@@ -1,0 +1,11 @@
+fastapi==0.115.4
+uvicorn[standard]==0.32.0
+python-multipart==0.0.17
+pydantic==2.9.2
+pydantic-settings==2.6.1
+anthropic>=0.42,<1
+faster-whisper>=1.0.3,<2
+ffmpeg-python==0.2.0
+Pillow>=10.4,<12
+aiofiles==24.1.0
+python-dotenv==1.0.1

@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Video Editor</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #0c0c0e;
+  --surface: #141418;
+  --border:  #26262e;
+  --accent:  #6c63ff;
+  --accent2: #a78bfa;
+  --text:    #f1f1f3;
+  --muted:   #7b7b8e;
+  --ok:      #34d399;
+  --err:     #f87171;
+  --radius:  12px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+.wrap {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 32px 20px 80px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 36px;
+}
+
+.logo-mark {
+  width: 36px;
+  height: 36px;
+  background: var(--accent);
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+header h1 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+header p {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+/* ── Card ── */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 20px;
+}
+
+.card-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+
+/* ── Drop zone ── */
+.drop {
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  padding: 36px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.18s, background 0.18s;
+  position: relative;
+}
+
+.drop:hover,
+.drop.over { border-color: var(--accent); background: rgba(108,99,255,0.06); }
+.drop.has-file { border-color: var(--ok); background: rgba(52,211,153,0.05); }
+
+.drop input[type=file] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+}
+
+.drop-icon { font-size: 2rem; margin-bottom: 10px; }
+.drop-main { font-weight: 600; margin-bottom: 4px; }
+.drop-sub  { font-size: 0.82rem; color: var(--muted); }
+
+/* ── Form fields ── */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.field:last-child { margin-bottom: 0; }
+
+label.label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+textarea, input[type=text], select {
+  background: #1a1a22;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.9rem;
+  padding: 9px 12px;
+  width: 100%;
+  font-family: inherit;
+  transition: border-color 0.18s;
+  appearance: none;
+}
+
+textarea { resize: vertical; min-height: 72px; }
+
+textarea:focus, input:focus, select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ── Segmented controls ── */
+.seg {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.seg input[type=radio] { display: none; }
+
+.seg label {
+  padding: 6px 16px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--muted);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  user-select: none;
+}
+
+.seg input[type=radio]:checked + label {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* ── Grid row ── */
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+@media (max-width: 500px) { .row { grid-template-columns: 1fr; } }
+
+/* ── Color swatches ── */
+.swatches {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.swatches input[type=radio] { display: none; }
+
+.swatch {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 3px solid transparent;
+  outline: 2px solid var(--border);
+  outline-offset: 2px;
+  transition: outline-color 0.15s, border-color 0.15s;
+}
+
+.swatches input[type=radio]:checked + .swatch {
+  outline-color: var(--accent);
+  border-color: rgba(255,255,255,0.35);
+}
+
+/* ── Button ── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 28px;
+  border-radius: 9px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.18s, transform 0.1s;
+  text-decoration: none;
+  font-family: inherit;
+}
+
+.btn:active:not(:disabled) { transform: scale(0.97); }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.btn-primary { background: var(--accent); color: #fff; width: 100%; padding: 14px; font-size: 1rem; }
+.btn-primary:hover:not(:disabled) { opacity: 0.88; }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+.btn-outline:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.btn-green { background: var(--ok); color: #0c0c0e; }
+
+/* ── Progress ── */
+.progress-wrap {
+  background: #222230;
+  border-radius: 99px;
+  height: 7px;
+  overflow: hidden;
+  margin: 14px 0 10px;
+}
+
+.progress-bar {
+  height: 100%;
+  border-radius: 99px;
+  background: var(--accent);
+  transition: width 0.4s ease;
+  width: 0%;
+}
+
+.progress-bar.done  { background: var(--ok); }
+.progress-bar.error { background: var(--err); }
+
+.status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.status-text { font-size: 0.88rem; color: var(--muted); }
+.status-pct  { font-size: 0.88rem; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+
+/* ── Result ── */
+video {
+  width: 100%;
+  border-radius: 10px;
+  background: #000;
+  display: block;
+  margin-bottom: 16px;
+}
+
+.result-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin: 16px 0;
+}
+
+.meta-box {
+  background: #1a1a22;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 12px 14px;
+}
+
+.meta-label { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.meta-value { font-size: 0.9rem; font-weight: 600; }
+
+.result-btns { display: flex; gap: 10px; }
+.result-btns .btn { flex: 1; }
+
+details { margin-top: 16px; }
+summary { cursor: pointer; font-size: 0.82rem; color: var(--muted); }
+pre { margin-top: 10px; background: #111118; border-radius: 8px; padding: 14px; font-size: 0.78rem; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+
+/* ── Utilities ── */
+.hidden { display: none !important; }
+.err-msg { color: var(--err); font-size: 0.85rem; margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- Header -->
+  <header>
+    <div class="logo-mark">&#x26A1;</div>
+    <div>
+      <h1>AI Video Editor</h1>
+      <p>Whisper &middot; Claude &middot; FFmpeg</p>
+    </div>
+  </header>
+
+  <!-- ── UPLOAD FORM ── -->
+  <div id="formSection">
+
+    <div class="card">
+      <div class="card-title">Video</div>
+      <div class="drop" id="drop">
+        <input type="file" id="fileInput" accept="video/*">
+        <div class="drop-icon">&#x1F3AC;</div>
+        <div class="drop-main">Click or drag &amp; drop your video</div>
+        <div class="drop-sub" id="fileLabel">mp4 &middot; mov &middot; webm &middot; avi</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Instructions</div>
+      <div class="field">
+        <textarea id="instructions" placeholder="Optional — e.g. Make this punchy for Reels. Keep only the best 45 seconds. End on the principle."></textarea>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Format</div>
+      <div class="seg">
+        <input type="radio" name="format" id="f-auto"  value="auto"  checked><label for="f-auto">Auto-detect</label>
+        <input type="radio" name="format" id="f-short" value="short"><label for="f-short">Short-form (Reels / TikTok)</label>
+        <input type="radio" name="format" id="f-long"  value="long"><label for="f-long">Long-form (YouTube)</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Aesthetic</div>
+      <div class="seg">
+        <input type="radio" name="theme" id="th-dark"   value="dark-pro"    checked><label for="th-dark">Dark Pro</label>
+        <input type="radio" name="theme" id="th-energy" value="high-energy"        ><label for="th-energy">High Energy</label>
+        <input type="radio" name="theme" id="th-faith"  value="faith-gold"         ><label for="th-faith">Faith &amp; Gold</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Caption Style</div>
+      <div class="row">
+        <div class="field">
+          <label class="label">Style</label>
+          <div class="seg">
+            <input type="radio" name="caption_style" id="cs-impact"  value="impact"  checked><label for="cs-impact">Impact</label>
+            <input type="radio" name="caption_style" id="cs-kinetic" value="kinetic"        ><label for="cs-kinetic">Kinetic Bar</label>
+          </div>
+        </div>
+        <div class="field">
+          <label class="label">Position</label>
+          <select id="caption_position">
+            <option value="center">Center</option>
+            <option value="bottom">Bottom</option>
+            <option value="side-left">Side &middot; Left</option>
+            <option value="side-right">Side &middot; Right</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field" style="margin-top:16px">
+        <label class="label">Caption Font</label>
+        <select id="caption_font">
+          <option value="Poppins Bold">Poppins Bold (default)</option>
+          <option value="Poppins ExtraBold">Poppins ExtraBold</option>
+          <option value="Poppins SemiBold">Poppins SemiBold</option>
+          <option value="Montserrat Bold">Montserrat Bold</option>
+          <option value="Montserrat Black">Montserrat Black</option>
+          <option value="Inter Bold">Inter Bold</option>
+          <option value="Roboto Bold">Roboto Bold</option>
+          <option value="Bebas Neue">Bebas Neue</option>
+          <option value="DM Sans Bold">DM Sans Bold</option>
+          <option value="Space Grotesk Bold">Space Grotesk Bold</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label class="label">Caption Color</label>
+        <div class="swatches">
+          <input type="radio" name="caption_color" id="cc-white"  value="white"  checked>
+          <label for="cc-white"  class="swatch" style="background:#ffffff" title="White"></label>
+          <input type="radio" name="caption_color" id="cc-yellow" value="yellow">
+          <label for="cc-yellow" class="swatch" style="background:#FFE500" title="Yellow"></label>
+          <input type="radio" name="caption_color" id="cc-red"    value="red">
+          <label for="cc-red"    class="swatch" style="background:#FF3B30" title="Red"></label>
+          <input type="radio" name="caption_color" id="cc-blue"   value="blue">
+          <label for="cc-blue"   class="swatch" style="background:#0A84FF" title="Blue"></label>
+          <input type="radio" name="caption_color" id="cc-orange" value="orange">
+          <label for="cc-orange" class="swatch" style="background:#FF6B00" title="Orange"></label>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="label">Brand Color <span style="color:var(--muted);text-transform:none;font-weight:400">(optional hex)</span></label>
+        <input type="text" id="brand_color" placeholder="#0A84FF" maxlength="7" style="max-width:160px">
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="submitBtn" disabled>
+      &#x26A1; Edit Video
+    </button>
+    <div id="formErr" class="err-msg hidden"></div>
+
+  </div><!-- /formSection -->
+
+  <!-- ── PROGRESS ── -->
+  <div class="card hidden" id="progressSection">
+    <div class="card-title" id="progressTitle">Processing</div>
+    <div class="progress-wrap">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+    <div class="status-row">
+      <span class="status-text" id="statusMsg">Starting&hellip;</span>
+      <span class="status-pct" id="statusPct">0%</span>
+    </div>
+    <div class="hidden" id="retryWrap" style="margin-top:14px">
+      <p style="font-size:.85rem;color:var(--muted);margin-bottom:10px">
+        Your video is still on the server &mdash; no need to re-upload.
+      </p>
+      <button class="btn btn-outline" id="retryBtn" style="width:auto;padding:9px 20px">
+        Retry Job
+      </button>
+    </div>
+  </div>
+
+  <!-- ── RESULT ── -->
+  <div class="card hidden" id="resultSection">
+    <div class="card-title">&#x2705; Edit Complete</div>
+    <video id="videoPlayer" controls playsinline preload="metadata"></video>
+
+    <div class="result-meta" id="resultMeta"></div>
+
+    <div class="result-btns">
+      <a class="btn btn-green" id="downloadBtn" download>&#x2B07; Download MP4</a>
+      <button class="btn btn-outline" id="newJobBtn">Edit Another</button>
+    </div>
+
+    <details>
+      <summary>Raw edit plan (JSON)</summary>
+      <pre id="planJson"></pre>
+    </details>
+  </div>
+
+</div><!-- /wrap -->
+
+<script>
+(function() {
+  'use strict';
+
+  var drop        = document.getElementById('drop');
+  var fileInput   = document.getElementById('fileInput');
+  var fileLabel   = document.getElementById('fileLabel');
+  var submitBtn   = document.getElementById('submitBtn');
+  var formErr     = document.getElementById('formErr');
+  var formSection = document.getElementById('formSection');
+
+  var progressSection = document.getElementById('progressSection');
+  var progressTitle   = document.getElementById('progressTitle');
+  var progressBar     = document.getElementById('progressBar');
+  var statusMsg       = document.getElementById('statusMsg');
+  var statusPct       = document.getElementById('statusPct');
+  var retryWrap       = document.getElementById('retryWrap');
+  var retryBtn        = document.getElementById('retryBtn');
+
+  var resultSection = document.getElementById('resultSection');
+  var videoPlayer   = document.getElementById('videoPlayer');
+  var downloadBtn   = document.getElementById('downloadBtn');
+  var newJobBtn     = document.getElementById('newJobBtn');
+  var resultMeta    = document.getElementById('resultMeta');
+  var planJson      = document.getElementById('planJson');
+
+  var _file       = null;
+  var _pollTimer  = null;
+  var _retryJobId = null;
+  var CHUNK       = 50 * 1024 * 1024;
+
+  fileInput.addEventListener('change', function() {
+    var f = fileInput.files[0];
+    if (f) pickFile(f);
+  });
+
+  function pickFile(f) {
+    _file = f;
+    var mb = (f.size / 1048576).toFixed(1);
+    fileLabel.textContent = f.name + '  (' + mb + ' MB)';
+    drop.classList.add('has-file');
+    submitBtn.disabled = false;
+  }
+
+  drop.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    drop.classList.add('over');
+  });
+  drop.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    drop.classList.remove('over');
+  });
+  drop.addEventListener('drop', function(e) {
+    e.preventDefault();
+    drop.classList.remove('over');
+    var f = e.dataTransfer && e.dataTransfer.files[0];
+    if (f && f.type.startsWith('video/')) {
+      try {
+        var dt = new DataTransfer();
+        dt.items.add(f);
+        fileInput.files = dt.files;
+      } catch(ex) {}
+      pickFile(f);
+    }
+  });
+
+  submitBtn.addEventListener('click', function() {
+    if (!_file) return;
+    clearError();
+    submitBtn.disabled = true;
+    showSection('progress');
+    setProgress(0, 'Preparing upload…', false);
+
+    if (_file.size > CHUNK) {
+      chunkedUpload(_file).catch(function(e) { fail(String(e)); });
+    } else {
+      directUpload(_file);
+    }
+  });
+
+  function directUpload(file) {
+    var fd = buildFormData();
+    fd.set('video', file, file.name);
+
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/edit');
+    xhr.withCredentials = true;
+
+    xhr.upload.addEventListener('progress', function(e) {
+      if (!e.lengthComputable) return;
+      var pct = Math.round((e.loaded / e.total) * 30);
+      setProgress(pct, 'Uploading ' + (e.loaded / 1048576).toFixed(0) + ' / ' + (e.total / 1048576).toFixed(0) + ' MB…', false);
+    });
+
+    xhr.addEventListener('load', function() {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        fail('Upload failed: ' + xhr.status + ' — ' + xhr.responseText.slice(0, 200));
+        return;
+      }
+      try {
+        var j = JSON.parse(xhr.responseText);
+        setProgress(32, 'Upload complete. AI is editing…', false);
+        _retryJobId = j.job_id;
+        poll(j.job_id);
+      } catch(e) {
+        fail('Bad server response: ' + xhr.responseText.slice(0, 200));
+      }
+    });
+    xhr.addEventListener('error',   function() { fail('Network error during upload.'); });
+    xhr.addEventListener('timeout', function() { fail('Upload timed out.'); });
+    xhr.send(fd);
+  }
+
+  async function chunkedUpload(file) {
+    var initRes = await fetch('/api/upload/init', { method: 'POST', credentials: 'same-origin' });
+    if (!initRes.ok) throw new Error('Upload init failed: ' + initRes.status);
+    var data = await initRes.json();
+    var upload_id = data.upload_id;
+
+    var total   = Math.ceil(file.size / CHUNK);
+    var totalMb = (file.size / 1048576).toFixed(0);
+
+    for (var i = 0; i < total; i++) {
+      var slice  = file.slice(i * CHUNK, (i + 1) * CHUNK);
+      var sentMb = Math.min(((i + 1) * CHUNK) / 1048576, file.size / 1048576).toFixed(0);
+      setProgress(Math.round(((i + 1) / total) * 28),
+        'Uploading ' + sentMb + ' / ' + totalMb + ' MB (chunk ' + (i+1) + '/' + total + ')…', false);
+      var res = await fetch('/api/upload/chunk/' + upload_id + '/' + i, {
+        method: 'PUT', body: slice, credentials: 'same-origin'
+      });
+      if (!res.ok) throw new Error('Chunk ' + i + ' failed: ' + res.status);
+    }
+
+    setProgress(29, 'Assembling file on server…', false);
+    var asmRes = await fetch('/api/upload/assemble/' + upload_id, {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: file.name }),
+    });
+    if (!asmRes.ok) throw new Error('Assembly failed: ' + asmRes.status);
+
+    setProgress(31, 'Starting AI edit…', false);
+    var fd = buildFormData();
+    fd.set('upload_id', upload_id);
+    var editRes = await fetch('/api/edit', { method: 'POST', body: fd, credentials: 'same-origin' });
+    if (!editRes.ok) throw new Error('Edit start failed: ' + editRes.status + ' ' + await editRes.text());
+    var ed = await editRes.json();
+    _retryJobId = ed.job_id;
+    poll(ed.job_id);
+  }
+
+  function buildFormData() {
+    var fd = new FormData();
+    fd.set('instructions',     document.getElementById('instructions').value.trim());
+    fd.set('format_hint',      document.querySelector('[name=format]:checked').value);
+    fd.set('theme',            document.querySelector('[name=theme]:checked').value);
+    fd.set('caption_style',    document.querySelector('[name=caption_style]:checked').value);
+    fd.set('caption_color',    document.querySelector('[name=caption_color]:checked').value);
+    fd.set('caption_position', document.getElementById('caption_position').value);
+    fd.set('caption_font',     document.getElementById('caption_font').value);
+    var bc = document.getElementById('brand_color').value.trim();
+    if (bc) fd.set('brand_color', bc);
+    return fd;
+  }
+
+  function poll(jobId) {
+    if (_pollTimer) clearTimeout(_pollTimer);
+    _pollTimer = setTimeout(async function() {
+      try {
+        var res = await fetch('/api/jobs/' + jobId, { credentials: 'same-origin' });
+        if (!res.ok) {
+          if (res.status === 404) { fail('Job lost — server may have restarted.', jobId); return; }
+          fail('Poll error: ' + res.status, jobId);
+          return;
+        }
+        var job = await res.json();
+        setProgress(job.progress || 0, job.message || job.status || '…', false);
+        if (job.status === 'done')  { showResult(jobId, job.result); return; }
+        if (job.status === 'error') { fail(job.error || job.message || 'Unknown error', jobId); return; }
+        poll(jobId);
+      } catch(e) {
+        fail('Connection lost: ' + e.message, jobId);
+      }
+    }, 2000);
+  }
+
+  retryBtn.addEventListener('click', async function() {
+    if (!_retryJobId) return;
+    retryWrap.classList.add('hidden');
+    setProgress(5, 'Retrying with saved file…', false);
+    try {
+      var res = await fetch('/api/retry/' + _retryJobId, { method: 'POST', credentials: 'same-origin' });
+      if (!res.ok) { fail('Retry failed: ' + res.status); return; }
+      var r = await res.json();
+      _retryJobId = r.job_id;
+      poll(r.job_id);
+    } catch(e) {
+      fail('Retry error: ' + e.message);
+    }
+  });
+
+  function showResult(jobId, result) {
+    var url = '/api/download/' + jobId;
+    videoPlayer.src = url;
+    downloadBtn.href = url;
+    downloadBtn.setAttribute('download', 'edited_' + jobId.slice(0,8) + '.mp4');
+
+    var pkg   = (result && result.packaging) || {};
+    var dur   = result && result.duration ? result.duration.toFixed(1) + 's' : '—';
+    var fmt   = (result && result.format) || '—';
+    var title = pkg.title || (result && result.titres_ctr && result.titres_ctr[0]) || '—';
+    var thumb = (result && result.thumbnail_mot) || pkg.thumbnail_word || '—';
+
+    resultMeta.innerHTML = [
+      metaBox('Duration',        dur),
+      metaBox('Format',          fmt),
+      metaBox('Suggested title', title),
+      metaBox('Thumbnail word',  thumb),
+    ].join('');
+
+    planJson.textContent = JSON.stringify((result && result.plan) || result || {}, null, 2);
+    showSection('result');
+  }
+
+  function metaBox(label, value) {
+    return '<div class="meta-box"><div class="meta-label">' + label +
+           '</div><div class="meta-value">' + escHtml(String(value)) + '</div></div>';
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  newJobBtn.addEventListener('click', function() {
+    if (_pollTimer) clearTimeout(_pollTimer);
+    _file = null;
+    fileInput.value = '';
+    fileLabel.textContent = 'mp4 · mov · webm · avi';
+    drop.classList.remove('has-file');
+    submitBtn.disabled = true;
+    videoPlayer.src = '';
+    showSection('form');
+  });
+
+  function setProgress(pct, msg, isErr) {
+    progressBar.style.width = pct + '%';
+    progressBar.className   = 'progress-bar' + (isErr ? ' error' : (pct >= 100 ? ' done' : ''));
+    statusMsg.textContent   = msg;
+    statusPct.textContent   = pct + '%';
+  }
+
+  function fail(msg, jobId) {
+    setProgress(100, msg, true);
+    progressTitle.textContent = '❌ Error';
+    submitBtn.disabled = false;
+    if (jobId) { _retryJobId = jobId; retryWrap.classList.remove('hidden'); }
+  }
+
+  function clearError() {
+    formErr.classList.add('hidden');
+    formErr.textContent = '';
+  }
+
+  function showSection(name) {
+    formSection.classList.toggle    ('hidden', name !== 'form');
+    progressSection.classList.toggle('hidden', name !== 'progress');
+    resultSection.classList.toggle  ('hidden', name !== 'result');
+    if (name === 'progress') {
+      progressTitle.textContent = 'Processing…';
+      retryWrap.classList.add('hidden');
+    }
+  }
+
+})();
+</script>
+
+</body>
+</html>

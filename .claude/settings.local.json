@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-Process -Name python -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Force -ErrorAction SilentlyContinue)",
+      "PowerShell(Start-Process -FilePath \"python\" -ArgumentList \"c:\\\\Users\\\\KANWAGI\\\\Desktop\\\\EDITOR AI\\\\start.py\" -WorkingDirectory \"c:\\\\Users\\\\KANWAGI\\\\Desktop\\\\EDITOR AI\" -WindowStyle Hidden)",
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:8001/api/health\" -TimeoutSec 5)",
+      "Bash(mkdir -p \"c:/Users/KANWAGI/Desktop/EDITOR AI/editor_frontend\")"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\KANWAGI\\Desktop\\EDITOR AI\\editor_frontend"
+    ]
+  }
+}
