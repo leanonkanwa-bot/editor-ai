@@ -371,7 +371,7 @@ def _hex_to_rgb_at(hex6: str) -> str:
 
 
 def _ass_escape_text(text: str) -> str:
-    return text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'").replace("/", "\\/")
+    return text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
 
 
 def _build_hyperframe_filters(
@@ -416,7 +416,7 @@ def _build_hyperframe_filters(
                 # Black text on a colored flash reads fastest at 0.1s.
                 font_size = int(target_h * 0.22)
                 parts.append(
-                    f"drawtext=text='{_ass_escape_text(text)}'"
+                    f"drawtext=text={_ass_escape_text(text)}"
                     f"{_fontfile_arg}"
                     f":fontcolor=black:fontsize={font_size}"
                     f":x=(w-text_w)/2:y=(h-text_h)/2"
