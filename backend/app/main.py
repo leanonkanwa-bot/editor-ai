@@ -1,4 +1,4 @@
-"""FastAPI entrypoint for the AI Video Editor Agent."""
+﻿"""FastAPI entrypoint for the AI Video Editor Agent."""
 
 from __future__ import annotations
 
@@ -101,7 +101,7 @@ def auth_logout() -> Response:
 async def submit_edit(
     request: Request,
     background: BackgroundTasks,
-    video: UploadFile = File(None),   # optional — omitted when upload_id is used
+    video: UploadFile = File(None),   # optional â€” omitted when upload_id is used
     upload_id: str = Form(""),        # set by chunked-upload flow
     instructions: str = Form(""),
     format_hint: Literal["short", "long", "auto"] = Form("auto"),
@@ -125,7 +125,7 @@ async def submit_edit(
             raise HTTPException(400, f"No assembled file found for upload_id={upload_id!r}. "
                                      "Call /api/upload/assemble first.")
     elif video and video.filename:
-        # Direct upload path (files ≤ ~100 MB)
+        # Direct upload path (files â‰¤ ~100 MB)
         suffix = Path(video.filename).suffix or ".mp4"
         dest = settings.uploads_dir / f"{job.id}{suffix}"
         with dest.open("wb") as f:
@@ -168,3 +168,6 @@ def download(job_id: str, request: Request, _: None = Depends(_check_auth)):
 frontend_dir = Path(__file__).resolve().parents[2] / "editor_frontend"
 if frontend_dir.exists():
     app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
+
+
+
