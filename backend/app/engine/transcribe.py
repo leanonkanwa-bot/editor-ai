@@ -62,18 +62,9 @@ def unload_model() -> None:
 
 
 def _extract_audio_wav(video_path: Path, wav_path: Path) -> None:
-    import os
-    bin_dir = (
-        r"C:\Users\KANWAGI\Downloads"
-        r"\ffmpeg-master-latest-win64-gpl-shared"
-        r"\ffmpeg-master-latest-win64-gpl-shared"
-        r"\bin"
-    )
-    env = os.environ.copy()
-    env["PATH"] = bin_dir + os.pathsep + env.get("PATH", "")
     subprocess.run(
         [
-            bin_dir + r"\ffmpeg.exe",
+            FFMPEG_PATH,
             "-y", "-loglevel", "error",
             "-i", str(video_path),
             "-vn", "-ac", "1", "-ar", "16000",
@@ -82,7 +73,6 @@ def _extract_audio_wav(video_path: Path, wav_path: Path) -> None:
         ],
         check=True,
         timeout=300,
-        env=env,
     )
 
 
