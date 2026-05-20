@@ -20,14 +20,19 @@ from __future__ import annotations
 
 import shlex
 import subprocess
-import sys
 from pathlib import Path
 from typing import Any
 
 from app.agent.planner import EditPlan
 from app.engine.captions import WordTiming, build_ass
-from app.engine.graphics import AESTHETIC_COLORS, render_motion_graphic
 from app.engine.transcribe import FFMPEG_PATH, FFPROBE_PATH
+from app.engine.graphics import (
+    AESTHETIC_COLORS,
+    render_motion_graphic,
+    render_vignette_mask,
+    render_whiteboard_layout,
+    render_slide_layout,
+)
 
 
 SHORT_PAD_S = 0.05   # 50ms — tight, energetic
@@ -36,7 +41,7 @@ AUDIO_FADE_S = 0.03  # 30ms — anti-pop fade at every segment boundary
 
 
 def _run(cmd: list[str]) -> None:
-    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
+    proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode == 0:
         return
     stderr = proc.stderr[-2000:] or "(empty — process produced no stderr)"
@@ -371,7 +376,10 @@ def _hex_to_rgb_at(hex6: str) -> str:
 
 
 def _ass_escape_text(text: str) -> str:
-    return text.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+    return (text.replace("\\", "\\\\")
+                .replace("'", "\\'")
+                .replace(":", "\\:")
+                .replace("%", "\\%"))
 
 
 def _build_hyperframe_filters(
@@ -383,15 +391,6 @@ def _build_hyperframe_filters(
     """Return a comma-prefixed filter chain that overlays each hyperframe
     as a full-screen colored card with a centered word/number, only during
     its [at, at+duration] window. Empty string if no hyperframes."""
-    import os as _os
-    _poppins = f"{fonts_dir}/Poppins-ExtraBold.ttf"
-    _arial   = r"C:/Windows/Fonts/arialbd.ttf"
-    if _os.path.isfile(_poppins):
-        _fontfile_arg = f":fontfile={_poppins}"
-    elif sys.platform == "win32" and _os.path.isfile(_arial):
-        _fontfile_arg = f":fontfile={_arial}"
-    else:
-        _fontfile_arg = ""
     parts: list[str] = []
     for hf in hyperframes:
         try:
@@ -417,12 +416,85 @@ def _build_hyperframe_filters(
                 font_size = int(target_h * 0.22)
                 parts.append(
                     f"drawtext=text={_ass_escape_text(text)}"
-                    f"{_fontfile_arg}"
+                    f":fontfile={fonts_dir}/Poppins-ExtraBold.ttf"
                     f":fontcolor=black:fontsize={font_size}"
                     f":x=(w-text_w)/2:y=(h-text_h)/2"
                     f":enable=between(t,{t0:.3f},{t1:.3f})"
                 )
     return ("," + ",".join(parts)) if parts else ""
+
+
+def _vignette_dims(short_form: bool) -> tuple[int, int, int, int, int]:
+    """Return (vign_w, vign_h, vign_x, vign_y, corner_radius) for the vignette."""
+    if short_form:   # 1080 × 1920
+        vw, vh = 400, 500
+        vx = 1080 - vw - 40   # 640
+        vy = 1920 - vh - 80   # 1340
+        cr = 40
+    else:            # 1920 × 1080
+        vw, vh = 490, 380
+        vx = 1920 - vw - 40   # 1390
+        vy = 1080 - vh - 60   # 640
+        cr = 36
+    return vw, vh, vx, vy, cr
+
+
+def _render_vignette_layouts(
+    moments: list[dict[str, Any]],
+    work_dir: Path,
+    target_w: int,
+    target_h: int,
+    short_form: bool,
+    glow_color: str,
+) -> tuple[list[Path], Path | None]:
+    """Pre-render layout PNGs for each visual_style moment (Styles 2 & 3).
+    Returns (layout_paths, mask_path).  mask_path is None when moments is empty."""
+    if not moments:
+        return [], None
+    vw, vh, vx, vy, cr = _vignette_dims(short_form)
+    vign_dir = work_dir / "vignette"
+    vign_dir.mkdir(parents=True, exist_ok=True)
+
+    mask_path = vign_dir / "mask.png"
+    render_vignette_mask(vw, vh, cr, mask_path)
+
+    layout_paths: list[Path] = []
+    for i, m in enumerate(moments):
+        style = int(m.get("style", 2))
+        lp = vign_dir / f"layout_{i:03d}.png"
+        if style == 3:
+            title = str(m.get("title") or "").strip()
+            bullets = [str(b) for b in (m.get("bullets") or [])]
+            render_slide_layout(
+                title, bullets, lp,
+                target_w=target_w, target_h=target_h,
+                vign_x=vx, vign_y=vy, vign_w=vw, vign_h=vh,
+                glow_color=glow_color,
+            )
+        else:  # style == 2 (default)
+            content = str(m.get("content") or "").strip()
+            render_whiteboard_layout(
+                content, lp,
+                target_w=target_w, target_h=target_h,
+                vign_x=vx, vign_y=vy, vign_w=vw, vign_h=vh,
+                glow_color=glow_color,
+            )
+        layout_paths.append(lp)
+
+    return layout_paths, mask_path
+
+
+def _color_grade_filter(content_type: str) -> str:
+    """Return an FFmpeg video filter string for the given content type.
+    Applied FIRST in the filter chain so all subsequent overlays inherit the grade.
+    """
+    profiles: dict[str, str] = {
+        "coaching":   "eq=contrast=1.15:saturation=1.1,colorbalance=rs=0.05:bs=-0.03",
+        "education":  "eq=brightness=0.05:contrast=1.1,unsharp=5:5:1.0:5:5:0.0",
+        "motivation": "eq=contrast=1.2:gamma=0.95,colorbalance=rs=0.08:gs=0.03",
+        "story":      "eq=saturation=0.9:contrast=1.05,colorbalance=rs=0.03",
+    }
+    return profiles.get(content_type.lower(), "eq=contrast=1.1:saturation=1.05")
 
 
 def render(
@@ -439,6 +511,8 @@ def render(
     brand_color: str | None = None,
     aesthetic: str = "dark-pro",
     subject_position: dict | None = None,
+    graphic_specs: list | None = None,
+    content_type: str = "coaching",
 ) -> dict[str, Any]:
     work_dir.mkdir(parents=True, exist_ok=True)
 
@@ -470,6 +544,7 @@ def render(
     remapped_zoom: list[dict[str, Any]] = []
     remapped_words: list[WordTiming] = []
     remapped_silences: list[dict[str, Any]] = []
+    remapped_vsm: list[dict[str, Any]] = []
 
     for i, seg in enumerate(keep):
         s_raw = float(seg["start"])
@@ -522,6 +597,19 @@ def render(
                 remapped_silences.append({
                     **sil,
                     "at": cum + (sil_at - s),
+                })
+
+        for vm in (plan.visual_style_moments or []):
+            try:
+                vm_at = float(vm.get("at", 0))
+                vm_dur = float(vm.get("duration", 2.0))
+            except (TypeError, ValueError):
+                continue
+            if s <= vm_at <= e:
+                remapped_vsm.append({
+                    **vm,
+                    "at": cum + (vm_at - s),
+                    "duration": vm_dur,
                 })
 
         cum += (e - s)
@@ -654,86 +742,243 @@ def render(
         if rg is not None:
             rendered_graphics.append(rg)
 
-    # ── PASS 1: zoom + hyperframes + graphic overlays + audio ducks ──────────
-    # Captions are NOT burned here — kept out of filter_complex so the Windows
-    # subtitles filter never has to deal with a path that contains spaces.
+    # Pre-render vignette layouts (Styles 2 & 3).
+    # Only moments with style 2 or 3 go through the vignette path.
+    vign_moments = [m for m in remapped_vsm if int(m.get("style", 2)) in (2, 3)]
+    glow_color = brand_color or "#0A84FF"
+    layout_paths, mask_path = _render_vignette_layouts(
+        vign_moments, work_dir, target_w, target_h, short_form, glow_color,
+    )
+    V = len(vign_moments)
+    vw, vh, vx, vy, _cr = _vignette_dims(short_form) if V > 0 else (0, 0, 0, 0, 0)
+
+    # Build the final filter chain.
+    # Color grade is FIRST so all overlays (zoom, graphics, captions) inherit the look.
+    color_grade = _color_grade_filter(content_type)
     base_filter = (
+        f"{color_grade},"
         f"zoompan=z={z_expr}:x={x_expr}:y={y_expr}:"
         f"d=1:s={target_w}x{target_h}:fps={fps}"
         f"{hyperframe_chain}"
     )
+    import shutil as _shutil
+    import tempfile as _tempfile
+    _tmp_dir = Path(_tempfile.gettempdir())
+    _ass_tmp = _tmp_dir / f"captions_{ass_path.parent.name}.ass"
+    _shutil.copy2(ass_path, _ass_tmp)
+    _ass_str = str(_ass_tmp).replace("\\", "/").replace(":", "\\:")
+    # _nocap_path: first-pass output (no captions), lives in temp dir (no spaces)
+    _nocap_path = _tmp_dir / f"nocap_{output_path.stem}.mp4"
 
-    mute_ranges: list[tuple[float, float]] = []
+    # Assemble FFmpeg inputs.
+    # [0] = concat.mp4
+    # [1..M] = motion graphic PNGs
+    # [M+1..M+V] = layout PNGs (vignette moments)
+    # [M+V+1..M+2V] = mask PNGs (one per vignette, all same file)
+    M = len(rendered_graphics)
+    cmd: list[str] = [FFMPEG_PATH, "-y", "-loglevel", "error", "-i", str(concat_path)]
+    for rg in rendered_graphics:
+        cmd += ["-i", str(rg.png)]
+    for lp in layout_paths:
+        cmd += ["-loop", "1", "-i", str(lp)]
+    for _ in vign_moments:
+        cmd += ["-loop", "1", "-i", str(mask_path)]
+
+    # Log speed_ramps from the plan (scheduling data only — actual setpts
+    # ramps are not yet applied here; the timestamps are preserved in the
+    # plan JSON so a future renderer pass can act on them).
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+    speed_ramps = plan.speed_ramps or []
+    if speed_ramps:
+        _log.info("speed_ramps scheduled (%d entries) — stored in plan JSON, "
+                  "setpts/atempo application not yet implemented in this pass.",
+                  len(speed_ramps))
+
+    # Build audio silence ducks: collect mute windows as (t0, t1) pairs.
+    # All ranges are merged into ONE volume filter using if()+between() so
+    # FFmpeg never sees multiple volume= filters chained with commas.
+    audio_duck_ranges: list[tuple[float, float]] = []
     for sil in remapped_silences:
         try:
             t0 = float(sil.get("at", 0))
             dur = max(0.1, min(0.5, float(sil.get("duration", 0.3))))
         except (TypeError, ValueError):
             continue
-        mute_ranges.append((t0, t0 + dur))
+        audio_duck_ranges.append((t0, t0 + dur))
 
-    if mute_ranges:
-        conditions = "+".join([f"between(t,{s:.3f},{e:.3f})" for s, e in mute_ranges])
-        audio_filter = f"[0:a]volume=enable='{conditions}':volume=0[a_out]"
-    else:
-        audio_filter = "[0:a]acopy[a_out]"
+    # SFX mixing: blend cue files from backend/storage/sfx/ into the audio.
+    # Known SFX types and their expected filenames. If a file doesn't exist,
+    # the cue is silently skipped — never fails the render.
+    _SFX_DIR = work_dir.parents[1] / "storage" / "sfx"
+    _SFX_FILES = {
+        "whoosh": _SFX_DIR / "whoosh.wav",
+        "impact": _SFX_DIR / "impact.wav",
+        "riser":  _SFX_DIR / "riser.wav",
+        "click":  _SFX_DIR / "click.wav",
+    }
+    sfx_inputs: list[tuple[Path, float, float]] = []  # (file, at, volume)
+    for cue in (plan.sfx_cues or []):
+        try:
+            cue_at  = float(cue.get("at", 0))
+            cue_vol = float(cue.get("volume", 0.8))
+            cue_type = str(cue.get("type", "")).lower()
+        except (TypeError, ValueError):
+            continue
+        sfx_path = _SFX_FILES.get(cue_type)
+        if sfx_path and sfx_path.exists():
+            sfx_inputs.append((sfx_path, cue_at, min(1.0, max(0.0, cue_vol))))
+        else:
+            _log.debug("SFX cue '%s' at %.2fs skipped — file not found: %s",
+                       cue_type, cue_at, sfx_path)
 
-    pass1_path = work_dir / "pass1.mp4"
-    cmd1: list[str] = [FFMPEG_PATH, "-y", "-loglevel", "error", "-i", str(concat_path)]
-    for rg in rendered_graphics:
-        cmd1 += ["-i", str(rg.png)]
+    # Add SFX audio inputs to cmd now that sfx_inputs list is finalized.
+    sfx_base_idx = M + 1 + 2 * V
+    for sfx_path, _at, _vol in sfx_inputs:
+        cmd += ["-i", str(sfx_path)]
 
-    if rendered_graphics:
-        chain_parts: list[str] = [f"[0:v]{base_filter}[v0]"]
-        for i, rg in enumerate(rendered_graphics, start=1):
+    need_filter_complex = bool(rendered_graphics or vign_moments or sfx_inputs)
+
+    if need_filter_complex:
+        chain_parts: list[str] = []
+
+        # Split [0:v] into main stream + V vignette source streams.
+        if V > 0:
+            split_labels = "[v_main]" + "".join(f"[v_v{i}]" for i in range(V))
+            chain_parts.append(f"[0:v]split={V + 1}{split_labels}")
+            main_src = "v_main"
+        else:
+            main_src = "0:v"
+
+        # Zoompan on main path.
+        chain_parts.append(f"[{main_src}]{base_filter}[zp]")
+
+        # Motion graphics chain.
+        prev = "zp"
+        for i, rg in enumerate(rendered_graphics):
             t0 = rg.at
             t1 = rg.at + rg.duration
+            nxt = f"mg{i}"
             chain_parts.append(
-                f"[v{i-1}][{i}:v]overlay="
+                f"[{prev}][{i + 1}:v]overlay="
                 f"x={rg.x_expr}:y={rg.y_expr}:"
-                f"enable=between(t,{t0:.3f},{t1:.3f})[v{i}]"
+                f"enable=between(t,{t0:.3f},{t1:.3f})[{nxt}]"
             )
-        last_label = f"v{len(rendered_graphics)}"
-        chain_parts[-1] = chain_parts[-1][:-len(f"[{last_label}]")] + "[final]"
-        chain_parts.append(audio_filter)
-        filter_complex = ";".join(chain_parts)
-        filter_complex = filter_complex.rstrip("'")
-        import sys as _sys
-        print(f"DEBUG_LAST20: {repr(filter_complex[-20:])}", file=_sys.stderr, flush=True)
-        print(f"DEBUG_AUDIO: {repr(audio_filter)}", file=_sys.stderr, flush=True)
-        cmd1 += ["-filter_complex", filter_complex, "-map", "[final]", "-map", "[a_out]"]
-    else:
-        cmd1 += ["-vf", base_filter]
-        if mute_ranges:
-            conditions = "+".join([f"between(t,{s:.3f},{e:.3f})" for s, e in mute_ranges])
-            cmd1 += ["-af", f"volume='if({conditions},0,1)'"]
+            prev = nxt
 
-    cmd1 += [
+        # Vignette chain (Styles 2 & 3).
+        for i, vm in enumerate(vign_moments):
+            t0 = float(vm["at"])
+            t1 = t0 + float(vm["duration"])
+            layout_idx = M + 1 + i         # layout PNG input index
+            mask_idx   = M + 1 + V + i     # mask PNG input index
+
+            # Scale source video to vignette size + add alpha channel.
+            chain_parts.append(
+                f"[v_v{i}]scale={vw}:{vh},format=yuva420p[sv{i}]"
+            )
+            # Apply rounded-corner mask.
+            chain_parts.append(
+                f"[sv{i}][{mask_idx}:v]alphamerge[rv{i}]"
+            )
+            # Overlay full-frame layout (white + content) on the video stream.
+            nxt_layout = f"vl{i}"
+            chain_parts.append(
+                f"[{prev}][{layout_idx}:v]overlay=0:0"
+                f":enable=between(t,{t0:.3f},{t1:.3f})[{nxt_layout}]"
+            )
+            # Overlay rounded person vignette at bottom-right.
+            nxt_vign = f"vn{i}"
+            chain_parts.append(
+                f"[{nxt_layout}][rv{i}]overlay={vx}:{vy}"
+                f":enable=between(t,{t0:.3f},{t1:.3f})[{nxt_vign}]"
+            )
+            prev = nxt_vign
+
+        # Rename the last overlay output label to [final] directly by slicing
+        # off the trailing [{prev}] and appending [final]. Using slice instead
+        # of str.replace avoids accidentally hitting [{prev}] where it also
+        # appears as an input label at the start of the same string.
+        chain_parts[-1] = chain_parts[-1][:-len(f"[{prev}]")] + "[final]"
+
+        # Probe whether the concat video has an audio stream at all.
+        _has_audio = bool(subprocess.run(
+            [FFPROBE_PATH, "-v", "error", "-select_streams", "a:0",
+             "-show_entries", "stream=codec_type", "-of", "csv=p=0",
+             str(concat_path)],
+            capture_output=True, text=True,
+        ).stdout.strip())
+        # Audio chain: silence ducks + SFX mix.
+        # Skip entirely when there is no audio stream — use -an later.
+        if _has_audio and (audio_duck_ranges or sfx_inputs):
+            duck_out = ("a_ducked" if sfx_inputs else "a_out")
+            if audio_duck_ranges:
+                _between = "+".join(
+                    f"between(t,{t0:.3f},{t1:.3f})" for t0, t1 in audio_duck_ranges
+                )
+                _duck_filter = f"volume=enable={_between}:volume=0"
+                chain_parts.append(f"[0:a]{_duck_filter}[{duck_out}]")
+            if sfx_inputs:
+                cur_audio = duck_out if audio_duck_ranges else "0:a"
+                for j, (_, sfx_at, sfx_vol) in enumerate(sfx_inputs):
+                    sfx_idx = sfx_base_idx + j
+                    ms = int(sfx_at * 1000)
+                    chain_parts.append(
+                        f"[{sfx_idx}:a]adelay={ms}|{ms},"
+                        f"volume={sfx_vol:.2f}[sfx{j}]"
+                    )
+                    out_lbl = "a_out" if j == len(sfx_inputs) - 1 else f"a_sfx{j}"
+                    chain_parts.append(
+                        f"[{cur_audio}][sfx{j}]amix=inputs=2:duration=first[{out_lbl}]"
+                    )
+                    cur_audio = out_lbl
+
+        filter_complex = ";".join(chain_parts)
+        # Sanitise: replace any stray ]copy[ nodes that some FFmpeg builds reject.
+        _INVALID_FILTERS = {"copy"}
+        for _bad in _INVALID_FILTERS:
+            if f"]{_bad}[" in filter_complex:
+                filter_complex = filter_complex.replace(f"]{_bad}[", "]null[")
+        # Pass filter_complex directly — subprocess list args bypass the Windows
+        # shell entirely so there is no 8191-char command-line limit here.
+        filter_complex = filter_complex.rstrip("'")
+        cmd += ["-filter_complex", filter_complex, "-map", "[final]"]
+        _has_a_chain = _has_audio and (audio_duck_ranges or sfx_inputs)
+        if _has_a_chain:
+            cmd += ["-map", "[a_out]"]
+        elif _has_audio:
+            cmd += ["-map", "0:a"]
+        else:
+            cmd += ["-an"]
+    else:
+        cmd += ["-vf", base_filter]
+        if audio_duck_ranges:
+            _between = "+".join(
+                f"between(t,{t0:.3f},{t1:.3f})" for t0, t1 in audio_duck_ranges
+            )
+            cmd += ["-af", f"volume=enable={_between}:volume=0"]
+
+    cmd += [
         "-frames:v", str(total_frames),
         "-c:v", "libx264", "-preset", "superfast", "-crf", "22",
-        "-threads", "2",
+        "-threads", "2",   # Whisper is freed before this point → safe to use 2 cores
         "-x264-params", "rc-lookahead=0:bframes=0",
         "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "192k",
-        str(pass1_path),
+        "-movflags", "+faststart",
+        str(_nocap_path),
     ]
-    _run(cmd1)
+    _run(cmd)
 
-    # ── PASS 2: burn captions onto the clean pass-1 output ────────────────────
-    # Input and output both sit in work_dir / outputs_dir — spaces in those
-    # paths are fine for -i / output arguments.  Only the subtitles= filter
-    # value needs a space-free path, which we get by copying to %TEMP%.
-    import shutil as _shutil
-    import tempfile as _tempfile
-    _ass_tmp = Path(_tempfile.gettempdir()) / f"captions_{ass_path.parent.name}.ass"
-    _shutil.copy2(ass_path, _ass_tmp)
-    _ass_str = str(_ass_tmp).replace("\\", "/").replace(":", "\\:")
-    ass_filter = f"subtitles='{_ass_str}':force_style='FontName=Arial'"
-
-    cmd2: list[str] = [
+    # Second pass: burn captions onto the caption-free first-pass video.
+    # Running this as a separate ffmpeg invocation avoids all filter_complex
+    # path-escaping issues on Windows — the subtitles= value is passed directly
+    # as a subprocess list item (no shell), so only the ffmpeg filter parser
+    # sees it; C\:/ escaping handles the Windows drive-letter colon.
+    _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
-        "-i", str(pass1_path),
-        "-vf", ass_filter,
+        "-i", str(_nocap_path),
+        "-vf", f"subtitles={_ass_str}:force_style='FontName=Arial'",
         "-c:v", "libx264", "-preset", "superfast", "-crf", "22",
         "-threads", "2",
         "-x264-params", "rc-lookahead=0:bframes=0",
@@ -741,8 +986,8 @@ def render(
         "-c:a", "copy",
         "-movflags", "+faststart",
         str(output_path),
-    ]
-    _run(cmd2)
+    ])
+    _nocap_path.unlink(missing_ok=True)
 
     return {
         "output": str(output_path),
@@ -757,4 +1002,5 @@ def render(
             {"kind": rg.kind, "at": rg.at, "duration": rg.duration}
             for rg in rendered_graphics
         ],
+        "vignette_moments": len(vign_moments),
     }
