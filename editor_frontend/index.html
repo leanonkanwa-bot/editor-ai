@@ -460,6 +460,14 @@
 
     <main>
 
+      <!-- WELCOME BANNER (shown when coach_profile exists) -->
+      <div id="welcomeBanner" style="
+        display:none; margin-top:1.5rem; padding:.75rem 1.1rem;
+        border-radius:10px; border: 1px solid var(--salmon-border);
+        background:rgba(255,119,81,.08); font-size:.875rem; font-weight:500;
+        color:var(--text); display:none;
+      "></div>
+
       <!-- HERO -->
       <section class="hero">
         <span class="badge">
@@ -486,7 +494,7 @@
       </section>
 
       <!-- TOOL -->
-      <section id="tool" class="card tool hidden">
+      <section id="tool" class="card tool">
         <div class="tool-head">
           <h2>Éditer votre vidéo</h2>
           <p>Déposez votre fichier brut — l'IA fait le reste.</p>

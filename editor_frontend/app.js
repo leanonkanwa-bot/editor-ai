@@ -2,12 +2,76 @@ const $ = (id) => document.getElementById(id);
 
 // ── Auth helpers ────────────────────────────────────────────────────────────
 function getToken() { return sessionStorage.getItem("lle_token") || ""; }
+
 function authHeaders() { const t = getToken(); return t ? { "x-access-token": t } : {}; }
 function apiFetch(url, opts = {}) {
   opts.credentials = opts.credentials || "same-origin";
   opts.headers = { ...authHeaders(), ...(opts.headers || {}) };
   return fetch(url, opts);
 }
+
+// ── Coach profile (loaded from localStorage after onboarding) ───────────────
+(function applyCoachProfile() {
+  try {
+    const raw = localStorage.getItem("coach_profile");
+    if (!raw) return;
+    const p = JSON.parse(raw);
+
+    // Welcome banner
+    const banner = $("welcomeBanner");
+    if (banner) {
+      const displayName = p.name || p.brandName || "vous";
+      banner.textContent = `Bienvenue ${displayName} — votre profil est configuré ✓`;
+      banner.style.display = "block";
+    }
+
+    // Pre-fill brand color
+    if (p.primaryColor && $("brandPrimary"))   $("brandPrimary").value = p.primaryColor;
+    if (p.secondaryColor && $("brandSecondary")) $("brandSecondary").value = p.secondaryColor;
+    if (p.brandName && $("brandName"))          $("brandName").value = p.brandName;
+
+    // Pre-fill hidden brand_color input
+    const brandColorInput = document.querySelector('input[name="brand_color"]');
+    if (brandColorInput && p.primaryColor) brandColorInput.value = p.primaryColor;
+
+    // Pre-fill platform radio
+    if (p.platforms?.length) {
+      const plat = p.platforms[0];
+      const platformMap = { YouTube: "YouTube", Instagram: "Reels", TikTok: "Reels", LinkedIn: "" };
+      const platformRadioMap = { YouTube: "plt-yt", Reels: "plt-reels", "YouTube Shorts": "plt-shorts" };
+      const mapped = platformMap[plat];
+      if (mapped) {
+        const rid = platformRadioMap[mapped];
+        if (rid && $(rid)) $(rid).checked = true;
+      }
+    }
+
+    // Pre-fill format
+    if (p.format) {
+      const fmtMap = { short: "fmt-short", long: "fmt-long", both: "fmt-auto" };
+      const fid = fmtMap[p.format];
+      if (fid && $(fid)) $(fid).checked = true;
+    }
+
+    // Pre-fill notification email from profile
+    if (p.email && $("notifEmail")) $("notifEmail").value = p.email;
+
+    // Check for ?onboarded=true param and show brief
+    if (new URLSearchParams(location.search).get("onboarded") === "true") {
+      const briefBody = $("briefBody");
+      const briefArrow = $("briefArrow");
+      if (briefBody) briefBody.classList.add("open");
+      if (briefArrow) briefArrow.textContent = "↑";
+      // Pre-fill brief fields
+      if (p.audience && document.querySelector('[name="target_audience"]'))
+        document.querySelector('[name="target_audience"]').value = p.audience;
+      if (p.offer && document.querySelector('[name="main_message"]'))
+        document.querySelector('[name="main_message"]').value = p.offer;
+    }
+  } catch (e) {
+    console.warn("coach_profile parse error", e);
+  }
+})();
 
 // ── Brand panel ────────────────────────────────────────────────────────────
 (async () => {
@@ -218,23 +282,22 @@ const planJson = $("planJson");
 
 (async () => {
   try {
-    const res = await apiFetch("/api/auth/status");
+    const res = await apiFetch(“/api/auth/status”);
     const j = await res.json();
     if (j.required && !j.authed) {
-      loginCard.classList.remove("hidden");
-      document.querySelectorAll('a[href="#tool"]').forEach((a) => { a.href = "#login"; });
-    } else {
-      appCard.classList.remove("hidden");
+      // Auth required — hide tool, show login
+      appCard.classList.add(“hidden”);
+      loginCard.classList.remove(“hidden”);
+      document.querySelectorAll('a[href=”#tool”]').forEach((a) => { a.href = “#login”; });
     }
+    // else: tool is already visible (no hidden class), nothing to do
   } catch {
-    // Backend is unreachable — show the tool section but with a prominent warning
-    // so the user knows they need to start the server before submitting.
-    appCard.classList.remove("hidden");
-    const warn = document.createElement("p");
-    warn.id = "backendWarn";
-    warn.style.cssText = "color:var(--err,#ff5c7a);margin-bottom:1rem;font-size:.9rem";
-    warn.textContent = "⚠ Backend not reachable. Run “python app.py” and reload this page before editing a video.";
-    appCard.querySelector(".tool-head")?.after(warn);
+    // Backend unreachable — tool stays visible, add a warning
+    const warn = document.createElement(“p”);
+    warn.id = “backendWarn”;
+    warn.style.cssText = “color:var(--err,#ff5c7a);margin-bottom:1rem;font-size:.9rem”;
+    warn.textContent = “⚠ Backend non disponible. Démarrez le serveur et rechargez la page.”;
+    appCard.querySelector(“.tool-head”)?.after(warn);
   }
 })();
 
@@ -260,6 +323,11 @@ loginForm?.addEventListener("submit", async (e) => {
 });
 
 const CHUNK_SIZE = 200 * 1024 * 1024; // 200 MB per chunk — 20 GB = 100 chunks
+
+// Guard: these listeners only apply on the editor page
+if (!videoInput || !drop || !form) {
+  // Not on editor page — skip editor event listeners
+} else {
 
 videoInput.addEventListener("change", () => {
   const f = videoInput.files?.[0];
@@ -487,10 +555,10 @@ function setStatus(status, message, progress) {
     statusPip.style.borderColor = "rgba(255,92,122,.3)";
     statusPip.style.background = "rgba(255,92,122,.08)";
   } else {
-    barFill.style.background = "linear-gradient(90deg, var(--accent), var(--accent-2))";
-    statusPip.style.color = "var(--accent)";
-    statusPip.style.borderColor = "rgba(255,214,10,.2)";
-    statusPip.style.background = "rgba(255,214,10,.08)";
+    barFill.style.background = "linear-gradient(90deg, #FF7751, #ffb347)";
+    statusPip.style.color = "#FF7751";
+    statusPip.style.borderColor = "rgba(255,119,81,.25)";
+    statusPip.style.background = "rgba(255,119,81,.08)";
   }
 }
 
@@ -766,3 +834,5 @@ $("replanBtn")?.addEventListener("click", async () => {
     fail(`Re-plan error: ${err.message}`);
   }
 });
+
+} // end editor-page guard
