@@ -141,7 +141,7 @@
         box-shadow: 0 0 30px rgba(255,119,81,.08);
       }
       .drop.has-file { border-color: var(--salmon); border-style: solid; }
-      .drop input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+      .drop input[type="file"] { display: none; }
       .drop-icon { color: var(--muted); }
       .drop.has-file .drop-icon { color: var(--salmon); }
       #dropLabel { font-size: .9rem; font-weight: 500; }
@@ -359,18 +359,34 @@
       .platform-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
       .platform-dot.connected { background: #22c55e; }
 
-      /* ── ANALYTICS TAB ──────────────────────────────────────── */
-      #analyticsPanel { display: none; }
-      #analyticsPanel.visible { display: block; }
-      .analytics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-bottom: 1.25rem; }
-      .analytics-card { background: rgba(255,255,255,.03); border: 1px solid var(--border); border-radius: 8px; padding: .85rem 1rem; }
-      .analytics-card .big { font-size: 1.6rem; font-weight: 800; letter-spacing: -.02em; }
-      .analytics-card .sub { font-size: .75rem; color: var(--muted); margin-top: .1rem; }
-      .insight-row { padding: .65rem .85rem; border-radius: 8px; border: 1px solid var(--border); margin-bottom: .4rem; background: rgba(255,255,255,.03); }
-      .insight-text { font-size: .825rem; margin-bottom: .3rem; }
-      .insight-action { font-size: .72rem; color: var(--salmon); }
-      .conf-bar { height: 3px; background: var(--border); border-radius: 2px; margin-top: .4rem; }
-      .conf-fill { height: 100%; background: var(--salmon); border-radius: 2px; }
+      /* ── ANALYTICS ──────────────────────────────────────────── */
+      .analytics-stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .75rem; margin-bottom: 1.5rem; }
+      .analytics-stat { background: rgba(255,255,255,.03); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; }
+      .analytics-stat .big { font-size: 1.8rem; font-weight: 800; letter-spacing: -.04em; color: var(--salmon); display: block; line-height: 1.1; margin-bottom: .2rem; }
+      .analytics-stat .sub { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+      .analytics-section-title { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: .75rem; }
+      .video-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+      .video-table th { text-align: left; color: var(--muted); font-weight: 600; padding: .5rem .6rem; border-bottom: 1px solid var(--border); font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; }
+      .video-table td { padding: .6rem .6rem; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: middle; }
+      .video-table tr:last-child td { border-bottom: none; }
+      .status-badge { display: inline-block; padding: .15rem .5rem; border-radius: 99px; font-size: .7rem; font-weight: 600; }
+      .status-done { background: rgba(34,197,94,.15); color: #22c55e; }
+      .status-processing { background: rgba(255,119,81,.12); color: var(--salmon); }
+      .action-btn { background: rgba(255,255,255,.05); border: 1px solid var(--border); color: var(--muted); font-family: var(--font); font-size: .72rem; padding: .25rem .6rem; border-radius: 6px; cursor: pointer; transition: color .15s, border-color .15s; margin-right: .3rem; }
+      .action-btn:hover { color: var(--text); border-color: rgba(255,255,255,.18); }
+      .perf-chart { display: flex; flex-direction: column; gap: .5rem; }
+      .chart-row { display: flex; align-items: center; gap: .75rem; font-size: .78rem; }
+      .chart-label { min-width: 100px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .chart-bar-wrap { flex: 1; background: rgba(255,255,255,.04); border-radius: 99px; height: 8px; overflow: hidden; }
+      .chart-bar-fill { height: 100%; background: linear-gradient(90deg, var(--salmon), #ffb347); border-radius: 99px; transition: width .6s ease; }
+      .chart-val { min-width: 50px; text-align: right; color: var(--muted); font-size: .72rem; }
+      .insight-cards { display: flex; flex-direction: column; gap: .6rem; }
+      .insight-card { background: rgba(255,255,255,.03); border: 1px solid var(--border); border-radius: 10px; padding: .85rem 1rem; display: flex; gap: .75rem; align-items: flex-start; }
+      .insight-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: .1rem; }
+      .insight-card h4 { font-size: .82rem; font-weight: 700; margin-bottom: .2rem; }
+      .insight-card p { font-size: .78rem; color: var(--muted); line-height: 1.5; }
+      .analytics-empty { text-align: center; padding: 2.5rem 1rem; color: var(--muted); font-size: .875rem; }
+      .analytics-empty-icon { font-size: 2rem; display: block; margin-bottom: .6rem; }
 
       /* ── NAV TABS ───────────────────────────────────────────── */
       .nav-tabs { display: flex; align-items: center; gap: .25rem; }
@@ -586,15 +602,15 @@
           <input type="hidden" name="caption_font" value="Poppins Bold" />
           <input type="hidden" name="brand_color" value="#FF7751" />
 
-          <label class="drop" id="drop" for="video">
+          <div class="drop" id="drop" role="button" tabindex="0" aria-label="Cliquez ou déposez votre vidéo ici">
             <svg class="drop-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M12 16V4M6 10l6-6 6 6"/>
               <path d="M4 20h16"/>
             </svg>
             <span id="dropLabel">Cliquez ou déposez votre vidéo ici</span>
             <span class="drop-hint">mp4 · mov · webm · jusqu'à 20 Go</span>
-            <input id="video" name="video" type="file" accept="video/*" required />
-          </label>
+            <input id="video" name="video" type="file" accept="video/*" />
+          </div>
 
           <!-- Template selector -->
           <div class="field" id="templateField">
@@ -820,17 +836,91 @@
 
       <!-- ANALYTICS SECTION -->
       <div id="analyticsSection" class="app-section">
-        <section class="card" id="analyticsPanel">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
-            <h2 style="font-size:1.05rem;font-weight:700">Analytique</h2>
-            <button type="button" id="collectBtn" class="btn btn-ghost" style="font-size:.8rem">Rafraîchir</button>
+        <section class="card">
+
+          <!-- Header -->
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem">
+            <div>
+              <h2 style="font-size:1.05rem;font-weight:700;margin-bottom:.15rem">Analytique</h2>
+              <p style="font-size:.75rem;color:var(--muted)" id="analyticsUpdated">Dernière mise à jour : aujourd'hui</p>
+            </div>
+            <button type="button" id="collectBtn" class="btn btn-ghost" style="font-size:.8rem">↻ Rafraîchir</button>
           </div>
-          <div class="analytics-grid">
-            <div class="analytics-card"><div class="big" id="aTotal">—</div><div class="sub">Vidéos éditées</div></div>
-            <div class="analytics-card"><div class="big" id="aAvgScore">—</div><div class="sub">Score moyen / 10</div></div>
+
+          <!-- 4 Stats cards -->
+          <div class="analytics-stats-grid">
+            <div class="analytics-stat">
+              <span class="big" id="aVideos">0</span>
+              <span class="sub">Vidéos éditées</span>
+            </div>
+            <div class="analytics-stat">
+              <span class="big" id="aTimeSaved">0h</span>
+              <span class="sub">Temps économisé</span>
+            </div>
+            <div class="analytics-stat">
+              <span class="big" id="aEmails">—</span>
+              <span class="sub">Emails capturés</span>
+            </div>
+            <div class="analytics-stat">
+              <span class="big" id="aViews">0</span>
+              <span class="sub">Vues générées</span>
+            </div>
           </div>
-          <div id="insightsList" style="margin-bottom:1rem"></div>
-          <div id="videoTable" style="overflow-x:auto"></div>
+
+          <!-- Recent videos table -->
+          <p class="analytics-section-title">Vidéos récentes</p>
+          <div style="overflow-x:auto;margin-bottom:1.5rem" id="videoTableWrap">
+            <div class="analytics-empty" id="videoTableEmpty">
+              <span class="analytics-empty-icon">🎬</span>
+              Aucune vidéo éditée pour l'instant.<br>
+              <button class="btn btn-ghost" style="margin-top:.75rem;font-size:.8rem" onclick="document.querySelector('[data-target=editorArea]').click()">Éditer ma première vidéo →</button>
+            </div>
+            <table class="video-table" id="videoTable" style="display:none">
+              <thead>
+                <tr>
+                  <th>Titre</th>
+                  <th>Format</th>
+                  <th>Date</th>
+                  <th>Statut</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="videoTableBody"></tbody>
+            </table>
+          </div>
+
+          <!-- Performance chart -->
+          <p class="analytics-section-title">Performance — Vues par vidéo</p>
+          <div class="perf-chart" id="perfChart" style="margin-bottom:1.5rem">
+            <p style="font-size:.8rem;color:var(--muted)">Aucune donnée pour l'instant.</p>
+          </div>
+
+          <!-- Insights -->
+          <p class="analytics-section-title">Insights</p>
+          <div class="insight-cards">
+            <div class="insight-card">
+              <span class="insight-icon">🎯</span>
+              <div>
+                <h4>Votre hook le plus performant</h4>
+                <p id="insightHook">Commencez par le résultat concret, pas par l'introduction. Les hooks qui démarrent avec "Voici comment…" ont 40% plus de rétention.</p>
+              </div>
+            </div>
+            <div class="insight-card">
+              <span class="insight-icon">📊</span>
+              <div>
+                <h4>Format qui convertit le mieux</h4>
+                <p id="insightFormat">Les vidéos de 60–90s génèrent en moyenne 3× plus d'engagement sur Reels et TikTok que les formats longs.</p>
+              </div>
+            </div>
+            <div class="insight-card">
+              <span class="insight-icon">⏰</span>
+              <div>
+                <h4>Meilleur moment pour poster</h4>
+                <p id="insightTiming">Publiez entre 18h–20h (heure locale) du mardi au jeudi pour maximiser la portée organique sur YouTube et Instagram.</p>
+              </div>
+            </div>
+          </div>
+
         </section>
       </div><!-- end analyticsSection -->
 

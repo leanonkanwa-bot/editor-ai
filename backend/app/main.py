@@ -341,8 +341,8 @@ def _send_welcome_email(email: str) -> None:
 </html>
 """,
         })
-    except Exception:
-        pass  # Never let email errors break the API response
+    except Exception as e:
+        print(f"[email] Failed to send welcome email to {email}: {e}")
 
 
 @app.post("/api/waitlist")
