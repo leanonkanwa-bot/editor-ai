@@ -975,6 +975,21 @@ def render(
         "-movflags", "+faststart",
         str(_nocap_path),
     ]
+
+    # ── DEBUG: dump the exact command FFmpeg will receive ─────────────────
+    import pathlib as _pathlib
+    _debug = _pathlib.Path("/tmp/debug_filter.txt")
+    _debug_lines = [
+        "=== filter_complex ===" if need_filter_complex else "=== -vf (no filter_complex) ===",
+        filter_complex if need_filter_complex else base_filter,
+        "",
+        "=== full cmd ===",
+        shlex.join(cmd),
+    ]
+    _debug.write_text("\n".join(_debug_lines))
+    print(f"[debug] filter written to {_debug}", flush=True)
+    # ─────────────────────────────────────────────────────────────────────
+
     _run(cmd)
 
     # Second pass: burn captions onto the caption-free first-pass video.
