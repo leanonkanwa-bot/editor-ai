@@ -282,18 +282,87 @@ def _save_waitlist(entries: list[dict]) -> None:
     _WAITLIST_FILE.write_text(json.dumps(entries, indent=2, ensure_ascii=False))
 
 
+def _send_welcome_email(email: str) -> None:
+    """Fire-and-forget welcome email via Resend. Silently skips if key not set."""
+    import os
+    try:
+        import resend as _resend
+    except ImportError:
+        return
+    api_key = os.environ.get("RESEND_API_KEY", "")
+    if not api_key:
+        return
+    _resend.api_key = api_key
+    try:
+        _resend.Emails.send({
+            "from": "LeanRetention <hello@leanretention.com>",
+            "to": [email],
+            "subject": "Bienvenue sur LeanRetention 🎬",
+            "html": """
+<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#080808">
+  <div style="font-family:'Helvetica Neue',Arial,sans-serif;background:#080808;color:#F5F5F6;
+              padding:48px 32px;max-width:560px;margin:0 auto">
+
+    <div style="margin-bottom:32px">
+      <span style="background:#FF7751;color:#080808;font-size:13px;font-weight:700;
+                   padding:6px 12px;border-radius:6px;letter-spacing:.04em">LEANRETENTION</span>
+    </div>
+
+    <h1 style="font-size:28px;font-weight:800;letter-spacing:-.02em;margin:0 0 12px;color:#F5F5F6">
+      Bienvenue&nbsp;! Votre&nbsp;première vidéo&nbsp;vous&nbsp;attend.&nbsp;🔥
+    </h1>
+
+    <p style="font-size:16px;color:rgba(245,245,246,.65);line-height:1.6;margin:0 0 32px">
+      LeanRetention analyse votre contenu, réécrit votre hook, supprime les
+      silences et ajoute des captions automatiquement.<br><br>
+      Première vidéo <strong style="color:#FF7751">offerte</strong> — aucune carte requise.
+    </p>
+
+    <a href="https://leanlead-production.up.railway.app/app"
+       style="display:inline-block;background:#FF7751;color:#fff;
+              padding:14px 28px;border-radius:8px;text-decoration:none;
+              font-weight:700;font-size:15px;
+              box-shadow:0 0 24px rgba(255,119,81,.35)">
+      Commencer l'édition →
+    </a>
+
+    <div style="margin-top:48px;padding-top:24px;border-top:1px solid rgba(255,255,255,.08)">
+      <p style="color:rgba(245,245,246,.35);font-size:12px;margin:0">
+        LeanRetention · Paris<br>
+        Vous recevez cet email car vous avez rejoint notre liste d'attente.<br>
+        <a href="#" style="color:#FF7751;text-decoration:none">Se désabonner</a>
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+""",
+        })
+    except Exception:
+        pass  # Never let email errors break the API response
+
+
 @app.post("/api/waitlist")
-def waitlist_join(payload: dict = Body(...)) -> dict:
+def waitlist_join(
+    background: BackgroundTasks,
+    payload: dict = Body(...),
+) -> dict:
     email = (payload.get("email") or "").strip().lower()
     if not email or "@" not in email:
         raise HTTPException(400, "Invalid email")
     entries = _load_waitlist()
-    if not any(e.get("email") == email for e in entries):
+    is_new = not any(e.get("email") == email for e in entries)
+    if is_new:
         entries.append({
             "email": email,
             "timestamp": payload.get("timestamp") or datetime.utcnow().isoformat(),
         })
         _save_waitlist(entries)
+        # Send welcome email in background (non-blocking)
+        background.add_task(_send_welcome_email, email)
     return {"success": True, "count": len(entries)}
 
 
