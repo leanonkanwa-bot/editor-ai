@@ -1102,7 +1102,7 @@ def render_motion_graphic(
         anchor_y = int(target_h * 0.15)
         x_expr = (
             f"if(lt(t-{at:.3f},0.3),"
-            f"-w + ({margin_l} - (-w))*((t-{at:.3f})/0.3)*((t-{at:.3f})/0.3)*(3-2*((t-{at:.3f})/0.3)),"
+            f"-w+({margin_l}-(-w))*((t-{at:.3f})/0.3)*((t-{at:.3f})/0.3)*(3-2*((t-{at:.3f})/0.3)),"
             f"{margin_l})"
         )
         y_expr = f"{anchor_y}"
@@ -1168,14 +1168,14 @@ def render_motion_graphic(
         if slide == "left":
             x_expr = (
                 f"if(lt(t-{at:.3f},0.3),"
-                f"-w + ({anchor_x} - (-w))*"
+                f"-w+({anchor_x}-(-w))*"
                 f"((t-{at:.3f})/0.3)*((t-{at:.3f})/0.3)*(3-2*((t-{at:.3f})/0.3)),"
                 f"{anchor_x})"
             )
         elif slide == "right":
             x_expr = (
                 f"if(lt(t-{at:.3f},0.3),"
-                f"W + ({anchor_x} - W)*"
+                f"W+({anchor_x}-W)*"
                 f"((t-{at:.3f})/0.3)*((t-{at:.3f})/0.3)*(3-2*((t-{at:.3f})/0.3)),"
                 f"{anchor_x})"
             )
