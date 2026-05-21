@@ -94,6 +94,23 @@ def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/api/test-ffmpeg")
+async def test_ffmpeg() -> dict:
+    import subprocess as _sp
+    from app.engine.transcribe import FFMPEG_PATH
+    cmd = [
+        FFMPEG_PATH, "-f", "lavfi", "-i", "color=c=black:s=100x100:d=1",
+        "-filter_complex", "[0:v]scale=100:100[out]",
+        "-map", "[out]", "-f", "null", "-",
+    ]
+    result = _sp.run(cmd, capture_output=True, text=True)
+    return {
+        "returncode": result.returncode,
+        "stdout": result.stdout[-500:],
+        "stderr": result.stderr[-500:],
+    }
+
+
 @app.get("/api/auth/status")
 def auth_status(request: Request) -> dict:
     if not _auth_required():
