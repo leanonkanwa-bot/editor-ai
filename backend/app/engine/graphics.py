@@ -786,6 +786,228 @@ def render_money_counter(
 
 
 # ---------------------------------------------------------------------------
+# Graphic 12 — Giant Text (Style 1: huge number + colored subtitle overlay)
+# ---------------------------------------------------------------------------
+
+def render_giant_text(
+    number: str,
+    subtitle: str,
+    subtitle_color_hex: str,
+    out_path: Path,
+    *,
+    target_w: int,
+    target_h: int,
+    face_top_pct: float = 15.0,
+    face_bottom_pct: float = 65.0,
+) -> Path:
+    """Huge white number/stat (e.g. '65%') with a colored subtitle below.
+    Sized to fill whichever safe zone (above/below face) is taller.
+    Background is transparent — overlaid on the live video."""
+    space_above_px = int(target_h * face_top_pct / 100)
+    space_below_px = int(target_h * (1.0 - face_bottom_pct / 100))
+    avail_h = max(space_above_px, space_below_px, 100)
+    avail_w = target_w
+
+    # Auto-size number font to fill ~70% of available height.
+    num_size = max(40, int(avail_h * 0.65))
+    num_font = _load_font("Poppins-ExtraBold", num_size)
+    # If text is too wide, shrink.
+    while num_size > 40 and _text_size(num_font, number)[0] > int(avail_w * 0.90):
+        num_size = max(40, int(num_size * 0.88))
+        num_font = _load_font("Poppins-ExtraBold", num_size)
+
+    sub_color = _hex_to_rgba(subtitle_color_hex, PALETTE["red"])
+    sub_size = max(20, int(num_size * 0.28))
+    sub_font = _load_font("Poppins-Bold", sub_size)
+
+    nw, nh = _text_size(num_font, number)
+    sw, sh = (_text_size(sub_font, subtitle) if subtitle else (0, 0))
+    gap = int(num_size * 0.08)
+    total_h = nh + (gap + sh if subtitle else 0) + 8
+    total_w = max(nw, sw) + 16
+
+    img = Image.new("RGBA", (total_w, total_h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+
+    # White number centered.
+    draw.text(((total_w - nw) // 2, 4), number, font=num_font, fill=PALETTE["white"])
+    if subtitle:
+        sub_lines = _wrap_text_to_width(subtitle, sub_font, total_w)
+        y = 4 + nh + gap
+        for ln in sub_lines:
+            lw, lh = _text_size(sub_font, ln)
+            draw.text(((total_w - lw) // 2, y), ln, font=sub_font, fill=sub_color)
+            y += lh + 4
+
+    img.save(out_path, "PNG")
+    return out_path
+
+
+# ---------------------------------------------------------------------------
+# Graphic 13 — Vignette Mask (rounded-rect alpha mask for alphamerge)
+# ---------------------------------------------------------------------------
+
+def render_vignette_mask(
+    width: int,
+    height: int,
+    corner_radius: int,
+    out_path: Path,
+) -> Path:
+    """Grayscale PNG: white inside rounded rect, black outside.
+    Used by FFmpeg alphamerge to give the person a rounded-corner vignette."""
+    img = Image.new("L", (width, height), 0)
+    draw = ImageDraw.Draw(img)
+    draw.rounded_rectangle((0, 0, width, height), radius=corner_radius, fill=255)
+    img.save(out_path, "PNG")
+    return out_path
+
+
+# ---------------------------------------------------------------------------
+# Graphic 14 — Whiteboard Layout (Style 2: white bg + text left + glow ring)
+# ---------------------------------------------------------------------------
+
+def render_whiteboard_layout(
+    content_text: str,
+    out_path: Path,
+    *,
+    target_w: int,
+    target_h: int,
+    vign_x: int,
+    vign_y: int,
+    vign_w: int,
+    vign_h: int,
+    glow_color: str = "#0A84FF",
+    bar_w: int = 30,
+) -> Path:
+    """Full-frame white PNG: text/content on the left, glow ring where the
+    person vignette will be overlaid by FFmpeg at (vign_x, vign_y)."""
+    img = Image.new("RGBA", (target_w, target_h), (255, 255, 255, 255))
+    draw = ImageDraw.Draw(img)
+
+    # Black decorative side bars.
+    draw.rectangle((0, 0, bar_w, target_h), fill=(10, 10, 10, 255))
+    draw.rectangle((target_w - bar_w, 0, target_w, target_h), fill=(10, 10, 10, 255))
+
+    # Glow ring around the vignette area (drawn BEFORE the person is overlaid).
+    glow = _hex_to_rgba(glow_color, PALETTE["blue"])
+    border = 10
+    glow_alpha_ring = (*glow[:3], 220)
+    draw.rounded_rectangle(
+        (vign_x - border, vign_y - border,
+         vign_x + vign_w + border, vign_y + vign_h + border),
+        radius=50, outline=glow_alpha_ring, width=8, fill=None,
+    )
+    # Faint glow halo.
+    for g in range(1, 4):
+        ga = (*glow[:3], max(0, 60 - g * 18))
+        draw.rounded_rectangle(
+            (vign_x - border - g * 5, vign_y - border - g * 5,
+             vign_x + vign_w + border + g * 5, vign_y + vign_h + border + g * 5),
+            radius=55 + g * 4, outline=ga, width=4, fill=None,
+        )
+
+    # Content text on the left (safe zone: bar_w+20 to vign_x-40).
+    max_content_w = vign_x - bar_w - 60
+    font_size = max(24, min(int(target_h * 0.045), 80))
+    font = _load_font("Poppins-Bold", font_size)
+    lines = _wrap_text_to_width(content_text or "", font, max_content_w)
+    ascent, descent = font.getmetrics()
+    lh = ascent + descent
+    block_h = len(lines) * lh + max(0, len(lines) - 1) * 12
+    y = max(bar_w + 20, (target_h - block_h) // 3)
+    for ln in lines:
+        draw.text((bar_w + 30, y), ln, font=font, fill=(10, 10, 10, 255))
+        y += lh + 12
+
+    img.save(out_path, "PNG")
+    return out_path
+
+
+# ---------------------------------------------------------------------------
+# Graphic 15 — Slide Layout (Style 3: white bg + title + bullets + glow ring)
+# ---------------------------------------------------------------------------
+
+def render_slide_layout(
+    title: str,
+    bullets: list[str],
+    out_path: Path,
+    *,
+    target_w: int,
+    target_h: int,
+    vign_x: int,
+    vign_y: int,
+    vign_w: int,
+    vign_h: int,
+    glow_color: str = "#0A84FF",
+    bar_w: int = 30,
+) -> Path:
+    """Full-frame white PNG: big title left + bullet list, glow ring where
+    the person vignette will be overlaid by FFmpeg."""
+    img = Image.new("RGBA", (target_w, target_h), (255, 255, 255, 255))
+    draw = ImageDraw.Draw(img)
+
+    # Black side bars.
+    draw.rectangle((0, 0, bar_w, target_h), fill=(10, 10, 10, 255))
+    draw.rectangle((target_w - bar_w, 0, target_w, target_h), fill=(10, 10, 10, 255))
+
+    # Glow ring.
+    glow = _hex_to_rgba(glow_color, PALETTE["blue"])
+    border = 10
+    glow_alpha_ring = (*glow[:3], 220)
+    draw.rounded_rectangle(
+        (vign_x - border, vign_y - border,
+         vign_x + vign_w + border, vign_y + vign_h + border),
+        radius=50, outline=glow_alpha_ring, width=8, fill=None,
+    )
+    for g in range(1, 4):
+        ga = (*glow[:3], max(0, 60 - g * 18))
+        draw.rounded_rectangle(
+            (vign_x - border - g * 5, vign_y - border - g * 5,
+             vign_x + vign_w + border + g * 5, vign_y + vign_h + border + g * 5),
+            radius=55 + g * 4, outline=ga, width=4, fill=None,
+        )
+
+    content_w = vign_x - bar_w - 60
+    pad_x = bar_w + 30
+    y = int(target_h * 0.08)
+
+    # Title.
+    title_size = max(32, min(int(content_w * 0.09), 100))
+    title_font = _load_font("Poppins-ExtraBold", title_size)
+    while title_size > 32 and _text_size(title_font, title or "")[0] > content_w:
+        title_size = max(32, int(title_size * 0.88))
+        title_font = _load_font("Poppins-ExtraBold", title_size)
+    title_lines = _wrap_text_to_width(title or "", title_font, content_w)
+    t_ascent, t_descent = title_font.getmetrics()
+    for ln in title_lines:
+        draw.text((pad_x, y), ln, font=title_font, fill=(10, 10, 10, 255))
+        y += t_ascent + t_descent + 8
+    y += int(title_size * 0.3)
+
+    # Accent line under title.
+    glow_rgb = glow[:3]
+    draw.rectangle((pad_x, y, pad_x + min(content_w, 200), y + 5),
+                   fill=(*glow_rgb, 255))
+    y += 24
+
+    # Bullet points.
+    bull_size = max(22, int(title_size * 0.48))
+    bull_font = _load_font("Poppins-Bold", bull_size)
+    b_ascent, b_descent = bull_font.getmetrics()
+    for bullet in (bullets or []):
+        bullet_text = f"→  {bullet}"
+        b_lines = _wrap_text_to_width(bullet_text, bull_font, content_w - 20)
+        for i, ln in enumerate(b_lines):
+            draw.text((pad_x + (20 if i > 0 else 0), y), ln,
+                      font=bull_font, fill=(30, 30, 30, 255))
+            y += b_ascent + b_descent + 6
+        y += int(bull_size * 0.3)
+
+    img.save(out_path, "PNG")
+    return out_path
+
+
+# ---------------------------------------------------------------------------
 # Dispatcher — turn one motion_graphic JSON into a rendered PNG + position.
 # ---------------------------------------------------------------------------
 
@@ -1093,6 +1315,36 @@ def render_motion_graphic(
         return RenderedGraphic(
             png=png, at=at, duration=duration,
             x_expr="0", y_expr="0", kind=kind, bg_card=bg_card,
+        )
+
+    if kind == "giant_text":
+        number = str(spec.get("number") or spec.get("text") or "").strip()
+        subtitle = str(spec.get("subtitle") or "").strip()
+        sub_color = spec.get("subtitle_color") or "#FF3B30"
+        if not number:
+            return None
+        ft = _ft
+        fb = _fb
+        render_giant_text(
+            number, subtitle, sub_color, png,
+            target_w=target_w, target_h=target_h,
+            face_top_pct=ft, face_bottom_pct=fb,
+        )
+        # Place in the safe zone with the most vertical space.
+        space_above = ft
+        space_below = 100.0 - fb
+        if space_above >= space_below:
+            y_expr = f"max(0, {int(target_h * ft / 100 / 2)} - h/2)"
+        else:
+            safe_start = int(target_h * fb / 100)
+            safe_end = target_h
+            y_expr = f"{safe_start + (safe_end - safe_start) // 2} - h/2"
+        x_expr = "(W-w)/2"
+        if bg_card:
+            _apply_bg_card(png, bg_card)
+        return RenderedGraphic(
+            png=png, at=at, duration=duration,
+            x_expr=x_expr, y_expr=y_expr, kind=kind, bg_card=bg_card,
         )
 
     return None
