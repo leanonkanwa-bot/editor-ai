@@ -946,10 +946,17 @@ def render(
         for _bad in _INVALID_FILTERS:
             if f"]{_bad}[" in filter_complex:
                 filter_complex = filter_complex.replace(f"]{_bad}[", "]null[")
-        # Pass filter_complex directly — subprocess list args bypass the Windows
-        # shell entirely so there is no 8191-char command-line limit here.
         filter_complex = filter_complex.rstrip("'")
-        cmd += ["-filter_complex", filter_complex, "-map", "[final]"]
+        # Write filter_complex to a temp file and use -filter_complex_script.
+        # This completely bypasses argument-length limits and any shell/parser
+        # escaping issues that can cause "Invalid argument" on Railway's FFmpeg.
+        import tempfile as _tempfile_fc, os as _os_fc
+        _fc_file = _tempfile_fc.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False, encoding="utf-8"
+        )
+        _fc_file.write(filter_complex)
+        _fc_file.close()
+        cmd += ["-filter_complex_script", _fc_file.name, "-map", "[final]"]
         _has_a_chain = _has_audio and (audio_duck_ranges or sfx_inputs)
         if _has_a_chain:
             cmd += ["-map", "[a_out]"]
@@ -991,6 +998,12 @@ def render(
     # ─────────────────────────────────────────────────────────────────────
 
     _run(cmd)
+    # Clean up filter_complex_script temp file (only exists when need_filter_complex).
+    if need_filter_complex:
+        try:
+            _os_fc.unlink(_fc_file.name)
+        except Exception:
+            pass
 
     # Second pass: burn captions onto the caption-free first-pass video.
     # Running this as a separate ffmpeg invocation avoids all filter_complex
