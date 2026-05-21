@@ -52,6 +52,12 @@ CAP_SIZE_LONG = 76      # 7.0% of 1080
 
 PUNCT_RE = re.compile(r"[.,!?;:\"'()\[\]…–—]")
 
+# Prime the viewer 1 frame before the word is fully spoken (Typography Engine rule).
+# At 30fps one frame = 0.0333s. The caption appears this much earlier than the
+# word's detected start — the brain processes text ~100ms ahead of audio, so this
+# keeps perception in sync rather than making captions feel late.
+CAPTION_LEAD_S: float = 1.0 / 30.0  # ~33ms
+
 
 @dataclass
 class WordTiming:
@@ -210,8 +216,11 @@ def build_ass(
         if emphasis_only and not is_emphasis:
             continue
         style_name = "Emphasis" if is_emphasis else "Default"
+        # Apply 1-frame lead: caption appears slightly before the word is
+        # fully spoken so perception stays in sync (Typography Engine rule).
+        start = max(0.0, w.start - CAPTION_LEAD_S)
         lines.append(
-            f"Dialogue: 0,{_ts(w.start)},{_ts(w.end)},{style_name},,0,0,0,,{clean}"
+            f"Dialogue: 0,{_ts(start)},{_ts(w.end)},{style_name},,0,0,0,,{clean}"
         )
 
     out_path.write_text("\n".join(lines), encoding="utf-8")

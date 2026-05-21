@@ -1,0 +1,257 @@
+"""Rhythm-Aware Silence Remover — Feature 2.
+
+Processes word timestamps and segments to identify pauses and filler words
+that should be removed without disrupting natural speech rhythm.
+
+Rules:
+  - Remove pauses > 0.5s mid-sentence.
+  - Remove pauses > 0.3s after filler words (um, uh, like, basically, etc.).
+  - Keep authority pauses before periods/full-stops.
+  - Keep emphasis pauses before PRINCIPLE/PAYOFF keywords.
+  - Keep question beats (pause before rhetorical questions).
+  - Keep last 0.3s of each segment.
+  - Remove filler words when they are standalone (not used as comparisons).
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from typing import Any
+
+
+_FILLER_WORDS = frozenset({
+    "um", "uh", "uhh", "umm", "hmm", "hm", "er", "erm",
+    "like", "basically", "literally", "actually", "honestly",
+    "you know", "i mean", "right", "okay", "so", "well",
+    "kind of", "sort of", "you know what i mean",
+})
+
+_FILLERS_RE = re.compile(
+    r"^(" + "|".join(re.escape(f) for f in sorted(_FILLER_WORDS, key=len, reverse=True)) + r")$",
+    re.IGNORECASE,
+)
+
+_PRINCIPLE_PAYOFF = re.compile(
+    r"\b(the truth is|the key is|the secret is|the reason is|the point is|"
+    r"what that means|what this means|here is|this is why|the answer is|"
+    r"the reality is|remember this|never forget|most people|nobody talks|"
+    r"this changed|this is the|the biggest|the real|the only)\b",
+    re.IGNORECASE,
+)
+
+_PAUSE_MID_SENTENCE = 0.5   # seconds — remove pauses longer than this
+_PAUSE_AFTER_FILLER = 0.3   # seconds — remove pauses after fillers longer than this
+_KEEP_SEGMENT_TAIL  = 0.3   # seconds — always keep the last 0.3s of each segment
+
+
+@dataclass
+class DropSegment:
+    """A time range to drop from the audio/video timeline."""
+    start: float
+    end: float
+    reason: str
+
+
+class RhythmAwareSilenceRemover:
+    """Analyses word timestamps and returns segments to drop."""
+
+    def process(
+        self,
+        word_timestamps: list[dict[str, Any]],
+        segments: list[dict[str, Any]],
+    ) -> list[DropSegment]:
+        """
+        Returns a list of DropSegment objects representing time ranges to cut.
+
+        Args:
+            word_timestamps: flat list of {text, start, end} word dicts
+            segments: list of {start, end, text, words} segment dicts
+
+        Returns:
+            list of DropSegment in chronological order, non-overlapping
+        """
+        drops: list[DropSegment] = []
+
+        # Build a flat list of (text, start, end) from segments.
+        words: list[tuple[str, float, float]] = []
+        for seg in segments:
+            for w in seg.get("words", []):
+                try:
+                    words.append((
+                        str(w.get("text", "")).strip(),
+                        float(w["start"]),
+                        float(w["end"]),
+                    ))
+                except (KeyError, TypeError, ValueError):
+                    continue
+
+        if not words:
+            # Fall back to word_timestamps list.
+            for w in word_timestamps:
+                try:
+                    words.append((
+                        str(w.get("text", "")).strip(),
+                        float(w["start"]),
+                        float(w["end"]),
+                    ))
+                except (KeyError, TypeError, ValueError):
+                    continue
+
+        if len(words) < 2:
+            return drops
+
+        # Build segment end times for boundary detection.
+        segment_ends: set[float] = set()
+        for seg in segments:
+            try:
+                segment_ends.add(float(seg["end"]))
+            except (KeyError, TypeError, ValueError):
+                pass
+
+        for i in range(len(words) - 1):
+            cur_text,  cur_start,  cur_end  = words[i]
+            next_text, next_start, next_end = words[i + 1]
+
+            gap_start = cur_end
+            gap_end   = next_start
+            gap_dur   = gap_end - gap_start
+
+            if gap_dur <= 0:
+                continue
+
+            # Skip: end of segment tail — preserve rhythm.
+            # If this is the last word before a segment boundary, keep the gap.
+            if any(abs(cur_end - se) < 0.1 for se in segment_ends):
+                continue
+
+            # Skip: the gap is before a PRINCIPLE/PAYOFF keyword — keep it.
+            if _PRINCIPLE_PAYOFF.search(next_text):
+                continue
+
+            # Skip: gap before a question mark word (rhetorical question beat).
+            if next_text.rstrip().endswith("?"):
+                continue
+
+            # Remove: pause after a filler word.
+            if _FILLERS_RE.match(cur_text) and gap_dur > _PAUSE_AFTER_FILLER:
+                drops.append(DropSegment(gap_start, gap_end, f"pause_after_filler:{cur_text}"))
+                continue
+
+            # Remove: long mid-sentence pause.
+            if gap_dur > _PAUSE_MID_SENTENCE:
+                # But preserve if it's before an important transition word.
+                if not _PRINCIPLE_PAYOFF.search(next_text):
+                    # Keep up to 0.25s of the pause for natural breath.
+                    trimmed_start = gap_start + 0.25
+                    if trimmed_start < gap_end - 0.05:
+                        drops.append(DropSegment(trimmed_start, gap_end, "long_mid_sentence_pause"))
+                    continue
+
+        # Remove standalone filler words (when confidence is implied by position).
+        filler_drops = self._find_filler_word_drops(words, segment_ends)
+        drops.extend(filler_drops)
+
+        # Sort and merge overlapping drops.
+        drops.sort(key=lambda d: d.start)
+        return _merge_drops(drops)
+
+    def _find_filler_word_drops(
+        self,
+        words: list[tuple[str, float, float]],
+        segment_ends: set[float],
+    ) -> list[DropSegment]:
+        """Drop standalone filler words that serve no semantic purpose."""
+        drops: list[DropSegment] = []
+        for i, (text, start, end) in enumerate(words):
+            if not _FILLERS_RE.match(text):
+                continue
+
+            # Don't drop if it's the only word or surrounded by pauses.
+            if i == 0 or i == len(words) - 1:
+                continue
+
+            # Don't drop if it's at a segment boundary.
+            if any(abs(end - se) < 0.1 for se in segment_ends):
+                continue
+
+            # Don't drop "like" if used as comparison (following by a noun/adjective).
+            if text.lower() == "like":
+                prev_text = words[i - 1][0] if i > 0 else ""
+                if _is_comparison_like(prev_text):
+                    continue
+
+            # Don't drop "so" if it's a meaningful connector at sentence start.
+            if text.lower() == "so":
+                if i == 0:
+                    continue
+                prev_end = words[i - 1][2]
+                if start - prev_end > 0.3:  # preceded by a pause → sentence starter
+                    continue
+
+            drops.append(DropSegment(start, end, f"filler_word:{text}"))
+
+        return drops
+
+
+def _is_comparison_like(preceding_word: str) -> bool:
+    """Heuristic: 'like' is a comparison if preceded by a verb or 'just'."""
+    comparison_triggers = {"just", "look", "works", "acts", "feels", "sounds", "seems"}
+    return preceding_word.lower().rstrip(".,!?") in comparison_triggers
+
+
+def _merge_drops(drops: list[DropSegment]) -> list[DropSegment]:
+    """Merge overlapping or adjacent drop segments."""
+    if not drops:
+        return drops
+    merged: list[DropSegment] = [drops[0]]
+    for d in drops[1:]:
+        last = merged[-1]
+        if d.start <= last.end + 0.05:
+            # Extend the last segment.
+            merged[-1] = DropSegment(last.start, max(last.end, d.end), last.reason)
+        else:
+            merged.append(d)
+    return merged
+
+
+def apply_drops_to_transcript(
+    transcript: dict[str, Any],
+    drops: list[DropSegment],
+) -> dict[str, Any]:
+    """
+    Returns a copy of the transcript with word timestamps adjusted to
+    remove the dropped time ranges. Does NOT modify the original dict.
+
+    The output timestamps reflect what the audio would look like if the
+    drop ranges were spliced out — used to keep the caption/plan timings
+    consistent with silence-removed audio.
+    """
+    if not drops:
+        return transcript
+
+    import copy
+    t = copy.deepcopy(transcript)
+
+    def _adjust_time(original_t: float) -> float:
+        adjusted = original_t
+        shift = 0.0
+        for d in drops:
+            if original_t <= d.start:
+                break
+            if original_t >= d.end:
+                shift += d.end - d.start
+            else:
+                # Time falls inside a drop — clamp to drop start.
+                shift += original_t - d.start
+                break
+        return original_t - shift
+
+    for seg in t.get("segments", []):
+        seg["start"] = _adjust_time(float(seg.get("start", 0)))
+        seg["end"]   = _adjust_time(float(seg.get("end", 0)))
+        for w in seg.get("words", []):
+            w["start"] = _adjust_time(float(w.get("start", 0)))
+            w["end"]   = _adjust_time(float(w.get("end", 0)))
+
+    return t

@@ -77,6 +77,22 @@ class EditPlan:
     def thumbnail_mot(self) -> str:
         return self.raw.get("thumbnail_mot", "")
 
+    @property
+    def visual_style_moments(self) -> list[dict[str, Any]]:
+        return self.raw.get("visual_style_moments", [])
+
+    @property
+    def sfx_cues(self) -> list[dict[str, Any]]:
+        return self.raw.get("sfx_cues", [])
+
+    @property
+    def speed_ramps(self) -> list[dict[str, Any]]:
+        return self.raw.get("speed_ramps", [])
+
+    @property
+    def music_energy(self) -> list[dict[str, Any]]:
+        return self.raw.get("music_energy", [])
+
 
 def _decide_format(duration_s: float, hint: FormatHint) -> str:
     if hint in ("short", "long"):
@@ -184,7 +200,7 @@ def plan_edit(
     caption_position: str | None = None,
     caption_font: str | None = None,
     subject_position: dict[str, float] | None = None,
-    aesthetic: str = "dark-pro",
+    aesthetic: str = "high-energy",  # kept for API compat, ignored internally
 ) -> EditPlan:
     """
     Ask Claude to produce an edit plan for the given transcript.
@@ -223,6 +239,17 @@ def plan_edit(
                     f"DURATION: {duration:.2f}s\n"
                     f"LANGUAGE: {transcript.get('language', 'en')}\n"
                     f"{face_context}\n"
+                    "PRE-ANALYSIS (do before building the plan):\n"
+                    "  1. content_type: coaching | education | story | motivation\n"
+                    "  2. primary_audience: who this is for (1 sentence)\n"
+                    "  3. key_result: the ONE outcome the viewer gets (1 sentence)\n"
+                    "  4. hook_moment: timestamp (seconds) of the most counterintuitive claim\n\n"
+                    "HOOK FIRST — STRICT: The segment at hook_moment must be first in\n"
+                    "keep_segments regardless of its position in the original transcript.\n"
+                    "No intro. No context. The most surprising thing first, immediately.\n\n"
+                    "TENSION MECHANICS: For each setup (question/problem/curiosity gap),\n"
+                    "ensure its payoff appears AT LEAST 20 seconds later in the edit.\n"
+                    "If adjacent in the source, INSERT a story or principle between them.\n\n"
                     f"USER INSTRUCTIONS:\n{user_instructions or '(none — apply default high-retention edit)'}\n\n"
                     "TRANSCRIPT WITH WORD TIMESTAMPS (JSON):\n"
                     f"{json.dumps(transcript, ensure_ascii=False)}\n\n"
@@ -237,11 +264,10 @@ def plan_edit(
         max_tokens=16000,
         system=system_prompt(
             format_hint=fmt,
-            brand_color=brand_color,
-            caption_color=caption_color,
-            caption_position=caption_position,
-            caption_font=caption_font,
-            aesthetic=aesthetic,
+            brand_color=brand_color or "#FF7751",
+            caption_color=caption_color or "white",
+            caption_position=caption_position or "center",
+            caption_font=caption_font or "Poppins Bold",
         ),
         messages=[user_msg],
     )
@@ -250,6 +276,59 @@ def plan_edit(
     plan = _extract_json(text)
     plan.setdefault("format", fmt)
     return EditPlan(raw=plan)
+
+
+def rewrite_hook(
+    transcript_text: str,
+    original_hook_segment: str,
+    brand_color: str = "#FF7751",
+) -> dict[str, Any]:
+    """
+    Ask Claude to rewrite the hook opening line for maximum retention.
+    Returns: {rewritten_hook, hook_type, display_style, confidence}
+    If confidence < 0.7 the caller should skip the overlay.
+    Falls back to a safe default dict on any error.
+    """
+    try:
+        resp = _client().messages.create(
+            model=settings.anthropic_model,
+            max_tokens=256,
+            messages=[{
+                "role": "user",
+                "content": (
+                    "You are a viral video hook specialist. Rewrite the following opening "
+                    "line to maximise scroll-stop retention.\n\n"
+                    "RULES:\n"
+                    "  - Max 12 words.\n"
+                    "  - Start with the most counterintuitive or specific claim.\n"
+                    "  - No filler ('In this video...', 'Today I want to...').\n"
+                    "  - Match the speaker's voice.\n"
+                    "  - hook_type: one of: question | statement | number | contrast | story\n"
+                    "  - display_style: bold_overlay | subtitle | none\n"
+                    "  - confidence: 0.0–1.0 (how sure you are this improves the original)\n\n"
+                    f"ORIGINAL HOOK: {original_hook_segment}\n\n"
+                    f"FULL TRANSCRIPT EXCERPT (first 300 chars): {transcript_text[:300]}\n\n"
+                    "Reply ONLY with JSON:\n"
+                    '{"rewritten_hook":"...","hook_type":"...","display_style":"...",'
+                    '"confidence":0.0}'
+                ),
+            }],
+        )
+        text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
+        data = _extract_json(text)
+        return {
+            "rewritten_hook": str(data.get("rewritten_hook", original_hook_segment)),
+            "hook_type":      str(data.get("hook_type",      "statement")),
+            "display_style":  str(data.get("display_style",  "bold_overlay")),
+            "confidence":     float(data.get("confidence",   0.0)),
+        }
+    except Exception:
+        return {
+            "rewritten_hook": original_hook_segment,
+            "hook_type":      "statement",
+            "display_style":  "none",
+            "confidence":     0.0,
+        }
 
 
 def _extract_json(text: str) -> dict[str, Any]:

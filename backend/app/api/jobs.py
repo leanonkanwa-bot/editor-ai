@@ -42,6 +42,15 @@ class Job:
     created_at: float = field(default_factory=time.time)
     result: dict[str, Any] | None = None
     error: str | None = None
+    source_path: str | None = None          # absolute path to source video on disk
+    params: dict[str, Any] = field(default_factory=dict)  # run_job kwargs for retry
+    # Two-phase pipeline fields (Feature 7)
+    plan_data: dict[str, Any] | None = None      # edit plan JSON (ready_for_review phase)
+    transcript: dict[str, Any] | None = None     # whisper transcript dict
+    subject_pos: dict[str, float] | None = None  # vision-detected face position
+    energy_profile: list | None = None           # EnergyPoint dicts
+    hook_overlay: dict[str, Any] | None = None   # rewrite_hook result
+    preview: dict[str, Any] | None = None        # structured preview sent to frontend
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

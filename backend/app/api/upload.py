@@ -2,13 +2,15 @@
 
 Flow:
   1. POST /api/upload/init         → { upload_id }
-  2. PUT  /api/upload/chunk/{id}/{n}  (body = raw bytes, max 50 MB each)
+  2. PUT  /api/upload/chunk/{id}/{n}  (body = raw bytes, up to 250 MB each)
   3. POST /api/upload/assemble/{id}  (body = { filename }) → { upload_id, size_bytes }
 
 After step 3 the assembled file sits at uploads/{upload_id}.{ext}.
 The client then calls POST /api/edit with upload_id=<id> instead of a
 video file attachment — the edit endpoint skips the file copy and uses
 the pre-assembled path directly.
+
+File size ceiling: only disk space. 20 GB+ files are supported.
 """
 
 from __future__ import annotations
@@ -48,21 +50,32 @@ async def upload_init(request: Request) -> JSONResponse:
     return JSONResponse({"upload_id": upload_id})
 
 
+_MAX_CHUNK_BYTES = 250 * 1024 * 1024  # 250 MB per chunk
+
+
 @router.put("/api/upload/chunk/{upload_id}/{chunk_index}")
 async def upload_chunk(
     upload_id: str,
     chunk_index: int,
     request: Request,
 ) -> JSONResponse:
-    """Store one raw-bytes chunk. Max 100 MB per chunk."""
+    """Store one raw-bytes chunk. Streams directly to disk — no full-body buffer."""
     d = _chunk_dir(upload_id)
     if not d.exists():
         raise HTTPException(404, "Upload session not found. Call /api/upload/init first.")
-    data = await request.body()
-    if len(data) > 100 * 1024 * 1024:
-        raise HTTPException(413, "Chunk too large (max 100 MB).")
-    (d / f"chunk_{chunk_index:08d}").write_bytes(data)
-    return JSONResponse({"chunk_index": chunk_index, "received": len(data)})
+
+    chunk_path = d / f"chunk_{chunk_index:08d}"
+    received = 0
+    with chunk_path.open("wb") as fh:
+        async for piece in request.stream():
+            received += len(piece)
+            if received > _MAX_CHUNK_BYTES:
+                fh.close()
+                chunk_path.unlink(missing_ok=True)
+                raise HTTPException(413, f"Chunk too large (max {_MAX_CHUNK_BYTES // (1024*1024)} MB).")
+            fh.write(piece)
+
+    return JSONResponse({"chunk_index": chunk_index, "received": received})
 
 
 @router.post("/api/upload/assemble/{upload_id}")
