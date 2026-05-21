@@ -703,15 +703,6 @@ def render(
         fb = subject_position.get("face_bottom_pct", 65.0)
         face_cx_pct = (fl + fr) / 2
         face_cy_pct = (ft + fb) / 2
-    # Simple stable zoom — avoids FFmpeg expression complexity limits.
-    # A constant 1.04x zoom anchored to the frame center (or face center when
-    # detected) gives a clean professional look without any filter parser risk.
-    if face_cx_pct != 50.0 or face_cy_pct != 50.0:
-        _zoom_x = f"max(0,min(iw-(iw/zoom),iw*{face_cx_pct/100:.4f}-(iw/zoom/2)))"
-        _zoom_y = f"max(0,min(ih-(ih/zoom),ih*{face_cy_pct/100:.4f}-(ih/zoom/2)))"
-    else:
-        _zoom_x = "iw/2-(iw/zoom/2)"
-        _zoom_y = "ih/2-(ih/zoom/2)"
     total_frames = max(1, int(total_duration * fps))
 
     hyperframe_chain = _build_hyperframe_filters(
@@ -768,12 +759,13 @@ def render(
     vw, vh, vx, vy, _cr = _vignette_dims(short_form) if V > 0 else (0, 0, 0, 0, 0)
 
     # Build the final filter chain.
-    # Color grade is FIRST so all overlays (zoom, graphics, captions) inherit the look.
+    # zoompan removed — Railway's FFmpeg rejects max()/min() in x=/y= params.
+    # Simple scale+pad gives 100% reliable output; zoom effects can be layered later.
     color_grade = _color_grade_filter(content_type)
     base_filter = (
         f"{color_grade},"
-        f"zoompan=z=1.04:x={_zoom_x}:y={_zoom_y}:"
-        f"d=1:s={target_w}x{target_h}:fps={fps}"
+        f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease,"
+        f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2"
         f"{hyperframe_chain}"
     )
     import shutil as _shutil
