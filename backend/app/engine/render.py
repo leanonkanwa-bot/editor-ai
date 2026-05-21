@@ -703,11 +703,15 @@ def render(
         fb = subject_position.get("face_bottom_pct", 65.0)
         face_cx_pct = (fl + fr) / 2
         face_cy_pct = (ft + fb) / 2
-    z_expr, xy_expr = _build_zoom_expression(
-        remapped_zoom, total_duration, fps=fps,
-        face_cx_pct=face_cx_pct, face_cy_pct=face_cy_pct,
-    )
-    x_expr, y_expr = xy_expr.split(";")
+    # Simple stable zoom — avoids FFmpeg expression complexity limits.
+    # A constant 1.04x zoom anchored to the frame center (or face center when
+    # detected) gives a clean professional look without any filter parser risk.
+    if face_cx_pct != 50.0 or face_cy_pct != 50.0:
+        _zoom_x = f"max(0,min(iw-(iw/zoom),iw*{face_cx_pct/100:.4f}-(iw/zoom/2)))"
+        _zoom_y = f"max(0,min(ih-(ih/zoom),ih*{face_cy_pct/100:.4f}-(ih/zoom/2)))"
+    else:
+        _zoom_x = "iw/2-(iw/zoom/2)"
+        _zoom_y = "ih/2-(ih/zoom/2)"
     total_frames = max(1, int(total_duration * fps))
 
     hyperframe_chain = _build_hyperframe_filters(
@@ -768,7 +772,7 @@ def render(
     color_grade = _color_grade_filter(content_type)
     base_filter = (
         f"{color_grade},"
-        f"zoompan=z={z_expr}:x={x_expr}:y={y_expr}:"
+        f"zoompan=z=1.04:x={_zoom_x}:y={_zoom_y}:"
         f"d=1:s={target_w}x{target_h}:fps={fps}"
         f"{hyperframe_chain}"
     )
