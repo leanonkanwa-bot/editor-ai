@@ -307,8 +307,8 @@ def _build_zoom_expression(
     detected face center instead of the geometric frame center.
     """
     if face_cx_pct != 50.0 or face_cy_pct != 50.0:
-        fx = f"max(0, min(iw-(iw/zoom), iw*{face_cx_pct/100:.4f}-(iw/zoom/2)))"
-        fy = f"max(0, min(ih-(ih/zoom), ih*{face_cy_pct/100:.4f}-(ih/zoom/2)))"
+        fx = f"max(0,min(iw-(iw/zoom),iw*{face_cx_pct/100:.4f}-(iw/zoom/2)))"
+        fy = f"max(0,min(ih-(ih/zoom),ih*{face_cy_pct/100:.4f}-(ih/zoom/2)))"
     else:
         fx = "iw/2-(iw/zoom/2)"
         fy = "ih/2-(ih/zoom/2)"
@@ -351,7 +351,7 @@ def _build_zoom_expression(
         kind = (step.get("kind") or "drift").lower()
 
         # Linear progress in [0,1].
-        t = f"min(1, max(0, (on-{f0}) / {seg_dur}))"
+        t = f"min(1,max(0,(on-{f0})/{seg_dur}))"
 
         if kind == "punch_in":
             # Hard cut — no interpolation. The whole window holds at z_to.
