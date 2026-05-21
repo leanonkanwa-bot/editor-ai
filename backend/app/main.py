@@ -97,17 +97,67 @@ def healthz() -> dict[str, str]:
 @app.get("/api/test-ffmpeg")
 async def test_ffmpeg() -> dict:
     import subprocess as _sp
+    import tempfile as _tf
+    import os as _os
     from app.engine.transcribe import FFMPEG_PATH
-    cmd = [
+
+    def _run(cmd):
+        r = _sp.run(cmd, capture_output=True, text=True)
+        return {"returncode": r.returncode, "err": r.stderr[-200:]}
+
+    # Test 1: drawbox + between() — same pattern as hyperframe chain
+    fc1 = (
+        "[0:v]scale=100:100,"
+        "drawbox=x=0:y=0:w=50:h=50:color=red@1.0:t=fill:enable=between(t,0,0.5)"
+        "[out]"
+    )
+    r1 = _run([
         FFMPEG_PATH, "-f", "lavfi", "-i", "color=c=black:s=100x100:d=1",
-        "-filter_complex", "[0:v]scale=100:100[out]",
-        "-map", "[out]", "-f", "null", "-",
-    ]
-    result = _sp.run(cmd, capture_output=True, text=True)
+        "-filter_complex", fc1, "-map", "[out]", "-f", "null", "-",
+    ])
+
+    # Test 2: overlay with two inputs — same pattern as motion graphics chain
+    fc2 = "[0:v]scale=100:100[bg];[bg][1:v]overlay=x=0:y=0:enable=between(t,0,0.5)[out]"
+    r2 = _run([
+        FFMPEG_PATH,
+        "-f", "lavfi", "-i", "color=c=black:s=100x100:d=1",
+        "-f", "lavfi", "-i", "color=c=red:s=50x50:d=1",
+        "-filter_complex", fc2, "-map", "[out]", "-f", "null", "-",
+    ])
+
+    # Test 3: video + audio in same filter_complex — same pattern as duck chain
+    fc3 = (
+        "[0:v]scale=100:100[out];"
+        "[1:a]volume=enable=between(t,0,0.5):volume=0[aout]"
+    )
+    r3 = _run([
+        FFMPEG_PATH,
+        "-f", "lavfi", "-i", "color=c=black:s=100x100:d=1",
+        "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+        "-filter_complex", fc3,
+        "-map", "[out]", "-map", "[aout]", "-f", "null", "-",
+    ])
+
+    # Test 4: same fc2 but via -filter_complex_script temp file
+    _fc_tmp = _tf.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8")
+    _fc_tmp.write(fc2)
+    _fc_tmp.close()
+    try:
+        r4 = _run([
+            FFMPEG_PATH,
+            "-f", "lavfi", "-i", "color=c=black:s=100x100:d=1",
+            "-f", "lavfi", "-i", "color=c=red:s=50x50:d=1",
+            "-filter_complex_script", _fc_tmp.name,
+            "-map", "[out]", "-f", "null", "-",
+        ])
+    finally:
+        _os.unlink(_fc_tmp.name)
+
     return {
-        "returncode": result.returncode,
-        "stdout": result.stdout[-500:],
-        "stderr": result.stderr[-500:],
+        "test1_drawbox_between": r1,
+        "test2_overlay":         r2,
+        "test3_audio_duck":      r3,
+        "test4_script_file":     r4,
     }
 
 
