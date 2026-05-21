@@ -295,7 +295,7 @@ def _send_welcome_email(email: str) -> None:
     _resend.api_key = api_key
     try:
         _resend.Emails.send({
-            "from": "LeanRetention <hello@leanretention.com>",
+            "from": "onboarding@resend.dev",
             "to": [email],
             "subject": "Bienvenue sur LeanRetention 🎬",
             "html": """

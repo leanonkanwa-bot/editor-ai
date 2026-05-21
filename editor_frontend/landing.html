@@ -317,7 +317,7 @@
         <span class="logo-name">LeanRetention</span>
       </a>
       <div class="nav-right">
-        <a href="/app" class="nav-link">Se connecter</a>
+        <a href="#" class="nav-link" id="seConnecterLink">Se connecter</a>
         <button class="btn btn-salmon" onclick="openOnboarding()">Commencer gratuitement</button>
       </div>
     </div>
@@ -603,11 +603,26 @@
 
 
   <script>
+    // ── Issue 2: Returning users go directly to /app ────────────────────
+    if (localStorage.getItem('coach_profile')) {
+      window.location.href = '/app';
+    }
+
     // ── Scroll-based nav ────────────────────────────────────────────────
     const nav = document.getElementById('nav');
     window.addEventListener('scroll', () => {
       nav.classList.toggle('scrolled', window.scrollY > 20);
     }, { passive: true });
+
+    // ── Issue 1: "Se connecter" — onboard-first ────────────────────────
+    document.getElementById('seConnecterLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      if (localStorage.getItem('coach_profile')) {
+        window.location.href = '/app';
+      } else {
+        openOnboarding();
+      }
+    });
 
     // ── Fade-in on scroll ───────────────────────────────────────────────
     const fades = document.querySelectorAll('.fade');

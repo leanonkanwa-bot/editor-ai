@@ -372,6 +372,55 @@
       .conf-bar { height: 3px; background: var(--border); border-radius: 2px; margin-top: .4rem; }
       .conf-fill { height: 100%; background: var(--salmon); border-radius: 2px; }
 
+      /* ── NAV TABS ───────────────────────────────────────────── */
+      .nav-tabs { display: flex; align-items: center; gap: .25rem; }
+      .nav-tab {
+        background: transparent; border: none; cursor: pointer;
+        font-family: var(--font); font-size: .82rem; font-weight: 500;
+        color: var(--muted); padding: .38rem .75rem; border-radius: 8px;
+        transition: background .15s, color .15s;
+      }
+      .nav-tab:hover { background: rgba(255,255,255,.06); color: var(--text); }
+      .nav-tab.active { background: rgba(255,119,81,.12); color: var(--salmon); }
+
+      /* ── DASHBOARD ──────────────────────────────────────────── */
+      #dashboardSection { padding-top: 1.5rem; }
+      .dash-welcome {
+        padding: 1.1rem 1.25rem; border-radius: 12px;
+        border: 1px solid var(--salmon-border);
+        background: rgba(255,119,81,.07);
+        font-size: .9rem; font-weight: 600; color: var(--text);
+        margin-bottom: 1.25rem;
+      }
+      .dash-welcome span { color: var(--salmon); }
+      .dash-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: .75rem; margin-bottom: 1.25rem; }
+      .dash-stat {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: 12px; padding: 1rem 1.1rem;
+      }
+      .dash-stat .big { font-size: 1.8rem; font-weight: 800; letter-spacing: -.04em; color: var(--salmon); display: block; line-height: 1.1; }
+      .dash-stat .lbl { font-size: .72rem; color: var(--muted); margin-top: .2rem; display: block; }
+      .dash-edit-btn {
+        width: 100%; padding: .9rem; border-radius: 10px; border: none;
+        background: var(--salmon); color: #fff; font-family: var(--font);
+        font-size: .95rem; font-weight: 700; cursor: pointer;
+        box-shadow: 0 0 24px rgba(255,119,81,.35);
+        transition: opacity .15s, box-shadow .2s;
+        margin-bottom: 1.25rem;
+      }
+      .dash-edit-btn:hover { opacity: .9; box-shadow: 0 0 36px rgba(255,119,81,.5); }
+      .dash-recent-title { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: .75rem; }
+      .dash-empty {
+        text-align: center; padding: 2rem 1rem;
+        border: 1px dashed rgba(255,255,255,.1); border-radius: 10px;
+        color: var(--muted); font-size: .85rem;
+      }
+      .dash-empty-icon { font-size: 2rem; display: block; margin-bottom: .5rem; }
+
+      /* ── SECTION VISIBILITY ─────────────────────────────────── */
+      .app-section { display: none; }
+      .app-section.active { display: block; }
+
       /* ── FOOTER ─────────────────────────────────────────────── */
       .foot {
         text-align: center; padding: 2rem 1rem;
@@ -398,10 +447,11 @@
         <span class="logo-mark"></span>
         <span class="logo-name">LeanRetention</span>
       </a>
-      <div class="nav-right">
-        <a href="#tool" class="nav-link">Éditeur</a>
-        <a href="#" class="nav-link" id="analyticsLink">Analytique</a>
-        <button id="brandBtn" class="btn btn-ghost" style="padding:.38rem .7rem;font-size:.8rem">⚙ Brand</button>
+      <div class="nav-tabs" id="navTabs">
+        <button class="nav-tab active" data-target="editorArea">Éditeur</button>
+        <button class="nav-tab" data-target="dashboardSection">Dashboard</button>
+        <button class="nav-tab" data-target="analyticsSection">Analytique</button>
+        <button id="brandBtn" class="btn btn-ghost" style="padding:.38rem .7rem;font-size:.8rem;margin-left:.5rem">⚙ Brand</button>
       </div>
     </nav>
 
@@ -468,6 +518,34 @@
         color:var(--text); display:none;
       "></div>
 
+      <!-- DASHBOARD SECTION -->
+      <div id="dashboardSection" class="app-section">
+        <div class="dash-welcome">Bonjour, <span id="dashName">—</span> 👋</div>
+        <div class="dash-stats">
+          <div class="dash-stat">
+            <span class="big" id="dashVideos">0</span>
+            <span class="lbl">Vidéos éditées</span>
+          </div>
+          <div class="dash-stat">
+            <span class="big" id="dashTimeSaved">0 min</span>
+            <span class="lbl">Temps économisé</span>
+          </div>
+          <div class="dash-stat">
+            <span class="big" id="dashViews">—</span>
+            <span class="lbl">Vues générées</span>
+          </div>
+        </div>
+        <button class="dash-edit-btn" id="dashEditBtn">Éditer une nouvelle vidéo →</button>
+        <p class="dash-recent-title">Vidéos récentes</p>
+        <div class="dash-empty">
+          <span class="dash-empty-icon">🎬</span>
+          Aucune vidéo éditée pour l'instant. Cliquez ci-dessus pour commencer !
+        </div>
+      </div>
+
+      <!-- EDITOR AREA -->
+      <div id="editorArea" class="app-section active">
+
       <!-- HERO -->
       <section class="hero">
         <span class="badge">
@@ -508,7 +586,7 @@
           <input type="hidden" name="caption_font" value="Poppins Bold" />
           <input type="hidden" name="brand_color" value="#FF7751" />
 
-          <label class="drop" for="video">
+          <label class="drop" id="drop" for="video">
             <svg class="drop-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M12 16V4M6 10l6-6 6 6"/>
               <path d="M4 20h16"/>
@@ -738,19 +816,23 @@
         </div>
       </section>
 
-      <!-- ANALYTICS PANEL -->
-      <section class="card" id="analyticsPanel">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
-          <h2 style="font-size:1.05rem;font-weight:700">Analytique</h2>
-          <button type="button" id="collectBtn" class="btn btn-ghost" style="font-size:.8rem">Rafraîchir</button>
-        </div>
-        <div class="analytics-grid">
-          <div class="analytics-card"><div class="big" id="aTotal">—</div><div class="sub">Vidéos éditées</div></div>
-          <div class="analytics-card"><div class="big" id="aAvgScore">—</div><div class="sub">Score moyen / 10</div></div>
-        </div>
-        <div id="insightsList" style="margin-bottom:1rem"></div>
-        <div id="videoTable" style="overflow-x:auto"></div>
-      </section>
+      </div><!-- end editorArea -->
+
+      <!-- ANALYTICS SECTION -->
+      <div id="analyticsSection" class="app-section">
+        <section class="card" id="analyticsPanel">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">
+            <h2 style="font-size:1.05rem;font-weight:700">Analytique</h2>
+            <button type="button" id="collectBtn" class="btn btn-ghost" style="font-size:.8rem">Rafraîchir</button>
+          </div>
+          <div class="analytics-grid">
+            <div class="analytics-card"><div class="big" id="aTotal">—</div><div class="sub">Vidéos éditées</div></div>
+            <div class="analytics-card"><div class="big" id="aAvgScore">—</div><div class="sub">Score moyen / 10</div></div>
+          </div>
+          <div id="insightsList" style="margin-bottom:1rem"></div>
+          <div id="videoTable" style="overflow-x:auto"></div>
+        </section>
+      </div><!-- end analyticsSection -->
 
     </main>
 

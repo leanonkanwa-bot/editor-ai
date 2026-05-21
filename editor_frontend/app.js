@@ -200,14 +200,46 @@ $("uploadTemplateBtn")?.addEventListener("click", async () => {
   input.click();
 });
 
-// ── Analytics panel ────────────────────────────────────────────────────────
-$("analyticsLink")?.addEventListener("click", (e) => {
-  e.preventDefault();
-  const panel = $("analyticsPanel");
-  if (!panel) return;
-  const visible = panel.classList.toggle("visible");
-  if (visible) loadAnalytics();
+// ── Section switching ──────────────────────────────────────────────────────
+function switchSection(targetId) {
+  // Update section visibility
+  ["editorArea", "dashboardSection", "analyticsSection"].forEach(id => {
+    const el = $(id);
+    if (el) el.classList.toggle("active", id === targetId);
+  });
+  // Update tab active state
+  document.querySelectorAll(".nav-tab[data-target]").forEach(tab => {
+    tab.classList.toggle("active", tab.dataset.target === targetId);
+  });
+  // Load analytics data when switching to analytics
+  if (targetId === "analyticsSection") loadAnalytics();
+}
+
+// Nav tab clicks
+document.querySelectorAll(".nav-tab[data-target]").forEach(tab => {
+  tab.addEventListener("click", () => switchSection(tab.dataset.target));
 });
+
+// Dashboard "Éditer" button → switch to editor
+$("dashEditBtn")?.addEventListener("click", () => switchSection("editorArea"));
+
+// Init: show dashboard for returning users, else show editor
+(function initSection() {
+  try {
+    const profile = localStorage.getItem("coach_profile");
+    if (profile) {
+      const p = JSON.parse(profile);
+      // Populate dashboard name
+      const nameEl = $("dashName");
+      if (nameEl) nameEl.textContent = p.name || p.brandName || "toi";
+      switchSection("dashboardSection");
+    } else {
+      switchSection("editorArea");
+    }
+  } catch {
+    switchSection("editorArea");
+  }
+})();
 
 async function loadAnalytics() {
   try {
@@ -261,7 +293,7 @@ const loginErr = $("loginErr");
 
 const form = $("form");
 const submitBtn = $("submit");
-const drop = document.querySelector(".drop");
+const drop = $("drop") || document.querySelector(".drop");
 const dropLabel = $("dropLabel");
 const videoInput = $("video");
 
