@@ -391,6 +391,17 @@ def _build_hyperframe_filters(
     """Return a comma-prefixed filter chain that overlays each hyperframe
     as a full-screen colored card with a centered word/number, only during
     its [at, at+duration] window. Empty string if no hyperframes."""
+    import os as _os
+    # Find a font that actually exists on this system (Railway ships Debian).
+    _FONT_CANDIDATES = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+        f"{fonts_dir}/Poppins-ExtraBold.ttf",
+    ]
+    _system_font = next((f for f in _FONT_CANDIDATES if _os.path.exists(f)), None)
+    _fontfile_part = f":fontfile={_system_font}" if _system_font else ""
+
     parts: list[str] = []
     for hf in hyperframes:
         try:
@@ -416,7 +427,7 @@ def _build_hyperframe_filters(
                 font_size = int(target_h * 0.22)
                 parts.append(
                     f"drawtext=text={_ass_escape_text(text)}"
-                    f":fontfile={fonts_dir}/Poppins-ExtraBold.ttf"
+                    f"{_fontfile_part}"
                     f":fontcolor=black:fontsize={font_size}"
                     f":x=(w-text_w)/2:y=(h-text_h)/2"
                     f":enable=between(t,{t0:.3f},{t1:.3f})"

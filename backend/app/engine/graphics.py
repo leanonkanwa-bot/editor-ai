@@ -1077,10 +1077,10 @@ def render_motion_graphic(
 
     def _safe_x_expr(graphic_w_expr: str = "w") -> str:
         if _fcx < 40:    # subject left → graphic right
-            return f"W - {graphic_w_expr} - W*0.04"
+            return f"W-{graphic_w_expr}-W*0.04"
         if _fcx > 60:    # subject right → graphic left
             return f"W*0.04"
-        return f"(W - {graphic_w_expr}) / 2"
+        return f"(W-{graphic_w_expr})/2"
 
     def _safe_y_expr() -> str:
         if _fcy < 40:    # face in top half → graphic at bottom
@@ -1334,11 +1334,11 @@ def render_motion_graphic(
         space_above = ft
         space_below = 100.0 - fb
         if space_above >= space_below:
-            y_expr = f"max(0, {int(target_h * ft / 100 / 2)} - h/2)"
+            y_expr = f"max(0,{int(target_h * ft / 100 / 2)}-h/2)"
         else:
             safe_start = int(target_h * fb / 100)
             safe_end = target_h
-            y_expr = f"{safe_start + (safe_end - safe_start) // 2} - h/2"
+            y_expr = f"{safe_start + (safe_end - safe_start) // 2}-h/2"
         x_expr = "(W-w)/2"
         if bg_card:
             _apply_bg_card(png, bg_card)

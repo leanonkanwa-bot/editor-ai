@@ -79,14 +79,17 @@ async function loadAnalytics() {
   if ($("aTimeSaved")) $("aTimeSaved").textContent  = (count * 4) + "h";
   if ($("aViews"))     $("aViews").textContent      = count > 0 ? (count * 10000).toLocaleString("fr-FR") : "0";
 
-  // Fetch email count from API
-  try {
-    const r = await fetch("/api/waitlist/count");
-    if (r.ok) {
-      const { count: emailCount } = await r.json();
-      if ($("aEmails")) $("aEmails").textContent = emailCount ?? "—";
+  // Compute average retention score from local video data
+  const retentionEl = $("aRetention");
+  if (retentionEl) {
+    const scores = videos.map(v => v.retentionScore).filter(s => typeof s === "number" && !isNaN(s));
+    if (scores.length > 0) {
+      const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+      retentionEl.textContent = avg + "%";
+    } else {
+      retentionEl.textContent = "—";
     }
-  } catch {}
+  }
 
   // Update last-updated timestamp
   const now = new Date();
