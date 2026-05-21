@@ -360,7 +360,7 @@ def _build_zoom_expression(
             # Smoothstep easing: s = t*t*(3-2*t). Zero derivative at both ends
             # → no velocity discontinuity at segment boundaries → no shake.
             ease = f"({t})*({t})*(3-2*({t}))"
-            seg_expr = f"({z_from} + ({z_to}-{z_from}) * ({ease}))"
+            seg_expr = f"({z_from}+({z_to}-{z_from})*({ease}))"
 
         z_expr = f"if(between(on,{f0},{f1}),{seg_expr},{z_expr})"
 
