@@ -705,305 +705,43 @@ def render(
         face_cy_pct = (ft + fb) / 2
     total_frames = max(1, int(total_duration * fps))
 
-    hyperframe_chain = _build_hyperframe_filters(
-        remapped_hyperframes, target_w, target_h
-    )
+    # ── Simple encode: color grade + scale/pad, no filter_complex ────────
+    # Motion graphics, vignettes, hyperframes, SFX and silence-duck filters
+    # are all skipped. Railway's FFmpeg build does not support the overlay /
+    # drawbox filters required for those effects. Re-enable once a compatible
+    # build is confirmed via /api/test-ffmpeg.
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+    _log.info("render: filter_complex disabled — using simple -vf pipeline")
 
-    # Render each motion graphic (the ones we know how to draw) to a PNG.
-    # Then chain them as overlays in the final filter graph. Anything we
-    # don't yet execute (split, quote, highlight, flow, arrow_callout) is
-    # left in the JSON output as a brief — we don't fail.
-    preset_colors = AESTHETIC_COLORS.get(aesthetic, AESTHETIC_COLORS["dark-pro"])
-    accent_for_graphics = brand_color or preset_colors["accent"]
-    graphics_dir = work_dir / "graphics"
-    rendered_graphics: list[Any] = []
-    for i, mg in enumerate(plan.motion_graphics or []):
-        try:
-            mg_at = float(mg.get("at", 0))
-        except (TypeError, ValueError):
-            continue
-        # Remap the graphic timestamp onto the cut timeline.
-        run = 0.0
-        remapped_at = None
-        for seg in keep:
-            ss = float(seg["start"])
-            ee = float(seg["end"])
-            if ss <= mg_at <= ee and ee > ss:
-                remapped_at = run + (mg_at - ss)
-                break
-            run += max(0.0, ee - ss)
-        if remapped_at is None:
-            continue
-        # Hard enforcement: graphics appear ≥0.5s after the relevant moment
-        # so they never pop up before the words are spoken.
-        remapped_at = min(remapped_at + 0.5, max(0.0, total_duration - 1.0))
-        spec = {**mg, "at": remapped_at}
-        rg = render_motion_graphic(
-            spec, graphics_dir, i,
-            target_w=target_w, target_h=target_h,
-            accent_hex=accent_for_graphics,
-            aesthetic=aesthetic,
-            subject_pos=subject_position,
-        )
-        if rg is not None:
-            rendered_graphics.append(rg)
-
-    # Pre-render vignette layouts (Styles 2 & 3).
-    # Only moments with style 2 or 3 go through the vignette path.
-    vign_moments = [m for m in remapped_vsm if int(m.get("style", 2)) in (2, 3)]
-    glow_color = brand_color or "#0A84FF"
-    layout_paths, mask_path = _render_vignette_layouts(
-        vign_moments, work_dir, target_w, target_h, short_form, glow_color,
-    )
-    V = len(vign_moments)
-    vw, vh, vx, vy, _cr = _vignette_dims(short_form) if V > 0 else (0, 0, 0, 0, 0)
-
-    # Build the final filter chain.
-    # zoompan removed — Railway's FFmpeg rejects max()/min() in x=/y= params.
-    # Simple scale+pad gives 100% reliable output; zoom effects can be layered later.
     color_grade = _color_grade_filter(content_type)
-    base_filter = (
+    vf_simple = (
         f"{color_grade},"
         f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease,"
         f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2"
-        f"{hyperframe_chain}"
     )
+
     import shutil as _shutil
     import tempfile as _tempfile
     _tmp_dir = Path(_tempfile.gettempdir())
     _ass_tmp = _tmp_dir / f"captions_{ass_path.parent.name}.ass"
     _shutil.copy2(ass_path, _ass_tmp)
     _ass_str = str(_ass_tmp).replace("\\", "/").replace(":", "\\:")
-    # _nocap_path: first-pass output (no captions), lives in temp dir (no spaces)
     _nocap_path = _tmp_dir / f"nocap_{output_path.stem}.mp4"
 
-    # Assemble FFmpeg inputs.
-    # [0] = concat.mp4
-    # [1..M] = motion graphic PNGs
-    # [M+1..M+V] = layout PNGs (vignette moments)
-    # [M+V+1..M+2V] = mask PNGs (one per vignette, all same file)
-    M = len(rendered_graphics)
-    cmd: list[str] = [FFMPEG_PATH, "-y", "-loglevel", "error", "-i", str(concat_path)]
-    for rg in rendered_graphics:
-        cmd += ["-i", str(rg.png)]
-    for lp in layout_paths:
-        cmd += ["-loop", "1", "-i", str(lp)]
-    for _ in vign_moments:
-        cmd += ["-loop", "1", "-i", str(mask_path)]
-
-    # Log speed_ramps from the plan (scheduling data only — actual setpts
-    # ramps are not yet applied here; the timestamps are preserved in the
-    # plan JSON so a future renderer pass can act on them).
-    import logging as _logging
-    _log = _logging.getLogger(__name__)
-    speed_ramps = plan.speed_ramps or []
-    if speed_ramps:
-        _log.info("speed_ramps scheduled (%d entries) — stored in plan JSON, "
-                  "setpts/atempo application not yet implemented in this pass.",
-                  len(speed_ramps))
-
-    # Build audio silence ducks: collect mute windows as (t0, t1) pairs.
-    # All ranges are merged into ONE volume filter using if()+between() so
-    # FFmpeg never sees multiple volume= filters chained with commas.
-    audio_duck_ranges: list[tuple[float, float]] = []
-    for sil in remapped_silences:
-        try:
-            t0 = float(sil.get("at", 0))
-            dur = max(0.1, min(0.5, float(sil.get("duration", 0.3))))
-        except (TypeError, ValueError):
-            continue
-        audio_duck_ranges.append((t0, t0 + dur))
-
-    # SFX mixing: blend cue files from backend/storage/sfx/ into the audio.
-    # Known SFX types and their expected filenames. If a file doesn't exist,
-    # the cue is silently skipped — never fails the render.
-    _SFX_DIR = work_dir.parents[1] / "storage" / "sfx"
-    _SFX_FILES = {
-        "whoosh": _SFX_DIR / "whoosh.wav",
-        "impact": _SFX_DIR / "impact.wav",
-        "riser":  _SFX_DIR / "riser.wav",
-        "click":  _SFX_DIR / "click.wav",
-    }
-    sfx_inputs: list[tuple[Path, float, float]] = []  # (file, at, volume)
-    for cue in (plan.sfx_cues or []):
-        try:
-            cue_at  = float(cue.get("at", 0))
-            cue_vol = float(cue.get("volume", 0.8))
-            cue_type = str(cue.get("type", "")).lower()
-        except (TypeError, ValueError):
-            continue
-        sfx_path = _SFX_FILES.get(cue_type)
-        if sfx_path and sfx_path.exists():
-            sfx_inputs.append((sfx_path, cue_at, min(1.0, max(0.0, cue_vol))))
-        else:
-            _log.debug("SFX cue '%s' at %.2fs skipped — file not found: %s",
-                       cue_type, cue_at, sfx_path)
-
-    # Add SFX audio inputs to cmd now that sfx_inputs list is finalized.
-    sfx_base_idx = M + 1 + 2 * V
-    for sfx_path, _at, _vol in sfx_inputs:
-        cmd += ["-i", str(sfx_path)]
-
-    need_filter_complex = bool(rendered_graphics or vign_moments or sfx_inputs)
-
-    if need_filter_complex:
-        chain_parts: list[str] = []
-
-        # Split [0:v] into main stream + V vignette source streams.
-        if V > 0:
-            split_labels = "[v_main]" + "".join(f"[v_v{i}]" for i in range(V))
-            chain_parts.append(f"[0:v]split={V + 1}{split_labels}")
-            main_src = "v_main"
-        else:
-            main_src = "0:v"
-
-        # Zoompan on main path.
-        chain_parts.append(f"[{main_src}]{base_filter}[zp]")
-
-        # Motion graphics chain.
-        prev = "zp"
-        for i, rg in enumerate(rendered_graphics):
-            t0 = rg.at
-            t1 = rg.at + rg.duration
-            nxt = f"mg{i}"
-            chain_parts.append(
-                f"[{prev}][{i + 1}:v]overlay="
-                f"x={rg.x_expr}:y={rg.y_expr}:"
-                f"enable=between(t,{t0:.3f},{t1:.3f})[{nxt}]"
-            )
-            prev = nxt
-
-        # Vignette chain (Styles 2 & 3).
-        for i, vm in enumerate(vign_moments):
-            t0 = float(vm["at"])
-            t1 = t0 + float(vm["duration"])
-            layout_idx = M + 1 + i         # layout PNG input index
-            mask_idx   = M + 1 + V + i     # mask PNG input index
-
-            # Scale source video to vignette size + add alpha channel.
-            chain_parts.append(
-                f"[v_v{i}]scale={vw}:{vh},format=yuva420p[sv{i}]"
-            )
-            # Apply rounded-corner mask.
-            chain_parts.append(
-                f"[sv{i}][{mask_idx}:v]alphamerge[rv{i}]"
-            )
-            # Overlay full-frame layout (white + content) on the video stream.
-            nxt_layout = f"vl{i}"
-            chain_parts.append(
-                f"[{prev}][{layout_idx}:v]overlay=0:0"
-                f":enable=between(t,{t0:.3f},{t1:.3f})[{nxt_layout}]"
-            )
-            # Overlay rounded person vignette at bottom-right.
-            nxt_vign = f"vn{i}"
-            chain_parts.append(
-                f"[{nxt_layout}][rv{i}]overlay={vx}:{vy}"
-                f":enable=between(t,{t0:.3f},{t1:.3f})[{nxt_vign}]"
-            )
-            prev = nxt_vign
-
-        # Rename the last overlay output label to [final] directly by slicing
-        # off the trailing [{prev}] and appending [final]. Using slice instead
-        # of str.replace avoids accidentally hitting [{prev}] where it also
-        # appears as an input label at the start of the same string.
-        chain_parts[-1] = chain_parts[-1][:-len(f"[{prev}]")] + "[final]"
-
-        # Probe whether the concat video has an audio stream at all.
-        _has_audio = bool(subprocess.run(
-            [FFPROBE_PATH, "-v", "error", "-select_streams", "a:0",
-             "-show_entries", "stream=codec_type", "-of", "csv=p=0",
-             str(concat_path)],
-            capture_output=True, text=True,
-        ).stdout.strip())
-        # Audio chain: silence ducks + SFX mix.
-        # Skip entirely when there is no audio stream — use -an later.
-        if _has_audio and (audio_duck_ranges or sfx_inputs):
-            duck_out = ("a_ducked" if sfx_inputs else "a_out")
-            if audio_duck_ranges:
-                _between = "+".join(
-                    f"between(t,{t0:.3f},{t1:.3f})" for t0, t1 in audio_duck_ranges
-                )
-                _duck_filter = f"volume=enable={_between}:volume=0"
-                chain_parts.append(f"[0:a]{_duck_filter}[{duck_out}]")
-            if sfx_inputs:
-                cur_audio = duck_out if audio_duck_ranges else "0:a"
-                for j, (_, sfx_at, sfx_vol) in enumerate(sfx_inputs):
-                    sfx_idx = sfx_base_idx + j
-                    ms = int(sfx_at * 1000)
-                    chain_parts.append(
-                        f"[{sfx_idx}:a]adelay={ms}|{ms},"
-                        f"volume={sfx_vol:.2f}[sfx{j}]"
-                    )
-                    out_lbl = "a_out" if j == len(sfx_inputs) - 1 else f"a_sfx{j}"
-                    chain_parts.append(
-                        f"[{cur_audio}][sfx{j}]amix=inputs=2:duration=first[{out_lbl}]"
-                    )
-                    cur_audio = out_lbl
-
-        filter_complex = ";".join(chain_parts)
-        # Sanitise: replace any stray ]copy[ nodes that some FFmpeg builds reject.
-        _INVALID_FILTERS = {"copy"}
-        for _bad in _INVALID_FILTERS:
-            if f"]{_bad}[" in filter_complex:
-                filter_complex = filter_complex.replace(f"]{_bad}[", "]null[")
-        filter_complex = filter_complex.rstrip("'")
-        # Write filter_complex to a temp file and use -filter_complex_script.
-        # This completely bypasses argument-length limits and any shell/parser
-        # escaping issues that can cause "Invalid argument" on Railway's FFmpeg.
-        import tempfile as _tempfile_fc, os as _os_fc
-        _fc_file = _tempfile_fc.NamedTemporaryFile(
-            mode="w", suffix=".txt", delete=False, encoding="utf-8"
-        )
-        _fc_file.write(filter_complex)
-        _fc_file.close()
-        cmd += ["-filter_complex_script", _fc_file.name, "-map", "[final]"]
-        _has_a_chain = _has_audio and (audio_duck_ranges or sfx_inputs)
-        if _has_a_chain:
-            cmd += ["-map", "[a_out]"]
-        elif _has_audio:
-            cmd += ["-map", "0:a"]
-        else:
-            cmd += ["-an"]
-    else:
-        cmd += ["-vf", base_filter]
-        if audio_duck_ranges:
-            _between = "+".join(
-                f"between(t,{t0:.3f},{t1:.3f})" for t0, t1 in audio_duck_ranges
-            )
-            cmd += ["-af", f"volume=enable={_between}:volume=0"]
-
-    cmd += [
+    _run([
+        FFMPEG_PATH, "-y", "-loglevel", "error",
+        "-i", str(concat_path),
+        "-vf", vf_simple,
         "-frames:v", str(total_frames),
         "-c:v", "libx264", "-preset", "superfast", "-crf", "22",
-        "-threads", "2",   # Whisper is freed before this point → safe to use 2 cores
+        "-threads", "2",
         "-x264-params", "rc-lookahead=0:bframes=0",
         "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "192k",
         "-movflags", "+faststart",
         str(_nocap_path),
-    ]
-
-    # ── DEBUG: dump the exact command FFmpeg will receive ─────────────────
-    import pathlib as _pathlib
-    _debug = _pathlib.Path("/tmp/debug_filter.txt")
-    _debug_lines = [
-        "=== filter_complex ===" if need_filter_complex else "=== -vf (no filter_complex) ===",
-        filter_complex if need_filter_complex else base_filter,
-        "",
-        "=== full cmd ===",
-        shlex.join(cmd),
-    ]
-    _debug.write_text("\n".join(_debug_lines))
-    print(f"[debug] filter written to {_debug}", flush=True)
-    # ─────────────────────────────────────────────────────────────────────
-
-    _run(cmd)
-    # Clean up filter_complex_script temp file (only exists when need_filter_complex).
-    if need_filter_complex:
-        try:
-            _os_fc.unlink(_fc_file.name)
-        except Exception:
-            pass
+    ])
 
     # Second pass: burn captions onto the caption-free first-pass video.
     # Running this as a separate ffmpeg invocation avoids all filter_complex
@@ -1031,11 +769,8 @@ def render(
         "packaging": plan.packaging,
         "plan": plan.raw,
         "key_lines": plan.key_lines,
-        "hyperframes_rendered": len(remapped_hyperframes),
+        "hyperframes_rendered": 0,
         "broll_pauses": len(remapped_broll),
-        "graphics_rendered": [
-            {"kind": rg.kind, "at": rg.at, "duration": rg.duration}
-            for rg in rendered_graphics
-        ],
-        "vignette_moments": len(vign_moments),
+        "graphics_rendered": [],
+        "vignette_moments": 0,
     }
