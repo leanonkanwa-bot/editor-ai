@@ -28,6 +28,7 @@ from app.engine.captions import WordTiming, build_ass
 from app.engine.transcribe import FFMPEG_PATH, FFPROBE_PATH
 from app.engine.graphics import (
     AESTHETIC_COLORS,
+    RenderedGraphic,
     render_motion_graphic,
     render_vignette_mask,
     render_whiteboard_layout,
@@ -382,58 +383,6 @@ def _ass_escape_text(text: str) -> str:
                 .replace("%", "\\%"))
 
 
-def _build_hyperframe_filters(
-    hyperframes: list[dict[str, Any]],
-    target_w: int,
-    target_h: int,
-    fonts_dir: str = "/usr/local/share/fonts/leanlead",
-) -> str:
-    """Return a comma-prefixed filter chain that overlays each hyperframe
-    as a full-screen colored card with a centered word/number, only during
-    its [at, at+duration] window. Empty string if no hyperframes."""
-    import os as _os
-    # Find a font that actually exists on this system (Railway ships Debian).
-    _FONT_CANDIDATES = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-        f"{fonts_dir}/Poppins-ExtraBold.ttf",
-    ]
-    _system_font = next((f for f in _FONT_CANDIDATES if _os.path.exists(f)), None)
-    _fontfile_part = f":fontfile={_system_font}" if _system_font else ""
-
-    parts: list[str] = []
-    for hf in hyperframes:
-        try:
-            t0 = float(hf.get("at", 0))
-            dur = float(hf.get("duration", 0.1))
-        except (TypeError, ValueError):
-            continue
-        t1 = t0 + max(0.05, min(0.2, dur))
-        color = _hex_to_rgb_at(hf.get("color", "#FFE500"))
-        kind = (hf.get("kind") or "word").lower()
-
-        # Solid color flash that covers the whole frame.
-        parts.append(
-            f"drawbox=x=0:y=0:w=iw:h=ih:color={color}:t=fill"
-            f":enable=between(t,{t0:.3f},{t1:.3f})"
-        )
-
-        if kind in {"word", "number", "image"}:
-            text = str(hf.get("content", "")).strip()
-            if text:
-                # Single bold word/number, full-screen weight.
-                # Black text on a colored flash reads fastest at 0.1s.
-                font_size = int(target_h * 0.22)
-                parts.append(
-                    f"drawtext=text={_ass_escape_text(text)}"
-                    f"{_fontfile_part}"
-                    f":fontcolor=black:fontsize={font_size}"
-                    f":x=(w-text_w)/2:y=(h-text_h)/2"
-                    f":enable=between(t,{t0:.3f},{t1:.3f})"
-                )
-    return ("," + ",".join(parts)) if parts else ""
-
 
 def _vignette_dims(short_form: bool) -> tuple[int, int, int, int, int]:
     """Return (vign_w, vign_h, vign_x, vign_y, corner_radius) for the vignette."""
@@ -493,6 +442,130 @@ def _render_vignette_layouts(
         layout_paths.append(lp)
 
     return layout_paths, mask_path
+
+
+def _find_system_font() -> str | None:
+    """Return path to a bold TTF that exists on this system (Railway = Debian)."""
+    import os as _os
+    for candidate in [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    ]:
+        if _os.path.exists(candidate):
+            return candidate
+    return None
+
+
+def _build_pass1_filter_complex(
+    target_w: int,
+    target_h: int,
+    fps: int,
+    color_grade: str,
+    scale_filter: str | None,
+    hyperframes: list[dict[str, Any]],
+    silences: list[dict[str, Any]],
+    rendered_graphics: list[RenderedGraphic],
+    system_font: str | None,
+) -> tuple[str, str, str | None]:
+    """Build the filter_complex string for render pass 1.
+
+    Video chain:
+      [0:v] → grade+scale+zoompan → drawbox/drawtext per hyperframe
+             → overlay per motion-graphic PNG → [vout_label]
+    Audio chain (when silences exist):
+      [0:a] → volume-duck chain → [aout]
+
+    Syntax rules enforced here:
+      • NO spaces around arithmetic operators in any expression.
+      • NO spaces after commas inside filter function calls.
+      • overlay/drawbox/drawtext x= expressions are already built by
+        render_motion_graphic() with correct no-space syntax.
+
+    Returns:
+        (filter_complex_str, video_out_label, audio_out_label_or_None)
+    """
+    fc: list[str] = []
+
+    # ── Video: grade + optional scale + constant zoompan ─────────────────
+    # All chained with commas inside a single [0:v]...[vzoom] node.
+    grade_parts: list[str] = [color_grade]
+    if scale_filter:
+        grade_parts.append(scale_filter)
+    # Constant 1.04× zoom anchored to frame center.
+    # Uses only iw/ih/zoom — NO max() or min() which some ffmpeg builds reject.
+    grade_parts.append(
+        f"zoompan=z=1.04"
+        f":x=iw/2-(iw/zoom/2)"
+        f":y=ih/2-(ih/zoom/2)"
+        f":d=1:s={target_w}x{target_h}:fps={fps}"
+    )
+    fc.append(f"[0:v]{','.join(grade_parts)}[vzoom]")
+
+    # ── Hyperframe drawbox + drawtext ─────────────────────────────────────
+    v = "vzoom"
+    for i, hf in enumerate(hyperframes):
+        try:
+            t0 = float(hf.get("at", 0))
+            dur = float(hf.get("duration", 0.1))
+        except (TypeError, ValueError):
+            continue
+        t1 = t0 + max(0.05, min(0.2, dur))
+        color = _hex_to_rgb_at(hf.get("color", "#FFE500"))
+        box_out = f"vhfb{i}"
+        fc.append(
+            f"[{v}]drawbox=x=0:y=0:w=iw:h=ih:color={color}:t=fill"
+            f":enable=between(t,{t0:.3f},{t1:.3f})[{box_out}]"
+        )
+        v = box_out
+
+        kind = (hf.get("kind") or "color").lower()
+        text = str(hf.get("content", "")).strip()
+        if kind in {"word", "number"} and text and system_font:
+            font_size = int(target_h * 0.22)
+            escaped = _ass_escape_text(text)
+            txt_out = f"vhft{i}"
+            fc.append(
+                f"[{v}]drawtext=text={escaped}"
+                f":fontfile={system_font}"
+                f":fontcolor=black:fontsize={font_size}"
+                f":x=(w-text_w)/2:y=(h-text_h)/2"
+                f":enable=between(t,{t0:.3f},{t1:.3f})[{txt_out}]"
+            )
+            v = txt_out
+
+    # ── Motion graphic overlays ───────────────────────────────────────────
+    # PNG inputs are at indices 1..N (index 0 = concat video).
+    # x_expr / y_expr from RenderedGraphic already contain the smoothstep
+    # slide-in expression with no spaces — pass through verbatim.
+    for j, rg in enumerate(rendered_graphics):
+        input_idx = j + 1
+        ov_out = f"vg{j}"
+        fc.append(
+            f"[{v}][{input_idx}:v]overlay"
+            f"=x={rg.x_expr}:y={rg.y_expr}"
+            f":enable=between(t,{rg.at:.3f},{rg.at+rg.duration:.3f})[{ov_out}]"
+        )
+        v = ov_out
+
+    # ── Audio: volume-duck at deliberate silence inserts ──────────────────
+    # Multiple ducks are comma-chained on the same stream node.
+    a_label: str | None = None
+    vol_nodes: list[str] = []
+    for sil in silences:
+        try:
+            at = float(sil.get("at", 0))
+            dur = max(0.05, min(0.5, float(sil.get("duration", 0.3))))
+        except (TypeError, ValueError):
+            continue
+        vol_nodes.append(
+            f"volume=enable=between(t,{at:.3f},{at+dur:.3f}):volume=0"
+        )
+    if vol_nodes:
+        fc.append(f"[0:a]{','.join(vol_nodes)}[aout]")
+        a_label = "aout"
+
+    return ";".join(fc), v, a_label
 
 
 def _color_grade_filter(content_type: str) -> str:
@@ -705,62 +778,102 @@ def render(
         face_cy_pct = (ft + fb) / 2
     total_frames = max(1, int(total_duration * fps))
 
-    # ── Simple encode: color grade + scale/pad, no filter_complex ────────
-    # Motion graphics, vignettes, hyperframes, SFX and silence-duck filters
-    # are all skipped. Railway's FFmpeg build does not support the overlay /
-    # drawbox filters required for those effects. Re-enable once a compatible
-    # build is confirmed via /api/test-ffmpeg.
     import logging as _logging
+    import shutil as _shutil
+    import tempfile as _tempfile
     _log = _logging.getLogger(__name__)
-    _log.info("render: filter_complex disabled — using simple -vf pipeline")
 
+    # ── Pre-render motion-graphics PNGs ───────────────────────────────────
+    glow_color = brand_color or "#4FC3F7"
+    mg_dir = work_dir / "motion_graphics"
+    rendered_graphics: list[RenderedGraphic] = []
+    for idx, mg in enumerate(plan.motion_graphics or []):
+        try:
+            rg = render_motion_graphic(
+                mg, mg_dir, idx,
+                target_w=target_w, target_h=target_h,
+                accent_hex=glow_color,
+                aesthetic=aesthetic,
+                subject_pos=subject_position,
+            )
+            if rg is not None:
+                rendered_graphics.append(rg)
+        except Exception as _e:
+            _log.warning("motion graphic %d (%s) skipped: %s",
+                         idx, mg.get("kind"), _e)
+
+    # ── Smart dimension detection ─────────────────────────────────────────
+    # _cut_segment / _create_proxy already scale to target dims, so this
+    # is usually a no-op — but we handle every edge case explicitly.
     color_grade = _color_grade_filter(content_type)
-
-    # ── Smart dimension detection ────────────────────────────────────────────
-    # Probe the concat file to decide whether and how to scale. _cut_segment
-    # and _create_proxy already scale to target dimensions, so in practice this
-    # is usually a no-op, but edge cases (e.g. un-proxied same-codec source)
-    # could produce non-target dims — handle them all explicitly.
     concat_info = _probe_video_info(concat_path)
     src_w = concat_info.get("width",  0) or target_w
     src_h = concat_info.get("height", 0) or target_h
 
     if src_w == target_w and src_h == target_h:
-        # Already the exact target resolution — no scale needed.
-        scale_filter: str | None = None
+        scale_filter: str | None = None          # already correct — skip re-scale
     elif src_w >= src_h:
-        # Landscape or square source going to portrait target: scale-up then crop
-        # to fill the frame without letterboxing.
+        # Landscape / square → portrait: fill frame, no letterbox
         scale_filter = (
             f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
             f"crop={target_w}:{target_h}"
         )
     else:
-        # Portrait source — fix the constrained axis, let FFmpeg auto-compute
-        # the other to the nearest even number (-2). No distortion, no padding.
-        if short_form:
-            scale_filter = f"scale=-2:{target_h}"   # fix height
-        else:
-            scale_filter = f"scale={target_w}:-2"   # fix width
+        # Portrait source: fix the constrained axis, auto-compute the other
+        scale_filter = (
+            f"scale=-2:{target_h}" if short_form else f"scale={target_w}:-2"
+        )
 
-    vf_simple = color_grade if scale_filter is None else f"{color_grade},{scale_filter}"
+    system_font = _find_system_font()
 
-    import shutil as _shutil
-    import tempfile as _tempfile
+    # ── Decide pipeline: filter_complex or simple -vf ─────────────────────
+    # filter_complex is used when we have effects that need it.
+    # Simple -vf is the fast fallback for clean videos.
+    use_fc = bool(remapped_hyperframes or rendered_graphics or remapped_silences)
+
     _tmp_dir = Path(_tempfile.gettempdir())
-    _ass_tmp = _tmp_dir / f"captions_{ass_path.parent.name}.ass"
-    _shutil.copy2(ass_path, _ass_tmp)
-    _ass_str = str(_ass_tmp).replace("\\", "/").replace(":", "\\:")
     _nocap_path = _tmp_dir / f"nocap_{output_path.stem}.mp4"
 
-    # First pass — encode color grade + scale; no captions yet.
-    # CRF 16 → visually near-lossless (lower = better quality).
-    # preset medium → good encode speed / quality balance for Railway.
-    _vf_args = ["-vf", vf_simple] if vf_simple else []
-    _run([
-        FFMPEG_PATH, "-y", "-loglevel", "error",
-        "-i", str(concat_path),
-        *_vf_args,
+    # ── Pass 1: grade + scale + zoompan + hyperframes + graphics + audio ──
+    if use_fc:
+        fc_str, v_out, a_out = _build_pass1_filter_complex(
+            target_w, target_h, fps,
+            color_grade, scale_filter,
+            remapped_hyperframes,
+            remapped_silences,
+            rendered_graphics,
+            system_font,
+        )
+        cmd1: list[str] = [
+            FFMPEG_PATH, "-y", "-loglevel", "error",
+            "-i", str(concat_path),
+        ]
+        for rg in rendered_graphics:   # PNG inputs at indices 1..N
+            cmd1 += ["-i", str(rg.png)]
+        cmd1 += ["-filter_complex", fc_str, "-map", f"[{v_out}]"]
+        cmd1 += ["-map", f"[{a_out}]"] if a_out else ["-map", "0:a"]
+        _log.info(
+            "render pass1: filter_complex  hf=%d  graphics=%d  silences=%d",
+            len(remapped_hyperframes), len(rendered_graphics), len(remapped_silences),
+        )
+    else:
+        # Simple -vf: grade + scale + constant zoompan
+        zoom_str = (
+            f"zoompan=z=1.04"
+            f":x=iw/2-(iw/zoom/2)"
+            f":y=ih/2-(ih/zoom/2)"
+            f":d=1:s={target_w}x{target_h}:fps={fps}"
+        )
+        vf_parts = [p for p in [color_grade, scale_filter, zoom_str] if p]
+        cmd1 = [
+            FFMPEG_PATH, "-y", "-loglevel", "error",
+            "-i", str(concat_path),
+            "-vf", ",".join(vf_parts),
+            "-map", "0:v", "-map", "0:a",
+        ]
+        _log.info("render pass1: simple -vf pipeline")
+
+    cmd1 += [
         "-frames:v", str(total_frames),
         "-c:v", "libx264", "-preset", "medium", "-crf", "16",
         "-threads", "2",
@@ -769,13 +882,15 @@ def render(
         "-c:a", "aac", "-b:a", "192k",
         "-movflags", "+faststart",
         str(_nocap_path),
-    ])
+    ]
+    _run(cmd1)
 
-    # Second pass: burn captions onto the caption-free first-pass video.
-    # Running this as a separate ffmpeg invocation avoids all filter_complex
-    # path-escaping issues on Windows — the subtitles= value is passed directly
-    # as a subprocess list item (no shell), so only the ffmpeg filter parser
-    # sees it; C\:/ escaping handles the Windows drive-letter colon.
+    # ── Pass 2: burn ASS captions ──────────────────────────────────────────
+    # Separate ffmpeg invocation so subtitle path escaping is handled by the
+    # OS arg list (no shell expansion) — only the ffmpeg filter parser sees it.
+    _ass_tmp = _tmp_dir / f"captions_{ass_path.parent.name}.ass"
+    _shutil.copy2(ass_path, _ass_tmp)
+    _ass_str = str(_ass_tmp).replace("\\", "/").replace(":", "\\:")
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-i", str(_nocap_path),
@@ -797,8 +912,8 @@ def render(
         "packaging": plan.packaging,
         "plan": plan.raw,
         "key_lines": plan.key_lines,
-        "hyperframes_rendered": 0,
+        "hyperframes_rendered": len(remapped_hyperframes),
         "broll_pauses": len(remapped_broll),
-        "graphics_rendered": [],
-        "vignette_moments": 0,
+        "graphics_rendered": [rg.kind for rg in rendered_graphics],
+        "vignette_moments": len(remapped_vsm),
     }

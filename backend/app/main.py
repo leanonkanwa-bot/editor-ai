@@ -118,69 +118,171 @@ async def ffmpeg_info() -> dict:
 
 @app.get("/api/test-ffmpeg")
 async def test_ffmpeg() -> dict:
+    """Test every filter pattern used in the full render pipeline.
+
+    Eight tests — all must be ok=true before the render pipeline is trustworthy:
+      t1  zoompan center-crop (exact expression)
+      t2  drawbox + between()
+      t3  drawtext + fontfile + between()
+      t4  volume duck + between()
+      t5  eq color-grade profiles
+      t6  full filter_complex  (grade→scale→zoompan→drawbox→drawtext + audio duck)
+      t7  overlay with slide-in smoothstep x expression
+      t8  subtitles burn (ASS pass-2)
+    """
     import subprocess as _sp
     import tempfile as _tf
     import os as _os
+    from pathlib import Path as _P
     from app.engine.transcribe import FFMPEG_PATH
 
-    def _run(cmd):
+    FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    font_ok = _os.path.exists(FONT)
+    fontfile = f":fontfile={FONT}" if font_ok else ""
+    W, H = 1080, 1920
+
+    results: dict = {"font_found": font_ok, "font_path": FONT}
+
+    def _t(label: str, cmd: list[str]) -> None:
         r = _sp.run(cmd, capture_output=True, text=True)
-        return {"returncode": r.returncode, "err": r.stderr[-200:]}
+        results[label] = {
+            "ok": r.returncode == 0,
+            "err": r.stderr[-500:] if r.returncode != 0 else "",
+        }
 
-    # Test 1: drawbox + between() — same pattern as hyperframe chain
-    fc1 = (
-        "[0:v]scale=100:100,"
-        "drawbox=x=0:y=0:w=50:h=50:color=red@1.0:t=fill:enable=between(t,0,0.5)"
-        "[out]"
+    # ── T1: zoompan center crop ───────────────────────────────────────────
+    # z=1.04  x=iw/2-(iw/zoom/2)  y=ih/2-(ih/zoom/2)  d=1
+    # No max()/min() in x/y — just the simple centre formula.
+    _t("t1_zoompan", [
+        FFMPEG_PATH, "-y", "-loglevel", "error",
+        "-f", "lavfi", "-i", f"color=c=blue:size={W}x{H}:duration=1:rate=30",
+        "-vf", (
+            f"zoompan=z=1.04:x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2)"
+            f":d=1:s={W}x{H}:fps=30"
+        ),
+        "-frames:v", "10", "-f", "null", "-",
+    ])
+
+    # ── T2: drawbox + between() ───────────────────────────────────────────
+    _t("t2_drawbox_between", [
+        FFMPEG_PATH, "-y", "-loglevel", "error",
+        "-f", "lavfi", "-i", f"color=c=black:size={W}x{H}:duration=2:rate=30",
+        "-vf", "drawbox=x=0:y=0:w=iw:h=ih:color=0xFFE500@1.0:t=fill:enable=between(t,0.5,0.6)",
+        "-frames:v", "10", "-f", "null", "-",
+    ])
+
+    # ── T3: drawtext + fontfile + between() ──────────────────────────────
+    _t("t3_drawtext_between", [
+        FFMPEG_PATH, "-y", "-loglevel", "error",
+        "-f", "lavfi", "-i", f"color=c=black:size={W}x{H}:duration=2:rate=30",
+        "-vf", (
+            f"drawtext=text=STOP{fontfile}"
+            f":fontcolor=white:fontsize=400"
+            f":x=(w-text_w)/2:y=(h-text_h)/2"
+            f":enable=between(t,0.5,0.6)"
+        ),
+        "-frames:v", "10", "-f", "null", "-",
+    ])
+
+    # ── T4: volume duck + between() ───────────────────────────────────────
+    _t("t4_volume_duck", [
+        FFMPEG_PATH, "-y", "-loglevel", "error",
+        "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+        "-af", "volume=enable=between(t,0.5,1.0):volume=0",
+        "-f", "null", "-",
+    ])
+
+    # ── T5: eq color-grade (coaching profile) ────────────────────────────
+    _t("t5_color_grade", [
+        FFMPEG_PATH, "-y", "-loglevel", "error",
+        "-f", "lavfi", "-i", f"color=c=red:size={W}x{H}:duration=1:rate=30",
+        "-vf", "eq=contrast=1.15:saturation=1.1,colorbalance=rs=0.05:bs=-0.03",
+        "-frames:v", "5", "-f", "null", "-",
+    ])
+
+    # ── T6: full filter_complex ───────────────────────────────────────────
+    # grade + scale + zoompan + drawbox + drawtext + volume duck
+    # Two lavfi inputs: [0] = video, [1] = audio (sine)
+    fc6 = (
+        f"[0:v]eq=contrast=1.1:saturation=1.05,"
+        f"scale={W}:{H}:force_original_aspect_ratio=increase,"
+        f"crop={W}:{H},"
+        f"zoompan=z=1.04:x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2)"
+        f":d=1:s={W}x{H}:fps=30[vzoom];"
+        f"[vzoom]drawbox=x=0:y=0:w=iw:h=ih:color=0xFFE500@1.0:t=fill"
+        f":enable=between(t,1.0,1.1)[vhf];"
+        f"[vhf]drawtext=text=STOP{fontfile}"
+        f":fontcolor=black:fontsize=422"
+        f":x=(w-text_w)/2:y=(h-text_h)/2"
+        f":enable=between(t,1.0,1.1)[vout];"
+        f"[1:a]volume=enable=between(t,0.5,0.8):volume=0[aout]"
     )
-    r1 = _run([
-        FFMPEG_PATH, "-f", "lavfi", "-i", "color=c=black:s=100x100:d=1",
-        "-filter_complex", fc1, "-map", "[out]", "-f", "null", "-",
+    _t("t6_full_filter_complex", [
+        FFMPEG_PATH, "-y", "-loglevel", "error",
+        "-f", "lavfi", "-i", f"color=c=black:size={W}x{H}:duration=3:rate=30",
+        "-f", "lavfi", "-i", "sine=frequency=440:duration=3",
+        "-filter_complex", fc6,
+        "-map", "[vout]", "-map", "[aout]",
+        "-frames:v", "30", "-f", "null", "-",
     ])
 
-    # Test 2: overlay with two inputs — same pattern as motion graphics chain
-    fc2 = "[0:v]scale=100:100[bg];[bg][1:v]overlay=x=0:y=0:enable=between(t,0,0.5)[out]"
-    r2 = _run([
-        FFMPEG_PATH,
-        "-f", "lavfi", "-i", "color=c=black:s=100x100:d=1",
-        "-f", "lavfi", "-i", "color=c=red:s=50x50:d=1",
-        "-filter_complex", fc2, "-map", "[out]", "-f", "null", "-",
-    ])
-
-    # Test 3: video + audio in same filter_complex — same pattern as duck chain
-    fc3 = (
-        "[0:v]scale=100:100[out];"
-        "[1:a]volume=enable=between(t,0,0.5):volume=0[aout]"
-    )
-    r3 = _run([
-        FFMPEG_PATH,
-        "-f", "lavfi", "-i", "color=c=black:s=100x100:d=1",
-        "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
-        "-filter_complex", fc3,
-        "-map", "[out]", "-map", "[aout]", "-f", "null", "-",
-    ])
-
-    # Test 4: same fc2 but via -filter_complex_script temp file
-    _fc_tmp = _tf.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8")
-    _fc_tmp.write(fc2)
-    _fc_tmp.close()
-    try:
-        r4 = _run([
-            FFMPEG_PATH,
-            "-f", "lavfi", "-i", "color=c=black:s=100x100:d=1",
-            "-f", "lavfi", "-i", "color=c=red:s=50x50:d=1",
-            "-filter_complex_script", _fc_tmp.name,
-            "-map", "[out]", "-f", "null", "-",
+    # ── T7: overlay with slide-in smoothstep expression ───────────────────
+    # Exact pattern used by render_motion_graphic() for lower_third / text_overlay.
+    # Smoothstep from off-screen-left (-w) to x=60 over 0.3 s starting at t=0.5.
+    _tmp_png = _P(_tf.mktemp(suffix=".png"))
+    _sp.run([
+        FFMPEG_PATH, "-y", "-loglevel", "error",
+        "-f", "lavfi", "-i", "color=c=white:size=300x100:duration=0.1:rate=1",
+        "-frames:v", "1", str(_tmp_png),
+    ], capture_output=True)
+    if _tmp_png.exists():
+        x_slide = (
+            "if(lt(t-0.500,0.3),"
+            "-w+(60-(-w))*((t-0.500)/0.3)*((t-0.500)/0.3)*(3-2*((t-0.500)/0.3)),"
+            "60)"
+        )
+        _t("t7_overlay_slide_in", [
+            FFMPEG_PATH, "-y", "-loglevel", "error",
+            "-f", "lavfi", "-i", f"color=c=black:size={W}x{H}:duration=3:rate=30",
+            "-i", str(_tmp_png),
+            "-filter_complex",
+            f"[0:v][1:v]overlay=x={x_slide}:y=100:enable=between(t,0.5,2.5)[vout]",
+            "-map", "[vout]",
+            "-frames:v", "30", "-f", "null", "-",
         ])
-    finally:
-        _os.unlink(_fc_tmp.name)
+        _os.unlink(str(_tmp_png))
+    else:
+        results["t7_overlay_slide_in"] = {"ok": False, "err": "test PNG creation failed"}
 
-    return {
-        "test1_drawbox_between": r1,
-        "test2_overlay":         r2,
-        "test3_audio_duck":      r3,
-        "test4_script_file":     r4,
-    }
+    # ── T8: subtitles burn (ASS pass-2) ──────────────────────────────────
+    _ass_tmp = _P(_tf.mktemp(suffix=".ass"))
+    _ass_tmp.write_text(
+        "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\n\n"
+        "[V4+ Styles]\n"
+        "Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,"
+        "OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,"
+        "ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,"
+        "Alignment,MarginL,MarginR,MarginV,Encoding\n"
+        "Style: Default,DejaVu Sans Bold,86,&H00FFFFFF,&H00FFFFFF,"
+        "&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,2,0,2,60,60,288,1\n\n"
+        "[Events]\n"
+        "Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text\n"
+        "Dialogue: 0,0:00:00.50,0:00:01.50,Default,,0,0,0,,Hello World\n",
+        encoding="utf-8",
+    )
+    _ass_esc = str(_ass_tmp).replace(":", "\\:")
+    _t("t8_subtitles_burn", [
+        FFMPEG_PATH, "-y", "-loglevel", "error",
+        "-f", "lavfi", "-i", f"color=c=black:size={W}x{H}:duration=2:rate=30",
+        "-vf", f"subtitles={_ass_esc}",
+        "-frames:v", "20", "-f", "null", "-",
+    ])
+    _os.unlink(str(_ass_tmp))
+
+    results["all_passed"] = all(
+        v.get("ok", False) for k, v in results.items() if k.startswith("t")
+    )
+    return results
 
 
 @app.get("/api/auth/status")
