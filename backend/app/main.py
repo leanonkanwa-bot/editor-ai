@@ -89,6 +89,19 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/api/debug-last-filter")
+def debug_last_filter() -> Response:
+    """Return the exact filter_complex string from the last render attempt.
+
+    render.py writes /tmp/debug_filter.txt before every filter_complex call
+    so a crash leaves the offending string on disk for inspection.
+    """
+    p = Path("/tmp/debug_filter.txt")
+    if not p.exists():
+        return Response(content="(no /tmp/debug_filter.txt found)", media_type="text/plain")
+    return Response(content=p.read_text(encoding="utf-8", errors="replace"), media_type="text/plain")
+
+
 @app.get("/healthz")
 def healthz() -> dict[str, str]:
     return {"status": "ok"}
@@ -118,184 +131,65 @@ async def ffmpeg_info() -> dict:
 
 @app.get("/api/test-ffmpeg")
 async def test_ffmpeg() -> dict:
-    """Test every filter pattern used in the full render pipeline.
+    """Diagnostic: test four enable= syntax variants to find which one works.
 
-    Eight tests — all must be ok=true before the render pipeline is trustworthy.
+    tA  backslash-comma, no quotes:  enable=gte(t\\,0.2)*lte(t\\,0.8)
+    tB  no enable= at all            (baseline — must always pass)
+    tC  plain commas, no quotes:     enable=gte(t,0.2)*lte(t,0.8)
+    tD  volume backslash-comma:      volume=enable=gte(t\\,0.2)*lte(t\\,0.8):volume=0
 
-    NOTE on enable= syntax (two rules, both needed):
-      between(t,S,E) is NOT used — FFmpeg 7.x treats its commas as filter
-      separators → "No such filter: '0.5'" error.
-
-      For drawbox / drawtext / volume:
-        enable='gte(t,S)*lte(t,E)'   ← single quotes stop comma splitting
-
-      For overlay (x= already contains if() with commas):
-        enable=gte(t\,S)*lte(t\,E)   ← backslash-comma escaping
-        Single quotes conflict with the outer filter_complex parser when
-        the overlay x= expression itself contains if() sub-expressions.
-        In Python f-strings: \\, produces the literal \, FFmpeg needs.
-
-      t1  zoompan center-crop (z=1.04, no max/min in x/y)
-      t2  drawbox  + gte*lte  (single-quoted)
-      t3  drawtext + gte*lte  (single-quoted)
-      t4  volume   + gte*lte  (single-quoted)
-      t5  eq color-grade profiles
-      t6  full filter_complex (grade+scale+zoompan+drawbox+drawtext+volume)
-      t7  overlay  + gte*lte  (backslash-comma — different from t2–t4!)
-      t8  subtitles burn (ASS pass-2)
+    Each test uses:
+      ffmpeg -f lavfi -i color=c=black:s=100x100:d=1
+             -filter_complex {fc} -map [out] -f null -
+    Returns returncode and stderr tail for every variant so we can see
+    exactly which syntax FFmpeg 7.1.4 on Railway accepts.
     """
     import subprocess as _sp
-    import tempfile as _tf
     import os as _os
-    from pathlib import Path as _P
     from app.engine.transcribe import FFMPEG_PATH
 
-    FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-    font_ok = _os.path.exists(FONT)
-    fontfile = f":fontfile={FONT}" if font_ok else ""
-    W, H = 1080, 1920
-
-    results: dict = {"font_found": font_ok, "font_path": FONT}
+    results: dict = {}
 
     def _t(label: str, cmd: list[str]) -> None:
         r = _sp.run(cmd, capture_output=True, text=True)
         results[label] = {
             "ok": r.returncode == 0,
-            "err": r.stderr[-500:] if r.returncode != 0 else "",
+            "returncode": r.returncode,
+            "err": r.stderr[-600:],
         }
 
-    # ── T1: zoompan center crop ───────────────────────────────────────────
-    # z=1.04  x=iw/2-(iw/zoom/2)  y=ih/2-(ih/zoom/2)  d=1
-    # No max()/min() in x/y — just the simple centre formula.
-    _t("t1_zoompan", [
+    BASE = [
         FFMPEG_PATH, "-y", "-loglevel", "error",
-        "-f", "lavfi", "-i", f"color=c=blue:size={W}x{H}:duration=1:rate=30",
-        "-vf", (
-            f"zoompan=z=1.04:x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2)"
-            f":d=1:s={W}x{H}:fps=30"
-        ),
-        "-frames:v", "10", "-f", "null", "-",
+        "-f", "lavfi", "-i", "color=c=black:s=100x100:d=1",
+    ]
+
+    # ── tA: backslash-comma, no quotes ───────────────────────────────────
+    # Python \\, → literal \, in subprocess arg → FFmpeg sees \, as escaped comma
+    fc_a = "[0:v]drawbox=x=0:y=0:w=50:h=50:color=red@1.0:t=fill:enable=gte(t\\,0.2)*lte(t\\,0.8)[out]"
+    _t("tA_backslash_comma", BASE + [
+        "-filter_complex", fc_a, "-map", "[out]", "-f", "null", "-",
     ])
 
-    # ── T2: drawbox + gte*lte enable ──────────────────────────────────────
-    _t("t2_drawbox_gte_lte", [
-        FFMPEG_PATH, "-y", "-loglevel", "error",
-        "-f", "lavfi", "-i", f"color=c=black:size={W}x{H}:duration=2:rate=30",
-        "-vf", "drawbox=x=0:y=0:w=iw:h=ih:color=0xFFE500@1.0:t=fill:enable='gte(t,0.5)*lte(t,0.6)'",
-        "-frames:v", "10", "-f", "null", "-",
+    # ── tB: no enable= (baseline — always expected to pass) ──────────────
+    fc_b = "[0:v]drawbox=x=0:y=0:w=50:h=50:color=red@1.0:t=fill[out]"
+    _t("tB_no_enable", BASE + [
+        "-filter_complex", fc_b, "-map", "[out]", "-f", "null", "-",
     ])
 
-    # ── T3: drawtext + fontfile + gte*lte enable ─────────────────────────
-    _t("t3_drawtext_gte_lte", [
-        FFMPEG_PATH, "-y", "-loglevel", "error",
-        "-f", "lavfi", "-i", f"color=c=black:size={W}x{H}:duration=2:rate=30",
-        "-vf", (
-            f"drawtext=text=STOP{fontfile}"
-            f":fontcolor=white:fontsize=400"
-            f":x=(w-text_w)/2:y=(h-text_h)/2"
-            f":enable='gte(t,0.5)*lte(t,0.6)'"
-        ),
-        "-frames:v", "10", "-f", "null", "-",
+    # ── tC: plain commas, no quotes, no backslash ─────────────────────────
+    fc_c = "[0:v]drawbox=x=0:y=0:w=50:h=50:color=red@1.0:t=fill:enable=gte(t,0.2)*lte(t,0.8)[out]"
+    _t("tC_plain_commas", BASE + [
+        "-filter_complex", fc_c, "-map", "[out]", "-f", "null", "-",
     ])
 
-    # ── T4: volume duck + gte*lte enable ─────────────────────────────────
-    _t("t4_volume_duck", [
+    # ── tD: volume filter with backslash-comma ────────────────────────────
+    # Uses a sine source so [0:a] actually exists.
+    _t("tD_volume_backslash", [
         FFMPEG_PATH, "-y", "-loglevel", "error",
-        "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
-        "-af", "volume=enable='gte(t,0.5)*lte(t,1.0)':volume=0",
+        "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+        "-af", "volume=enable=gte(t\\,0.2)*lte(t\\,0.8):volume=0",
         "-f", "null", "-",
     ])
-
-    # ── T5: eq color-grade (coaching profile) ────────────────────────────
-    _t("t5_color_grade", [
-        FFMPEG_PATH, "-y", "-loglevel", "error",
-        "-f", "lavfi", "-i", f"color=c=red:size={W}x{H}:duration=1:rate=30",
-        "-vf", "eq=contrast=1.15:saturation=1.1,colorbalance=rs=0.05:bs=-0.03",
-        "-frames:v", "5", "-f", "null", "-",
-    ])
-
-    # ── T6: full filter_complex ───────────────────────────────────────────
-    # grade + scale + zoompan + drawbox + drawtext + volume duck
-    # Two lavfi inputs: [0] = video, [1] = audio (sine)
-    # enable= uses 'gte*lte' throughout — no between()
-    fc6 = (
-        f"[0:v]eq=contrast=1.1:saturation=1.05,"
-        f"scale={W}:{H}:force_original_aspect_ratio=increase,"
-        f"crop={W}:{H},"
-        f"zoompan=z=1.04:x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2)"
-        f":d=1:s={W}x{H}:fps=30[vzoom];"
-        f"[vzoom]drawbox=x=0:y=0:w=iw:h=ih:color=0xFFE500@1.0:t=fill"
-        f":enable='gte(t,1.0)*lte(t,1.1)'[vhf];"
-        f"[vhf]drawtext=text=STOP{fontfile}"
-        f":fontcolor=black:fontsize=422"
-        f":x=(w-text_w)/2:y=(h-text_h)/2"
-        f":enable='gte(t,1.0)*lte(t,1.1)'[vout];"
-        f"[1:a]volume=enable='gte(t,0.5)*lte(t,0.8)':volume=0[aout]"
-    )
-    _t("t6_full_filter_complex", [
-        FFMPEG_PATH, "-y", "-loglevel", "error",
-        "-f", "lavfi", "-i", f"color=c=black:size={W}x{H}:duration=3:rate=30",
-        "-f", "lavfi", "-i", "sine=frequency=440:duration=3",
-        "-filter_complex", fc6,
-        "-map", "[vout]", "-map", "[aout]",
-        "-frames:v", "30", "-f", "null", "-",
-    ])
-
-    # ── T7: overlay with slide-in smoothstep expression ───────────────────
-    # Exact pattern used by render_motion_graphic() for lower_third / text_overlay.
-    # Smoothstep from off-screen-left (-w) to x=60 over 0.3 s starting at t=0.5.
-    _tmp_png = _P(_tf.mktemp(suffix=".png"))
-    _sp.run([
-        FFMPEG_PATH, "-y", "-loglevel", "error",
-        "-f", "lavfi", "-i", "color=c=white:size=300x100:duration=0.1:rate=1",
-        "-frames:v", "1", str(_tmp_png),
-    ], capture_output=True)
-    if _tmp_png.exists():
-        x_slide = (
-            "if(lt(t-0.500,0.3),"
-            "-w+(60-(-w))*((t-0.500)/0.3)*((t-0.500)/0.3)*(3-2*((t-0.500)/0.3)),"
-            "60)"
-        )
-        _t("t7_overlay_slide_in", [
-            FFMPEG_PATH, "-y", "-loglevel", "error",
-            "-f", "lavfi", "-i", f"color=c=black:size={W}x{H}:duration=3:rate=30",
-            "-i", str(_tmp_png),
-            "-filter_complex",
-            # overlay enable= uses \, escaping, not single quotes.
-            # Single quotes conflict with the outer filter_complex parser
-            # when x= already contains an if() expression with commas.
-            f"[0:v][1:v]overlay=x={x_slide}:y=100:enable=gte(t\\,0.5)*lte(t\\,2.5)[vout]",
-            "-map", "[vout]",
-            "-frames:v", "30", "-f", "null", "-",
-        ])
-        _os.unlink(str(_tmp_png))
-    else:
-        results["t7_overlay_slide_in"] = {"ok": False, "err": "test PNG creation failed"}
-
-    # ── T8: subtitles burn (ASS pass-2) ──────────────────────────────────
-    _ass_tmp = _P(_tf.mktemp(suffix=".ass"))
-    _ass_tmp.write_text(
-        "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\n\n"
-        "[V4+ Styles]\n"
-        "Format: Name,Fontname,Fontsize,PrimaryColour,SecondaryColour,"
-        "OutlineColour,BackColour,Bold,Italic,Underline,StrikeOut,"
-        "ScaleX,ScaleY,Spacing,Angle,BorderStyle,Outline,Shadow,"
-        "Alignment,MarginL,MarginR,MarginV,Encoding\n"
-        "Style: Default,DejaVu Sans Bold,86,&H00FFFFFF,&H00FFFFFF,"
-        "&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,2,0,2,60,60,288,1\n\n"
-        "[Events]\n"
-        "Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text\n"
-        "Dialogue: 0,0:00:00.50,0:00:01.50,Default,,0,0,0,,Hello World\n",
-        encoding="utf-8",
-    )
-    _ass_esc = str(_ass_tmp).replace(":", "\\:")
-    _t("t8_subtitles_burn", [
-        FFMPEG_PATH, "-y", "-loglevel", "error",
-        "-f", "lavfi", "-i", f"color=c=black:size={W}x{H}:duration=2:rate=30",
-        "-vf", f"subtitles={_ass_esc}",
-        "-frames:v", "20", "-f", "null", "-",
-    ])
-    _os.unlink(str(_ass_tmp))
 
     results["all_passed"] = all(
         v.get("ok", False) for k, v in results.items() if k.startswith("t")
