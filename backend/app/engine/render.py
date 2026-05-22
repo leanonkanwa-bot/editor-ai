@@ -547,10 +547,15 @@ def _build_pass1_filter_complex(
     for j, rg in enumerate(rendered_graphics):
         input_idx = j + 1
         ov_out = f"vg{j}"
+        # overlay enable= cannot use single quotes — they conflict with the
+        # outer filter_complex string parser when the overlay x_expr itself
+        # contains if() expressions. Use \, (backslash-comma) escaping instead:
+        # FFmpeg sees \, as a literal comma (not a filter separator).
+        # In Python f-string: \\, → single backslash in the actual string.
         fc.append(
             f"[{v}][{input_idx}:v]overlay"
             f"=x={rg.x_expr}:y={rg.y_expr}"
-            f":enable='gte(t,{rg.at:.3f})*lte(t,{rg.at+rg.duration:.3f})'[{ov_out}]"
+            f":enable=gte(t\\,{rg.at:.3f})*lte(t\\,{rg.at+rg.duration:.3f})[{ov_out}]"
         )
         v = ov_out
 

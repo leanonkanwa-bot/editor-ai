@@ -122,19 +122,26 @@ async def test_ffmpeg() -> dict:
 
     Eight tests — all must be ok=true before the render pipeline is trustworthy.
 
-    NOTE on enable= syntax:
-      between(t,S,E) is NOT used. FFmpeg 7.x parses the commas inside between()
-      as filter-chain separators → "No such filter: '0.5'" error.
-      All enable= expressions use: enable='gte(t,S)*lte(t,E)'
-      Single quotes prevent comma splitting; gte/lte each have only one comma.
+    NOTE on enable= syntax (two rules, both needed):
+      between(t,S,E) is NOT used — FFmpeg 7.x treats its commas as filter
+      separators → "No such filter: '0.5'" error.
+
+      For drawbox / drawtext / volume:
+        enable='gte(t,S)*lte(t,E)'   ← single quotes stop comma splitting
+
+      For overlay (x= already contains if() with commas):
+        enable=gte(t\,S)*lte(t\,E)   ← backslash-comma escaping
+        Single quotes conflict with the outer filter_complex parser when
+        the overlay x= expression itself contains if() sub-expressions.
+        In Python f-strings: \\, produces the literal \, FFmpeg needs.
 
       t1  zoompan center-crop (z=1.04, no max/min in x/y)
-      t2  drawbox + gte*lte enable
-      t3  drawtext + fontfile + gte*lte enable
-      t4  volume duck + gte*lte enable (single-quoted)
+      t2  drawbox  + gte*lte  (single-quoted)
+      t3  drawtext + gte*lte  (single-quoted)
+      t4  volume   + gte*lte  (single-quoted)
       t5  eq color-grade profiles
-      t6  full filter_complex  (grade→scale→zoompan→drawbox→drawtext + audio duck)
-      t7  overlay with slide-in smoothstep x expression + gte*lte enable
+      t6  full filter_complex (grade+scale+zoompan+drawbox+drawtext+volume)
+      t7  overlay  + gte*lte  (backslash-comma — different from t2–t4!)
       t8  subtitles burn (ASS pass-2)
     """
     import subprocess as _sp
@@ -254,7 +261,10 @@ async def test_ffmpeg() -> dict:
             "-f", "lavfi", "-i", f"color=c=black:size={W}x{H}:duration=3:rate=30",
             "-i", str(_tmp_png),
             "-filter_complex",
-            f"[0:v][1:v]overlay=x={x_slide}:y=100:enable='gte(t,0.5)*lte(t,2.5)'[vout]",
+            # overlay enable= uses \, escaping, not single quotes.
+            # Single quotes conflict with the outer filter_complex parser
+            # when x= already contains an if() expression with commas.
+            f"[0:v][1:v]overlay=x={x_slide}:y=100:enable=gte(t\\,0.5)*lte(t\\,2.5)[vout]",
             "-map", "[vout]",
             "-frames:v", "30", "-f", "null", "-",
         ])
