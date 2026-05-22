@@ -715,11 +715,35 @@ def render(
     _log.info("render: filter_complex disabled — using simple -vf pipeline")
 
     color_grade = _color_grade_filter(content_type)
-    vf_simple = (
-        f"{color_grade},"
-        f"scale={target_w}:{target_h}:force_original_aspect_ratio=decrease,"
-        f"pad={target_w}:{target_h}:(ow-iw)/2:(oh-ih)/2"
-    )
+
+    # ── Smart dimension detection ────────────────────────────────────────────
+    # Probe the concat file to decide whether and how to scale. _cut_segment
+    # and _create_proxy already scale to target dimensions, so in practice this
+    # is usually a no-op, but edge cases (e.g. un-proxied same-codec source)
+    # could produce non-target dims — handle them all explicitly.
+    concat_info = _probe_video_info(concat_path)
+    src_w = concat_info.get("width",  0) or target_w
+    src_h = concat_info.get("height", 0) or target_h
+
+    if src_w == target_w and src_h == target_h:
+        # Already the exact target resolution — no scale needed.
+        scale_filter: str | None = None
+    elif src_w >= src_h:
+        # Landscape or square source going to portrait target: scale-up then crop
+        # to fill the frame without letterboxing.
+        scale_filter = (
+            f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
+            f"crop={target_w}:{target_h}"
+        )
+    else:
+        # Portrait source — fix the constrained axis, let FFmpeg auto-compute
+        # the other to the nearest even number (-2). No distortion, no padding.
+        if short_form:
+            scale_filter = f"scale=-2:{target_h}"   # fix height
+        else:
+            scale_filter = f"scale={target_w}:-2"   # fix width
+
+    vf_simple = color_grade if scale_filter is None else f"{color_grade},{scale_filter}"
 
     import shutil as _shutil
     import tempfile as _tempfile
@@ -729,14 +753,18 @@ def render(
     _ass_str = str(_ass_tmp).replace("\\", "/").replace(":", "\\:")
     _nocap_path = _tmp_dir / f"nocap_{output_path.stem}.mp4"
 
+    # First pass — encode color grade + scale; no captions yet.
+    # CRF 16 → visually near-lossless (lower = better quality).
+    # preset medium → good encode speed / quality balance for Railway.
+    _vf_args = ["-vf", vf_simple] if vf_simple else []
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-i", str(concat_path),
-        "-vf", vf_simple,
+        *_vf_args,
         "-frames:v", str(total_frames),
-        "-c:v", "libx264", "-preset", "superfast", "-crf", "22",
+        "-c:v", "libx264", "-preset", "medium", "-crf", "16",
         "-threads", "2",
-        "-x264-params", "rc-lookahead=0:bframes=0",
+        "-x264-params", "rc-lookahead=32:bframes=3",
         "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "192k",
         "-movflags", "+faststart",
@@ -751,10 +779,10 @@ def render(
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-i", str(_nocap_path),
-        "-vf", f"subtitles={_ass_str}:force_style='FontName=Arial'",
-        "-c:v", "libx264", "-preset", "superfast", "-crf", "22",
+        "-vf", f"subtitles={_ass_str}",
+        "-c:v", "libx264", "-preset", "medium", "-crf", "16",
         "-threads", "2",
-        "-x264-params", "rc-lookahead=0:bframes=0",
+        "-x264-params", "rc-lookahead=32:bframes=3",
         "-pix_fmt", "yuv420p",
         "-c:a", "copy",
         "-movflags", "+faststart",
