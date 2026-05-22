@@ -459,6 +459,31 @@ def _find_system_font() -> str | None:
     return None
 
 
+def _png_to_timed_clip(png: Path, dst: Path, duration: float, fps: int) -> None:
+    """Convert a static PNG to a short RGBA video clip.
+
+    Uses the PNG video codec in a Matroska (.mkv) container — the only
+    widely-available combination that preserves a full RGBA alpha channel
+    for transparent overlay compositing.
+
+    Clip timestamps start at 0; the caller uses setpts=PTS+start/TB in
+    the filter_complex to shift it to the correct position in the edit
+    timeline. No enable= expression is needed: the clip simply doesn't
+    exist outside its window, so the overlay falls through to the base
+    video automatically (eof_action=pass).
+    """
+    _run([
+        FFMPEG_PATH, "-y", "-loglevel", "error",
+        "-loop", "1",
+        "-i", str(png),
+        "-t", f"{duration:.3f}",
+        "-pix_fmt", "rgba",
+        "-c:v", "png",
+        "-r", str(fps),
+        str(dst),
+    ])
+
+
 def _build_pass1_filter_complex(
     target_w: int,
     target_h: int,
@@ -541,21 +566,20 @@ def _build_pass1_filter_complex(
             v = txt_out
 
     # ── Motion graphic overlays ───────────────────────────────────────────
-    # PNG inputs are at indices 1..N (index 0 = concat video).
-    # x_expr / y_expr from RenderedGraphic already contain the smoothstep
-    # slide-in expression with no spaces — pass through verbatim.
+    # Inputs at indices 1..N are pre-cut MKV clips (RGBA, duration = rg.duration).
+    # setpts=PTS+at/TB shifts each clip to its correct position in the timeline.
+    # eof_action=pass lets the base video show through before and after the clip.
+    # No enable= expression is needed at all — the clip simply doesn't exist
+    # outside its window, so the overlay falls through to the base video.
     for j, rg in enumerate(rendered_graphics):
         input_idx = j + 1
+        timed = f"gt{j}"
         ov_out = f"vg{j}"
-        # overlay enable= cannot use single quotes — they conflict with the
-        # outer filter_complex string parser when the overlay x_expr itself
-        # contains if() expressions. Use \, (backslash-comma) escaping instead:
-        # FFmpeg sees \, as a literal comma (not a filter separator).
-        # In Python f-string: \\, → single backslash in the actual string.
+        fc.append(f"[{input_idx}:v]setpts=PTS+{rg.at:.3f}/TB[{timed}]")
         fc.append(
-            f"[{v}][{input_idx}:v]overlay"
+            f"[{v}][{timed}]overlay"
             f"=x={rg.x_expr}:y={rg.y_expr}"
-            f":enable=gte(t\\,{rg.at:.3f})*lte(t\\,{rg.at+rg.duration:.3f})[{ov_out}]"
+            f":eof_action=pass[{ov_out}]"
         )
         v = ov_out
 
@@ -837,10 +861,27 @@ def render(
 
     system_font = _find_system_font()
 
+    # ── Convert motion-graphic PNGs to timed RGBA MKV clips ──────────────
+    # Each clip is exactly rg.duration seconds long, starting at t=0.
+    # In filter_complex, setpts=PTS+rg.at/TB shifts it to its timeline position.
+    # Clips that fail to render are silently dropped — the edit continues.
+    clips_dir = work_dir / "graphic_clips"
+    clips_dir.mkdir(parents=True, exist_ok=True)
+    graphic_clip_paths: list[Path] = []
+    ok_graphics: list[RenderedGraphic] = []
+    for rg in rendered_graphics:
+        clip_path = clips_dir / f"{rg.png.stem}_clip.mkv"
+        try:
+            _png_to_timed_clip(rg.png, clip_path, rg.duration, fps)
+            graphic_clip_paths.append(clip_path)
+            ok_graphics.append(rg)
+        except Exception as _e:
+            _log.warning("graphic clip failed (%s): %s", rg.kind, _e)
+
     # ── Decide pipeline: filter_complex or simple -vf ─────────────────────
     # filter_complex is used when we have effects that need it.
     # Simple -vf is the fast fallback for clean videos.
-    use_fc = bool(remapped_hyperframes or rendered_graphics or remapped_silences)
+    use_fc = bool(remapped_hyperframes or ok_graphics or remapped_silences)
 
     _tmp_dir = Path(_tempfile.gettempdir())
     _nocap_path = _tmp_dir / f"nocap_{output_path.stem}.mp4"
@@ -852,20 +893,20 @@ def render(
             color_grade, scale_filter,
             remapped_hyperframes,
             remapped_silences,
-            rendered_graphics,
+            ok_graphics,
             system_font,
         )
         cmd1: list[str] = [
             FFMPEG_PATH, "-y", "-loglevel", "error",
             "-i", str(concat_path),
         ]
-        for rg in rendered_graphics:   # PNG inputs at indices 1..N
-            cmd1 += ["-i", str(rg.png)]
+        for cp in graphic_clip_paths:   # MKV clip inputs at indices 1..N
+            cmd1 += ["-i", str(cp)]
         cmd1 += ["-filter_complex", fc_str, "-map", f"[{v_out}]"]
         cmd1 += ["-map", f"[{a_out}]"] if a_out else ["-map", "0:a"]
         _log.info(
             "render pass1: filter_complex  hf=%d  graphics=%d  silences=%d",
-            len(remapped_hyperframes), len(rendered_graphics), len(remapped_silences),
+            len(remapped_hyperframes), len(ok_graphics), len(remapped_silences),
         )
     else:
         # Simple -vf: grade + scale + constant zoompan
