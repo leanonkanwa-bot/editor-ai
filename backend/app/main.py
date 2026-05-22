@@ -120,14 +120,21 @@ async def ffmpeg_info() -> dict:
 async def test_ffmpeg() -> dict:
     """Test every filter pattern used in the full render pipeline.
 
-    Eight tests — all must be ok=true before the render pipeline is trustworthy:
-      t1  zoompan center-crop (exact expression)
-      t2  drawbox + between()
-      t3  drawtext + fontfile + between()
-      t4  volume duck + between()
+    Eight tests — all must be ok=true before the render pipeline is trustworthy.
+
+    NOTE on enable= syntax:
+      between(t,S,E) is NOT used. FFmpeg 7.x parses the commas inside between()
+      as filter-chain separators → "No such filter: '0.5'" error.
+      All enable= expressions use: enable='gte(t,S)*lte(t,E)'
+      Single quotes prevent comma splitting; gte/lte each have only one comma.
+
+      t1  zoompan center-crop (z=1.04, no max/min in x/y)
+      t2  drawbox + gte*lte enable
+      t3  drawtext + fontfile + gte*lte enable
+      t4  volume duck + gte*lte enable (single-quoted)
       t5  eq color-grade profiles
       t6  full filter_complex  (grade→scale→zoompan→drawbox→drawtext + audio duck)
-      t7  overlay with slide-in smoothstep x expression
+      t7  overlay with slide-in smoothstep x expression + gte*lte enable
       t8  subtitles burn (ASS pass-2)
     """
     import subprocess as _sp
@@ -163,32 +170,32 @@ async def test_ffmpeg() -> dict:
         "-frames:v", "10", "-f", "null", "-",
     ])
 
-    # ── T2: drawbox + between() ───────────────────────────────────────────
-    _t("t2_drawbox_between", [
+    # ── T2: drawbox + gte*lte enable ──────────────────────────────────────
+    _t("t2_drawbox_gte_lte", [
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-f", "lavfi", "-i", f"color=c=black:size={W}x{H}:duration=2:rate=30",
-        "-vf", "drawbox=x=0:y=0:w=iw:h=ih:color=0xFFE500@1.0:t=fill:enable=between(t,0.5,0.6)",
+        "-vf", "drawbox=x=0:y=0:w=iw:h=ih:color=0xFFE500@1.0:t=fill:enable='gte(t,0.5)*lte(t,0.6)'",
         "-frames:v", "10", "-f", "null", "-",
     ])
 
-    # ── T3: drawtext + fontfile + between() ──────────────────────────────
-    _t("t3_drawtext_between", [
+    # ── T3: drawtext + fontfile + gte*lte enable ─────────────────────────
+    _t("t3_drawtext_gte_lte", [
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-f", "lavfi", "-i", f"color=c=black:size={W}x{H}:duration=2:rate=30",
         "-vf", (
             f"drawtext=text=STOP{fontfile}"
             f":fontcolor=white:fontsize=400"
             f":x=(w-text_w)/2:y=(h-text_h)/2"
-            f":enable=between(t,0.5,0.6)"
+            f":enable='gte(t,0.5)*lte(t,0.6)'"
         ),
         "-frames:v", "10", "-f", "null", "-",
     ])
 
-    # ── T4: volume duck + between() ───────────────────────────────────────
+    # ── T4: volume duck + gte*lte enable ─────────────────────────────────
     _t("t4_volume_duck", [
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
-        "-af", "volume=enable=between(t,0.5,1.0):volume=0",
+        "-af", "volume=enable='gte(t,0.5)*lte(t,1.0)':volume=0",
         "-f", "null", "-",
     ])
 
@@ -203,6 +210,7 @@ async def test_ffmpeg() -> dict:
     # ── T6: full filter_complex ───────────────────────────────────────────
     # grade + scale + zoompan + drawbox + drawtext + volume duck
     # Two lavfi inputs: [0] = video, [1] = audio (sine)
+    # enable= uses 'gte*lte' throughout — no between()
     fc6 = (
         f"[0:v]eq=contrast=1.1:saturation=1.05,"
         f"scale={W}:{H}:force_original_aspect_ratio=increase,"
@@ -210,12 +218,12 @@ async def test_ffmpeg() -> dict:
         f"zoompan=z=1.04:x=iw/2-(iw/zoom/2):y=ih/2-(ih/zoom/2)"
         f":d=1:s={W}x{H}:fps=30[vzoom];"
         f"[vzoom]drawbox=x=0:y=0:w=iw:h=ih:color=0xFFE500@1.0:t=fill"
-        f":enable=between(t,1.0,1.1)[vhf];"
+        f":enable='gte(t,1.0)*lte(t,1.1)'[vhf];"
         f"[vhf]drawtext=text=STOP{fontfile}"
         f":fontcolor=black:fontsize=422"
         f":x=(w-text_w)/2:y=(h-text_h)/2"
-        f":enable=between(t,1.0,1.1)[vout];"
-        f"[1:a]volume=enable=between(t,0.5,0.8):volume=0[aout]"
+        f":enable='gte(t,1.0)*lte(t,1.1)'[vout];"
+        f"[1:a]volume=enable='gte(t,0.5)*lte(t,0.8)':volume=0[aout]"
     )
     _t("t6_full_filter_complex", [
         FFMPEG_PATH, "-y", "-loglevel", "error",
@@ -246,7 +254,7 @@ async def test_ffmpeg() -> dict:
             "-f", "lavfi", "-i", f"color=c=black:size={W}x{H}:duration=3:rate=30",
             "-i", str(_tmp_png),
             "-filter_complex",
-            f"[0:v][1:v]overlay=x={x_slide}:y=100:enable=between(t,0.5,2.5)[vout]",
+            f"[0:v][1:v]overlay=x={x_slide}:y=100:enable='gte(t,0.5)*lte(t,2.5)'[vout]",
             "-map", "[vout]",
             "-frames:v", "30", "-f", "null", "-",
         ])

@@ -363,7 +363,9 @@ def _build_zoom_expression(
             ease = f"({t})*({t})*(3-2*({t}))"
             seg_expr = f"({z_from}+({z_to}-{z_from})*({ease}))"
 
-        z_expr = f"if(between(on,{f0},{f1}),{seg_expr},{z_expr})"
+        # gte*lte instead of between() — FFmpeg 7.x parses between()'s commas
+        # as filter-chain separators. gte/lte are 2-arg functions (one comma each).
+        z_expr = f"if(gte(on,{f0})*lte(on,{f1}),{seg_expr},{z_expr})"
 
     return z_expr, f"{fx};{fy}"
 
@@ -513,9 +515,13 @@ def _build_pass1_filter_complex(
         t1 = t0 + max(0.05, min(0.2, dur))
         color = _hex_to_rgb_at(hf.get("color", "#FFE500"))
         box_out = f"vhfb{i}"
+        # enable=  uses single-quoted gte*lte instead of between().
+        # between(t,S,E) fails on FFmpeg 7.x — the commas are parsed as
+        # filter-chain separators. gte/lte are 2-arg functions (one comma each)
+        # and single-quoting the whole expression prevents any comma splitting.
         fc.append(
             f"[{v}]drawbox=x=0:y=0:w=iw:h=ih:color={color}:t=fill"
-            f":enable=between(t,{t0:.3f},{t1:.3f})[{box_out}]"
+            f":enable='gte(t,{t0:.3f})*lte(t,{t1:.3f})'[{box_out}]"
         )
         v = box_out
 
@@ -530,7 +536,7 @@ def _build_pass1_filter_complex(
                 f":fontfile={system_font}"
                 f":fontcolor=black:fontsize={font_size}"
                 f":x=(w-text_w)/2:y=(h-text_h)/2"
-                f":enable=between(t,{t0:.3f},{t1:.3f})[{txt_out}]"
+                f":enable='gte(t,{t0:.3f})*lte(t,{t1:.3f})'[{txt_out}]"
             )
             v = txt_out
 
@@ -544,7 +550,7 @@ def _build_pass1_filter_complex(
         fc.append(
             f"[{v}][{input_idx}:v]overlay"
             f"=x={rg.x_expr}:y={rg.y_expr}"
-            f":enable=between(t,{rg.at:.3f},{rg.at+rg.duration:.3f})[{ov_out}]"
+            f":enable='gte(t,{rg.at:.3f})*lte(t,{rg.at+rg.duration:.3f})'[{ov_out}]"
         )
         v = ov_out
 
@@ -559,7 +565,7 @@ def _build_pass1_filter_complex(
         except (TypeError, ValueError):
             continue
         vol_nodes.append(
-            f"volume=enable=between(t,{at:.3f},{at+dur:.3f}):volume=0"
+            f"volume=enable='gte(t,{at:.3f})*lte(t,{at+dur:.3f})':volume=0"
         )
     if vol_nodes:
         fc.append(f"[0:a]{','.join(vol_nodes)}[aout]")
