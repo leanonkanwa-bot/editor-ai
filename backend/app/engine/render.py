@@ -540,13 +540,15 @@ def _build_pass1_filter_complex(
         t1 = t0 + max(0.05, min(0.2, dur))
         color = _hex_to_rgb_at(hf.get("color", "#FFE500"))
         box_out = f"vhfb{i}"
-        # enable=  uses single-quoted gte*lte instead of between().
-        # between(t,S,E) fails on FFmpeg 7.x — the commas are parsed as
-        # filter-chain separators. gte/lte are 2-arg functions (one comma each)
-        # and single-quoting the whole expression prevents any comma splitting.
+        # enable= uses backslash-comma (\\,) instead of single quotes.
+        # Single quotes inside a filter_complex string passed via subprocess
+        # list get shell-escaped to '"'"' by some runtimes, corrupting the
+        # entire filter graph. \\, in the Python f-string becomes a literal
+        # backslash-comma in the argument — FFmpeg treats \, as a literal
+        # comma (not a filter-chain separator). No shell quoting required.
         fc.append(
             f"[{v}]drawbox=x=0:y=0:w=iw:h=ih:color={color}:t=fill"
-            f":enable='gte(t,{t0:.3f})*lte(t,{t1:.3f})'[{box_out}]"
+            f":enable=gte(t\\,{t0:.3f})*lte(t\\,{t1:.3f})[{box_out}]"
         )
         v = box_out
 
@@ -561,7 +563,7 @@ def _build_pass1_filter_complex(
                 f":fontfile={system_font}"
                 f":fontcolor=black:fontsize={font_size}"
                 f":x=(w-text_w)/2:y=(h-text_h)/2"
-                f":enable='gte(t,{t0:.3f})*lte(t,{t1:.3f})'[{txt_out}]"
+                f":enable=gte(t\\,{t0:.3f})*lte(t\\,{t1:.3f})[{txt_out}]"
             )
             v = txt_out
 
@@ -594,7 +596,7 @@ def _build_pass1_filter_complex(
         except (TypeError, ValueError):
             continue
         vol_nodes.append(
-            f"volume=enable='gte(t,{at:.3f})*lte(t,{at+dur:.3f})':volume=0"
+            f"volume=enable=gte(t\\,{at:.3f})*lte(t\\,{at+dur:.3f}):volume=0"
         )
     if vol_nodes:
         fc.append(f"[0:a]{','.join(vol_nodes)}[aout]")
