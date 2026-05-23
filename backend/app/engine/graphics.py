@@ -1,15 +1,15 @@
-﻿"""
+"""
 Motion graphics renderer.
 
 Each function renders ONE graphic to a PNG (RGBA, transparent background)
 that the FFmpeg filter chain overlays onto the video. Animation (slide-in,
-fade-in) is done by the FFmpeg overlay expressions, NOT here â€” that keeps
+fade-in) is done by the FFmpeg overlay expressions, NOT here — that keeps
 each graphic file small (one PNG) and keeps the renderer fast.
 
 Today's library:
-  - lower_third_title  â€” section title that slides in from the left
-  - stat_circle        â€” donut chart with a big number in the middle
-  - checklist          â€” stacked rounded pill buttons with X / âœ“ icons
+  - lower_third_title  — section title that slides in from the left
+  - stat_circle        — donut chart with a big number in the middle
+  - checklist          — stacked rounded pill buttons with X / ✓ icons
 
 Style alignment is intentional: rounded corners, sans-serif Bold,
 high-contrast accent colours pulled from the app's palette so the
@@ -34,7 +34,7 @@ AESTHETIC_COLORS: dict[str, dict] = {
 }
 
 
-# Brand palette â€” kept in sync with the front-end picker.
+# Brand palette — kept in sync with the front-end picker.
 PALETTE = {
     "blue":      (10, 132, 255, 255),    # Electric Blue  #0A84FF
     "red":       (255, 59, 48, 255),     # Clean Red      #FF3B30
@@ -56,7 +56,7 @@ def _normalize_font_name(name: str) -> str:
 
 def _load_font(name: str, size: int) -> ImageFont.FreeTypeFont:
     """Resolve a font we baked into the Docker image. Falls back to default
-    if a system box has none of these â€” prevents render hard-fails."""
+    if a system box has none of these — prevents render hard-fails."""
     candidates = [
         f"/usr/local/share/fonts/leanlead/{name}.ttf",
         f"/usr/share/fonts/truetype/{name.lower()}/{name}.ttf",
@@ -122,7 +122,7 @@ def _wrap_text_to_width(text: str, font: ImageFont.FreeTypeFont, max_px: int) ->
 
 
 # ---------------------------------------------------------------------------
-# Graphic 1 â€” Lower Third Title
+# Graphic 1 — Lower Third Title
 # ---------------------------------------------------------------------------
 
 def render_lower_third(
@@ -183,7 +183,7 @@ def render_lower_third(
 
 
 # ---------------------------------------------------------------------------
-# Graphic 2 â€” Stat Circle (donut + big number)
+# Graphic 2 — Stat Circle (donut + big number)
 # ---------------------------------------------------------------------------
 
 def render_stat_circle(
@@ -207,12 +207,12 @@ def render_stat_circle(
     percent = max(0, min(100, int(percent)))
 
     bbox = (stroke // 2, stroke // 2, size - stroke // 2, size - stroke // 2)
-    # Track + filled arc â€” start at top (-90Â°), draw clockwise.
+    # Track + filled arc — start at top (-90°), draw clockwise.
     end_angle = -90 + (360 * percent / 100)
     draw.arc(bbox, start=-90, end=270, fill=(40, 40, 40, 255), width=stroke)
     draw.arc(bbox, start=-90, end=end_angle, fill=accent, width=stroke)
 
-    # Centre text â€” number then sub-label.
+    # Centre text — number then sub-label.
     number_font = _load_font(font_number, int(size * 0.22))
     label_font = _load_font(font_label, int(size * 0.07))
 
@@ -235,13 +235,13 @@ def render_stat_circle(
 
 
 # ---------------------------------------------------------------------------
-# Graphic 3 â€” Checklist Reveal (X / âœ“ rounded pill buttons)
+# Graphic 3 — Checklist Reveal (X / ✓ rounded pill buttons)
 # ---------------------------------------------------------------------------
 
 @dataclass
 class ChecklistItem:
     text: str
-    ok: bool   # True = green âœ“, False = red âœ—
+    ok: bool   # True = green ✓, False = red ✗
 
 
 def render_checklist(
@@ -253,11 +253,11 @@ def render_checklist(
     gap: int = 28,
     font_name: str = "Poppins-Bold",
 ) -> Path:
-    """Stacked rounded pill buttons with red X or green âœ“ on the left.
+    """Stacked rounded pill buttons with red X or green ✓ on the left.
     Matches the 'Not a Demo / Not Theory / Real Automations' reference."""
     n = len(items)
     if n == 0:
-        # Render a 1Ã—1 transparent pixel so callers always get a valid file.
+        # Render a 1×1 transparent pixel so callers always get a valid file.
         Image.new("RGBA", (1, 1), (0, 0, 0, 0)).save(out_path, "PNG")
         return out_path
 
@@ -294,7 +294,7 @@ def render_checklist(
             outline_width=4,
         )
 
-        # Icon â€” filled circle in red/green with a white X or âœ“.
+        # Icon — filled circle in red/green with a white X or ✓.
         icon_y = y0 + (pill_height - icon_size) // 2
         draw.ellipse(
             (icon_x, icon_y, icon_x + icon_size, icon_y + icon_size),
@@ -303,7 +303,7 @@ def render_checklist(
         cx = icon_x + icon_size / 2
         cy = icon_y + icon_size / 2
         if item.ok:
-            # Checkmark â€” three points, drawn as two thick lines.
+            # Checkmark — three points, drawn as two thick lines.
             arm = icon_size * 0.25
             stem = icon_size * 0.4
             draw.line(
@@ -315,7 +315,7 @@ def render_checklist(
             draw.line([(cx - arm, cy - arm), (cx + arm, cy + arm)], fill=PALETTE["white"], width=10)
             draw.line([(cx + arm, cy - arm), (cx - arm, cy + arm)], fill=PALETTE["white"], width=10)
 
-        # Label text â€” left-aligned with consistent padding after the icon.
+        # Label text — left-aligned with consistent padding after the icon.
         text_x = icon_x + icon_size + 36
         tw, th = _text_size(text_font, item.text)
         draw.text(
@@ -328,10 +328,10 @@ def render_checklist(
 
 
 # ---------------------------------------------------------------------------
-# Graphic 4 â€” Text Overlay (the universal primitive)
+# Graphic 4 — Text Overlay (the universal primitive)
 # ---------------------------------------------------------------------------
 # Free-form text the agent can place anywhere with full styling control.
-# This is the workhorse â€” anything the templates don't cover, the agent
+# This is the workhorse — anything the templates don't cover, the agent
 # composes from text_overlays. Multi-line, custom font/size/color/position,
 # choice of slide-in direction.
 
@@ -372,7 +372,7 @@ def render_text_overlay(
     else:
         lines = raw_lines or [""]
 
-    # Use font metrics for line height â€” getbbox is glyph-tight and clips
+    # Use font metrics for line height — getbbox is glyph-tight and clips
     # descenders ("y", "g") on multi-line layouts.
     ascent, descent = font.getmetrics()
     line_h = ascent + descent
@@ -402,7 +402,7 @@ def render_text_overlay(
 
 
 # ---------------------------------------------------------------------------
-# Graphic 5 â€” Quote Card (full-frame inspirational quote)
+# Graphic 5 — Quote Card (full-frame inspirational quote)
 # ---------------------------------------------------------------------------
 
 def render_quote_card(
@@ -430,7 +430,7 @@ def render_quote_card(
 
     pad = int(target_w * 0.08)
     deco_x, deco_y = pad, int(target_h * 0.08)
-    draw.text((deco_x, deco_y), "â€œ", font=deco_font, fill=accent)
+    draw.text((deco_x, deco_y), "“", font=deco_font, fill=accent)
 
     max_quote_w = int(target_w * 0.84)
     lines = _wrap_text_to_width(quote or "", quote_font, max_quote_w)
@@ -456,7 +456,7 @@ def render_quote_card(
 
 
 # ---------------------------------------------------------------------------
-# Graphic 6 â€” Split Screen (wrong/right, before/after comparison)
+# Graphic 6 — Split Screen (wrong/right, before/after comparison)
 # ---------------------------------------------------------------------------
 
 def render_split_screen(
@@ -525,7 +525,7 @@ def render_split_screen(
 
 
 # ---------------------------------------------------------------------------
-# Graphic 7 â€” Timeline (horizontal with dots and labels)
+# Graphic 7 — Timeline (horizontal with dots and labels)
 # ---------------------------------------------------------------------------
 
 def render_timeline(
@@ -587,7 +587,7 @@ def render_timeline(
 
 
 # ---------------------------------------------------------------------------
-# Graphic 8 â€” Versus (two-card head-to-head)
+# Graphic 8 — Versus (two-card head-to-head)
 # ---------------------------------------------------------------------------
 
 def render_versus(
@@ -638,7 +638,7 @@ def render_versus(
 
 
 # ---------------------------------------------------------------------------
-# Graphic 9 â€” Notification Banner (iPhone-style)
+# Graphic 9 — Notification Banner (iPhone-style)
 # ---------------------------------------------------------------------------
 
 def render_notification(
@@ -686,7 +686,7 @@ def render_notification(
 
 
 # ---------------------------------------------------------------------------
-# Graphic 10 â€” Typography Broll (big word + orbiting supporting words)
+# Graphic 10 — Typography Broll (big word + orbiting supporting words)
 # ---------------------------------------------------------------------------
 
 def render_typography_broll(
@@ -720,7 +720,7 @@ def render_typography_broll(
     sup_font = _load_font("Poppins-SemiBold", int(target_h * 0.04))
     # Positions that stay clear of the center (where the main word is) and
     # avoid the face area (typically center or lower-center of frame).
-    # Only corners and top/bottom zones are used â€” max 3 orbit words.
+    # Only corners and top/bottom zones are used — max 3 orbit words.
     positions = [
         (0.05, 0.08), (0.72, 0.07), (0.05, 0.78),
         (0.72, 0.80), (0.40, 0.05), (0.40, 0.88),
@@ -747,7 +747,7 @@ def render_typography_broll(
 
 
 # ---------------------------------------------------------------------------
-# Graphic 11 â€” Money Counter (large formatted number display)
+# Graphic 11 — Money Counter (large formatted number display)
 # ---------------------------------------------------------------------------
 
 def render_money_counter(
@@ -786,7 +786,7 @@ def render_money_counter(
 
 
 # ---------------------------------------------------------------------------
-# Graphic 12 â€” Giant Text (Style 1: huge number + colored subtitle overlay)
+# Graphic 12 — Giant Text (Style 1: huge number + colored subtitle overlay)
 # ---------------------------------------------------------------------------
 
 def render_giant_text(
@@ -802,7 +802,7 @@ def render_giant_text(
 ) -> Path:
     """Huge white number/stat (e.g. '65%') with a colored subtitle below.
     Sized to fill whichever safe zone (above/below face) is taller.
-    Background is transparent â€” overlaid on the live video."""
+    Background is transparent — overlaid on the live video."""
     space_above_px = int(target_h * face_top_pct / 100)
     space_below_px = int(target_h * (1.0 - face_bottom_pct / 100))
     avail_h = max(space_above_px, space_below_px, 100)
@@ -844,7 +844,7 @@ def render_giant_text(
 
 
 # ---------------------------------------------------------------------------
-# Graphic 13 â€” Vignette Mask (rounded-rect alpha mask for alphamerge)
+# Graphic 13 — Vignette Mask (rounded-rect alpha mask for alphamerge)
 # ---------------------------------------------------------------------------
 
 def render_vignette_mask(
@@ -863,7 +863,7 @@ def render_vignette_mask(
 
 
 # ---------------------------------------------------------------------------
-# Graphic 14 â€” Whiteboard Layout (Style 2: white bg + text left + glow ring)
+# Graphic 14 — Whiteboard Layout (Style 2: white bg + text left + glow ring)
 # ---------------------------------------------------------------------------
 
 def render_whiteboard_layout(
@@ -924,7 +924,7 @@ def render_whiteboard_layout(
 
 
 # ---------------------------------------------------------------------------
-# Graphic 15 â€” Slide Layout (Style 3: white bg + title + bullets + glow ring)
+# Graphic 15 — Slide Layout (Style 3: white bg + title + bullets + glow ring)
 # ---------------------------------------------------------------------------
 
 def render_slide_layout(
@@ -995,7 +995,7 @@ def render_slide_layout(
     bull_font = _load_font("Poppins-Bold", bull_size)
     b_ascent, b_descent = bull_font.getmetrics()
     for bullet in (bullets or []):
-        bullet_text = f"â†’  {bullet}"
+        bullet_text = f"→  {bullet}"
         b_lines = _wrap_text_to_width(bullet_text, bull_font, content_w - 20)
         for i, ln in enumerate(b_lines):
             draw.text((pad_x + (20 if i > 0 else 0), y), ln,
@@ -1008,7 +1008,7 @@ def render_slide_layout(
 
 
 # ---------------------------------------------------------------------------
-# Dispatcher â€” turn one motion_graphic JSON into a rendered PNG + position.
+# Dispatcher — turn one motion_graphic JSON into a rendered PNG + position.
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -1022,7 +1022,7 @@ class RenderedGraphic:
     y_expr: str        # ffmpeg overlay y expression
     fade_in_s: float = 0.3
     kind: str = ""
-    bg_card: str = ""  # "black" | "white" â€” solid card painted behind the graphic
+    bg_card: str = ""  # "black" | "white" — solid card painted behind the graphic
 
 
 def _apply_bg_card(png: Path, color: str) -> None:
@@ -1076,19 +1076,19 @@ def render_motion_graphic(
     _fcy = (_ft + _fb) / 2   # face center y %
 
     def _safe_x_expr(graphic_w_expr: str = "w") -> str:
-        if _fcx < 40:    # subject left â†’ graphic right
+        if _fcx < 40:    # subject left → graphic right
             return f"W-{graphic_w_expr}-W*0.04"
-        if _fcx > 60:    # subject right â†’ graphic left
+        if _fcx > 60:    # subject right → graphic left
             return f"W*0.04"
         return f"(W-{graphic_w_expr})/2"
 
     def _safe_y_expr() -> str:
-        if _fcy < 40:    # face in top half â†’ graphic at bottom
+        if _fcy < 40:    # face in top half → graphic at bottom
             return "H*0.62"
         return "H*0.04"
 
     if kind == "lower_third" or kind == "fly_in":
-        # fly_in degrades into a lower-third title â€” same visual, same intent.
+        # fly_in degrades into a lower-third title — same visual, same intent.
         title = str(spec.get("title") or spec.get("text") or "").strip()
         accent_word = (spec.get("accent_word") or "").strip() or None
         if not title:
@@ -1135,7 +1135,7 @@ def render_motion_graphic(
             return None
         font = _normalize_font_name(spec.get("font") or "Poppins Bold")
         # size is a percentage of the frame's shorter edge (min of W and H).
-        # size: 15 â†’ 15% of min(target_w, target_h). Keeps text proportional
+        # size: 15 → 15% of min(target_w, target_h). Keeps text proportional
         # across portrait and landscape without the agent needing pixel math.
         size_pct = float(spec.get("size") or 15)
         font_size = max(14, int(min(target_w, target_h) * size_pct / 100))
@@ -1149,7 +1149,7 @@ def render_motion_graphic(
         x_pct = float(spec.get("x_pct", 6)) / 100.0
         y_pct = float(spec.get("y_pct", 8)) / 100.0
 
-        # Soft wrap at 25% of frame width by default â€” keeps text blocks
+        # Soft wrap at 25% of frame width by default — keeps text blocks
         # compact and away from the centre of the frame.
         max_w_pct = float(spec.get("max_width_pct", 25)) / 100.0
         max_width_px = int(target_w * max_w_pct) if max_w_pct > 0 else None
@@ -1161,7 +1161,7 @@ def render_motion_graphic(
             max_width_px=max_width_px,
         )
 
-        # Slide direction. Default = left â†’ in.
+        # Slide direction. Default = left → in.
         slide = (spec.get("slide_in") or "left").lower()
         anchor_x = int(target_w * x_pct)
         anchor_y = int(target_h * y_pct)
@@ -1179,7 +1179,7 @@ def render_motion_graphic(
                 f"((t-{at:.3f})/0.3)*((t-{at:.3f})/0.3)*(3-2*((t-{at:.3f})/0.3)),"
                 f"{anchor_x})"
             )
-        else:  # "none" â€” instant pop-in
+        else:  # "none" — instant pop-in
             x_expr = f"{anchor_x}"
         y_expr = f"{anchor_y}"
 
@@ -1348,6 +1348,3 @@ def render_motion_graphic(
         )
 
     return None
-
-
-

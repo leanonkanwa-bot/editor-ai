@@ -1,15 +1,15 @@
-﻿"""
+"""
 FFmpeg renderer. Takes the EditPlan + transcript + raw video and produces the
 final edited video.
 
 Pipeline (production-correct order):
   1. SNAP each keep_segment edge to the nearest word boundary (Hard Rule 1).
-  2. PAD the edges: 30â€“200ms working window (Hard Rule 2). Tighter for short
+  2. PAD the edges: 30–200ms working window (Hard Rule 2). Tighter for short
      form, looser for long form.
   3. Per-segment extract with 30ms audio fades baked in (Hard Rule 6, prevents
      audible pops at every cut).
   4. Lossless `-c copy` concat of segments (no double-encode).
-  5. Single re-encode pass: scale/crop â†’ zoompan â†’ burn ASS subtitles LAST
+  5. Single re-encode pass: scale/crop → zoompan → burn ASS subtitles LAST
      (Hard Rule 7, never under overlays).
 
 Borrows the per-segment-extract / lossless-concat / 30ms-afade pattern from
@@ -36,28 +36,28 @@ from app.engine.graphics import (
 )
 
 
-SHORT_PAD_S = 0.05   # 50ms â€” tight, energetic
-LONG_PAD_S = 0.15    # 150ms â€” cinematic breathing room
-AUDIO_FADE_S = 0.03  # 30ms â€” anti-pop fade at every segment boundary
+SHORT_PAD_S = 0.05   # 50ms — tight, energetic
+LONG_PAD_S = 0.15    # 150ms — cinematic breathing room
+AUDIO_FADE_S = 0.03  # 30ms — anti-pop fade at every segment boundary
 
 
 def _run(cmd: list[str]) -> None:
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode == 0:
         return
-    stderr = proc.stderr[-2000:] or "(empty â€” process produced no stderr)"
+    stderr = proc.stderr[-2000:] or "(empty — process produced no stderr)"
     if proc.returncode < 0:
         sig = -proc.returncode
         hint = ""
         if sig == 9:
             hint = (
-                " â€” SIGKILL. The kernel killed ffmpeg, almost always because "
+                " — SIGKILL. The kernel killed ffmpeg, almost always because "
                 "the container ran out of memory. Try a shorter video, lower "
                 "WHISPER_MODEL, or upgrade your hosting plan to give the "
                 "encoder more headroom."
             )
         elif sig == 15:
-            hint = " â€” SIGTERM. Something asked ffmpeg to stop."
+            hint = " — SIGTERM. Something asked ffmpeg to stop."
         raise RuntimeError(
             f"ffmpeg killed by signal {sig}{hint}\n"
             f"  cmd: {shlex.join(cmd)}\n  stderr: {stderr}"
@@ -110,7 +110,7 @@ def _needs_proxy(info: dict[str, Any], target_w: int, target_h: int) -> bool:
     Proxying is triggered when:
     - Codec is ProRes, HEVC/H.265, or other heavy-decode format
       (these hold large reference-frame buffers during decode), OR
-    - Source resolution is larger than the target (4Kâ†’1080p decode is expensive).
+    - Source resolution is larger than the target (4K→1080p decode is expensive).
     """
     heavy_codecs = {"prores", "hevc", "vp9", "av1", "dnxhd", "dnxhr",
                     "mjpeg", "mpeg2video", "cfhd"}
@@ -135,10 +135,10 @@ def _create_proxy(
     Why: heavy-decode codecs (ProRes, HEVC, 4K) keep large reference-frame
     buffers alive for every segment cut. Decoding them once here and writing
     a cheap H.264 proxy means all subsequent _cut_proxy_segment calls use
-    stream-copy â€” zero decode memory, near-zero CPU.
+    stream-copy — zero decode memory, near-zero CPU.
 
-    Keyframe every 2 s (60 frames at 30 fps) so stream-copy cuts have â‰¤ 2 s
-    of alignment error (acceptable â€” the final re-encode corrects it).
+    Keyframe every 2 s (60 frames at 30 fps) so stream-copy cuts have ≤ 2 s
+    of alignment error (acceptable — the final re-encode corrects it).
     """
     vf = (
         f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase"
@@ -170,8 +170,8 @@ def _cut_proxy_segment(
 ) -> None:
     """Cut a segment from the H.264 proxy using stream-copy for video.
 
-    Stream-copy means zero decode memory â€” we just copy the H.264 bitstream
-    bytes. Cuts snap to the nearest keyframe (â‰¤ 2 s error), which the final
+    Stream-copy means zero decode memory — we just copy the H.264 bitstream
+    bytes. Cuts snap to the nearest keyframe (≤ 2 s error), which the final
     zoompan re-encode corrects. Audio is re-encoded to apply the 30 ms fades.
     """
     duration = max(0.1, end - start)
@@ -212,7 +212,7 @@ def _snap_to_word_boundary(
     """
     Snap a cut time to the nearest word boundary (Hard Rule 1).
     edge='start' snaps to the START of the next word; edge='end' snaps to the
-    END of the previous word â€” so we never cut INTO a word.
+    END of the previous word — so we never cut INTO a word.
     """
     if not words:
         return t
@@ -256,7 +256,7 @@ def _cut_segment(
     # Intermediate segments are re-encoded in the final zoompan+subs pass,
     # so quality here doesn't affect the output. Use CRF 35 + strict memory
     # caps. Most importantly: no +faststart (moov-atom rewrite buffers the
-    # entire mdat, doubling peak RSS on large videos â†’ SIGKILL on small dynos).
+    # entire mdat, doubling peak RSS on large videos → SIGKILL on small dynos).
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-threads", "1",        # global: limits decoder threads too, not just encoder
@@ -297,9 +297,9 @@ def _build_zoom_expression(
     frame. zoompan uses 'on' = output frame number. We translate timestamps to
     frame ranges and build a chained if(...) expression.
 
-    BUG FIX â€” ZOOM SHAKE:
+    BUG FIX — ZOOM SHAKE:
     Linear interpolation between keyframes causes a velocity discontinuity at
-    every segment boundary, which the eye reads as a tiny jolt â€” repeated, it
+    every segment boundary, which the eye reads as a tiny jolt — repeated, it
     feels like shake. Use smoothstep easing s = t*t*(3-2*t), which has zero
     derivative at the endpoints. The zoom passes through every keyframe at
     the same value but with smooth velocity, so transitions feel butter.
@@ -320,7 +320,7 @@ def _build_zoom_expression(
     sorted_plan = sorted(zoom_plan, key=lambda p: float(p.get("start", 0)))
 
     # Fill gaps between zoom segments with hold-at-last-value entries so z
-    # never snaps back to the default "1" during silent/non-zoom moments â€”
+    # never snaps back to the default "1" during silent/non-zoom moments —
     # that snap is what the eye reads as shake.
     filled: list[dict] = []
     for i, step in enumerate(sorted_plan):
@@ -355,15 +355,15 @@ def _build_zoom_expression(
         t = f"min(1,max(0,(on-{f0})/{seg_dur}))"
 
         if kind == "punch_in":
-            # Hard cut â€” no interpolation. The whole window holds at z_to.
+            # Hard cut — no interpolation. The whole window holds at z_to.
             seg_expr = f"{z_to}"
         else:
             # Smoothstep easing: s = t*t*(3-2*t). Zero derivative at both ends
-            # â†’ no velocity discontinuity at segment boundaries â†’ no shake.
+            # → no velocity discontinuity at segment boundaries → no shake.
             ease = f"({t})*({t})*(3-2*({t}))"
             seg_expr = f"({z_from}+({z_to}-{z_from})*({ease}))"
 
-        # gte*lte instead of between() â€” FFmpeg 7.x parses between()'s commas
+        # gte*lte instead of between() — FFmpeg 7.x parses between()'s commas
         # as filter-chain separators. gte/lte are 2-arg functions (one comma each).
         z_expr = f"if(gte(on,{f0})*lte(on,{f1}),{seg_expr},{z_expr})"
 
@@ -388,12 +388,12 @@ def _ass_escape_text(text: str) -> str:
 
 def _vignette_dims(short_form: bool) -> tuple[int, int, int, int, int]:
     """Return (vign_w, vign_h, vign_x, vign_y, corner_radius) for the vignette."""
-    if short_form:   # 1080 Ã— 1920
+    if short_form:   # 1080 × 1920
         vw, vh = 400, 500
         vx = 1080 - vw - 40   # 640
         vy = 1920 - vh - 80   # 1340
         cr = 40
-    else:            # 1920 Ã— 1080
+    else:            # 1920 × 1080
         vw, vh = 490, 380
         vx = 1920 - vw - 40   # 1390
         vy = 1080 - vh - 60   # 640
@@ -459,10 +459,50 @@ def _find_system_font() -> str | None:
     return None
 
 
+def _render_hyperframe_png(
+    color_str: str,
+    dst: Path,
+    target_w: int,
+    target_h: int,
+    text: str | None = None,
+    system_font: str | None = None,
+) -> None:
+    """Render a full-frame solid-color PNG for a hyperframe flash.
+
+    Generates the PNG via ffmpeg's lavfi color source — no enable= needed.
+    The resulting PNG is converted to a timed MKV clip by _png_to_timed_clip()
+    and overlaid with setpts+eof_action=pass, completely avoiding any
+    enable= expression in the filter_complex.
+
+    color_str is the output of _hex_to_rgb_at() e.g. '0xFF7751@1.0'.
+    We strip the @opacity suffix since lavfi color=c= doesn't accept it.
+    """
+    lavfi_color = color_str.split("@")[0]   # '0xFF7751@1.0' → '0xFF7751'
+    base_cmd = [
+        FFMPEG_PATH, "-y", "-loglevel", "error",
+        "-f", "lavfi",
+        "-i", f"color=c={lavfi_color}:s={target_w}x{target_h}:rate=1",
+    ]
+    if text and system_font:
+        font_size = int(target_h * 0.22)
+        escaped = _ass_escape_text(text)
+        base_cmd += [
+            "-vf",
+            (
+                f"drawtext=text={escaped}"
+                f":fontfile={system_font}"
+                f":fontcolor=black:fontsize={font_size}"
+                f":x=(w-text_w)/2:y=(h-text_h)/2"
+            ),
+        ]
+    base_cmd += ["-frames:v", "1", "-pix_fmt", "rgba", str(dst)]
+    _run(base_cmd)
+
+
 def _png_to_timed_clip(png: Path, dst: Path, duration: float, fps: int) -> None:
     """Convert a static PNG to a short RGBA video clip.
 
-    Uses the PNG video codec in a Matroska (.mkv) container â€” the only
+    Uses the PNG video codec in a Matroska (.mkv) container — the only
     widely-available combination that preserves a full RGBA alpha channel
     for transparent overlay compositing.
 
@@ -490,37 +530,32 @@ def _build_pass1_filter_complex(
     fps: int,
     color_grade: str,
     scale_filter: str | None,
-    hyperframes: list[dict[str, Any]],
     silences: list[dict[str, Any]],
     rendered_graphics: list[RenderedGraphic],
-    system_font: str | None,
 ) -> tuple[str, str, str | None]:
     """Build the filter_complex string for render pass 1.
 
     Video chain:
-      [0:v] â†’ grade+scale+zoompan â†’ drawbox/drawtext per hyperframe
-             â†’ overlay per motion-graphic PNG â†’ [vout_label]
-    Audio chain (when silences exist):
-      [0:a] â†’ volume-duck chain â†’ [aout]
+      [0:v] → grade+scale+zoompan → overlay per timed clip → [vout_label]
 
-    Syntax rules enforced here:
-      â€¢ NO spaces around arithmetic operators in any expression.
-      â€¢ NO spaces after commas inside filter function calls.
-      â€¢ overlay/drawbox/drawtext x= expressions are already built by
-        render_motion_graphic() with correct no-space syntax.
+    Timed clips (indices 1..N) cover both hyperframe flashes and motion
+    graphics. They are positioned via setpts=PTS+at/TB so no enable=
+    expression is needed anywhere in the video filter chain.
+
+    Audio chain (when silences exist):
+      [0:a] → volume-duck chain → [aout]
+      Volume enable= uses \\, (backslash-comma) escaping — the only
+      remaining enable= in the entire pipeline.
 
     Returns:
         (filter_complex_str, video_out_label, audio_out_label_or_None)
     """
     fc: list[str] = []
 
-    # â”€â”€ Video: grade + optional scale + constant zoompan â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    # All chained with commas inside a single [0:v]...[vzoom] node.
+    # ── Video: grade + optional scale + constant zoompan ─────────────────
     grade_parts: list[str] = [color_grade]
     if scale_filter:
         grade_parts.append(scale_filter)
-    # Constant 1.04Ã— zoom anchored to frame center.
-    # Uses only iw/ih/zoom â€” NO max() or min() which some ffmpeg builds reject.
     grade_parts.append(
         f"zoompan=z=1.04"
         f":x=iw/2-(iw/zoom/2)"
@@ -529,49 +564,11 @@ def _build_pass1_filter_complex(
     )
     fc.append(f"[0:v]{','.join(grade_parts)}[vzoom]")
 
-    # â”€â”€ Hyperframe drawbox + drawtext â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    v = "vzoom"
-    for i, hf in enumerate(hyperframes):
-        try:
-            t0 = float(hf.get("at", 0))
-            dur = float(hf.get("duration", 0.1))
-        except (TypeError, ValueError):
-            continue
-        t1 = t0 + max(0.05, min(0.2, dur))
-        color = _hex_to_rgb_at(hf.get("color", "#FFE500"))
-        box_out = f"vhfb{i}"
-        # enable= uses backslash-comma (\\,) instead of single quotes.
-        # Single quotes inside a filter_complex string passed via subprocess
-        # list get shell-escaped to '"'"' by some runtimes, corrupting the
-        # entire filter graph. \\, in the Python f-string becomes a literal
-        # backslash-comma in the argument â€” FFmpeg treats \, as a literal
-        # comma (not a filter-chain separator). No shell quoting required.
-        fc.append(
-            f"[{v}]drawbox=x=0:y=0:w=iw:h=ih:color={color}:t=fill"
-            f":enable=gte(t,{t0:.3f})*lte(t,{t1:.3f})[{box_out}]"
-        )
-        v = box_out
-
-        kind = (hf.get("kind") or "color").lower()
-        text = str(hf.get("content", "")).strip()
-        if kind in {"word", "number"} and text and system_font:
-            font_size = int(target_h * 0.22)
-            escaped = _ass_escape_text(text)
-            txt_out = f"vhft{i}"
-            fc.append(
-                f"[{v}]drawtext=text={escaped}"
-                f":fontfile={system_font}"
-                f":fontcolor=black:fontsize={font_size}"
-                f":x=(w-text_w)/2:y=(h-text_h)/2"
-                f":enable=gte(t,{t0:.3f})*lte(t,{t1:.3f})[{txt_out}]"
-            )
-            v = txt_out
-
-    # â”€â”€ Motion graphic overlays â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Timed clip overlays (hyperframes + motion graphics) ───────────────
     # Inputs at indices 1..N are pre-cut MKV clips (RGBA, duration = rg.duration).
     # setpts=PTS+at/TB shifts each clip to its correct position in the timeline.
     # eof_action=pass lets the base video show through before and after the clip.
-    # No enable= expression is needed at all â€” the clip simply doesn't exist
+    # No enable= expression is needed at all — the clip simply doesn't exist
     # outside its window, so the overlay falls through to the base video.
     for j, rg in enumerate(rendered_graphics):
         input_idx = j + 1
@@ -585,7 +582,7 @@ def _build_pass1_filter_complex(
         )
         v = ov_out
 
-    # â”€â”€ Audio: volume-duck at deliberate silence inserts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Audio: volume-duck at deliberate silence inserts ──────────────────
     # Multiple ducks are comma-chained on the same stream node.
     a_label: str | None = None
     vol_nodes: list[str] = []
@@ -596,7 +593,7 @@ def _build_pass1_filter_complex(
         except (TypeError, ValueError):
             continue
         vol_nodes.append(
-            f"volume=enable=gte(t,{at:.3f})*lte(t,{at+dur:.3f}):volume=0"
+            f"volume=enable=gte(t\\,{at:.3f})*lte(t\\,{at+dur:.3f}):volume=0"
         )
     if vol_nodes:
         fc.append(f"[0:a]{','.join(vol_nodes)}[aout]")
@@ -650,7 +647,7 @@ def render(
 
     # Proxy: if the source is a heavy-decode format (ProRes, HEVC) or larger
     # than the target resolution, pre-transcode it once to a target-res H.264.
-    # All segment cuts then use stream-copy on the proxy â†’ zero decode RAM.
+    # All segment cuts then use stream-copy on the proxy → zero decode RAM.
     video_info = _probe_video_info(src)
     use_proxy = _needs_proxy(video_info, target_w, target_h)
     if use_proxy:
@@ -672,10 +669,10 @@ def render(
         e_raw = float(seg["end"])
         if e_raw <= s_raw:
             continue
-        # Hard Rule 1 â€” snap to word boundaries
+        # Hard Rule 1 — snap to word boundaries
         s = _snap_to_word_boundary(s_raw, words, edge="start")
         e = _snap_to_word_boundary(e_raw, words, edge="end")
-        # Hard Rule 2 â€” pad cut edges
+        # Hard Rule 2 — pad cut edges
         s = max(0.0, s - pad)
         e = min(src_duration, e + pad) if src_duration > 0 else e + pad
         if e - s < 0.15:
@@ -743,8 +740,8 @@ def render(
     total_duration = _probe_duration(concat_path)
 
     # Remap b-roll windows to the cut timeline so captions pause there.
-    # BUG FIX â€” B-ROLL TIMING:
-    # Hard rule: 2.5s â‰¤ b-roll â‰¤ 4s. Anything shorter is a flash that just
+    # BUG FIX — B-ROLL TIMING:
+    # Hard rule: 2.5s ≤ b-roll ≤ 4s. Anything shorter is a flash that just
     # confuses the viewer. Clamp the agent's suggestion into that window;
     # if the agent gave us 0s/0.1s of duration the clamp pulls it up to
     # the readable floor.
@@ -776,7 +773,7 @@ def render(
             hf_at = float(hf.get("at", 0))
         except (TypeError, ValueError):
             continue
-        # Default color: hyperframe â†’ brand_color â†’ electric yellow.
+        # Default color: hyperframe → brand_color → electric yellow.
         hf_color = hf.get("color") or brand_color or "#FFE500"
         run = 0.0
         for seg in keep:
@@ -820,7 +817,7 @@ def render(
     import tempfile as _tempfile
     _log = _logging.getLogger(__name__)
 
-    # â”€â”€ Pre-render motion-graphics PNGs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Pre-render motion-graphics PNGs ───────────────────────────────────
     glow_color = brand_color or "#4FC3F7"
     mg_dir = work_dir / "motion_graphics"
     rendered_graphics: list[RenderedGraphic] = []
@@ -839,18 +836,18 @@ def render(
             _log.warning("motion graphic %d (%s) skipped: %s",
                          idx, mg.get("kind"), _e)
 
-    # â”€â”€ Smart dimension detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Smart dimension detection ─────────────────────────────────────────
     # _cut_segment / _create_proxy already scale to target dims, so this
-    # is usually a no-op â€” but we handle every edge case explicitly.
+    # is usually a no-op — but we handle every edge case explicitly.
     color_grade = _color_grade_filter(content_type)
     concat_info = _probe_video_info(concat_path)
     src_w = concat_info.get("width",  0) or target_w
     src_h = concat_info.get("height", 0) or target_h
 
     if src_w == target_w and src_h == target_h:
-        scale_filter: str | None = None          # already correct â€” skip re-scale
+        scale_filter: str | None = None          # already correct — skip re-scale
     elif src_w >= src_h:
-        # Landscape / square â†’ portrait: fill frame, no letterbox
+        # Landscape / square → portrait: fill frame, no letterbox
         scale_filter = (
             f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
             f"crop={target_w}:{target_h}"
@@ -863,15 +860,42 @@ def render(
 
     system_font = _find_system_font()
 
-    # â”€â”€ Convert motion-graphic PNGs to timed RGBA MKV clips â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    # Each clip is exactly rg.duration seconds long, starting at t=0.
-    # In filter_complex, setpts=PTS+rg.at/TB shifts it to its timeline position.
-    # Clips that fail to render are silently dropped â€” the edit continues.
+    # ── Pre-render hyperframe flash PNGs ──────────────────────────────────
+    # Each flash is a full-frame solid-color PNG (+ optional text) turned into
+    # a timed MKV clip via _png_to_timed_clip() — same mechanism as motion
+    # graphics. This completely eliminates enable= from the video filter chain:
+    # no drawbox, no drawtext, no gte/lte timing expressions.
+    hf_dir = work_dir / "hyperframes"
+    hf_dir.mkdir(parents=True, exist_ok=True)
+    hf_graphics: list[RenderedGraphic] = []
+    for i, hf in enumerate(remapped_hyperframes):
+        try:
+            hf_at = float(hf.get("at", 0))
+            hf_dur = max(0.05, min(0.2, float(hf.get("duration", 0.1))))
+            hf_color = _hex_to_rgb_at(hf.get("color") or brand_color or "#FFE500")
+            hf_text = str(hf.get("content") or "").strip()
+            hf_kind = (hf.get("kind") or "color").lower()
+            hf_png = hf_dir / f"hf_{i:03d}.png"
+            _render_hyperframe_png(
+                hf_color, hf_png, target_w, target_h,
+                text=hf_text if hf_kind in {"word", "number"} else None,
+                system_font=system_font,
+            )
+            hf_graphics.append(RenderedGraphic(
+                png=hf_png, at=hf_at, duration=hf_dur,
+                x_expr="0", y_expr="0", kind="hyperframe",
+            ))
+        except Exception as _e:
+            _log.warning("hyperframe %d skipped: %s", i, _e)
+
+    # ── Convert all PNGs to timed RGBA MKV clips ──────────────────────────
+    # Hyperframes first in the chain so motion graphics overlay on top of them
+    # (matching original drawbox → overlay ordering).
     clips_dir = work_dir / "graphic_clips"
     clips_dir.mkdir(parents=True, exist_ok=True)
     graphic_clip_paths: list[Path] = []
     ok_graphics: list[RenderedGraphic] = []
-    for rg in rendered_graphics:
+    for rg in hf_graphics + rendered_graphics:
         clip_path = clips_dir / f"{rg.png.stem}_clip.mkv"
         try:
             _png_to_timed_clip(rg.png, clip_path, rg.duration, fps)
@@ -880,23 +904,19 @@ def render(
         except Exception as _e:
             _log.warning("graphic clip failed (%s): %s", rg.kind, _e)
 
-    # â”€â”€ Decide pipeline: filter_complex or simple -vf â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    # filter_complex is used when we have effects that need it.
-    # Simple -vf is the fast fallback for clean videos.
-    use_fc = bool(remapped_hyperframes or ok_graphics or remapped_silences)
+    # ── Decide pipeline: filter_complex or simple -vf ─────────────────────
+    use_fc = bool(ok_graphics or remapped_silences)
 
     _tmp_dir = Path(_tempfile.gettempdir())
     _nocap_path = _tmp_dir / f"nocap_{output_path.stem}.mp4"
 
-    # â”€â”€ Pass 1: grade + scale + zoompan + hyperframes + graphics + audio â”€â”€
+    # ── Pass 1: grade + scale + zoompan + timed clips + volume duck ───────
     if use_fc:
         fc_str, v_out, a_out = _build_pass1_filter_complex(
             target_w, target_h, fps,
             color_grade, scale_filter,
-            remapped_hyperframes,
             remapped_silences,
             ok_graphics,
-            system_font,
         )
         cmd1: list[str] = [
             FFMPEG_PATH, "-y", "-loglevel", "error",
@@ -908,7 +928,8 @@ def render(
         cmd1 += ["-map", f"[{a_out}]"] if a_out else ["-map", "0:a"]
         _log.info(
             "render pass1: filter_complex  hf=%d  graphics=%d  silences=%d",
-            len(remapped_hyperframes), len(ok_graphics), len(remapped_silences),
+            len(hf_graphics), len([r for r in ok_graphics if r.kind != "hyperframe"]),
+            len(remapped_silences),
         )
     else:
         # Simple -vf: grade + scale + constant zoompan
@@ -939,9 +960,9 @@ def render(
     ]
     _run(cmd1)
 
-    # â”€â”€ Pass 2: burn ASS captions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Pass 2: burn ASS captions ──────────────────────────────────────────
     # Separate ffmpeg invocation so subtitle path escaping is handled by the
-    # OS arg list (no shell expansion) â€” only the ffmpeg filter parser sees it.
+    # OS arg list (no shell expansion) — only the ffmpeg filter parser sees it.
     _ass_tmp = _tmp_dir / f"captions_{ass_path.parent.name}.ass"
     _shutil.copy2(ass_path, _ass_tmp)
     _ass_str = str(_ass_tmp).replace("\\", "/").replace(":", "\\:")
@@ -971,6 +992,3 @@ def render(
         "graphics_rendered": [rg.kind for rg in rendered_graphics],
         "vignette_moments": len(remapped_vsm),
     }
-
-
-
