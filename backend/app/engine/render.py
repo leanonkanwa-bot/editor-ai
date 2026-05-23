@@ -570,15 +570,24 @@ def _build_pass1_filter_complex(
     # eof_action=pass lets the base video show through before and after the clip.
     # No enable= expression is needed at all — the clip simply doesn't exist
     # outside its window, so the overlay falls through to the base video.
+    #
+    # COMMA ESCAPING: x_expr / y_expr from graphics.py use plain commas inside
+    # function calls like max(a,b), if(c,a,b), lt(a,b).  In a filter_complex
+    # option value, an unescaped comma is a filter-chain separator — FFmpeg would
+    # split "y=max(0,345-h/2)" into two filters: "y=max(0" and "345-h/2)…".
+    # Replace every plain comma with \, so the filter_complex parser treats them
+    # as literal commas and forwards them intact to the expression evaluator.
     v = "vzoom"
     for j, rg in enumerate(rendered_graphics):
         input_idx = j + 1
         timed = f"gt{j}"
         ov_out = f"vg{j}"
+        x = rg.x_expr.replace(",", "\\,")
+        y = rg.y_expr.replace(",", "\\,")
         fc.append(f"[{input_idx}:v]setpts=PTS+{rg.at:.3f}/TB[{timed}]")
         fc.append(
             f"[{v}][{timed}]overlay"
-            f"=x={rg.x_expr}:y={rg.y_expr}"
+            f"=x={x}:y={y}"
             f":eof_action=pass[{ov_out}]"
         )
         v = ov_out
