@@ -1349,3 +1349,4 @@ def render_motion_graphic(
 
     return None
 
+
