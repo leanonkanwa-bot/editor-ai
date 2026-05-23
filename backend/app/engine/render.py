@@ -570,6 +570,7 @@ def _build_pass1_filter_complex(
     # eof_action=pass lets the base video show through before and after the clip.
     # No enable= expression is needed at all — the clip simply doesn't exist
     # outside its window, so the overlay falls through to the base video.
+    v = "vzoom"
     for j, rg in enumerate(rendered_graphics):
         input_idx = j + 1
         timed = f"gt{j}"
