@@ -11,7 +11,7 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800&family=Inter:wght@400;500;600&family=DM+Sans:wght@400;500;600&family=Bebas+Neue&display=swap" rel="stylesheet" />
 
     <style>
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -134,11 +134,12 @@
         cursor: pointer;
         transition: border-color .2s, background .2s, box-shadow .2s;
         margin-bottom: 1.25rem; text-align: center; position: relative;
+        background: radial-gradient(ellipse 60% 50% at 50% 100%, rgba(255,119,81,.04) 0%, transparent 70%);
       }
       .drop:hover, .drop.dragover {
         border-color: var(--salmon);
         background: var(--salmon-dim);
-        box-shadow: 0 0 30px rgba(255,119,81,.08);
+        box-shadow: 0 0 40px rgba(255,119,81,.12), 0 0 80px rgba(255,119,81,.05);
       }
       .drop.has-file { border-color: var(--salmon); border-style: solid; }
       .drop input[type="file"] { display: none; }
@@ -202,6 +203,7 @@
       .btn-submit:hover { box-shadow: 0 0 50px rgba(255,119,81,.5), 0 6px 24px rgba(255,119,81,.3); }
       .btn-submit:active { transform: scale(.98); }
       .btn-submit:disabled { opacity: .45; cursor: not-allowed; transform: none; box-shadow: none; }
+      .btn-submit.loading .btn-shimmer { animation: shimmer 1.4s infinite; }
       .btn-shimmer {
         position: absolute; inset: 0;
         background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,.18) 50%, transparent 60%);
@@ -336,6 +338,29 @@
       .color-swatch label { font-size: .7rem; color: var(--muted); }
       input[type="color"] { width: 40px; height: 40px; border: none; border-radius: 8px; cursor: pointer; padding: 2px; background: var(--bg); }
 
+      /* Brand font selector */
+      .font-selector { display: flex; flex-direction: column; gap: .4rem; }
+      .font-option {
+        padding: .5rem .85rem; border-radius: 8px;
+        border: 1px solid var(--border); background: rgba(255,255,255,.03);
+        color: var(--muted); font-size: .9rem; cursor: pointer;
+        transition: border-color .15s, color .15s, background .15s;
+        text-align: left;
+      }
+      .font-option:hover { border-color: rgba(255,255,255,.2); color: var(--text); }
+      .font-option.active { border-color: var(--salmon); background: rgba(255,119,81,.1); color: var(--text); }
+
+      /* Editing style selector */
+      .style-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+      .style-option {
+        padding: .6rem .75rem; border-radius: 8px;
+        border: 1px solid var(--border); background: rgba(255,255,255,.03);
+        color: var(--muted); font-size: .8rem; font-weight: 600; cursor: pointer;
+        transition: border-color .15s, color .15s, background .15s; text-align: center;
+      }
+      .style-option:hover { border-color: rgba(255,255,255,.2); color: var(--text); }
+      .style-option.active { border-color: var(--salmon); background: rgba(255,119,81,.1); color: var(--text); }
+
       /* ── TEMPLATE SELECTOR ──────────────────────────────────── */
       .template-row { display: flex; align-items: center; gap: .6rem; margin-bottom: 1.25rem; }
       .template-chips { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .4rem; }
@@ -372,6 +397,7 @@
       .status-badge { display: inline-block; padding: .15rem .5rem; border-radius: 99px; font-size: .7rem; font-weight: 600; }
       .status-done { background: rgba(34,197,94,.15); color: #22c55e; }
       .status-processing { background: rgba(255,119,81,.12); color: var(--salmon); }
+      .retention-badge { display: inline-block; padding: .15rem .5rem; border-radius: 99px; font-size: .7rem; font-weight: 700; background: rgba(255,119,81,.15); color: var(--salmon); }
       .action-btn { background: rgba(255,255,255,.05); border: 1px solid var(--border); color: var(--muted); font-family: var(--font); font-size: .72rem; padding: .25rem .6rem; border-radius: 6px; cursor: pointer; transition: color .15s, border-color .15s; margin-right: .3rem; }
       .action-btn:hover { color: var(--text); border-color: rgba(255,255,255,.18); }
       .perf-chart { display: flex; flex-direction: column; gap: .5rem; }
@@ -382,11 +408,16 @@
       .chart-val { min-width: 50px; text-align: right; color: var(--muted); font-size: .72rem; }
       .insight-cards { display: flex; flex-direction: column; gap: .6rem; }
       .insight-card { background: rgba(255,255,255,.03); border: 1px solid var(--border); border-radius: 10px; padding: .85rem 1rem; display: flex; gap: .75rem; align-items: flex-start; }
-      .insight-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: .1rem; }
+      .insight-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: .1rem; color: var(--salmon); }
       .insight-card h4 { font-size: .82rem; font-weight: 700; margin-bottom: .2rem; }
       .insight-card p { font-size: .78rem; color: var(--muted); line-height: 1.5; }
       .analytics-empty { text-align: center; padding: 2.5rem 1rem; color: var(--muted); font-size: .875rem; }
       .analytics-empty-icon { font-size: 2rem; display: block; margin-bottom: .6rem; }
+
+      /* SVG retention curve */
+      .retention-chart-wrap { background: rgba(255,255,255,.02); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; margin-bottom: 1.5rem; }
+      .retention-chart-title { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: .75rem; }
+      .retention-svg { width: 100%; height: 80px; }
 
       /* ── NAV TABS ───────────────────────────────────────────── */
       .nav-tabs { display: flex; align-items: center; gap: .25rem; }
@@ -394,7 +425,7 @@
         background: transparent; border: none; cursor: pointer;
         font-family: var(--font); font-size: .82rem; font-weight: 500;
         color: var(--muted); padding: .38rem .75rem; border-radius: 8px;
-        transition: background .15s, color .15s;
+        transition: background .15s, color .15s; white-space: nowrap;
       }
       .nav-tab:hover { background: rgba(255,255,255,.06); color: var(--text); }
       .nav-tab.active { background: rgba(255,119,81,.12); color: var(--salmon); }
@@ -433,6 +464,123 @@
       }
       .dash-empty-icon { font-size: 2rem; display: block; margin-bottom: .5rem; }
 
+      /* ── STREAK & GAMIFICATION ──────────────────────────────── */
+      .streak-card {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: 12px; padding: 1rem 1.1rem; margin-bottom: .75rem;
+        display: flex; flex-direction: column; gap: .6rem;
+      }
+      .streak-header { display: flex; align-items: center; justify-content: space-between; }
+      .streak-count { font-size: 1.6rem; font-weight: 800; display: flex; align-items: center; gap: .3rem; }
+      .streak-label { font-size: .75rem; color: var(--muted); }
+      .streak-bar-wrap { background: rgba(255,255,255,.06); border-radius: 99px; height: 6px; overflow: hidden; }
+      .streak-bar-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--salmon), #ffb347); transition: width .6s ease; }
+      .streak-milestone { font-size: .72rem; color: var(--muted); }
+
+      .goal-row { display: flex; align-items: center; gap: .75rem; margin-bottom: .75rem; }
+      .goal-label { font-size: .82rem; color: var(--muted); flex: 1; }
+      .goal-val { font-size: .82rem; font-weight: 700; color: var(--salmon); white-space: nowrap; }
+      .goal-bar-wrap { width: 100%; background: rgba(255,255,255,.06); border-radius: 99px; height: 5px; overflow: hidden; margin-bottom: .75rem; }
+      .goal-bar-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--salmon), #ffb347); transition: width .6s ease; }
+
+      .achievements-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .5rem; margin-bottom: 1.25rem; }
+      .achievement {
+        background: rgba(255,255,255,.03); border: 1px solid var(--border);
+        border-radius: 10px; padding: .75rem .85rem;
+        display: flex; align-items: center; gap: .6rem;
+        transition: border-color .15s;
+      }
+      .achievement.unlocked { border-color: var(--salmon-border); background: rgba(255,119,81,.06); }
+      .achievement-icon { font-size: 1.2rem; flex-shrink: 0; }
+      .achievement.locked .achievement-icon { filter: grayscale(1); opacity: .35; }
+      .achievement-text { }
+      .achievement-name { font-size: .78rem; font-weight: 700; }
+      .achievement.locked .achievement-name { color: var(--muted); }
+      .achievement-desc { font-size: .68rem; color: var(--muted); }
+
+      /* ── VIDEO LIBRARY ──────────────────────────────────────── */
+      .video-library-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-bottom: 1.25rem; }
+      .video-lib-card {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: 12px; overflow: hidden;
+        transition: border-color .2s, box-shadow .2s;
+        cursor: pointer; position: relative;
+      }
+      .video-lib-card:hover { border-color: var(--salmon-border); box-shadow: 0 0 20px rgba(255,119,81,.1); }
+      .video-lib-thumb {
+        width: 100%; aspect-ratio: 16/9;
+        background: linear-gradient(135deg, rgba(255,119,81,.3) 0%, rgba(255,119,81,.08) 100%);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.5rem; position: relative;
+      }
+      .video-lib-retention {
+        position: absolute; top: .4rem; right: .4rem;
+        background: rgba(8,8,8,.85); border-radius: 6px; padding: .15rem .4rem;
+        font-size: .68rem; font-weight: 700; color: var(--salmon);
+      }
+      .video-lib-overlay {
+        position: absolute; inset: 0;
+        background: rgba(8,8,8,.85);
+        display: flex; align-items: center; justify-content: center; gap: .5rem;
+        opacity: 0; transition: opacity .2s;
+      }
+      .video-lib-card:hover .video-lib-overlay { opacity: 1; }
+      .video-lib-info { padding: .65rem .75rem; }
+      .video-lib-title { font-size: .78rem; font-weight: 600; margin-bottom: .15rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .video-lib-meta { font-size: .68rem; color: var(--muted); }
+
+      /* ── PROFILE SECTION ────────────────────────────────────── */
+      #profileSection { padding-top: 1.5rem; }
+      .profile-avatar-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+      .profile-avatar {
+        width: 64px; height: 64px; border-radius: 50%;
+        background: linear-gradient(135deg, var(--salmon), rgba(255,119,81,.4));
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.4rem; font-weight: 800; color: #fff; flex-shrink: 0;
+        border: 2px solid var(--salmon-border);
+      }
+      .profile-info { flex: 1; }
+      .profile-name { font-size: 1.05rem; font-weight: 700; margin-bottom: .15rem; }
+      .profile-brand { font-size: .82rem; color: var(--muted); margin-bottom: .3rem; }
+      .profile-badges { display: flex; gap: .35rem; flex-wrap: wrap; }
+      .profile-badge {
+        font-size: .68rem; font-weight: 600; padding: .15rem .5rem;
+        border-radius: 99px; background: var(--salmon-dim);
+        border: 1px solid var(--salmon-border); color: var(--salmon);
+      }
+      .profile-section-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: .75rem; }
+      .profile-section-card h4 { font-size: .75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: .85rem; }
+      .profile-pillars { display: flex; flex-direction: column; gap: .5rem; }
+      .profile-pillar { display: flex; align-items: center; gap: .6rem; }
+      .pillar-num { width: 20px; height: 20px; border-radius: 50%; background: var(--salmon-dim); border: 1px solid var(--salmon-border); color: var(--salmon); font-size: .65rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+      .pillar-input { flex: 1; padding: .5rem .7rem; border-radius: 8px; background: rgba(255,255,255,.03); border: 1px solid var(--border); color: var(--text); font-family: var(--font); font-size: .82rem; outline: none; }
+      .pillar-input:focus { border-color: var(--salmon); }
+      .platform-badges { display: flex; gap: .4rem; flex-wrap: wrap; }
+      .platform-badge { padding: .25rem .65rem; border-radius: 99px; font-size: .72rem; font-weight: 600; background: rgba(255,255,255,.06); border: 1px solid var(--border); color: var(--muted); }
+
+      /* ── CONFETTI ───────────────────────────────────────────── */
+      .confetti-piece {
+        position: fixed; width: 8px; height: 8px; border-radius: 2px;
+        pointer-events: none; z-index: 9999;
+        animation: confetti-fall 2.5s ease-in forwards;
+      }
+      @keyframes confetti-fall {
+        0% { transform: translateY(-20px) rotate(0deg); opacity: 1; }
+        100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+      }
+
+      /* ── TOOLTIPS ───────────────────────────────────────────── */
+      [data-tooltip] { position: relative; }
+      [data-tooltip]::after {
+        content: attr(data-tooltip);
+        position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
+        background: #1a1a1c; border: 1px solid var(--border); border-radius: 6px;
+        padding: .3rem .6rem; font-size: .72rem; color: var(--text); white-space: nowrap;
+        pointer-events: none; opacity: 0; transition: opacity .15s;
+        z-index: 50;
+      }
+      [data-tooltip]:hover::after { opacity: 1; }
+
       /* ── SECTION VISIBILITY ─────────────────────────────────── */
       .app-section { display: none; }
       .app-section.active { display: block; }
@@ -453,6 +601,11 @@
         h1 { font-size: 1.75rem; }
         .card { padding: 1.25rem; }
         .preview-stats { grid-template-columns: 1fr 1fr; }
+        .nav-tab { font-size: .75rem; padding: .38rem .55rem; }
+        .video-library-grid { grid-template-columns: 1fr; }
+        .achievements-grid { grid-template-columns: 1fr; }
+        .analytics-stats-grid { grid-template-columns: 1fr; }
+        .dash-stats { grid-template-columns: 1fr 1fr; }
       }
     </style>
   </head>
@@ -467,6 +620,7 @@
         <button class="nav-tab active" data-target="editorArea">Éditeur</button>
         <button class="nav-tab" data-target="dashboardSection">Dashboard</button>
         <button class="nav-tab" data-target="analyticsSection">Analytique</button>
+        <button class="nav-tab" data-target="profileSection">Profil</button>
         <button id="brandBtn" class="btn btn-ghost" style="padding:.38rem .7rem;font-size:.8rem;margin-left:.5rem">⚙ Brand</button>
       </div>
     </nav>
@@ -490,6 +644,39 @@
           <div class="color-swatch"><input type="color" id="brandPrimary" value="#FF7751" /><label>Primaire</label></div>
           <div class="color-swatch"><input type="color" id="brandSecondary" value="#FFFFFF" /><label>Secondaire</label></div>
           <div class="color-swatch"><input type="color" id="brandBg" value="#080808" /><label>Fond</label></div>
+        </div>
+        <!-- Live preview -->
+        <div id="brandPreview" style="margin-top:.75rem;height:36px;border-radius:8px;display:flex;align-items:center;padding:0 .75rem;font-size:.8rem;font-weight:600;transition:background .2s,color .2s">
+          Aperçu de votre marque
+        </div>
+      </div>
+
+      <div class="brand-section">
+        <h4>Police de caractères</h4>
+        <div class="font-selector" id="brandFontSelector">
+          <button class="font-option active" data-font="Poppins" style="font-family:'Poppins',sans-serif">Poppins</button>
+          <button class="font-option" data-font="Montserrat" style="font-family:'Montserrat',sans-serif;font-weight:700">Montserrat</button>
+          <button class="font-option" data-font="Inter" style="font-family:'Inter',sans-serif">Inter</button>
+          <button class="font-option" data-font="DM Sans" style="font-family:'DM Sans',sans-serif">DM Sans</button>
+          <button class="font-option" data-font="Bebas Neue" style="font-family:'Bebas Neue',sans-serif;letter-spacing:.06em;font-size:1rem">BEBAS NEUE</button>
+        </div>
+      </div>
+
+      <div class="brand-section">
+        <h4>Style de montage</h4>
+        <div class="style-grid" id="brandStyleSelector">
+          <button class="style-option" data-style="Kiyosaki">📈 Kiyosaki</button>
+          <button class="style-option" data-style="Hormozi">⚡ Hormozi</button>
+          <button class="style-option" data-style="Documentary">🎬 Documentary</button>
+          <button class="style-option" data-style="Minimal">✦ Minimal</button>
+        </div>
+      </div>
+
+      <div class="brand-section">
+        <h4>Logo</h4>
+        <input type="file" id="brandLogo" accept="image/*" style="color:var(--muted);font-size:.8rem" />
+        <div id="brandLogoPreview" style="margin-top:.5rem;display:none">
+          <img id="brandLogoImg" style="max-height:40px;border-radius:6px;border:1px solid var(--border)" alt="Logo" />
         </div>
       </div>
 
@@ -527,36 +714,93 @@
     <main>
 
       <!-- WELCOME BANNER (shown when coach_profile exists) -->
-      <div id="welcomeBanner" style="
-        display:none; margin-top:1.5rem; padding:.75rem 1.1rem;
-        border-radius:10px; border: 1px solid var(--salmon-border);
-        background:rgba(255,119,81,.08); font-size:.875rem; font-weight:500;
-        color:var(--text); display:none;
-      "></div>
+      <div id="welcomeBanner" style="display:none; margin-top:1.5rem; padding:.75rem 1.1rem;border-radius:10px; border: 1px solid var(--salmon-border);background:rgba(255,119,81,.08); font-size:.875rem; font-weight:500;color:var(--text);"></div>
 
       <!-- DASHBOARD SECTION -->
       <div id="dashboardSection" class="app-section">
         <div class="dash-welcome">Bonjour, <span id="dashName">—</span> 👋</div>
+
+        <!-- Stats row -->
         <div class="dash-stats">
           <div class="dash-stat">
             <span class="big" id="dashVideos">0</span>
             <span class="lbl">Vidéos éditées</span>
           </div>
           <div class="dash-stat">
-            <span class="big" id="dashTimeSaved">0 min</span>
+            <span class="big" id="dashTimeSaved">0h</span>
             <span class="lbl">Temps économisé</span>
           </div>
           <div class="dash-stat">
             <span class="big" id="dashViews">—</span>
-            <span class="lbl">Vues générées</span>
+            <span class="lbl">Vues potentielles</span>
           </div>
         </div>
+
+        <!-- Streak card -->
+        <div class="streak-card" id="streakCard">
+          <div class="streak-header">
+            <div>
+              <div class="streak-count">🔥 <span id="streakCount">0</span></div>
+              <div class="streak-label" id="streakLabel">jours consécutifs</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:.75rem;color:var(--muted)">Objectif semaine</div>
+              <div style="font-size:.82rem;font-weight:700;color:var(--salmon)" id="weeklyGoalDisplay">0 / 3 vidéos</div>
+            </div>
+          </div>
+          <div class="streak-bar-wrap">
+            <div class="streak-bar-fill" id="streakBarFill" style="width:0%"></div>
+          </div>
+          <div class="streak-milestone" id="streakMilestone">Prochain palier : 7 jours 🏆</div>
+
+          <!-- Weekly goal bar -->
+          <div class="goal-bar-wrap" style="margin-bottom:0">
+            <div class="goal-bar-fill" id="weeklyGoalBar" style="width:0%"></div>
+          </div>
+        </div>
+
+        <!-- Achievements -->
+        <p class="dash-recent-title" style="margin-top:.25rem">Succès</p>
+        <div class="achievements-grid" id="achievementsGrid">
+          <div class="achievement locked" id="ach-first">
+            <span class="achievement-icon">🎬</span>
+            <div class="achievement-text">
+              <div class="achievement-name">Première vidéo</div>
+              <div class="achievement-desc">Éditez votre 1ère vidéo</div>
+            </div>
+          </div>
+          <div class="achievement locked" id="ach-streak7">
+            <span class="achievement-icon">🔥</span>
+            <div class="achievement-text">
+              <div class="achievement-name">7 jours consécutifs</div>
+              <div class="achievement-desc">Maintenez le rythme</div>
+            </div>
+          </div>
+          <div class="achievement locked" id="ach-10videos">
+            <span class="achievement-icon">💰</span>
+            <div class="achievement-text">
+              <div class="achievement-name">10 vidéos éditées</div>
+              <div class="achievement-desc">Créateur régulier</div>
+            </div>
+          </div>
+          <div class="achievement locked" id="ach-active">
+            <span class="achievement-icon">⚡</span>
+            <div class="achievement-text">
+              <div class="achievement-name">Créateur actif</div>
+              <div class="achievement-desc">3 vidéos en 1 semaine</div>
+            </div>
+          </div>
+        </div>
+
         <button class="dash-edit-btn" id="dashEditBtn">Éditer une nouvelle vidéo →</button>
-        <p class="dash-recent-title">Vidéos récentes</p>
-        <div class="dash-empty">
+
+        <!-- Video Library -->
+        <p class="dash-recent-title">Bibliothèque vidéos</p>
+        <div id="videoLibraryEmpty" class="dash-empty">
           <span class="dash-empty-icon">🎬</span>
           Aucune vidéo éditée pour l'instant. Cliquez ci-dessus pour commencer !
         </div>
+        <div class="video-library-grid" id="videoLibraryGrid" style="display:none"></div>
       </div>
 
       <!-- EDITOR AREA -->
@@ -863,7 +1107,28 @@
             </div>
             <div class="analytics-stat">
               <span class="big" id="aViews">0</span>
-              <span class="sub">Vues générées</span>
+              <span class="sub">Vues potentielles</span>
+            </div>
+          </div>
+
+          <!-- Retention curve SVG -->
+          <div class="retention-chart-wrap">
+            <p class="retention-chart-title">Courbe de rétention estimée</p>
+            <svg class="retention-svg" viewBox="0 0 400 80" preserveAspectRatio="none" id="retentionSvg">
+              <defs>
+                <linearGradient id="retGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#FF7751" stop-opacity=".25"/>
+                  <stop offset="100%" stop-color="#FF7751" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <!-- Demo curve path, updated by JS when data available -->
+              <path id="retentionFill" fill="url(#retGrad)" d=""/>
+              <path id="retentionLine" fill="none" stroke="#FF7751" stroke-width="2" stroke-linecap="round" d=""/>
+              <!-- Drop annotation -->
+              <circle id="retDrop1" cx="0" cy="0" r="3" fill="#ff5c7a" opacity="0"/>
+            </svg>
+            <div style="display:flex;justify-content:space-between;font-size:.65rem;color:var(--muted);margin-top:.25rem">
+              <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
             </div>
           </div>
 
@@ -881,7 +1146,7 @@
                   <th>Titre</th>
                   <th>Format</th>
                   <th>Date</th>
-                  <th>Statut</th>
+                  <th>Rétention</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -890,13 +1155,13 @@
           </div>
 
           <!-- Performance chart -->
-          <p class="analytics-section-title">Performance — Vues par vidéo</p>
+          <p class="analytics-section-title">Performance — Score rétention par vidéo</p>
           <div class="perf-chart" id="perfChart" style="margin-bottom:1.5rem">
             <p style="font-size:.8rem;color:var(--muted)">Aucune donnée pour l'instant.</p>
           </div>
 
           <!-- Insights -->
-          <p class="analytics-section-title">Insights</p>
+          <p class="analytics-section-title">Insights IA</p>
           <div class="insight-cards">
             <div class="insight-card">
               <span class="insight-icon">🎯</span>
@@ -923,6 +1188,57 @@
 
         </section>
       </div><!-- end analyticsSection -->
+
+      <!-- PROFILE SECTION -->
+      <div id="profileSection" class="app-section">
+        <section class="card">
+          <div class="profile-avatar-row">
+            <div class="profile-avatar" id="profileAvatar">?</div>
+            <div class="profile-info">
+              <div class="profile-name" id="profileName">—</div>
+              <div class="profile-brand" id="profileBrandName">—</div>
+              <div class="profile-badges" id="profileBadges"></div>
+            </div>
+            <button id="editProfileBtn" class="btn btn-ghost" style="font-size:.8rem;align-self:flex-start">✏ Éditer</button>
+          </div>
+
+          <!-- ICP -->
+          <div class="profile-section-card">
+            <h4>Client idéal (ICP)</h4>
+            <textarea id="profileIcp" rows="2" placeholder="Décrivez votre client idéal en 1-2 phrases…" style="min-height:60px;font-size:.82rem"></textarea>
+          </div>
+
+          <!-- Content pillars -->
+          <div class="profile-section-card">
+            <h4>Piliers de contenu</h4>
+            <div class="profile-pillars">
+              <div class="profile-pillar">
+                <span class="pillar-num">1</span>
+                <input type="text" class="pillar-input" id="pillar1" placeholder="ex. Mindset &amp; performance" />
+              </div>
+              <div class="profile-pillar">
+                <span class="pillar-num">2</span>
+                <input type="text" class="pillar-input" id="pillar2" placeholder="ex. Business &amp; revenus" />
+              </div>
+              <div class="profile-pillar">
+                <span class="pillar-num">3</span>
+                <input type="text" class="pillar-input" id="pillar3" placeholder="ex. Liberté de vie" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Platforms -->
+          <div class="profile-section-card">
+            <h4>Plateformes</h4>
+            <div class="platform-badges" id="profilePlatforms">
+              <span class="platform-badge" style="color:var(--muted)">Aucune sélectionnée</span>
+            </div>
+          </div>
+
+          <button id="saveProfileBtn" class="btn btn-primary" style="width:100%;margin-top:.25rem;padding:.7rem">Sauvegarder le profil</button>
+          <p id="profileSaveMsg" style="font-size:.8rem;color:var(--salmon);margin-top:.5rem;display:none">Profil sauvegardé ✓</p>
+        </section>
+      </div><!-- end profileSection -->
 
     </main>
 

@@ -290,9 +290,55 @@
     .ob-next-btn { background: var(--salmon); color: #fff; border: none; font-family: var(--font); font-size: .9rem; font-weight: 700; padding: .65rem 1.6rem; border-radius: 8px; cursor: pointer; box-shadow: 0 0 20px rgba(255,119,81,.3); transition: opacity .15s, box-shadow .2s; }
     .ob-next-btn:hover { opacity: .9; box-shadow: 0 0 30px rgba(255,119,81,.45); }
 
+    /* ── TESTIMONIAL CAROUSEL ───────────────────────────────────────── */
+    .testi-carousel { position: relative; overflow: hidden; }
+    .testi-track { display: flex; transition: transform .5s ease; }
+    .testi-slide { min-width: 100%; }
+    .testi-dots { display: flex; justify-content: center; gap: .5rem; margin-top: 1.5rem; }
+    .testi-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); cursor: pointer; transition: background .2s, transform .2s; border: none; }
+    .testi-dot.active { background: var(--salmon); transform: scale(1.2); }
+    .testi-nav { display: flex; justify-content: center; gap: .75rem; margin-top: .75rem; }
+    .testi-nav-btn { background: rgba(255,255,255,.06); border: 1px solid var(--border); color: var(--muted); width: 36px; height: 36px; border-radius: 50%; cursor: pointer; font-size: .85rem; transition: background .15s, color .15s; }
+    .testi-nav-btn:hover { background: rgba(255,119,81,.15); color: var(--text); border-color: var(--salmon-border); }
+
+    /* ── PRICING ─────────────────────────────────────────────────────── */
+    .pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+    .pricing-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 2rem 1.75rem; display: flex; flex-direction: column; gap: 1rem; transition: border-color .25s, box-shadow .25s; }
+    .pricing-card:hover { border-color: var(--salmon-border); box-shadow: 0 0 30px rgba(255,119,81,.08); }
+    .pricing-card.featured { border-color: var(--salmon-border); background: rgba(255,119,81,.05); box-shadow: 0 0 40px rgba(255,119,81,.12); }
+    .pricing-badge { display: inline-block; padding: .2rem .65rem; border-radius: 99px; font-size: .68rem; font-weight: 700; background: var(--salmon); color: #fff; margin-bottom: .25rem; letter-spacing: .04em; }
+    .pricing-name { font-size: 1rem; font-weight: 700; margin-bottom: .1rem; }
+    .pricing-price { font-size: 2.4rem; font-weight: 900; letter-spacing: -.04em; line-height: 1; color: var(--text); }
+    .pricing-price sup { font-size: 1rem; font-weight: 600; vertical-align: super; }
+    .pricing-period { font-size: .78rem; color: var(--muted); margin-left: .25rem; }
+    .pricing-desc { font-size: .82rem; color: var(--muted); line-height: 1.5; }
+    .pricing-features { list-style: none; display: flex; flex-direction: column; gap: .5rem; flex: 1; }
+    .pricing-features li { font-size: .83rem; display: flex; align-items: flex-start; gap: .5rem; }
+    .pricing-check { color: var(--salmon); flex-shrink: 0; margin-top: .05rem; }
+    .pricing-x { color: var(--muted); flex-shrink: 0; }
+    .pricing-btn { width: 100%; padding: .75rem; border-radius: 8px; border: none; font-family: var(--font); font-size: .9rem; font-weight: 700; cursor: pointer; transition: opacity .15s, box-shadow .2s; margin-top: auto; }
+    .pricing-btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+    .pricing-btn-ghost:hover { border-color: rgba(255,255,255,.22); color: var(--text); }
+    .pricing-btn-salmon { background: var(--salmon); color: #fff; box-shadow: 0 0 20px rgba(255,119,81,.35); }
+    .pricing-btn-salmon:hover { opacity: .9; box-shadow: 0 0 30px rgba(255,119,81,.5); }
+
+    /* ── FAQ ─────────────────────────────────────────────────────────── */
+    .faq-list { display: flex; flex-direction: column; gap: .5rem; }
+    .faq-item { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; transition: border-color .2s; }
+    .faq-item.open { border-color: var(--salmon-border); }
+    .faq-question { width: 100%; padding: 1.1rem 1.25rem; background: none; border: none; color: var(--text); font-family: var(--font); font-size: .9rem; font-weight: 600; cursor: pointer; text-align: left; display: flex; align-items: center; justify-content: space-between; gap: 1rem; transition: color .15s; }
+    .faq-question:hover { color: var(--salmon); }
+    .faq-item.open .faq-question { color: var(--salmon); }
+    .faq-arrow { font-size: .85rem; color: var(--salmon); transition: transform .25s; flex-shrink: 0; }
+    .faq-item.open .faq-arrow { transform: rotate(180deg); }
+    .faq-answer { max-height: 0; overflow: hidden; transition: max-height .35s ease, padding .35s ease; padding: 0 1.25rem; font-size: .875rem; color: var(--muted); line-height: 1.7; }
+    .faq-item.open .faq-answer { max-height: 200px; padding: 0 1.25rem 1.1rem; }
+
     /* ── RESPONSIVE ──────────────────────────────────────────────────── */
     @media (max-width: 768px) {
-      .steps-grid, .features-grid, .testi-grid { grid-template-columns: 1fr; }
+      .steps-grid, .features-grid { grid-template-columns: 1fr; }
+      .testi-grid { grid-template-columns: 1fr; }
+      .pricing-grid { grid-template-columns: 1fr; }
       .stats-grid { grid-template-columns: 1fr 1fr; }
       .email-form { flex-direction: column; }
       .hero-ctas { flex-direction: column; align-items: stretch; }
@@ -361,14 +407,14 @@
     </div>
   </section>
 
-  <!-- STATS BAR -->
+  <!-- STATS BAR (animated counters) -->
   <div class="stats-section">
     <div class="container">
       <div class="stats-grid">
-        <div class="fade"><span class="stat-num">500+</span><span class="stat-label">Créateurs actifs</span></div>
-        <div class="fade"><span class="stat-num">4h</span><span class="stat-label">Économisées par semaine</span></div>
-        <div class="fade"><span class="stat-num">3min</span><span class="stat-label">Temps de traitement moyen</span></div>
-        <div class="fade"><span class="stat-num">10x</span><span class="stat-label">Plus de vues en moyenne</span></div>
+        <div class="fade counter-item"><span class="stat-num" data-target="500" data-suffix="+">0+</span><span class="stat-label">Créateurs actifs</span></div>
+        <div class="fade counter-item"><span class="stat-num" data-target="4" data-suffix="h">0h</span><span class="stat-label">Économisées par semaine</span></div>
+        <div class="fade counter-item"><span class="stat-num" data-target="3" data-suffix="min">0min</span><span class="stat-label">Temps de traitement moyen</span></div>
+        <div class="fade counter-item"><span class="stat-num" data-target="10" data-suffix="x">0x</span><span class="stat-label">Plus de vues en moyenne</span></div>
       </div>
     </div>
   </div>
@@ -404,27 +450,178 @@
     </div>
   </section>
 
-  <!-- TESTIMONIALS -->
+  <!-- TESTIMONIALS CAROUSEL -->
   <section class="section" style="padding-top:0">
     <div class="container">
       <span class="section-tag">Témoignages</span>
       <h2 class="section-title">Ce que disent nos créateurs</h2>
-      <p class="section-sub" style="margin-bottom:3rem">Des résultats concrets, pas des promesses.</p>
-      <div class="testi-grid">
-        <div class="testi-card fade">
-          <div class="testi-stars">★★★★★</div>
-          <p class="testi-quote">"J'éditais mes vidéos moi-même, ça prenait 4-5 heures chacune. Maintenant LeanRetention fait ça en 3 minutes. Mes vues ont triplé en 6 semaines."</p>
-          <div class="testi-author"><div class="testi-avatar">TK</div><div><div class="testi-name">Thomas K.</div><div class="testi-role">Coach business · 48k abonnés</div></div></div>
+      <p class="section-sub" style="margin-bottom:2rem">Des résultats concrets, pas des promesses.</p>
+
+      <div class="testi-carousel" id="testiCarousel">
+        <div class="testi-track" id="testiTrack">
+          <!-- Slide 1: 3 cards -->
+          <div class="testi-slide">
+            <div class="testi-grid">
+              <div class="testi-card">
+                <div class="testi-stars">★★★★★</div>
+                <p class="testi-quote">"J'éditais mes vidéos moi-même, ça prenait 4-5 heures chacune. Maintenant LeanRetention fait ça en 3 minutes. Mes vues ont triplé en 6 semaines."</p>
+                <div class="testi-author"><div class="testi-avatar">TK</div><div><div class="testi-name">Thomas K.</div><div class="testi-role">Coach business · 48k abonnés</div></div></div>
+              </div>
+              <div class="testi-card">
+                <div class="testi-stars">★★★★★</div>
+                <p class="testi-quote">"Le Hook Rewriter est incroyable. Mes premières secondes sont maintenant accrocheuses même quand j'ai mal démarré mon enregistrement."</p>
+                <div class="testi-author"><div class="testi-avatar">SA</div><div><div class="testi-name">Sarah A.</div><div class="testi-role">Créatrice lifestyle · 120k abonnés</div></div></div>
+              </div>
+              <div class="testi-card">
+                <div class="testi-stars">★★★★★</div>
+                <p class="testi-quote">"J'avais peur que l'IA ne comprenne pas mon style. Mais les résultats sont bluffants — on dirait qu'un vrai monteur professionnel a travaillé dessus."</p>
+                <div class="testi-author"><div class="testi-avatar">MR</div><div><div class="testi-name">Marc R.</div><div class="testi-role">Entrepreneur · 22k abonnés</div></div></div>
+              </div>
+            </div>
+          </div>
+          <!-- Slide 2: 3 more cards -->
+          <div class="testi-slide">
+            <div class="testi-grid">
+              <div class="testi-card">
+                <div class="testi-stars">★★★★★</div>
+                <p class="testi-quote">"LeanRetention m'a permis de passer de 2 vidéos par mois à 8. Le ROI est dingue — j'ai multiplié mes leads par 4 en 3 mois."</p>
+                <div class="testi-author"><div class="testi-avatar">JD</div><div><div class="testi-name">Julie D.</div><div class="testi-role">Consultante marketing · 35k abonnés</div></div></div>
+              </div>
+              <div class="testi-card">
+                <div class="testi-stars">★★★★★</div>
+                <p class="testi-quote">"La suppression auto des silences seule vaut l'abonnement. Mes vidéos semblent beaucoup plus dynamiques et professionnelles maintenant."</p>
+                <div class="testi-author"><div class="testi-avatar">AL</div><div><div class="testi-name">Alex L.</div><div class="testi-role">Développeur/Créateur tech · 90k</div></div></div>
+              </div>
+              <div class="testi-card">
+                <div class="testi-stars">★★★★★</div>
+                <p class="testi-quote">"Le Brand Kit est un game-changer. Toutes mes vidéos ont maintenant une identité cohérente sans que j'aie à y penser à chaque fois."</p>
+                <div class="testi-author"><div class="testi-avatar">CM</div><div><div class="testi-name">Camille M.</div><div class="testi-role">Coach bien-être · 67k abonnés</div></div></div>
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="testi-card fade">
-          <div class="testi-stars">★★★★★</div>
-          <p class="testi-quote">"Le Hook Rewriter est incroyable. Mes premières secondes sont maintenant accrocheuses même quand j'ai mal démarré mon enregistrement."</p>
-          <div class="testi-author"><div class="testi-avatar">SA</div><div><div class="testi-name">Sarah A.</div><div class="testi-role">Créatrice lifestyle · 120k abonnés</div></div></div>
+      </div>
+      <!-- Carousel controls -->
+      <div class="testi-nav">
+        <button class="testi-nav-btn" id="testiPrev">←</button>
+        <button class="testi-nav-btn" id="testiNext">→</button>
+      </div>
+      <div class="testi-dots" id="testiDots">
+        <button class="testi-dot active" data-slide="0"></button>
+        <button class="testi-dot" data-slide="1"></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRICING -->
+  <section class="section" style="padding-top:0" id="pricing">
+    <div class="container">
+      <span class="section-tag">Tarifs</span>
+      <h2 class="section-title">Simple. Transparent. Sans surprise.</h2>
+      <p class="section-sub" style="margin-bottom:3rem">Commencez gratuitement. Évoluez quand vous en avez besoin.</p>
+      <div class="pricing-grid">
+
+        <!-- Free -->
+        <div class="pricing-card fade">
+          <div>
+            <div class="pricing-name">Gratuit</div>
+            <div class="pricing-price">0<span class="pricing-period">€ / mois</span></div>
+            <div class="pricing-desc" style="margin-top:.5rem">Parfait pour commencer et tester la puissance de l'IA.</div>
+          </div>
+          <ul class="pricing-features">
+            <li><span class="pricing-check">✓</span> 1 vidéo par mois</li>
+            <li><span class="pricing-check">✓</span> Transcription + suppression silences</li>
+            <li><span class="pricing-check">✓</span> Hook Rewriter</li>
+            <li><span class="pricing-check">✓</span> Export MP4 720p</li>
+            <li><span class="pricing-x">✕</span> <span style="color:var(--muted)">Brand Kit personnalisé</span></li>
+            <li><span class="pricing-x">✕</span> <span style="color:var(--muted)">Publication automatique</span></li>
+          </ul>
+          <button class="pricing-btn pricing-btn-ghost" onclick="openOnboarding()">Commencer gratuitement</button>
         </div>
-        <div class="testi-card fade">
-          <div class="testi-stars">★★★★★</div>
-          <p class="testi-quote">"J'avais peur que l'IA ne comprenne pas mon style. Mais les résultats sont bluffants — on dirait qu'un vrai monteur professionnel a travaillé dessus."</p>
-          <div class="testi-author"><div class="testi-avatar">MR</div><div><div class="testi-name">Marc R.</div><div class="testi-role">Entrepreneur · 22k abonnés</div></div></div>
+
+        <!-- Pro -->
+        <div class="pricing-card featured fade">
+          <div>
+            <span class="pricing-badge">POPULAIRE</span>
+            <div class="pricing-name">Pro</div>
+            <div class="pricing-price"><sup>€</sup>19<span class="pricing-period">/ mois</span></div>
+            <div class="pricing-desc" style="margin-top:.5rem">Pour les créateurs sérieux qui veulent scaler leur contenu.</div>
+          </div>
+          <ul class="pricing-features">
+            <li><span class="pricing-check">✓</span> <strong>Vidéos illimitées</strong></li>
+            <li><span class="pricing-check">✓</span> Brand Kit complet</li>
+            <li><span class="pricing-check">✓</span> Captions word-by-word</li>
+            <li><span class="pricing-check">✓</span> B-roll &amp; motion graphics</li>
+            <li><span class="pricing-check">✓</span> Publication YouTube / TikTok / IG</li>
+            <li><span class="pricing-check">✓</span> Export MP4 1080p / 4K</li>
+          </ul>
+          <button class="pricing-btn pricing-btn-salmon" onclick="openOnboarding()">Commencer l'essai gratuit →</button>
+        </div>
+
+        <!-- Agency -->
+        <div class="pricing-card fade">
+          <div>
+            <div class="pricing-name">Agency</div>
+            <div class="pricing-price"><sup>€</sup>49<span class="pricing-period">/ mois</span></div>
+            <div class="pricing-desc" style="margin-top:.5rem">Pour les agences et équipes qui gèrent plusieurs créateurs.</div>
+          </div>
+          <ul class="pricing-features">
+            <li><span class="pricing-check">✓</span> Tout le plan Pro</li>
+            <li><span class="pricing-check">✓</span> <strong>5 marques / comptes</strong></li>
+            <li><span class="pricing-check">✓</span> Templates partagés</li>
+            <li><span class="pricing-check">✓</span> Tableau de bord multi-clients</li>
+            <li><span class="pricing-check">✓</span> API access</li>
+            <li><span class="pricing-check">✓</span> Support prioritaire</li>
+          </ul>
+          <button class="pricing-btn pricing-btn-ghost" onclick="openOnboarding()">Contacter l'équipe →</button>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="section" style="padding-top:0" id="faq">
+    <div class="container" style="max-width:700px">
+      <span class="section-tag">FAQ</span>
+      <h2 class="section-title">Questions fréquentes</h2>
+      <p class="section-sub" style="margin-bottom:2.5rem">Tout ce que vous devez savoir avant de commencer.</p>
+
+      <div class="faq-list">
+        <div class="faq-item">
+          <button class="faq-question">
+            Combien de temps faut-il pour éditer une vidéo ?
+            <span class="faq-arrow">↓</span>
+          </button>
+          <div class="faq-answer">La plupart des vidéos de moins de 30 minutes sont traitées en 3 à 7 minutes. Pour les vidéos longues (1h+), comptez 10-15 minutes. Vous recevez une notification email dès que c'est prêt.</div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question">
+            Quels formats de fichiers sont acceptés ?
+            <span class="faq-arrow">↓</span>
+          </button>
+          <div class="faq-answer">LeanRetention accepte tous les formats vidéo courants : MP4, MOV, AVI, WebM, MKV, et plus encore. La taille maximale est de 20 Go pour les plans Pro et Agency. L'upload par chunks garantit la stabilité même pour les très gros fichiers.</div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question">
+            L'IA respecte-t-elle mon style de montage ?
+            <span class="faq-arrow">↓</span>
+          </button>
+          <div class="faq-answer">Oui. Grâce au Coach Profile et aux templates de style, l'IA apprend vos préférences : rythme, style de coupes, fréquence des graphiques, etc. Vous pouvez aussi uploader une vidéo de référence pour qu'elle s'en inspire directement.</div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question">
+            Mes vidéos sont-elles stockées sur vos serveurs ?
+            <span class="faq-arrow">↓</span>
+          </button>
+          <div class="faq-answer">Vos vidéos sont traitées de façon sécurisée et supprimées automatiquement après 24h. Nous ne partageons jamais votre contenu avec des tiers. Toutes les communications sont chiffrées en TLS 1.3.</div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question">
+            Puis-je annuler mon abonnement à tout moment ?
+            <span class="faq-arrow">↓</span>
+          </button>
+          <div class="faq-answer">Absolument. Aucun engagement, aucune pénalité. Vous pouvez annuler depuis votre dashboard en 2 clics. L'accès reste actif jusqu'à la fin de la période payée.</div>
         </div>
       </div>
     </div>
@@ -843,6 +1040,20 @@
       localStorage.setItem('coach_profile', JSON.stringify(profile));
       localStorage.setItem('onboarded', 'true');
 
+      // Persist profile to backend so it survives cache clears
+      try {
+        const existingId = localStorage.getItem('profile_id');
+        const res = await fetch('/api/profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...profile, profile_id: existingId || undefined }),
+        });
+        if (res.ok) {
+          const { profile_id } = await res.json();
+          localStorage.setItem('profile_id', profile_id);
+        }
+      } catch {}
+
       // Post email to waitlist
       try {
         await fetch('/api/waitlist', {
@@ -854,6 +1065,111 @@
 
       // Redirect to editor (dashboard will show automatically)
       window.location.href = '/app';
+    });
+
+    // ── Animated counters (count up on scroll) ──────────────────────────
+    function animateCounter(el) {
+      const target = parseInt(el.dataset.target, 10);
+      const suffix = el.dataset.suffix || '';
+      const duration = 1400;
+      const start = performance.now();
+      function step(now) {
+        const elapsed = now - start;
+        const progress = Math.min(elapsed / duration, 1);
+        const eased = 1 - Math.pow(1 - progress, 3);
+        const value = Math.round(eased * target);
+        el.textContent = value + suffix;
+        if (progress < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    const counterObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          const numEl = entry.target.querySelector('.stat-num[data-target]');
+          if (numEl && !numEl.dataset.animated) {
+            numEl.dataset.animated = '1';
+            animateCounter(numEl);
+          }
+          counterObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.5 });
+
+    document.querySelectorAll('.counter-item').forEach(el => counterObserver.observe(el));
+
+    // ── Testimonial carousel ────────────────────────────────────────────
+    const track = document.getElementById('testiTrack');
+    const dots = document.querySelectorAll('.testi-dot');
+    let currentSlide = 0;
+    const totalSlides = document.querySelectorAll('.testi-slide').length;
+    let autoRotateTimer;
+
+    function goToSlide(n) {
+      currentSlide = (n + totalSlides) % totalSlides;
+      if (track) track.style.transform = `translateX(-${currentSlide * 100}%)`;
+      dots.forEach((d, i) => d.classList.toggle('active', i === currentSlide));
+    }
+
+    document.getElementById('testiNext')?.addEventListener('click', () => {
+      goToSlide(currentSlide + 1);
+      resetAutoRotate();
+    });
+    document.getElementById('testiPrev')?.addEventListener('click', () => {
+      goToSlide(currentSlide - 1);
+      resetAutoRotate();
+    });
+    dots.forEach(dot => {
+      dot.addEventListener('click', () => {
+        goToSlide(parseInt(dot.dataset.slide, 10));
+        resetAutoRotate();
+      });
+    });
+
+    function startAutoRotate() {
+      autoRotateTimer = setInterval(() => goToSlide(currentSlide + 1), 4000);
+    }
+    function resetAutoRotate() {
+      clearInterval(autoRotateTimer);
+      startAutoRotate();
+    }
+    startAutoRotate();
+
+    // ── Waitlist live count ─────────────────────────────────────────────
+    (async () => {
+      try {
+        const res = await fetch('/api/waitlist/count');
+        if (res.ok) {
+          const { count } = await res.json();
+          if (count > 0) {
+            // Update the "Créateurs actifs" animated counter target
+            const creatorStat = document.querySelector('.stat-num[data-target="500"]');
+            if (creatorStat) {
+              creatorStat.dataset.target = Math.max(count, 500);
+              creatorStat.textContent = Math.max(count, 500) + '+';
+            }
+            // Update hero text mentioning 500+
+            document.querySelectorAll('p').forEach(p => {
+              if (p.textContent.includes('500+')) {
+                p.textContent = p.textContent.replace('500+', Math.max(count, 500) + '+');
+              }
+            });
+          }
+        }
+      } catch {}
+    })();
+
+    // ── FAQ accordion ───────────────────────────────────────────────────
+    document.querySelectorAll('.faq-question').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const item = btn.closest('.faq-item');
+        const isOpen = item.classList.contains('open');
+        // Close all
+        document.querySelectorAll('.faq-item.open').forEach(el => el.classList.remove('open'));
+        // Toggle clicked
+        if (!isOpen) item.classList.add('open');
+      });
     });
   </script>
 </body>

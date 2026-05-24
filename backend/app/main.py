@@ -255,6 +255,8 @@ async def submit_edit(
     content_type_hint: str = Form(""),
     # Template Memory (Feature 1)
     template_id: str = Form(""),
+    # Coach profile (Feature 3)
+    profile_id: str = Form(""),
     _: None = Depends(_check_auth),
 ) -> JSONResponse:
     if not settings.anthropic_api_key:
@@ -277,6 +279,18 @@ async def submit_edit(
     else:
         raise HTTPException(400, "Provide either a video file or an upload_id.")
 
+    # Load coach profile from disk if profile_id provided
+    coach_profile: dict | None = None
+    if profile_id:
+        try:
+            from app.core.config import settings as _settings
+            _profile_path = _settings.uploads_dir.parent / "profiles" / f"{profile_id}.json"
+            if _profile_path.exists():
+                import json as _json
+                coach_profile = _json.loads(_profile_path.read_text())
+        except Exception:
+            pass
+
     # Persist source path + run params so the job can be retried after a
     # server restart without the user having to re-upload the video.
     run_params = dict(
@@ -294,6 +308,7 @@ async def submit_edit(
         platform=platform,
         content_type_hint=content_type_hint,
         template_id=template_id,
+        coach_profile=coach_profile,
     )
     store.update(job.id, source_path=str(dest), params=run_params)
 

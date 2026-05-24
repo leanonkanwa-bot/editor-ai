@@ -45,6 +45,8 @@ def run_job(
     content_type_hint: str = "",
     # Template Memory (Feature 1)
     template_id: str = "",
+    # Coach Profile IA (Feature 3)
+    coach_profile: dict | None = None,
 ) -> None:
     """Phase 1: transcription, analysis, planning → status: ready_for_review."""
     try:
@@ -175,6 +177,7 @@ def run_job(
             caption_position=caption_position,
             caption_font=caption_font,
             subject_position=subject_pos,
+            coach_profile=coach_profile,
         )
 
         # ── Step 7: Hook rewrite (Feature 3) ──────────────────────────────

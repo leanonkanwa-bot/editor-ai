@@ -191,6 +191,42 @@ def analyze_subject_position(src: Path) -> dict[str, float]:
                 "face_left_pct": 25.0, "face_right_pct": 75.0}
 
 
+def _build_coach_context(coach_profile: dict[str, Any] | None) -> str:
+    """Build a coach profile context string to inject into the system prompt."""
+    if not coach_profile:
+        return ""
+    lines = ["\nCOACH PROFILE — use to personalise the edit plan:"]
+    if coach_profile.get("name"):
+        lines.append(f"  Creator name: {coach_profile['name']}")
+    if coach_profile.get("brandName"):
+        lines.append(f"  Brand: {coach_profile['brandName']}")
+    if coach_profile.get("role"):
+        role_labels = {"coach": "Coach", "entrepreneur": "Entrepreneur", "educator": "Educator", "creator": "Content Creator"}
+        lines.append(f"  Role: {role_labels.get(coach_profile['role'], coach_profile['role'])}")
+    if coach_profile.get("audience"):
+        lines.append(f"  Target audience: {coach_profile['audience']}")
+    if coach_profile.get("offer"):
+        lines.append(f"  Main offer: {coach_profile['offer']}")
+    if coach_profile.get("icp"):
+        lines.append(f"  Ideal client profile: {coach_profile['icp']}")
+    if coach_profile.get("platforms"):
+        lines.append(f"  Platforms: {', '.join(coach_profile['platforms'])}")
+    if coach_profile.get("editingStyle") or coach_profile.get("editing_style"):
+        style = coach_profile.get("editingStyle") or coach_profile.get("editing_style")
+        lines.append(f"  Editing style: {style}")
+    if coach_profile.get("font"):
+        lines.append(f"  Preferred font: {coach_profile['font']}")
+    pillars = coach_profile.get("pillars") or []
+    pillar_strs = [p for p in pillars if p]
+    if pillar_strs:
+        lines.append(f"  Content pillars: {'; '.join(pillar_strs)}")
+    lines.append(
+        "  → Tailor the hook, segment selection, and packaging to this creator's voice, "
+        "audience, and offer. Make references feel native to their brand."
+    )
+    return "\n".join(lines)
+
+
 def plan_edit(
     transcript: dict[str, Any],
     user_instructions: str,
@@ -201,6 +237,7 @@ def plan_edit(
     caption_font: str | None = None,
     subject_position: dict[str, float] | None = None,
     aesthetic: str = "high-energy",  # kept for API compat, ignored internally
+    coach_profile: dict[str, Any] | None = None,
 ) -> EditPlan:
     """
     Ask Claude to produce an edit plan for the given transcript.
@@ -229,6 +266,8 @@ def plan_edit(
             f"  NEVER place a graphic at y_pct {st:.0f}–{sb:.0f} — that is the face.\n"
         )
 
+    coach_context = _build_coach_context(coach_profile)
+
     user_msg = {
         "role": "user",
         "content": [
@@ -239,6 +278,7 @@ def plan_edit(
                     f"DURATION: {duration:.2f}s\n"
                     f"LANGUAGE: {transcript.get('language', 'en')}\n"
                     f"{face_context}\n"
+                    f"{coach_context}\n"
                     "PRE-ANALYSIS (do before building the plan):\n"
                     "  1. content_type: coaching | education | story | motivation\n"
                     "  2. primary_audience: who this is for (1 sentence)\n"
