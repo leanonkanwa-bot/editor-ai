@@ -1171,6 +1171,95 @@
         if (!isOpen) item.classList.add('open');
       });
     });
+
+    // ── Feature 15: Social Proof Activity Ticker ─────────────────────────
+    (async () => {
+      const ticker = document.getElementById('activityTicker');
+      if (!ticker) return;
+
+      // Fallback messages shown before the API responds
+      const fallbacks = [
+        { name: 'Marie', action: 'vient d\'éditer une vidéo' },
+        { name: 'Lucas', action: 'a généré 5 hooks IA' },
+        { name: 'Camille', action: 'a téléchargé sa vidéo TikTok' },
+        { name: 'Thomas', action: 'a optimisé ses captions' },
+        { name: 'Emma', action: 'a analysé un concurrent' },
+        { name: 'Léo', action: 'vient de rejoindre LeanRetention' },
+      ];
+
+      let items = fallbacks;
+
+      try {
+        const res = await fetch('/api/activity');
+        if (res.ok) {
+          const { activity } = await res.json();
+          if (activity && activity.length) items = activity;
+        }
+      } catch {}
+
+      // Build ticker items
+      function buildTickerHTML(list) {
+        return list.map(a =>
+          `<span class="ticker-item">🟢 <strong>${a.name}</strong> ${a.action}</span>`
+        ).join('');
+      }
+      // Duplicate for seamless loop
+      ticker.innerHTML = buildTickerHTML(items) + buildTickerHTML(items);
+
+      // Refresh activity every 45 seconds
+      setInterval(async () => {
+        try {
+          const res = await fetch('/api/activity');
+          if (res.ok) {
+            const { activity } = await res.json();
+            if (activity && activity.length) {
+              ticker.innerHTML = buildTickerHTML(activity) + buildTickerHTML(activity);
+            }
+          }
+        } catch {}
+      }, 45000);
+    })();
   </script>
+
+  <!-- Feature 15: Social Proof Ticker bar -->
+  <style>
+    #activityBar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 9999;
+      background: rgba(8,8,8,0.92);
+      border-top: 1px solid rgba(255,119,81,0.3);
+      padding: 8px 0;
+      overflow: hidden;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    #activityTicker {
+      display: flex;
+      gap: 60px;
+      white-space: nowrap;
+      animation: tickerScroll 40s linear infinite;
+      width: max-content;
+    }
+    @keyframes tickerScroll {
+      0%   { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+    #activityBar .ticker-item {
+      font-size: 12px;
+      color: rgba(245,245,246,0.75);
+      flex-shrink: 0;
+    }
+    #activityBar .ticker-item strong {
+      color: #FF7751;
+    }
+    /* push page content up so ticker doesn't cover CTA buttons */
+    body { padding-bottom: 40px; }
+  </style>
+  <div id="activityBar" aria-hidden="true">
+    <div id="activityTicker"></div>
+  </div>
 </body>
 </html>

@@ -595,6 +595,241 @@
       .foot a { color: var(--muted); text-decoration: none; transition: color .15s; }
       .foot a:hover { color: var(--text); }
 
+      /* ── SCORE BADGES (Feature 1) ──────────────────────────── */
+      .score-badge {
+        font-size:.63rem; font-weight:700; padding:.1rem .38rem;
+        border-radius:99px; cursor:default; letter-spacing:.03em; flex-shrink:0;
+      }
+      .tl-row-hook {
+        border-color:var(--salmon-border);
+        background:rgba(255,119,81,.07);
+      }
+      .tl-row { position:relative; }
+      .tl-crown { font-size:.85rem; flex-shrink:0; }
+
+      /* ── RETENTION PREDICTION (Feature 5) ───────────────── */
+      .ret-pred-wrap {
+        display:flex; align-items:center; gap:.75rem;
+        background:rgba(255,255,255,.03); border:1px solid var(--border);
+        border-radius:8px; padding:.6rem .85rem; margin-bottom:1rem;
+      }
+      .ret-pred-label { font-size:.68rem; color:var(--muted); white-space:nowrap;
+        text-transform:uppercase; letter-spacing:.05em; font-weight:600; }
+      .ret-pred-bar-wrap { flex:1; background:rgba(255,255,255,.06);
+        border-radius:99px; height:8px; overflow:hidden; }
+      .ret-pred-bar-fill { height:100%; border-radius:99px; transition:width .9s cubic-bezier(.4,0,.2,1); }
+      .ret-pred-pct { font-size:1rem; font-weight:800; min-width:3rem;
+        text-align:right; letter-spacing:-.02em; }
+
+      /* ── MULTI-FORMAT DOWNLOAD (Feature 2) ──────────────── */
+      .download-buttons-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:.5rem; margin-bottom:1rem; }
+      .btn-download-fmt {
+        display:flex; flex-direction:column; align-items:center; gap:.2rem;
+        padding:.65rem .4rem; border-radius:8px;
+        background:var(--salmon); color:#fff; border:none; cursor:pointer;
+        text-decoration:none; font-family:var(--font);
+        transition:opacity .15s, box-shadow .2s;
+        box-shadow:0 0 16px rgba(255,119,81,.3);
+      }
+      .btn-download-fmt:hover { opacity:.9; }
+      .btn-download-fmt.fmt-outline {
+        background:transparent; border:1px solid var(--salmon-border);
+        color:var(--salmon); box-shadow:none;
+      }
+      .btn-download-fmt.fmt-outline:hover { background:var(--salmon-dim); }
+      .fmt-icon { font-size:1rem; }
+      .fmt-name { font-size:.75rem; font-weight:700; text-align:center; }
+      .fmt-sub { font-size:.6rem; opacity:.7; }
+
+      /* ── CAPTION STYLE PRESETS (Feature 3) ──────────────── */
+      .caption-preset-grid { display:flex; flex-direction:column; gap:.4rem; }
+      .caption-preset-btn {
+        display:flex; align-items:center; gap:.7rem;
+        padding:.55rem .8rem; border-radius:8px;
+        border:1px solid var(--border); background:rgba(255,255,255,.03);
+        cursor:pointer; font-family:var(--font); text-align:left;
+        transition:border-color .15s, background .15s; width:100%;
+      }
+      .caption-preset-btn:hover { border-color:rgba(255,255,255,.2); }
+      .caption-preset-btn.active { border-color:var(--salmon); background:var(--salmon-dim); }
+      .caption-preset-thumb {
+        width:54px; height:30px; border-radius:4px; background:#111;
+        display:flex; align-items:center; justify-content:center;
+        flex-shrink:0; overflow:hidden; border:1px solid rgba(255,255,255,.1);
+      }
+      .caption-preset-info .cp-name { font-size:.8rem; font-weight:700; color:var(--text); }
+      .caption-preset-info .cp-desc { font-size:.67rem; color:var(--muted); margin-top:.1rem; }
+
+      /* ── HOOK GENERATOR (Feature 4) ─────────────────────── */
+      .hook-options { display:flex; flex-direction:column; gap:.5rem; margin-top:.75rem; }
+      .hook-option {
+        background:rgba(255,255,255,.03); border:1px solid var(--border);
+        border-radius:8px; padding:.75rem .85rem;
+        display:flex; gap:.65rem; align-items:flex-start;
+        transition:border-color .15s;
+      }
+      .hook-option:hover { border-color:var(--salmon-border); }
+      .hook-score-pill {
+        font-size:.68rem; font-weight:800; padding:.15rem .4rem;
+        border-radius:99px; flex-shrink:0; margin-top:.1rem;
+      }
+      .hook-option-body { flex:1; min-width:0; }
+      .hook-option-text { font-size:.82rem; font-weight:500; margin-bottom:.25rem;
+        line-height:1.45; font-style:italic; }
+      .hook-option-why { font-size:.7rem; color:var(--muted); line-height:1.4; }
+      .hook-use-btn {
+        font-size:.7rem; font-weight:600; background:transparent;
+        border:1px solid var(--border); color:var(--muted); border-radius:6px;
+        padding:.2rem .5rem; cursor:pointer; font-family:var(--font);
+        transition:color .15s, border-color .15s; flex-shrink:0; margin-top:.1rem;
+        white-space:nowrap;
+      }
+      .hook-use-btn:hover { color:var(--text); border-color:var(--salmon-border); }
+
+      /* ── REFERRAL (Feature 6) ───────────────────────────── */
+      .referral-card {
+        background:var(--surface); border:1px solid var(--border);
+        border-radius:12px; padding:1rem 1.1rem; margin-bottom:.75rem;
+      }
+      .referral-link-row {
+        display:flex; gap:.4rem; align-items:center; margin:.6rem 0;
+      }
+      .referral-link-input {
+        flex:1; padding:.42rem .65rem; border-radius:8px;
+        background:rgba(255,255,255,.04); border:1px solid var(--border);
+        color:var(--salmon); font-family:var(--mono); font-size:.7rem;
+        outline:none; cursor:pointer;
+      }
+      .btn-copy {
+        padding:.42rem .75rem; border-radius:8px;
+        background:var(--salmon-dim); border:1px solid var(--salmon-border);
+        color:var(--salmon); font-family:var(--font); font-size:.72rem;
+        font-weight:600; cursor:pointer; white-space:nowrap;
+        transition:background .15s;
+      }
+      .btn-copy:hover { background:rgba(255,119,81,.2); }
+
+      /* ── ONBOARDING PROGRESS (Feature 8) ───────────────── */
+      .onboarding-card {
+        background:rgba(255,119,81,.05); border:1px solid var(--salmon-border);
+        border-radius:12px; padding:.9rem 1.1rem; margin-bottom:1rem;
+      }
+      .onboarding-card-title {
+        font-size:.72rem; font-weight:700; color:var(--salmon);
+        text-transform:uppercase; letter-spacing:.06em; margin-bottom:.6rem;
+      }
+      .onboarding-steps { display:flex; flex-direction:column; gap:.3rem; }
+      .ob-step {
+        display:flex; align-items:center; gap:.55rem; font-size:.79rem;
+      }
+      .ob-icon {
+        width:18px; height:18px; border-radius:50%; border:1.5px solid rgba(255,255,255,.18);
+        display:flex; align-items:center; justify-content:center;
+        font-size:.65rem; flex-shrink:0; color:#fff;
+      }
+      .ob-step.step-done .ob-icon { background:var(--salmon); border-color:var(--salmon); }
+      .ob-step.step-active .ob-icon { border-color:var(--salmon); color:var(--salmon); animation:pulse 2s infinite; }
+      .ob-label { flex:1; }
+      .ob-step.step-done .ob-label { color:var(--muted); }
+      .ob-step.step-active .ob-label { font-weight:600; }
+      .ob-unlock { font-size:.63rem; color:var(--salmon); font-weight:600;
+        background:var(--salmon-dim); padding:.1rem .38rem; border-radius:99px;
+        white-space:nowrap; }
+
+      /* ── AI VIDEO COACH (Feature 9) ─────────────────────────── */
+      .coach-panel {
+        position:fixed; top:0; right:-440px; width:420px; height:100vh;
+        background:#0c0c0d; border-left:1px solid var(--border);
+        z-index:300; display:flex; flex-direction:column;
+        transition:right .3s cubic-bezier(.4,0,.2,1);
+        box-shadow:-4px 0 32px rgba(0,0,0,.6);
+      }
+      .coach-panel.open { right:0; }
+      .coach-panel-head {
+        display:flex; align-items:center; justify-content:space-between;
+        padding:1rem 1.25rem; border-bottom:1px solid var(--border); flex-shrink:0;
+      }
+      .coach-panel-head h3 { font-size:.9rem; font-weight:700; }
+      .chat-messages {
+        flex:1; overflow-y:auto; padding:.85rem 1rem;
+        display:flex; flex-direction:column; gap:.5rem; scroll-behavior:smooth;
+      }
+      .chat-msg {
+        padding:.58rem .82rem; border-radius:10px;
+        font-size:.8rem; line-height:1.55; max-width:92%;
+      }
+      .chat-msg.user { background:rgba(255,119,81,.14); border:1px solid var(--salmon-border); align-self:flex-end; }
+      .chat-msg.ai   { background:rgba(255,255,255,.05); border:1px solid var(--border); align-self:flex-start; }
+      .chat-msg.loading { color:var(--muted); font-style:italic; animation:pulse 1.4s infinite; }
+      .chat-quick-pills { display:flex; gap:.3rem; flex-wrap:wrap; padding:.5rem 1rem; border-top:1px solid rgba(255,255,255,.04); flex-shrink:0; }
+      .chat-quick { font-size:.67rem; padding:.2rem .55rem; border-radius:99px; border:1px solid var(--border); background:rgba(255,255,255,.04); color:var(--muted); cursor:pointer; font-family:var(--font); transition:color .15s, border-color .15s; white-space:nowrap; }
+      .chat-quick:hover { color:var(--salmon); border-color:var(--salmon-border); }
+      .chat-input-row { display:flex; gap:.4rem; padding:.8rem 1rem; border-top:1px solid var(--border); flex-shrink:0; }
+      .chat-input { flex:1; padding:.55rem .75rem; border-radius:8px; background:rgba(255,255,255,.05); border:1px solid var(--border); color:var(--text); font-family:var(--font); font-size:.8rem; outline:none; }
+      .chat-input:focus { border-color:var(--salmon); }
+      .chat-send { background:var(--salmon); color:#fff; border:none; border-radius:8px; padding:.55rem .75rem; cursor:pointer; font-size:.95rem; transition:opacity .15s; flex-shrink:0; }
+      .chat-send:hover { opacity:.85; }
+      .coach-btn { background:transparent; border:1px solid var(--border); color:var(--muted); border-radius:8px; padding:.38rem .65rem; font-size:.78rem; font-weight:600; cursor:pointer; font-family:var(--font); display:flex; align-items:center; gap:.3rem; transition:color .15s, border-color .15s; }
+      .coach-btn:hover { color:var(--salmon); border-color:var(--salmon-border); }
+
+      /* ── TEMPLATE SYSTEM (Feature 10) ────────────────────────── */
+      .tpl-grid { display:flex; flex-direction:column; gap:.4rem; }
+      .tpl-card { background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:8px; padding:.65rem .85rem; display:flex; gap:.65rem; align-items:flex-start; transition:border-color .15s; }
+      .tpl-card:hover { border-color:rgba(255,255,255,.15); }
+      .tpl-icon { font-size:1.05rem; flex-shrink:0; margin-top:.05rem; }
+      .tpl-body { flex:1; min-width:0; }
+      .tpl-name { font-size:.8rem; font-weight:700; margin-bottom:.1rem; }
+      .tpl-hook { font-size:.71rem; color:var(--salmon); font-style:italic; margin-bottom:.15rem; line-height:1.35; }
+      .tpl-row { display:flex; gap:.4rem; flex-wrap:wrap; }
+      .tpl-tag  { font-size:.62rem; color:var(--muted); background:rgba(255,255,255,.05); border:1px solid var(--border); padding:.1rem .4rem; border-radius:99px; }
+      .tpl-score{ font-size:.62rem; color:#22c55e; background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.2); padding:.1rem .4rem; border-radius:99px; }
+      .tpl-use  { font-size:.68rem; font-weight:600; background:transparent; border:1px solid var(--border); color:var(--muted); border-radius:6px; padding:.2rem .48rem; cursor:pointer; font-family:var(--font); transition:color .15s, border-color .15s; flex-shrink:0; align-self:center; }
+      .tpl-use:hover { color:var(--salmon); border-color:var(--salmon-border); }
+
+      /* ── COMPETITOR ANALYSIS (Feature 11) ───────────────────── */
+      .comp-result { margin-top:.75rem; background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:8px; padding:.75rem .9rem; }
+      .comp-result h4 { font-size:.7rem; font-weight:700; color:var(--salmon); text-transform:uppercase; letter-spacing:.06em; margin-bottom:.55rem; }
+      .comp-row { display:flex; gap:.6rem; font-size:.78rem; margin-bottom:.4rem; }
+      .comp-lbl { color:var(--muted); min-width:110px; flex-shrink:0; font-size:.72rem; }
+      .comp-val { color:var(--text); font-weight:500; line-height:1.4; }
+      .comp-action { margin-top:.6rem; font-size:.78rem; color:var(--salmon); font-weight:600; border-top:1px solid var(--border); padding-top:.5rem; line-height:1.5; }
+
+      /* ── CONTENT CALENDAR (Feature 12) ──────────────────────── */
+      .cal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:.55rem; }
+      .cal-month  { font-size:.85rem; font-weight:700; }
+      .cal-nav-btn{ background:transparent; border:1px solid var(--border); color:var(--muted); border-radius:6px; padding:.2rem .58rem; cursor:pointer; font-family:var(--font); font-size:.75rem; transition:color .15s; }
+      .cal-nav-btn:hover { color:var(--text); }
+      .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+      .cal-day-hd { text-align:center; font-size:.58rem; color:var(--muted); font-weight:600; text-transform:uppercase; padding-bottom:.3rem; }
+      .cal-day { min-height:34px; border-radius:4px; background:rgba(255,255,255,.02); border:1px solid transparent; display:flex; flex-direction:column; align-items:center; padding:.2rem .1rem; cursor:pointer; transition:background .12s, border-color .12s; }
+      .cal-day:hover { background:rgba(255,255,255,.06); border-color:rgba(255,255,255,.09); }
+      .cal-today { border-color:var(--salmon-border) !important; background:rgba(255,119,81,.06) !important; }
+      .cal-other  { opacity:.3; pointer-events:none; }
+      .cal-day-n  { font-size:.65rem; color:var(--muted); font-weight:500; line-height:1; margin-bottom:2px; }
+      .cal-today .cal-day-n { color:var(--salmon); font-weight:800; }
+      .cal-dots { display:flex; gap:1px; justify-content:center; flex-wrap:wrap; }
+      .cal-dot { width:4px; height:4px; border-radius:50%; }
+
+      /* ── SPLIT TEST (Feature 13) ─────────────────────────────── */
+      .split-compare { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; margin-top:.85rem; }
+      .split-ver { background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:10px; padding:.85rem 1rem; text-align:center; }
+      .split-ver.winner { border-color:#22c55e; background:rgba(34,197,94,.05); }
+      .sv-label  { font-size:.63rem; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin-bottom:.4rem; }
+      .sv-score  { font-size:2.1rem; font-weight:800; letter-spacing:-.04em; margin-bottom:.25rem; }
+      .split-ver.winner .sv-score { color:#22c55e; }
+      .sv-verdict { font-size:.7rem; color:var(--muted); line-height:1.4; }
+      .sv-winner-pill { display:inline-block; font-size:.65rem; font-weight:700; background:rgba(34,197,94,.15); color:#22c55e; border:1px solid rgba(34,197,94,.25); border-radius:99px; padding:.14rem .45rem; margin-top:.3rem; }
+
+      /* ── CAPTION EDITOR (Feature 14) ─────────────────────────── */
+      .caption-editor { margin-top:1.25rem; }
+      .caption-list { max-height:260px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; }
+      .cap-row { display:flex; gap:.5rem; padding:.38rem .55rem; border-bottom:1px solid rgba(255,255,255,.04); transition:background .1s; }
+      .cap-row:last-child { border-bottom:none; }
+      .cap-row:hover { background:rgba(255,255,255,.04); }
+      .cap-tc  { font-size:.62rem; color:var(--muted); font-family:var(--mono); flex-shrink:0; min-width:62px; margin-top:.2rem; }
+      .cap-txt { flex:1; font-size:.78rem; border:none; background:transparent; color:var(--text); font-family:var(--font); outline:none; resize:none; padding:0; min-height:1em; }
+      .cap-txt:focus { color:var(--salmon); }
+
       /* ── RESPONSIVE ─────────────────────────────────────────── */
       @media (max-width: 480px) {
         .nav-right .nav-link:first-child { display: none; }
@@ -616,6 +851,8 @@
         <span class="logo-mark"></span>
         <span class="logo-name">LeanRetention</span>
       </a>
+      <span id="navGreeting" style="font-size:.78rem;color:var(--salmon);font-weight:600;display:none;margin-left:auto;margin-right:.5rem"></span>
+      <button class="coach-btn" id="coachBtn" style="margin-right:.5rem">🤖 Coach IA</button>
       <div class="nav-tabs" id="navTabs">
         <button class="nav-tab active" data-target="editorArea">Éditeur</button>
         <button class="nav-tab" data-target="dashboardSection">Dashboard</button>
@@ -624,6 +861,29 @@
         <button id="brandBtn" class="btn btn-ghost" style="padding:.38rem .7rem;font-size:.8rem;margin-left:.5rem">⚙ Brand</button>
       </div>
     </nav>
+
+    <!-- AI COACH PANEL (Feature 9) -->
+    <aside class="coach-panel" id="coachPanel" aria-label="Coach IA">
+      <div class="coach-panel-head">
+        <h3>🤖 Coach IA</h3>
+        <button class="brand-close" id="coachClose" aria-label="Fermer">✕</button>
+      </div>
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-msg ai">
+          Bonjour ! Je suis votre coach IA. Je peux analyser votre historique vidéo et vous donner des conseils précis. Posez-moi une question.
+        </div>
+      </div>
+      <div class="chat-quick-pills">
+        <button class="chat-quick" data-q="Pourquoi ma vidéo performe mal ?">Pourquoi ça performe mal ?</button>
+        <button class="chat-quick" data-q="Comment améliorer mon hook ?">Améliorer mon hook</button>
+        <button class="chat-quick" data-q="Quel est mon meilleur format ?">Meilleur format</button>
+        <button class="chat-quick" data-q="Donne-moi 3 idées de hooks pour cette semaine">3 idées de hooks</button>
+      </div>
+      <div class="chat-input-row">
+        <input class="chat-input" id="chatInput" placeholder="Posez une question…" />
+        <button class="chat-send" id="chatSend">↑</button>
+      </div>
+    </aside>
 
     <!-- BRAND PANEL -->
     <aside class="brand-panel" id="brandPanel" aria-label="Brand Kit">
@@ -704,6 +964,41 @@
         </div>
         <div class="field"><span>Vidéo outro (max 10s)</span>
           <input type="file" id="brandOutro" accept="video/*" style="color:var(--muted);font-size:.8rem" />
+        </div>
+      </div>
+
+      <!-- Caption style presets (Feature 3) -->
+      <div class="brand-section">
+        <h4>Style de captions</h4>
+        <div class="caption-preset-grid" id="captionPresetSelector">
+          <button class="caption-preset-btn active" data-preset="impact" data-style="impact">
+            <div class="caption-preset-thumb">
+              <span style="color:#fff;font-size:.55rem;font-weight:900;text-shadow:0 0 4px #000">IMPACT</span>
+            </div>
+            <div class="caption-preset-info">
+              <div class="cp-name">Impact</div>
+              <div class="cp-desc">Gras, mot clé salmon &amp; grand</div>
+            </div>
+          </button>
+          <button class="caption-preset-btn" data-preset="cinematic" data-style="impact">
+            <div class="caption-preset-thumb">
+              <span style="color:rgba(255,255,255,.55);font-size:.4rem;font-style:italic">cinematic</span>
+            </div>
+            <div class="caption-preset-info">
+              <div class="cp-name">Cinématique</div>
+              <div class="cp-desc">Élégant, petit, bas de cadre</div>
+            </div>
+          </button>
+          <button class="caption-preset-btn" data-preset="kiyosaki" data-style="kinetic">
+            <div class="caption-preset-thumb" style="flex-direction:column;gap:2px;padding:3px 4px;align-items:flex-start">
+              <span style="font-size:.35rem;color:rgba(255,255,255,.4)">contexte</span>
+              <span style="font-size:.55rem;color:#FF7751;font-weight:800">MOT CLÉ</span>
+            </div>
+            <div class="caption-preset-info">
+              <div class="cp-name">Kiyosaki</div>
+              <div class="cp-desc">2 niveaux: contexte + mot clé</div>
+            </div>
+          </button>
         </div>
       </div>
 
@@ -792,6 +1087,37 @@
           </div>
         </div>
 
+        <!-- Content Calendar (Feature 12) -->
+        <div class="card" style="padding:1.25rem;margin-bottom:.75rem">
+          <div class="cal-header">
+            <span class="cal-month" id="calMonthLabel">—</span>
+            <div style="display:flex;gap:.4rem">
+              <button class="cal-nav-btn" id="calPrev">‹</button>
+              <button class="cal-nav-btn" id="calNext">›</button>
+            </div>
+          </div>
+          <div class="cal-grid" id="calGrid">
+            <div class="cal-day-hd">L</div><div class="cal-day-hd">M</div><div class="cal-day-hd">M</div>
+            <div class="cal-day-hd">J</div><div class="cal-day-hd">V</div><div class="cal-day-hd">S</div>
+            <div class="cal-day-hd">D</div>
+          </div>
+          <p style="font-size:.72rem;color:var(--muted);margin-top:.5rem">Cliquez un jour pour planifier une publication.</p>
+        </div>
+
+        <!-- Referral (Feature 6) -->
+        <div class="referral-card" id="referralCard">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.2rem">
+            <span style="font-size:.82rem;font-weight:700">🎁 Invitez un ami, gagnez 1 mois gratuit</span>
+            <span id="referralCount" style="font-size:.72rem;color:var(--salmon);font-weight:700">0 invité</span>
+          </div>
+          <p style="font-size:.74rem;color:var(--muted);margin-bottom:.3rem">Partagez votre lien — chaque inscription vous offre 1 mois Pro.</p>
+          <div class="referral-link-row">
+            <input class="referral-link-input" id="referralLinkInput" readonly onclick="this.select()" value="" />
+            <button class="btn-copy" id="copyReferralBtn">Copier</button>
+          </div>
+          <p id="referralEarned" style="font-size:.72rem;color:var(--salmon);min-height:.9rem"></p>
+        </div>
+
         <button class="dash-edit-btn" id="dashEditBtn">Éditer une nouvelle vidéo →</button>
 
         <!-- Video Library -->
@@ -805,6 +1131,37 @@
 
       <!-- EDITOR AREA -->
       <div id="editorArea" class="app-section active">
+
+      <!-- ONBOARDING PROGRESS (Feature 8) -->
+      <div class="onboarding-card" id="onboardingCard" style="display:none">
+        <div class="onboarding-card-title">🚀 Votre progression</div>
+        <div class="onboarding-steps">
+          <div class="ob-step step-done" id="step-account">
+            <div class="ob-icon">✓</div>
+            <span class="ob-label">Compte créé</span>
+          </div>
+          <div class="ob-step" id="step-first-video">
+            <div class="ob-icon"></div>
+            <span class="ob-label">Première vidéo éditée</span>
+            <span class="ob-unlock">débloque Analytics</span>
+          </div>
+          <div class="ob-step" id="step-brand">
+            <div class="ob-icon"></div>
+            <span class="ob-label">Brand kit configuré</span>
+            <span class="ob-unlock">débloque Templates</span>
+          </div>
+          <div class="ob-step" id="step-5videos">
+            <div class="ob-icon"></div>
+            <span class="ob-label">5 vidéos éditées</span>
+            <span class="ob-unlock">débloque Hook Score</span>
+          </div>
+          <div class="ob-step" id="step-profile">
+            <div class="ob-icon"></div>
+            <span class="ob-label">Profil complet</span>
+            <span class="ob-unlock">débloque IA personnalisée</span>
+          </div>
+        </div>
+      </div>
 
       <!-- HERO -->
       <section class="hero">
@@ -955,6 +1312,23 @@
         </form>
       </section>
 
+      <!-- HOOK GENERATOR (Feature 4) -->
+      <section class="card" id="hookGenCard">
+        <div class="tool-head" style="margin-bottom:.85rem">
+          <h2>🎣 Générer un hook</h2>
+          <p>Décrivez votre sujet — l'IA génère 5 hooks haute-rétention scorés.</p>
+        </div>
+        <div class="field">
+          <span>Sujet de votre vidéo</span>
+          <input type="text" id="hookGenTopic" placeholder="ex. J'ai perdu 20kg sans salle de sport" />
+        </div>
+        <button type="button" id="hookGenBtn" class="btn-submit" style="margin-top:0;padding:.7rem">
+          <span id="hookGenBtnLabel">✨ Générer 5 hooks</span>
+          <span class="btn-shimmer" aria-hidden="true"></span>
+        </button>
+        <div id="hookGenResults" class="hook-options" style="display:none"></div>
+      </section>
+
       <!-- STATUS -->
       <section class="card status hidden" id="statusCard">
         <div class="row">
@@ -1009,6 +1383,27 @@
 
         <div class="preview-timeline" id="previewTimeline"></div>
 
+        <!-- Retention prediction (Feature 5) -->
+        <div id="retentionPrediction" class="ret-pred-wrap" style="display:none">
+          <span class="ret-pred-label">Rétention estimée</span>
+          <div class="ret-pred-bar-wrap">
+            <div class="ret-pred-bar-fill" id="retPredBar" style="width:0%"></div>
+          </div>
+          <span class="ret-pred-pct" id="retPredPct">—</span>
+        </div>
+
+        <!-- Split Test (Feature 13) -->
+        <div id="splitComparePanel" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+            <span style="font-size:.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Test A/B — Comparaison</span>
+            <span id="splitWinnerLabel" style="font-size:.78rem;font-weight:700;color:#22c55e"></span>
+          </div>
+          <div class="split-compare" id="splitCompare"></div>
+        </div>
+        <div style="display:flex;gap:.5rem;margin-top:.5rem">
+          <button id="versionBBtn" class="btn-replan" style="flex:1">⚡ Générer Version B</button>
+        </div>
+
         <details style="margin-top:.5rem">
           <summary>Plan JSON brut</summary>
           <pre id="previewJson"></pre>
@@ -1017,9 +1412,26 @@
 
       <!-- RESULT -->
       <section class="card result hidden" id="resultCard">
-        <div class="row">
+        <div class="row" style="margin-bottom:.75rem">
           <h2>Montage prêt ✓</h2>
-          <a id="downloadLink" class="btn-download" download>Télécharger mp4</a>
+        </div>
+        <!-- Multi-format download (Feature 2) -->
+        <div class="download-buttons-grid">
+          <a id="downloadTiktok" class="btn-download-fmt" download>
+            <span class="fmt-icon">📱</span>
+            <span class="fmt-name">TikTok / Reels</span>
+            <span class="fmt-sub">1080×1920</span>
+          </a>
+          <a id="downloadYoutube" class="btn-download-fmt" download>
+            <span class="fmt-icon">▶️</span>
+            <span class="fmt-name">YouTube</span>
+            <span class="fmt-sub">1920×1080</span>
+          </a>
+          <a id="downloadThumb" class="btn-download-fmt fmt-outline" download>
+            <span class="fmt-icon">🖼</span>
+            <span class="fmt-name">Miniature</span>
+            <span class="fmt-sub">1080×1080</span>
+          </a>
         </div>
         <video id="player" controls playsinline></video>
         <div class="packaging">
@@ -1040,6 +1452,16 @@
           <span class="tag-label">5 titres A/B à tester</span>
           <div id="ctrTitles"></div>
         </div>
+        <!-- Caption Editor (Feature 14) -->
+        <div class="caption-editor" id="captionEditorWrap" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.55rem">
+            <span style="font-size:.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">✏ Éditeur de captions</span>
+            <button id="reburnBtn" class="btn-render" style="font-size:.72rem;padding:.35rem .75rem">Re-brûler les captions</button>
+          </div>
+          <div class="caption-list" id="captionList"></div>
+          <p id="reburnMsg" style="font-size:.75rem;color:var(--salmon);margin-top:.4rem;display:none">Captions mises à jour ✓</p>
+        </div>
+
         <details>
           <summary>Plan de montage (JSON brut)</summary>
           <pre id="planJson"></pre>
@@ -1074,6 +1496,34 @@
           </div>
           <p id="publishStatus" style="font-size:.8rem;color:var(--muted);margin-top:.5rem"></p>
         </div>
+      </section>
+
+      <!-- TEMPLATE SYSTEM (Feature 10) -->
+      <section class="card" id="templateSystemCard">
+        <div class="tool-head" style="margin-bottom:.85rem">
+          <h2>📐 Templates éprouvés</h2>
+          <p>5 structures de contenu haute-rétention. Appliquez en un clic.</p>
+        </div>
+        <div class="tpl-grid" id="tplGrid">
+          <!-- Populated by JS -->
+        </div>
+      </section>
+
+      <!-- COMPETITOR ANALYSIS (Feature 11) -->
+      <section class="card" id="competitorCard">
+        <div class="tool-head" style="margin-bottom:.85rem">
+          <h2>🔍 Analyser un créateur</h2>
+          <p>Entrez un URL TikTok/YouTube — l'IA décrypte sa structure et vous explique comment répliquer.</p>
+        </div>
+        <div class="field">
+          <span>URL de la vidéo</span>
+          <input type="url" id="compUrl" placeholder="https://www.tiktok.com/@creator/video/..." />
+        </div>
+        <button type="button" id="compAnalyzeBtn" class="btn-submit" style="padding:.7rem;margin-top:0">
+          <span id="compBtnLabel">🔍 Analyser la structure</span>
+          <span class="btn-shimmer" aria-hidden="true"></span>
+        </button>
+        <div id="compResult" class="comp-result" style="display:none"></div>
       </section>
 
       </div><!-- end editorArea -->

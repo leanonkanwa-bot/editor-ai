@@ -19,8 +19,9 @@ function switchSection(targetId) {
     tab.classList.toggle("active", tab.dataset.target === targetId);
   });
   if (targetId === "analyticsSection") loadAnalytics();
-  if (targetId === "dashboardSection") { updateDashboardStats(); loadVideoLibrary(); updateStreak(); updateAchievements(); }
+  if (targetId === "dashboardSection") { updateDashboardStats(); loadVideoLibrary(); updateStreak(); updateAchievements(); initReferral(); }
   if (targetId === "profileSection") loadProfileSection();
+  if (targetId === "editorArea") updateOnboardingProgress();
 }
 
 // Nav tab clicks
@@ -36,22 +37,31 @@ $("dashEditBtn")?.addEventListener("click", () => switchSection("editorArea"));
   try {
     let raw = localStorage.getItem("coach_profile");
 
-    if (!raw) {
-      const profileId = localStorage.getItem("profile_id");
-      if (profileId) {
-        try {
-          const res = await fetch(`/api/profile/${profileId}`);
-          if (res.ok) {
-            const restored = await res.json();
-            localStorage.setItem("coach_profile", JSON.stringify(restored));
-            raw = JSON.stringify(restored);
-          }
-        } catch {}
-      }
+    // Always re-sync from server when profile_id is present (keeps data fresh)
+    const profileId = localStorage.getItem("profile_id");
+    if (profileId) {
+      try {
+        const res = await fetch(`/api/profile/${profileId}`);
+        if (res.ok) {
+          const restored = await res.json();
+          localStorage.setItem("coach_profile", JSON.stringify(restored));
+          raw = JSON.stringify(restored);
+        }
+      } catch {}
     }
 
     if (!raw) { switchSection("editorArea"); return; }
     const p = JSON.parse(raw);
+
+    // Show "Bienvenue {name}" greeting in nav
+    const greetingEl = $("navGreeting");
+    if (greetingEl) {
+      const name = p.name || p.brandName || "";
+      if (name) {
+        greetingEl.textContent = `Bienvenue ${name} 👋`;
+        greetingEl.style.display = "";
+      }
+    }
 
     const nameEl = $("dashName");
     if (nameEl) nameEl.textContent = p.name || p.brandName || "toi";
@@ -59,6 +69,7 @@ $("dashEditBtn")?.addEventListener("click", () => switchSection("editorArea"));
     updateDashboardStats();
     updateStreak();
     updateAchievements();
+    updateOnboardingProgress();
 
     const onboarded = localStorage.getItem("onboarded") === "true";
     if (onboarded) {
@@ -972,8 +983,10 @@ async function showResult(jobId, result) {
     } catch {}
   }, 600);
 
-  if (player)      player.src       = `/api/download/${jobId}`;
-  if (downloadLink) downloadLink.href = `/api/download/${jobId}`;
+  if (player)            player.src = `/api/download/${jobId}`;
+  if ($("downloadTiktok"))  $("downloadTiktok").href  = `/api/download/${jobId}`;
+  if ($("downloadYoutube")) $("downloadYoutube").href = `/api/download/${jobId}?fmt=landscape`;
+  if ($("downloadThumb"))   $("downloadThumb").href   = `/api/thumbnail/${jobId}`;
 
   const pkg = result?.packaging || {};
   if (pkgTitle) pkgTitle.textContent = pkg.title || result?.titres_ctr?.[0] || "—";
@@ -1017,6 +1030,9 @@ async function showResult(jobId, result) {
 
   _currentJobId = jobId;
   await loadPublishConnections();
+
+  // Feature 14: auto-load caption editor
+  try { await loadCaptions(jobId); } catch {}
 }
 
 let _currentJobId = null;
@@ -1127,10 +1143,51 @@ function showPreview(jobId, preview) {
   const tl = $("previewTimeline");
   if (tl) {
     const segs = preview.edit_plan || [];
-    tl.innerHTML = segs.slice(0, 20).map(s =>
-      `<div class="tl-row"><span class="tl-num">${s.order}</span><span class="tl-role">${s.role || "—"}</span><span class="tl-time">${s.original_time || ""} → ${s.edit_dur || ""}</span></div>`
-    ).join("") || "<p style='color:var(--muted);font-size:.8rem'>Aucun segment</p>";
+    tl.innerHTML = segs.slice(0, 20).map(s => {
+      const raw = typeof s.score === "number" ? s.score : 0;
+      // scores 1–10 from planner → display 0–100
+      const dispScore = raw <= 10 ? raw * 10 : raw;
+      const scoreColor = dispScore >= 80 ? "#22c55e" : dispScore >= 55 ? "var(--salmon)" : "#ff5c7a";
+      const tooltip = (s.retention_note || "").replace(/"/g, "&quot;");
+      const badge = `<span class="score-badge" style="background:${scoreColor}22;color:${scoreColor};border:1px solid ${scoreColor}44" ${tooltip ? `data-tooltip="${tooltip}"` : ""}>${dispScore}</span>`;
+      const isHook = s.role === "hook";
+      return `<div class="tl-row${isHook ? " tl-row-hook" : ""}">
+        ${isHook ? `<span class="tl-crown">👑</span>` : ""}
+        <span class="tl-num" style="${isHook ? "" : "margin-left:" + (0) + "px"}">${isHook ? "" : s.order}</span>
+        <span class="tl-role">${s.role || "—"}</span>
+        ${badge}
+        <span class="tl-time">${s.original_time || ""} → ${s.edit_dur || ""}</span>
+      </div>`;
+    }).join("") || "<p style='color:var(--muted);font-size:.8rem'>Aucun segment</p>";
   }
+
+  // ── Retention Prediction (Feature 5) ────────────────────────────────────────
+  const retBar  = $("retPredBar");
+  const retPct  = $("retPredPct");
+  const retWrap = $("retentionPrediction");
+  if (retBar && retPct && retWrap && preview.edit_plan) {
+    const segs = preview.edit_plan;
+    const hookSeg  = segs.find(s => s.role === "hook");
+    const hookRaw  = typeof hookSeg?.score === "number" ? hookSeg.score : 5;
+    const hookScaled = hookRaw <= 10 ? hookRaw * 10 : hookRaw;
+    const duration = preview.total_duration_edited || 60;
+    const loopCount = segs.filter(s => ["hook", "problem", "story"].includes(s.role)).length;
+    let base = 48;
+    base += Math.min(22, hookScaled * 0.22);    // hook quality → up to +22
+    base += Math.min(10, segs.length * 0.7);    // cut density → up to +10
+    base += Math.min(8, loopCount * 1.6);       // loop mechanics → up to +8
+    base -= Math.max(0, (duration - 90) * 0.12);// duration penalty
+    const predicted = Math.min(95, Math.max(35, Math.round(base)));
+    const color = predicted >= 80 ? "#22c55e" : predicted >= 65 ? "var(--salmon)" : "#ff5c7a";
+    setTimeout(() => {
+      retBar.style.width = predicted + "%";
+      retBar.style.background = color;
+    }, 200);
+    retPct.textContent = predicted + "%";
+    retPct.style.color = color;
+    retWrap.style.display = "";
+  }
+
   if ($("previewJson")) $("previewJson").textContent = JSON.stringify(preview, null, 2);
 }
 
@@ -1163,3 +1220,573 @@ $("replanBtn")?.addEventListener("click", async () => {
 });
 
 } // end editor guard
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FEATURE 3 — SMART CAPTION STYLES
+// ══════════════════════════════════════════════════════════════════════════════
+(function initCaptionPresets() {
+  // Restore saved preset
+  try {
+    const raw = localStorage.getItem("coach_profile");
+    if (raw) {
+      const p = JSON.parse(raw);
+      if (p.caption_preset) {
+        document.querySelectorAll("#captionPresetSelector .caption-preset-btn").forEach(b => {
+          b.classList.toggle("active", b.dataset.preset === p.caption_preset);
+        });
+        const active = document.querySelector(`#captionPresetSelector [data-preset="${p.caption_preset}"]`);
+        const styleInput = document.querySelector('input[name="caption_style"]');
+        if (active && styleInput) styleInput.value = active.dataset.style || "impact";
+      }
+    }
+  } catch {}
+})();
+
+document.querySelectorAll("#captionPresetSelector .caption-preset-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#captionPresetSelector .caption-preset-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    const preset = btn.dataset.preset;
+    const styleVal = btn.dataset.style || "impact";
+    const captionStyleInput = document.querySelector('input[name="caption_style"]');
+    if (captionStyleInput) captionStyleInput.value = styleVal;
+    try {
+      const raw = localStorage.getItem("coach_profile");
+      const p = raw ? JSON.parse(raw) : {};
+      p.caption_preset = preset;
+      localStorage.setItem("coach_profile", JSON.stringify(p));
+    } catch {}
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FEATURE 4 — HOOK GENERATOR
+// ══════════════════════════════════════════════════════════════════════════════
+function useHook(text) {
+  const instr = document.querySelector('textarea[name="instructions"]');
+  if (instr) {
+    instr.value = instr.value
+      ? instr.value.trimEnd() + "\n\nHook de départ: " + text
+      : "Hook de départ: " + text;
+    instr.scrollIntoView({ behavior: "smooth", block: "center" });
+    instr.focus();
+  }
+}
+
+$("hookGenBtn")?.addEventListener("click", async () => {
+  const topic = $("hookGenTopic")?.value.trim();
+  if (!topic) return;
+  const btn    = $("hookGenBtn");
+  const label  = $("hookGenBtnLabel");
+  const results = $("hookGenResults");
+  if (label) label.textContent = "Génération en cours…";
+  if (btn)   btn.disabled = true;
+  if (results) { results.style.display = "none"; results.innerHTML = ""; }
+  try {
+    const res = await fetch("/api/generate-hooks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ topic }),
+    });
+    if (!res.ok) throw new Error(`Erreur serveur: ${res.status}`);
+    const { hooks } = await res.json();
+    if (results && hooks?.length) {
+      results.innerHTML = hooks.map(h => {
+        const sc = typeof h.score === "number" ? h.score : 70;
+        const col = sc >= 80 ? "#22c55e" : sc >= 60 ? "#FF7751" : "#ff5c7a";
+        const safeText = h.text.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+        return `<div class="hook-option">
+          <span class="hook-score-pill" style="background:${col}22;color:${col};border:1px solid ${col}44">${sc}</span>
+          <div class="hook-option-body">
+            <div class="hook-option-text">"${h.text}"</div>
+            <div class="hook-option-why">${h.why || ""}</div>
+          </div>
+          <button class="hook-use-btn" onclick="useHook('${safeText}')">Utiliser →</button>
+        </div>`;
+      }).join("");
+      results.style.display = "flex";
+      results.style.flexDirection = "column";
+    } else {
+      if (results) {
+        results.innerHTML = `<p style="color:var(--muted);font-size:.8rem">Aucun hook généré. Réessayez avec un sujet plus précis.</p>`;
+        results.style.display = "block";
+      }
+    }
+  } catch (err) {
+    if (results) {
+      results.innerHTML = `<p style="color:var(--err);font-size:.8rem">Erreur: ${err.message}</p>`;
+      results.style.display = "block";
+    }
+  }
+  if (label) label.textContent = "✨ Générer 5 hooks";
+  if (btn)   btn.disabled = false;
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FEATURE 6 — REFERRAL SYSTEM
+// ══════════════════════════════════════════════════════════════════════════════
+function initReferral() {
+  const profileId = localStorage.getItem("profile_id");
+  const input = $("referralLinkInput");
+  if (input) {
+    const base = window.location.hostname === "localhost"
+      ? window.location.origin
+      : "https://leanlead-production.up.railway.app";
+    input.value = profileId ? `${base}?ref=${profileId}` : "";
+  }
+  if (profileId) {
+    fetch(`/api/referral/${profileId}/stats`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data) return;
+        const count = data.count || 0;
+        const countEl = $("referralCount");
+        const earnedEl = $("referralEarned");
+        if (countEl) countEl.textContent = `${count} invité${count !== 1 ? "s" : ""}`;
+        if (earnedEl && count > 0)
+          earnedEl.textContent = `🎉 ${count} mois gratuit${count > 1 ? "s" : ""} gagnés`;
+      })
+      .catch(() => {});
+  }
+}
+
+$("copyReferralBtn")?.addEventListener("click", () => {
+  const input = $("referralLinkInput");
+  if (!input?.value) return;
+  const btn = $("copyReferralBtn");
+  navigator.clipboard.writeText(input.value)
+    .then(() => {
+      if (btn) { btn.textContent = "Copié ✓"; setTimeout(() => { btn.textContent = "Copier"; }, 2000); }
+    })
+    .catch(() => {
+      input.select();
+      try { document.execCommand("copy"); } catch {}
+    });
+});
+
+// Track referral visit from ?ref= parameter
+(function checkReferralParam() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref");
+    const myId = localStorage.getItem("profile_id");
+    if (ref && ref !== myId) {
+      localStorage.setItem("referred_by", ref);
+      fetch(`/api/referral/${ref}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      }).catch(() => {});
+    }
+  } catch {}
+})();
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FEATURE 8 — ONBOARDING PROGRESS
+// ══════════════════════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════════════
+// FEATURE 9 — AI VIDEO COACH
+// ══════════════════════════════════════════════════════════════════════════════
+$("coachBtn")?.addEventListener("click",  () => $("coachPanel")?.classList.add("open"));
+$("coachClose")?.addEventListener("click", () => $("coachPanel")?.classList.remove("open"));
+
+function appendChatMsg(role, text) {
+  const box = $("chatMessages");
+  if (!box) return;
+  const div = document.createElement("div");
+  div.className = `chat-msg ${role}`;
+  div.textContent = text;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+  return div;
+}
+
+async function sendCoachMessage(question) {
+  if (!question.trim()) return;
+  const input = $("chatInput");
+  if (input) input.value = "";
+  appendChatMsg("user", question);
+  const loading = appendChatMsg("ai loading", "Analyse en cours…");
+  try {
+    const videos = (() => { try { return JSON.parse(localStorage.getItem("edited_videos") || "[]"); } catch { return []; } })();
+    const profile = (() => { try { return JSON.parse(localStorage.getItem("coach_profile") || "null"); } catch { return null; } })();
+    const res = await fetch("/api/coach-chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, video_history: videos.slice(0, 20), profile }),
+    });
+    const data = await res.json();
+    if (loading) { loading.classList.remove("loading"); loading.textContent = data.answer || "Désolé, une erreur s'est produite."; }
+  } catch (err) {
+    if (loading) { loading.classList.remove("loading"); loading.textContent = `Erreur: ${err.message}`; }
+  }
+}
+
+$("chatSend")?.addEventListener("click", () => sendCoachMessage($("chatInput")?.value || ""));
+$("chatInput")?.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendCoachMessage($("chatInput").value); } });
+document.querySelectorAll(".chat-quick").forEach(btn => {
+  btn.addEventListener("click", () => sendCoachMessage(btn.dataset.q || btn.textContent));
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FEATURE 10 — TEMPLATE SYSTEM
+// ══════════════════════════════════════════════════════════════════════════════
+const TEMPLATES = [
+  { icon:"📈", name:"Kiyosaki Classic", score:"~85%", best:"Coaching financier/business",
+    hook:"La majorité des gens travaillent dur pour rien. Voici pourquoi.",
+    structure:"Hook contre-intuitif → histoire personnelle → principe → reframe final" },
+  { icon:"⚡", name:"Hormozi Value Bomb", score:"~82%", best:"Éducation/conseils pratiques",
+    hook:"Voici exactement comment j'ai fait X en Y jours.",
+    structure:"Donner la réponse d'abord → expliquer le pourquoi → valider → CTA" },
+  { icon:"🔄", name:"Before/After", score:"~79%", best:"Transformation / résultats",
+    hook:"Il y a 6 mois j'étais [douleur]. Aujourd'hui [transformation].",
+    structure:"Douleur → transformation → preuve → méthode → CTA" },
+  { icon:"🧠", name:"Le Contrariant", score:"~88%", best:"Pensée unique / mindset",
+    hook:"Tout le monde pense X. Ils ont complètement tort.",
+    structure:"Croyance commune → réfutation → preuve → nouveau principe" },
+  { icon:"🎬", name:"Story Arc", score:"~76%", best:"Storytelling / expérience vécue",
+    hook:"La nuit où tout a failli s'effondrer, j'ai compris quelque chose.",
+    structure:"Scène d'ouverture → conflit → tournant → résolution → leçon" },
+];
+
+function useTpl(idx) {
+  const t = TEMPLATES[idx];
+  if (!t) return;
+  const instr = document.querySelector('textarea[name="instructions"]');
+  if (instr) {
+    instr.value = instr.value
+      ? instr.value.trimEnd() + `\n\nTemplate: ${t.name}\nStructure: ${t.structure}`
+      : `Template: ${t.name}\nStructure: ${t.structure}`;
+    instr.scrollIntoView({ behavior: "smooth", block: "center" });
+    instr.focus();
+  }
+}
+
+(function renderTemplates() {
+  const grid = $("tplGrid");
+  if (!grid) return;
+  grid.innerHTML = TEMPLATES.map((t, i) => `
+    <div class="tpl-card">
+      <span class="tpl-icon">${t.icon}</span>
+      <div class="tpl-body">
+        <div class="tpl-name">${t.name}</div>
+        <div class="tpl-hook">"${t.hook}"</div>
+        <div class="tpl-row">
+          <span class="tpl-score">Rétention ${t.score}</span>
+          <span class="tpl-tag">${t.best}</span>
+        </div>
+      </div>
+      <button class="tpl-use" onclick="useTpl(${i})">Utiliser →</button>
+    </div>`).join("");
+})();
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FEATURE 11 — COMPETITOR ANALYSIS
+// ══════════════════════════════════════════════════════════════════════════════
+$("compAnalyzeBtn")?.addEventListener("click", async () => {
+  const url = $("compUrl")?.value.trim();
+  if (!url) return;
+  const btn   = $("compAnalyzeBtn");
+  const label = $("compBtnLabel");
+  const result = $("compResult");
+  if (label) label.textContent = "Analyse en cours…";
+  if (btn)   btn.disabled = true;
+  if (result) result.style.display = "none";
+  try {
+    const res = await fetch("/api/analyze-competitor", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url }),
+    });
+    if (!res.ok) throw new Error(`Serveur: ${res.status}`);
+    const d = await res.json();
+    if (result) {
+      result.innerHTML = `
+        <h4>📊 Analyse structurelle</h4>
+        <div class="comp-row"><span class="comp-lbl">Type de hook</span><span class="comp-val">${d.hook_type || "—"}</span></div>
+        <div class="comp-row"><span class="comp-lbl">Durée segment moy.</span><span class="comp-val">${d.avg_segment_s || "—"}</span></div>
+        <div class="comp-row"><span class="comp-lbl">Boucles curiosité</span><span class="comp-val">${d.loop_mechanics || "—"}</span></div>
+        <div class="comp-row"><span class="comp-lbl">Style captions</span><span class="comp-val">${d.caption_style || "—"}</span></div>
+        <div class="comp-row"><span class="comp-lbl">Score rétention est.</span><span class="comp-val">${d.estimated_retention || "—"}</span></div>
+        ${d.action ? `<div class="comp-action">💡 ${d.action}</div>` : ""}`;
+      result.style.display = "block";
+    }
+  } catch (err) {
+    if (result) { result.innerHTML = `<p style="color:var(--err);font-size:.8rem">Erreur: ${err.message}</p>`; result.style.display = "block"; }
+  }
+  if (label) label.textContent = "🔍 Analyser la structure";
+  if (btn)   btn.disabled = false;
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FEATURE 12 — CONTENT CALENDAR
+// ══════════════════════════════════════════════════════════════════════════════
+let _calYear, _calMonth;
+
+function renderCalendar(year, month) {
+  _calYear = year; _calMonth = month;
+  const grid = $("calGrid");
+  if (!grid) return;
+  const label = $("calMonthLabel");
+  const months = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+  if (label) label.textContent = `${months[month]} ${year}`;
+  const events = JSON.parse(localStorage.getItem("cal_events") || "{}");
+  const today = new Date();
+  const firstDay = new Date(year, month, 1).getDay(); // 0=Sun
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const daysInPrev  = new Date(year, month, 0).getDate();
+  // Monday-first: shift 0→6, 1→0, ..., 6→5
+  const startOffset = (firstDay + 6) % 7;
+  // Keep headers (first 7 children) and rebuild day cells
+  const headers = Array.from(grid.children).slice(0, 7);
+  grid.innerHTML = "";
+  headers.forEach(h => grid.appendChild(h));
+  // Prev month fill
+  for (let i = startOffset - 1; i >= 0; i--) {
+    const d = document.createElement("div"); d.className = "cal-day cal-other";
+    d.innerHTML = `<span class="cal-day-n">${daysInPrev - i}</span>`;
+    grid.appendChild(d);
+  }
+  // This month
+  for (let day = 1; day <= daysInMonth; day++) {
+    const key = `${year}-${String(month + 1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    const isToday = (today.getFullYear() === year && today.getMonth() === month && today.getDate() === day);
+    const evts = events[key] || [];
+    const dotsHtml = evts.map(e => {
+      const c = e.platform === "TikTok" ? "#ee2a7b" : e.platform === "YouTube" ? "#ff0000" : e.platform === "Instagram" ? "#c13584" : "var(--salmon)";
+      return `<span class="cal-dot" style="background:${c}" title="${e.title || e.platform}"></span>`;
+    }).join("");
+    const d = document.createElement("div");
+    d.className = "cal-day" + (isToday ? " cal-today" : "") + (evts.length ? " cal-has-evt" : "");
+    d.innerHTML = `<span class="cal-day-n">${day}</span><div class="cal-dots">${dotsHtml}</div>`;
+    d.addEventListener("click", () => openCalScheduler(key));
+    grid.appendChild(d);
+  }
+  // Fill rest of week
+  const total = startOffset + daysInMonth;
+  const remainder = total % 7 === 0 ? 0 : 7 - (total % 7);
+  for (let i = 1; i <= remainder; i++) {
+    const d = document.createElement("div"); d.className = "cal-day cal-other";
+    d.innerHTML = `<span class="cal-day-n">${i}</span>`;
+    grid.appendChild(d);
+  }
+}
+
+function openCalScheduler(dateKey) {
+  const platform = prompt(`Planifier une publication le ${dateKey}\nPlateforme (TikTok/YouTube/Instagram):`, "TikTok");
+  if (!platform) return;
+  const title = prompt("Titre ou sujet de la vidéo:") || "";
+  const events = JSON.parse(localStorage.getItem("cal_events") || "{}");
+  if (!events[dateKey]) events[dateKey] = [];
+  events[dateKey].push({ platform, title, jobId: null });
+  localStorage.setItem("cal_events", JSON.stringify(events));
+  renderCalendar(_calYear, _calMonth);
+  // Schedule browser notification
+  try {
+    const [y, m, d] = dateKey.split("-").map(Number);
+    const notifTime = new Date(y, m - 1, d, 18, 0, 0).getTime() - Date.now();
+    if (notifTime > 0 && "Notification" in window && Notification.permission === "granted") {
+      setTimeout(() => {
+        new Notification(`📅 Vidéo à publier aujourd'hui`, {
+          body: `${title} sur ${platform}`,
+          tag: `cal-${dateKey}`,
+        });
+      }, notifTime);
+    }
+  } catch {}
+}
+
+(function initCalendar() {
+  const now = new Date();
+  renderCalendar(now.getFullYear(), now.getMonth());
+  $("calPrev")?.addEventListener("click", () => {
+    let m = _calMonth - 1, y = _calYear;
+    if (m < 0) { m = 11; y--; }
+    renderCalendar(y, m);
+  });
+  $("calNext")?.addEventListener("click", () => {
+    let m = _calMonth + 1, y = _calYear;
+    if (m > 11) { m = 0; y++; }
+    renderCalendar(y, m);
+  });
+})();
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FEATURE 13 — SPLIT TEST (Version B)
+// ══════════════════════════════════════════════════════════════════════════════
+let _versionBJobId  = null;
+let _versionAScore  = null;
+let _versionBScore  = null;
+
+$("versionBBtn")?.addEventListener("click", async () => {
+  if (!_reviewJobId) return;
+  const btn = $("versionBBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "Génération Version B…"; }
+  try {
+    // Get source path from current job
+    const jobRes = await apiFetch(`/api/jobs/${_reviewJobId}`);
+    const jobData = await jobRes.json();
+    if (!jobData.source_path) throw new Error("Fichier source introuvable");
+    // Create version B with contrarian hook instruction
+    const res = await apiFetch(`/api/retry/${_reviewJobId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ extra_instruction: "Use a CONTRARIAN hook — start with the opposite of what viewers expect. Different hook approach from Version A." }),
+    });
+    if (!res.ok) throw new Error(`Erreur ${res.status}`);
+    const { job_id } = await res.json();
+    _versionBJobId = job_id;
+    pollVersionB(job_id);
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.textContent = "⚡ Générer Version B"; }
+    alert(`Erreur: ${err.message}`);
+  }
+});
+
+async function pollVersionB(jobId) {
+  while (true) {
+    await new Promise(r => setTimeout(r, 2000));
+    try {
+      const res = await apiFetch(`/api/jobs/${jobId}`);
+      if (!res.ok) break;
+      const job = await res.json();
+      if (job.status === "ready_for_review" || job.status === "done") {
+        showSplitComparison(job);
+        break;
+      }
+      if (job.status === "error") {
+        const btn = $("versionBBtn");
+        if (btn) { btn.disabled = false; btn.textContent = "⚡ Générer Version B"; }
+        break;
+      }
+    } catch { break; }
+  }
+}
+
+function showSplitComparison(jobB) {
+  const btn = $("versionBBtn");
+  if (btn) { btn.disabled = false; btn.textContent = "🔄 Régénérer Version B"; }
+
+  // Extract hook score from plan
+  const planB = jobB.preview?.edit_plan || jobB.result?.plan?.keep_segments || [];
+  const hookB = planB.find(s => s.role === "hook");
+  const rawB  = typeof hookB?.score === "number" ? hookB.score : 6;
+  _versionBScore = rawB <= 10 ? rawB * 10 : rawB;
+
+  // Version A score from current preview
+  const tlRows = document.querySelectorAll(".tl-row-hook .score-badge");
+  _versionAScore = tlRows.length > 0 ? parseInt(tlRows[0].textContent, 10) || 70 : 70;
+
+  const aWins = _versionAScore >= _versionBScore;
+  const panel = $("splitComparePanel");
+  const compare = $("splitCompare");
+  const winLabel = $("splitWinnerLabel");
+  if (!panel || !compare) return;
+
+  compare.innerHTML = `
+    <div class="split-ver ${aWins ? "winner" : ""}">
+      <div class="sv-label">Version A (originale)</div>
+      <div class="sv-score">${_versionAScore}</div>
+      <div class="sv-verdict">Score de rétention du hook</div>
+      ${aWins ? `<div class="sv-winner-pill">🏆 Gagnant prédit</div>` : ""}
+    </div>
+    <div class="split-ver ${!aWins ? "winner" : ""}">
+      <div class="sv-label">Version B (contrariant)</div>
+      <div class="sv-score">${_versionBScore}</div>
+      <div class="sv-verdict">Score de rétention du hook</div>
+      ${!aWins ? `<div class="sv-winner-pill">🏆 Gagnant prédit</div>` : ""}
+    </div>`;
+  if (winLabel) winLabel.textContent = `Winner: Version ${aWins ? "A" : "B"} (${Math.max(_versionAScore, _versionBScore)} vs ${Math.min(_versionAScore, _versionBScore)})`;
+  panel.style.display = "";
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// FEATURE 14 — CAPTION EDITOR
+// ══════════════════════════════════════════════════════════════════════════════
+let _captionsJobId = null;
+let _captionData   = [];
+
+async function loadCaptions(jobId) {
+  _captionsJobId = jobId;
+  try {
+    const res = await apiFetch(`/api/jobs/${jobId}/captions`);
+    if (!res.ok) return;
+    const { captions } = await res.json();
+    if (!captions?.length) return;
+    _captionData = captions;
+    const list = $("captionList");
+    if (list) {
+      list.innerHTML = captions.map((c, i) => `
+        <div class="cap-row">
+          <span class="cap-tc">${c.start} → ${c.end}</span>
+          <textarea class="cap-txt" data-idx="${i}" rows="1">${c.text}</textarea>
+        </div>`).join("");
+      // Auto-resize textareas
+      list.querySelectorAll(".cap-txt").forEach(ta => {
+        ta.style.height = "auto";
+        ta.style.height = ta.scrollHeight + "px";
+        ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height = ta.scrollHeight + "px"; });
+      });
+    }
+    const wrap = $("captionEditorWrap");
+    if (wrap) wrap.style.display = "";
+  } catch {}
+}
+
+$("reburnBtn")?.addEventListener("click", async () => {
+  if (!_captionsJobId) return;
+  const btn = $("reburnBtn");
+  const msg = $("reburnMsg");
+  if (btn) { btn.disabled = true; btn.textContent = "Mise à jour…"; }
+  // Collect edits from textarea
+  const updated = [...(document.querySelectorAll(".cap-txt") || [])].map((ta, i) => ({
+    ..._captionData[i],
+    text: ta.value.trim(),
+  }));
+  try {
+    const res = await apiFetch(`/api/edit-captions/${_captionsJobId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ captions: updated }),
+    });
+    if (res.ok) {
+      if (msg) { msg.style.display = "block"; setTimeout(() => { msg.style.display = "none"; }, 3000); }
+      _captionData = updated;
+    }
+  } catch {}
+  if (btn) { btn.disabled = false; btn.textContent = "Re-brûler les captions"; }
+});
+
+function updateOnboardingProgress() {
+  const card = $("onboardingCard");
+  if (!card) return;
+  try {
+    const videos    = JSON.parse(localStorage.getItem("edited_videos") || "[]");
+    const hasVideo  = videos.length >= 1;
+    const has5      = videos.length >= 5;
+    const raw       = localStorage.getItem("coach_profile");
+    const p         = raw ? JSON.parse(raw) : null;
+    const hasBrand  = !!(p?.primaryColor && p?.brandName);
+    const hasProf   = !!(p?.name && p?.icp && (p?.pillars || []).filter(Boolean).length >= 2);
+
+    // Hide card when all 5 steps complete
+    const allDone = hasVideo && has5 && hasBrand && hasProf;
+    if (allDone) { card.style.display = "none"; return; }
+    card.style.display = "";
+
+    const setStep = (id, done, isNext) => {
+      const el = $(id);
+      if (!el) return;
+      el.classList.toggle("step-done",   done);
+      el.classList.toggle("step-active", !done && isNext);
+      const icon = el.querySelector(".ob-icon");
+      if (icon) icon.textContent = done ? "✓" : isNext ? "→" : "";
+    };
+
+    setStep("step-account",     !!p,              !p);
+    setStep("step-first-video", hasVideo,          !!p && !hasVideo);
+    setStep("step-brand",       hasBrand,          hasVideo && !hasBrand);
+    setStep("step-5videos",     has5,              hasBrand && !has5);
+    setStep("step-profile",     hasProf,           has5 && !hasProf);
+  } catch {}
+}
