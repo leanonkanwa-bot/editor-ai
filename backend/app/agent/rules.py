@@ -204,9 +204,9 @@ CUT FREQUENCY — non-negotiable targets:
                               positioning coaching content requires.
   LONG-FORM (over 60s)     → 1 cut every 4–6 seconds maximum.
   If a segment exceeds these limits, split it at the nearest breath pause.
-  Add a zoom punch-in or graphic to mark the split so it doesn't feel arbitrary.
+  Add a zoom punch-in to mark the split so it doesn't feel arbitrary.
   Never let 7 seconds pass without SOMETHING changing — cut, zoom,
-  graphic, or hyperframe.
+  or hyperframe flash.
 
 SENTENCE SCORING — score EVERY sentence before building keep_segments:
   Counterintuitive claim (contradicts a widely held belief)  → score 10  (always keep; this is your hook pool)
@@ -249,10 +249,10 @@ CUT SPEED BY SECTION:
 
 1.8-SECOND VISUAL RHYTHM — ABSOLUTE RULE:
   VISUAL RHYTHM: A visual change MUST occur every 1.5–2 seconds.
-  Visual changes: B-roll cut, zoom punch, caption color emphasis, hyperframe flash.
+  Visual changes: B-roll cut, zoom punch, caption color emphasis.
   Count frames. If no visual event in 1.8s window → add zoom punch.
   The renderer auto-inserts punches in any gap > 1.8s and every 3s via 15% punch.
-  Your job: ensure zoom_plan + hyperframes cover every 1.8s window.
+  Your job: ensure zoom_plan covers every 1.8s window.
   A video with no visual change for 2+ seconds loses 70% of mobile viewers.
 
 SPEED RAMPS — flag moments for the renderer:
@@ -391,32 +391,25 @@ broll_windows automatically — no action needed in the plan.
 """
 
 HYPERFRAMES = """\
-HYPERFRAMES — pattern interrupts every 7–10 seconds
+HYPERFRAMES — max 2 simple color flashes only
 
-Place hyperframes aggressively. One every 7–10 seconds minimum.
-A hyperframe is a single full-screen visual for 2–4 frames (≈0.08–0.16s
-at 30fps). Subliminal. The viewer feels it, can't explain why.
-This is the edutainment secret weapon — it resets attention before it drifts.
+A hyperframe is a very quick full-screen color flash (0.08s only).
+Subliminal. Use at maximum 2 moments per video — only at the absolute
+most shocking or emotionally impactful instants.
 
-Allowed kinds:
-  - "word"   — a single bold word filling the screen (PUSH, NOW, WHY, STOP,
-               FREE, WAIT, LISTEN, WRONG, TRUTH)
-  - "number" — one number filling the screen (3, 47, $1M, 80%)
-  - "color"  — a flat solid color flash (#FF7751 salmon by default)
-  - "image"  — describe the image; renderer renders it as a colored card
+Only allowed kind: "color" — a flat solid color flash.
+Default color: #FF7751 (salmon). Duration: ALWAYS 0.08s.
+NO text. NO words. NO numbers. Pure color flash only.
 
-Pick a `color` per hyperframe. Default to #FF7751 (salmon).
-Use high-contrast colors — salmon, white, black — to maximise the interrupt.
-
-Return as `hyperframes`: list of objects with `at`, `duration`,
-`kind`, `content`, `color`.
+Return as `hyperframes`: list of at most 2 objects:
+  { "at": <s>, "duration": 0.08, "kind": "color", "content": "", "color": "#FF7751" }
 
 Rules:
-  - One hyperframe per 7–10s window. Place them aggressively.
+  - Maximum 2 hyperframes total per video. Not one more.
+  - Only at the absolute most shocking/impactful moments (HOOK or REVELATION beat).
   - Never inside a B-roll window.
-  - Hyperframes during silence or right before a punch-in feel best.
-  - Count your timeline — verify no 10s+ gap exists without a hyperframe,
-    zoom punch-in, or graphic.
+  - Duration: always 0.08s exactly.
+  - Kind: always "color". No text, no words, no numbers ever.
 """
 
 MOTION_GRAPHICS = """\
@@ -753,8 +746,7 @@ PATTERN INTERRUPTS every 7–10 seconds:
   A viewer's attention resets every 7–10 seconds without stimulation.
   Force a change every 7–10s using ANY of:
     - zoom punch-in
-    - hyperframe flash (2–4 frames)
-    - motion graphic appearing
+    - hyperframe color flash (max 2 per video)
     - cut to new angle/clip
     - sfx hit (impact/whoosh)
   Track your output timeline. Verify no 10s+ gap exists without one.
@@ -777,7 +769,7 @@ CONDITIONAL TRIGGER TABLE — use these rules when planning:
   new topic in transcript          → punch_in at cut + "whoosh" sfx_cue
   key phrase (principle/payoff)    → bold caption + 0.3s silence before
   b-roll moment                    → broll_suggestion + Ken Burns by renderer
-  no interrupt for 7–10s           → insert hyperframe or zoom punch-in
+  no interrupt for 7–10s           → insert zoom punch-in
   emotional peak (story climax)    → slow cut pace + speed_ramp rate 0.7
   mundane transition               → speed_ramp rate 1.5–2.0 to compress
   section start (HISTOIRE etc.)    → "riser" sfx_cue 0.5s before
@@ -916,68 +908,15 @@ Reply with a SINGLE JSON object, no prose, matching this schema:
     /* MAX 2 entries. Zero is acceptable. Never 3+. Duration: 2.0–3.5s. */
   ],
 
+  /* Max 2 color-flash hyperframes only. Duration 0.08s. Kind "color" only. No text. */
   "hyperframes": [
-    { "at": <s>, "duration": <0.08–0.16>,
-      "kind": "word"|"number"|"color"|"image",
-      "content": "<one word, one number, or short description>",
-      "color": "#RRGGBB" }
+    { "at": <s>, "duration": 0.08, "kind": "color", "content": "", "color": "#FF7751" }
+    /* MAX 2 entries. Only at HOOK or REVELATION beat. No text, no words, no numbers. */
   ],
 
-  /* ── NEW: 3 visual styles ──────────────────────────────────────────────
-     Style 1 → use kind "giant_text" inside motion_graphics (see below).
-     Styles 2/3 → add entries here (1–3 per video, never in first 3s):
-  */
-  "visual_style_moments": [
-    /* Style 2 — whiteboard + vignette */
-    { "at": <s>, "duration": <s>, "style": 2,
-      "content": "<text for left side, use \\n for line breaks>" },
-    /* Style 3 — slide + vignette */
-    { "at": <s>, "duration": <s>, "style": 3,
-      "title": "<big bold title>",
-      "bullets": ["<bullet 1>", "<bullet 2>", "<bullet 3>"] }
-  ],
-
-  "motion_graphics": [
-    { "at": <s>, "duration": <s>,
-      "kind": "count_up"|"fly_in"|"text_overlay"|"checklist"
-            |"lower_third"|"stat_circle"|"annotation"
-            |"quote_card"|"split_screen"|"timeline"|"versus"
-            |"notification"|"typography_broll"|"money_counter"
-            |"giant_text",
-      /* text_overlay / fly_in / annotation */
-      "text": "<text>",
-      "size": 15,           /* text_overlay: % of frame short edge */
-      "x_pct": 5, "y_pct": 8,
-      "max_width_pct": 25,
-      "slide_in": "left"|"right"|"none",
-      /* count_up / stat_circle */
-      "from": <number>, "to": <number>, "label": "<text>",
-      /* lower_third */
-      "title": "<text>", "accent_word": "<text>",
-      /* checklist */
-      "items": [{"text": "<text>", "ok": true|false}],
-      /* quote_card */
-      "quote": "<text>", "speaker": "<name>",
-      /* split_screen */
-      "left": "<text>", "right": "<text>",
-      "left_label": "WRONG", "right_label": "RIGHT",
-      /* timeline */
-      "events": [{"label": "<text>", "year": "<year>"}],
-      /* versus */
-      "left": "<name>", "right": "<name>", "winner": "left"|"right",
-      /* notification */
-      "title": "<text>", "body": "<text>", "app_name": "<text>",
-      /* typography_broll */
-      "words": ["<word>", "<word>"],
-      /* money_counter */
-      "currency": "$", "positive": true,
-      /* giant_text (Style 1) */
-      "number": "<e.g. 65%>", "subtitle": "<e.g. FAIL IN 10 YEARS>",
-      "subtitle_color": "#FF3B30",
-      /* universal */
-      "bg_card": "black"|"white"|""
-    }
-  ],
+  /* DISABLED — output empty arrays for these. Do not generate any entries. */
+  "visual_style_moments": [],
+  "motion_graphics": [],
 
   "caption_emphasis_words": ["<word>", "<word>", ...],
 
@@ -1027,10 +966,9 @@ Rules the JSON must obey:
   - silences: only before PRINCIPLE and PAYOFF, 0.3–0.5s max.
   - titres_ctr: 5 titles, each deliverable from the video content.
   - thumbnail_mot: ONE word, uppercase, maximum emotional charge.
-  - One hyperframe per 7–10s window. Never inside b-roll.
-  - visual_style_moments: 0–3 entries, duration 2.5–6s, never in first 3s,
-    never overlapping each other or b-roll windows.
-  - giant_text: use inside motion_graphics (NOT visual_style_moments).
+  - hyperframes: MAX 2 total. Kind must be "color". Duration exactly 0.08s. No text. No content.
+  - visual_style_moments: must be empty []. Do not generate any entries.
+  - motion_graphics: must be empty []. max_motion_graphics = 0. Do not generate any entries.
   - sfx_cues: max 1 per 5s window; "whoosh" before topic-change cuts,
     "impact" with punch_in zooms, "riser" 0.5s before new sections,
     "click" on top-3 emphasis words only.
@@ -1153,12 +1091,12 @@ Output content_type in the `summary` field of the JSON.
 _EDUTAINMENT_BRAND = (
     "edutainment — Kiyosaki / Hormozi / MrBeast short-form standard.\n"
     "  accent: #FF7751 (salmon), dark bg #0A0A0A, white text #FFFFFF.\n"
-    "  Captions: Poppins Bold, 2–3 words/frame, bottom 20%, white with 2px black outline.\n"
-    "  Emphasis words: salmon #FF7751, sentence case, Title Case only for emphasis — pick 5–10 per video.\n"
-    "  Hyperframes: salmon color flashes every 7–10s.\n"
+    "  Captions: Inter Bold, word-by-word kinetic, center y=45%, category colors.\n"
+    "  Hyperframes: max 2 salmon color flashes only (0.08s each). No text on hyperframes.\n"
+    "  NO motion graphics. NO visual style overlays. Clean cuts + captions + zoom only.\n"
     "  Curiosity loops: open a new one every 15–20s throughout the edit.\n"
     "  10-beat structure: HOOK/AMPLIFY/PATTERN_BREAK/OPEN_LOOP/STORY/REVELATION/PRINCIPLE/REFRAME/PAYOFF/CTA.\n"
-    "  Style: clean, minimal, idea-driven. Every graphic reinforces a concept.\n"
+    "  Style: ultra clean, minimal, idea-driven. No overlays, no graphics. Pro creator standard.\n"
     "  Tone: smart, direct, zero filler. The viewer feels smarter after watching."
 )
 
@@ -1189,8 +1127,6 @@ def system_prompt(
         ZOOM_SYSTEM,
         CAPTION_RULES,
         HYPERFRAMES,
-        MOTION_GRAPHICS,
-        VISUAL_STYLES,
         BROLL_RULES,
         SOUND_DESIGN,
         RETENTION_MECHANICS,
@@ -1204,7 +1140,9 @@ def system_prompt(
             "kinetic word-by-word captions at frame center (y=45%), "
             "category colors on time/action/emotion words, "
             "salmon emphasis on hook/key words, "
-            "max 2 b-roll (2.0–3.5s each), hyperframe every 7–10s. "
+            "max 2 b-roll (2.0–3.5s each), max 2 hyperframe color flashes (0.08s each). "
+            "motion_graphics: [] — output empty array, no exceptions. "
+            "visual_style_moments: [] — output empty array, no exceptions. "
             "1 cut per 2–3 seconds. Ruthless filler removal. "
             "New curiosity loop every 15–20s. "
             "10-beat spine: HOOK/AMPLIFY/PATTERN_BREAK/OPEN_LOOP/STORY/REVELATION/PRINCIPLE/REFRAME/PAYOFF/CTA."
@@ -1214,6 +1152,7 @@ def system_prompt(
             "TARGET FORMAT: long — lower-amplitude zoom (100–110%), "
             "re-hook every 30–60s, kinetic word-by-word captions, "
             "category colors on key words, salmon emphasis. "
+            "motion_graphics: [] — output empty array. visual_style_moments: [] — output empty array. "
             "1 cut per 4–6 seconds. Max 2 b-roll. "
             "New curiosity loop every 15–20s."
         )

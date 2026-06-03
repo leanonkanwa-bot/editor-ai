@@ -1013,6 +1013,9 @@ def render(
                     _remap_time(ct, kept_intervals) for ct in cut_timestamps
                 ]
 
+    # Cap hyperframes to max 2 — simple color flashes only at peak moments.
+    remapped_hyperframes = remapped_hyperframes[:2]
+
     total_duration = _probe_duration(concat_path)
 
     # MULTI-CAMERA SIMULATION: 4-step zoom cycle on every cut creates the
@@ -1139,24 +1142,9 @@ def render(
     import tempfile as _tempfile
     _log = _logging.getLogger(__name__)
 
-    # ── Pre-render motion-graphics PNGs ───────────────────────────────────
-    glow_color = brand_color or "#4FC3F7"
-    mg_dir = work_dir / "motion_graphics"
+    # Motion graphics disabled — clean professional output.
+    # Only cuts + captions + zoom are applied.
     rendered_graphics: list[RenderedGraphic] = []
-    for idx, mg in enumerate(plan.motion_graphics or []):
-        try:
-            rg = render_motion_graphic(
-                mg, mg_dir, idx,
-                target_w=target_w, target_h=target_h,
-                accent_hex=glow_color,
-                aesthetic=aesthetic,
-                subject_pos=subject_position,
-            )
-            if rg is not None:
-                rendered_graphics.append(rg)
-        except Exception as _e:
-            _log.warning("motion graphic %d (%s) skipped: %s",
-                         idx, mg.get("kind"), _e)
 
     # ── Smart dimension detection ─────────────────────────────────────────
     # _cut_segment / _create_proxy already scale to target dims, so this
@@ -1193,15 +1181,13 @@ def render(
     for i, hf in enumerate(remapped_hyperframes):
         try:
             hf_at = float(hf.get("at", 0))
-            hf_dur = max(0.05, min(0.2, float(hf.get("duration", 0.1))))
-            hf_color = _hex_to_rgb_at(hf.get("color") or brand_color or "#FFE500")
-            hf_text = str(hf.get("content") or "").strip()
-            hf_kind = (hf.get("kind") or "color").lower()
+            hf_color = _hex_to_rgb_at(hf.get("color") or brand_color or "#FF7751")
+            hf_dur = max(0.05, min(0.1, float(hf.get("duration", 0.08))))
             hf_png = hf_dir / f"hf_{i:03d}.png"
+            # Color flash only — no text overlay on hyperframes.
             _render_hyperframe_png(
                 hf_color, hf_png, target_w, target_h,
-                text=hf_text if hf_kind in {"word", "number"} else None,
-                system_font=system_font,
+                text=None, system_font=None,
             )
             hf_graphics.append(RenderedGraphic(
                 png=hf_png, at=hf_at, duration=hf_dur,

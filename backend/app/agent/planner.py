@@ -51,7 +51,7 @@ class EditPlan:
 
     @property
     def motion_graphics(self) -> list[dict[str, Any]]:
-        return self.raw.get("motion_graphics", [])
+        return []  # disabled — clean professional output
 
     @property
     def key_lines(self) -> list[str]:
@@ -79,7 +79,7 @@ class EditPlan:
 
     @property
     def visual_style_moments(self) -> list[dict[str, Any]]:
-        return self.raw.get("visual_style_moments", [])
+        return []  # disabled — clean professional output
 
     @property
     def sfx_cues(self) -> list[dict[str, Any]]:
@@ -254,25 +254,8 @@ def plan_edit(
     duration = float(transcript.get("duration", 0.0))
     fmt = _decide_format(duration, format_hint)
 
-    # Inject Vision-derived face coordinates so Claude knows exactly where NOT
-    # to place graphics for this specific video.
+    # Motion graphics disabled — no face-safe-zone context needed.
     face_context = ""
-    if subject_position:
-        st  = subject_position.get("safe_top_y_pct",    10)
-        sb  = subject_position.get("safe_bottom_y_pct", 72)
-        ft  = subject_position.get("face_top_pct",      15)
-        fb  = subject_position.get("face_bottom_pct",   65)
-        fl  = subject_position.get("face_left_pct",     25)
-        fr  = subject_position.get("face_right_pct",    75)
-        face_context = (
-            f"\nSUBJECT POSITION — detected via vision analysis of this video:\n"
-            f"  Face occupies y_pct {ft:.0f}%–{fb:.0f}% vertically, "
-            f"x_pct {fl:.0f}%–{fr:.0f}% horizontally.\n"
-            f"  SAFE ZONES for motion_graphics:\n"
-            f"    Upper safe zone: y_pct ≤ {st:.0f}  (above the head)\n"
-            f"    Lower safe zone: y_pct ≥ {sb:.0f}  (below the chin)\n"
-            f"  NEVER place a graphic at y_pct {st:.0f}–{sb:.0f} — that is the face.\n"
-        )
 
     coach_context = _build_coach_context(coach_profile)
 

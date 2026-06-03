@@ -62,8 +62,8 @@ CATEGORY_COLOR_ASS: dict[str, str] = {
 
 PUNCT_RE = re.compile(r"[.,!?;:\"'()\[\]…–—]")
 
-# 50ms delay: caption appears slightly after the word starts — feels most natural.
-CAPTION_DELAY_S: float = 0.05
+# 0ms delay: caption appears exactly when the word is spoken — perfect sync.
+CAPTION_DELAY_S: float = 0.0
 
 # Group words separated by less than this gap into one caption line.
 WORD_GROUP_GAP_S: float = 0.25   # 250 ms — natural breath pause threshold
