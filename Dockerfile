@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Inter Bold — try apt package first, fall back to GitHub release download.
+# Inter Bold ??? try apt package first, fall back to GitHub release download.
 RUN apt-get update && ( apt-get install -y fonts-inter 2>/dev/null || ( \
     curl -fsSL https://github.com/rsms/inter/releases/download/v4.0/Inter-4.0.zip \
          -o /tmp/inter.zip && \
@@ -16,8 +16,8 @@ RUN apt-get update && ( apt-get install -y fonts-inter 2>/dev/null || ( \
     cp /tmp/inter/extras/otf/Inter-Bold.otf /usr/local/share/fonts/leanlead/ && \
     rm -rf /tmp/inter /tmp/inter.zip ) ) && rm -rf /var/lib/apt/lists/*
 
-# Custom fonts (SF Compact Bold, etc.) — drop TTF/OTF files into fonts/ before building.
-COPY fonts/ /usr/local/share/fonts/leanlead/
+# Custom fonts (SF Compact Bold, etc.) ??? drop TTF/OTF files into fonts/ before building.
+
 RUN fc-cache -f -v 2>/dev/null || true
 
 WORKDIR /app/backend
@@ -32,3 +32,4 @@ COPY frontend/ /app/frontend/
 EXPOSE 8000
 
 CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+
