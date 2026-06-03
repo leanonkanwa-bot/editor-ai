@@ -83,56 +83,72 @@ The CLOSING LINE lands in silence. Do not explain it. Do not soften it.
 """
 
 NARRATIVE_STRUCTURE = """\
-NARRATIVE STRUCTURE — every video maps onto these 8 beats
+NARRATIVE STRUCTURE — 10-beat high-retention spine (competitor-validated)
+Target total duration: 90–95 seconds. Hit each beat within its window.
+NEVER resolve tension early. NEVER explain what's coming. NEVER use "today I will."
 
-  1. HOOK (0–3s)
-     Pattern interrupt. One sentence. No setup. No intro. No name.
-     The viewer must feel something in the first 2 seconds or the video
-     is dead. Hormozi rule: start with the conclusion, not the intro.
-     → In `script_structure`, beat = "HOOK"
+  1. HOOK          (0:00–0:05)
+     Most counterintuitive sentence in the entire video. Score > 15/30.
+     Pattern interrupt. No setup. No intro. No name. No pleasantries.
+     Creates a question the viewer MUST stay to answer.
+     NEVER resolves the tension it opens — ever.
+     → beat = "HOOK"
 
-  2. PROBLÈME (3–8s)
-     The relatable tension. What they believe or what they are doing.
-     Make them feel the pain of the current situation.
-     → beat = "PROBLÈME"
+  2. AMPLIFY       (0:05–0:12)
+     "And it gets worse." Raise stakes immediately after the hook.
+     The viewer thought the hook was extreme — now make it worse.
+     No payoff. No comfort. Pure escalation.
+     → beat = "AMPLIFY"
 
-  3. CONSÉQUENCE (8–13s)
-     What this costs them. Real. Personal. Visceral.
-     Not statistics — lived experience. The price of staying wrong.
-     → beat = "CONSÉQUENCE"
+  3. PATTERN_BREAK (0:12–0:20)
+     Completely unexpected fact, contrast, or visceral consequence.
+     Shatters the viewer's mental model of the situation.
+     "The thing nobody tells you is…" — then land it hard.
+     → beat = "PATTERN_BREAK"
 
-  4. OPEN LOOP (13–18s)
-     Open a question. Do NOT answer it.
-     "But the real reason is something nobody explains."
-     "And what happens next changes everything."
-     The viewer cannot leave because they need the answer.
+  4. OPEN_LOOP     (0:20–0:35)
+     "Here's what nobody tells you…" — open a loop the brain cannot close.
+     A question the viewer absolutely cannot answer alone.
+     They cannot scroll away. They NEED the answer.
      → beat = "OPEN_LOOP"
 
-  5. HISTOIRE (18–50s)
-     One real moment. Specific details. No lessons yet.
-     Sanchez rule: make them see the scene like a movie.
-     Re-hook here if long-form — new tension every 30s.
-     → beat = "HISTOIRE"
+  5. STORY         (0:35–0:55)
+     Fast. Every sentence advances. Zero filler.
+     One real moment. Specific details. Show the scene like a movie.
+     No lessons yet — just show. Cut every pause > 0.25s.
+     → beat = "STORY"
 
-  6. PRINCIPE (50–58s)
-     One sentence. Universal. Timeless. Quotable.
-     This is the line they screenshot. This is why they follow.
-     Drop it with a 0.4s silence BEFORE it. Let it hit.
-     → beat = "PRINCIPE"
+  6. REVELATION    (0:55–1:05)
+     The turning point. Emotional peak. The moment everything changed.
+     Slow the pace here. Let it breathe. This is where the zoom punches in.
+     → beat = "REVELATION"
 
-  7. REFRAME (58–65s)
-     Completely flip their mental model.
-     What looked like a problem is actually the path.
-     Short. No explanation. Trust the listener.
+  7. PRINCIPLE     (1:05–1:15)
+     One clear lesson. Universal. Timeless. Quotable.
+     This is the line they screenshot and share.
+     0.4s silence BEFORE it — the pause IS the edit.
+     → beat = "PRINCIPLE"
+
+  8. REFRAME       (1:15–1:25)
+     "Most people think X. Reality: Y."
+     Flip their mental model completely. Short. No explanation.
+     Trust the listener to complete the thought.
      → beat = "REFRAME"
 
-  8. PAYOFF (last 3–8s)
-     The idea they save the video for.
-     Practical or deeply emotional. Sometimes both.
-     Sanchez rule: give them something usable tomorrow morning.
-     One sentence. Drop it. Silence.
-     The discomfort of the ending is what makes them comment.
+  9. PAYOFF        (1:25–1:30)
+     Close ALL open loops. Answer the hook directly.
+     One sentence. Drop it. Silence follows.
+     The discomfort of the ending IS what makes them comment.
      → beat = "PAYOFF"
+
+  10. CTA          (1:30–1:35)
+     "Save this" or "Follow for part 2." Exactly 1–2 sentences.
+     No explanation. Direct. The viewer who saved it is a subscriber.
+     → beat = "CTA"
+
+For LONG-FORM (> 5 min), use the same 10-beat spine but expand STORY
+(beat 5) into multiple sub-stories, each with its own REVELATION. Re-hook
+every 30s within STORY with a new tension. CTA lives in the final 15s.
 """
 
 CUT_PHILOSOPHY = """\
@@ -171,11 +187,15 @@ PAUSE THRESHOLDS — precise rules:
                    PAYOFF beat. Cut it everywhere else.
   pause < 0.2s  → keep; it's natural breathing, not dead air.
 
-CUT RULE — breath pauses only:
-  Every segment boundary must land on a breath pause (≥ 0.25s gap between words).
-  NEVER cut mid-sentence unless the sentence exceeds 12s — in that case,
-  find the closest natural pause inside it. A cut that interrupts word flow
-  sounds wrong and destroys trust.
+CUT RULE — sentence boundaries ONLY. ABSOLUTE HARD RULE:
+  NEVER cut a segment mid-sentence. Every keep_segment MUST:
+    - START at the beginning of a sentence (word following a pause ≥ 0.25s).
+    - END at the end of a sentence (word preceding a pause ≥ 0.25s).
+  A keep_segment that starts or ends mid-sentence is INVALID and will
+  produce an audible glitch that destroys the viewer's trust instantly.
+  If a long sentence (> 12s) must be split, find the natural pause WITHIN
+  it (≥ 0.25s gap) — that is the only valid internal split point.
+  Words with gap < 0.2s between them are NEVER valid cut points.
 
 CUT FREQUENCY — non-negotiable targets:
   SHORT-FORM (under 60s)   → 1 cut every 2–3 seconds maximum.
@@ -188,17 +208,25 @@ CUT FREQUENCY — non-negotiable targets:
   Never let 7 seconds pass without SOMETHING changing — cut, zoom,
   graphic, or hyperframe.
 
-SEGMENT SCORING — use this to prioritize what to keep vs. cut:
-  High tension / conflict moment   → score 10  (always keep)
-  Counterintuitive claim           → score 9   (always keep)
-  Specific stat / number / name    → score 8   (keep, use as emphasis word)
-  Story / narrative beat           → score 7   (keep if fits pacing)
-  Answer / payoff moment           → score 5   (keep, but compress)
-  Connective / transition          → score 3   (compress aggressively)
-  Filler / repetition / warm-up    → score 1   (cut entirely)
-Score each transcript segment before building keep_segments.
+SENTENCE SCORING — score EVERY sentence before building keep_segments:
+  Counterintuitive claim (contradicts a widely held belief)  → score 10  (always keep; this is your hook pool)
+  Specific stat / number / name / concrete claim             → score 8   (always keep; mark as emphasis_word)
+  Story / narrative / scene / lived moment                   → score 7   (keep if serves pacing)
+  Contrast / "but" / "however" / flip / reframe              → score 5   (keep; compress if needed)
+  Answer / payoff / resolution                               → score 5   (keep; but NEVER before last 20% of edit)
+  Connective / transition / setup / context                  → score 3   (compress aggressively)
+  Filler / repetition / warm-up / hedge                      → score 1   (cut entirely)
+
+PAYOFF PLACEMENT RULE — ABSOLUTE:
+  Tension resolution (the answer to any open loop) MUST appear in
+  the last 20% of the output edit duration.
+  Example: 60s video → payoff not before t=48s.
+  If the transcript's payoff appears early, DELAY it by reordering
+  keep_segments — insert story or principle segments between
+  the setup and the payoff to enforce the 20% rule.
+
 Drop score ≤ 3 segments entirely unless they are the hook or payoff.
-Compress score-5 segments to their single punchiest sentence.
+Compress score-5 payoff segments to one sentence; place in final 20%.
 
 CURIOSITY LOOP TIMER — every 15–20 seconds:
   Every 15–20 seconds of the output edit, a NEW curiosity loop must open.
@@ -218,6 +246,14 @@ CUT SPEED BY SECTION:
   HISTOIRE                         → medium cuts (3–5s per segment)
   PRINCIPE / PAYOFF                → slow cuts (4–8s per segment,
                                       let the weight land)
+
+1.8-SECOND VISUAL RHYTHM — ABSOLUTE RULE:
+  VISUAL RHYTHM: A visual change MUST occur every 1.5–2 seconds.
+  Visual changes: B-roll cut, zoom punch, caption color emphasis, hyperframe flash.
+  Count frames. If no visual event in 1.8s window → add zoom punch.
+  The renderer auto-inserts punches in any gap > 1.8s and every 3s via 15% punch.
+  Your job: ensure zoom_plan + hyperframes cover every 1.8s window.
+  A video with no visual change for 2+ seconds loses 70% of mobile viewers.
 
 SPEED RAMPS — flag moments for the renderer:
   speed_up moments: mundane connectives, quick examples, transitions
@@ -309,41 +345,49 @@ PUNCH-IN AUDIO TRIGGER:
 """
 
 CAPTION_RULES = """\
-CAPTION RULES — non-negotiable. The renderer enforces these mechanically.
+CAPTION RULES — kinetic word-by-word system. Renderer enforces mechanically.
 
-CAPTION SYSTEM: 2–3 words per caption frame, 4.5% font size, bottom 15% of frame.
+CAPTION SYSTEM: KINETIC — every word appears EXACTLY on its spoken syllable timestamp.
+  Each word "pops" independently. Not sentence by sentence. Not group by group.
+  One word. One frame. One pop. The viewer reads at speaking speed.
 
-Font: Poppins Bold (maps to DejaVu Sans Bold on the server). Always. No exceptions.
+Font: Inter Bold (installed in Docker image). Fallback: DejaVu Sans Bold.
 
-EVERY SPOKEN WORD appears on screen — no gaps in the caption track.
-  Group 2–3 consecutive words spoken within 0.25s of each other into one frame.
-  Natural breath pauses (≥ 0.25s) split groups automatically (renderer handles this).
-  The viewer should be able to follow the entire video from captions alone.
+WORD-LEVEL TIMING: Each word appears EXACTLY when it is spoken (+ 50ms).
+  Never before. Never during the previous word.
+  The renderer handles per-word timing — do not specify timing in the plan.
+
+POSITION: CENTER of frame, y = 45% from top.
+  Mobile eyes focus on the center zone, NOT the bottom.
+  Bottom 25% is covered by TikTok/Reels UI buttons — NEVER place captions there.
+
+SIZE: 5% of frame height (normal words), 6.5% for colored emphasis words.
+  Short form (1080×1920): 96px normal, 125px colored.
+  Long form (1920×1080): 54px normal, 70px colored.
+
+OUTLINE: 3px black, no shadow. The outline IS the readability mechanism.
+
+COLOR HIERARCHY (apply per word — output in `word_categories`):
+  Time/Location (3AM, 6AM, miles, hours, home, city)  → Cyan    #00FFFF  → "time"
+  Action verbs  (run, drive, wake, push, fight, build) → Purple  #A020F0  → "action"
+  Emotion words (hate, love, crazy, impossible, pain)  → Red     #FF3B30  → "emotion"
+  Hook/Key concepts (output as caption_emphasis_words) → Salmon  #FF7751  → "hook"
+  Normal connector words                               → White   #FFFFFF  (no category)
 
 EMPHASIS WORDS — `caption_emphasis_words`:
-  - The renderer displays these in salmon (#FF7751), 1.3× larger, Title Case.
-  - All other words: sentence case (first word capitalised, rest lowercase), white.
+  - The renderer displays these in salmon (#FF7751), 6.5% size, ALL CAPS.
   - List only the 5–10 highest-impact nouns, verbs, and numbers per video.
-  - Do NOT list every word — only those that carry the emotional or logical peak.
 
-COLOR:
-  Normal words  → pure white #FFFFFF with 2px black outline.
-  Emphasis words → salmon #FF7751 with 3px black outline (renderer applies automatically).
-  No gradients. No shadows only. The outline IS the readability mechanism.
+WORD CATEGORIES — `word_categories`:
+  - For each time/location/action/emotion word in the video, add to word_categories.
+  - Key = exact spoken word (verbatim, lowercase). Value = category name.
+  - These words get enlarged + colored automatically.
+  - 10–20 words per video. Every time reference, every action verb, every emotion word.
 
-POSITION: bottom 15% of frame (MarginV = 15% of PlayResY). Never covers the face.
-
-SIZE: 4.5% of video height. Bold and readable at full screen.
-  Short form (1080×1920): ~86px normal, ~112px emphasis.
-  Long form (1920×1080): ~49px normal, ~64px emphasis.
-  The renderer applies these automatically — never specify a pixel size.
-
-No punctuation in captions. Ever. No commas, no periods, no quotes.
+No punctuation in captions. Ever.
 
 Zero captions during B-roll. The renderer pauses the caption track over
 broll_windows automatically — no action needed in the plan.
-
-Caption style: always "impact" — clean outline, no shadow, bottom-third position.
 """
 
 HYPERFRAMES = """\
@@ -607,8 +651,21 @@ only when the visual DRAMATICALLY reinforces the spoken idea — never
 for variety or decoration.
 
 Placement (must match the spoken context precisely):
-  Clip 1 → during STORY/CONTRAST  (show the concrete scene or wrong way)
-  Clip 2 → during PAYOFF          (make the key idea land visually)
+  Each b-roll MUST specify:
+    `anchor_word` — the exact spoken word (verbatim from transcript) where the cut happens.
+                    The renderer finds that word's exact timestamp and cuts in on that frame.
+    `cut_type`    — "hard" (instant cut, default) or "cross_fade" (2-frame dissolve for
+                    emotional or contemplative moments only).
+  Cut IN on the stressed syllable of anchor_word. Duration: 2.0–3.5s.
+  Cut BACK to speaker on the next sentence boundary.
+  Clip 1 → during STORY / PATTERN_BREAK  (show the concrete scene)
+  Clip 2 → during PAYOFF / REVELATION    (make the key idea land visually)
+
+  B-roll types to suggest based on content:
+    Time references (3AM, morning, years)  → clock / alarm / sunrise visual
+    Location references (city, home, gym)  → relevant place visual
+    Numbers / stats                        → graphic overlay (motion_graphics)
+    Physical action (run, drive, fight)    → action footage
 
 Each b-roll suggestion's `at` is the EXACT START of the sentence whose
 content the visual matches. Read the transcript word-by-word and pick
@@ -749,15 +806,20 @@ Reply with a SINGLE JSON object, no prose, matching this schema:
   "format": "short" | "long",
   "summary": "<one-sentence summary>",
 
-  /* ── NEW: 8-beat retention structure ──────────────────────────────────
-     Every line MUST use VERBATIM words from the transcript (HOOK–PAYOFF).
+  /* ── 10-beat high-retention structure ─────────────────────────────────
+     Every line MUST use VERBATIM words from the transcript.
      Write line-by-line. Short sentences. TikTok rhythm.
-     beat must be one of: HOOK · PROBLÈME · CONSÉQUENCE · OPEN_LOOP
-                           HISTOIRE · PRINCIPE · REFRAME · PAYOFF
+     For short-form hit the timestamp targets:
+       HOOK 0–5s, AMPLIFY 5–12s, PATTERN_BREAK 12–20s, OPEN_LOOP 20–35s,
+       STORY 35–55s, REVELATION 55–65s, PRINCIPLE 65–75s,
+       REFRAME 75–85s, PAYOFF 85–90s, CTA 90–95s.
+     beat must be one of:
+       HOOK · AMPLIFY · PATTERN_BREAK · OPEN_LOOP · STORY
+       REVELATION · PRINCIPLE · REFRAME · PAYOFF · CTA
   */
   "script_structure": [
-    { "beat": "HOOK"|"PROBLÈME"|"CONSÉQUENCE"|"OPEN_LOOP"
-             |"HISTOIRE"|"PRINCIPE"|"REFRAME"|"PAYOFF",
+    { "beat": "HOOK"|"AMPLIFY"|"PATTERN_BREAK"|"OPEN_LOOP"|"STORY"
+             |"REVELATION"|"PRINCIPLE"|"REFRAME"|"PAYOFF"|"CTA",
       "lines": ["<line 1>", "<line 2>"],   /* verbatim, short, rhythmic */
       "start": <s>, "end": <s> }
   ],
@@ -770,6 +832,7 @@ Reply with a SINGLE JSON object, no prose, matching this schema:
   "silences": [
     { "at": <s>, "duration": 0.3,
       "before": "<the line that follows the silence>" }
+    /* Only before PRINCIPLE and PAYOFF. 0.3–0.5s. Never more. */
   ],
 
   /* ── NEW: 5 A/B CTR titles to test ───────────────────────────────────
@@ -812,7 +875,7 @@ Reply with a SINGLE JSON object, no prose, matching this schema:
      energy: "high" | "medium" | "low"
   */
   "music_energy": [
-    { "section": "HOOK"|"HISTOIRE"|"PRINCIPE"|"PAYOFF"|"CLOSING",
+    { "section": "HOOK"|"STORY"|"PRINCIPLE"|"PAYOFF"|"CTA",
       "energy": "high"|"medium"|"low" }
   ],
 
@@ -847,8 +910,10 @@ Reply with a SINGLE JSON object, no prose, matching this schema:
   "broll_suggestions": [
     { "at": <s>, "duration": <s>,
       "concept": "<what the b-roll shows>",
-      "reason": "contrast|story|payoff" }
-    /* MAX 2 entries. Zero is acceptable. Never 3+. */
+      "reason": "contrast|story|payoff",
+      "anchor_word": "<verbatim word from transcript at cut point>",
+      "cut_type": "hard" | "cross_fade"  /* hard = instant cut (default); cross_fade = 2-frame dissolve for emotional moments */ }
+    /* MAX 2 entries. Zero is acceptable. Never 3+. Duration: 2.0–3.5s. */
   ],
 
   "hyperframes": [
@@ -916,6 +981,25 @@ Reply with a SINGLE JSON object, no prose, matching this schema:
 
   "caption_emphasis_words": ["<word>", "<word>", ...],
 
+  /* ── word_categories: kinetic color system — REQUIRED for every video ─
+     Key = exact spoken word (verbatim, lowercase).
+     Value = "time" | "location" | "action" | "emotion" | "hook"
+     Renderer maps: time/location→cyan, action→purple, emotion→red, hook→salmon.
+     Include EVERY time reference, action verb, and emotion word in the video.
+     10–20 words is normal. These all pop in their category color.
+  */
+  "word_categories": {
+    "<word>": "time"|"location"|"action"|"emotion"|"hook"
+  },
+
+  /* ── word_colors: direct hex overrides (use for brand-specific words) ──
+     Key = exact spoken word (lowercase), Value = hex color.
+     Use sparingly — word_categories covers most cases.
+  */
+  "word_colors": {
+    "<word>": "#RRGGBB"
+  },
+
   "key_lines": [
     "<the 3 sentences the viewer remembers 24 hours later>",
     "<2nd>", "<3rd>"
@@ -932,11 +1016,15 @@ Rules the JSON must obey:
   - All times in seconds, decimals allowed.
   - Scale values are decimals (1.00 = 100%, 1.30 = 130%).
   - keep_segments order IS the playback order.
-  - keep_segments edges should fall on breath pauses (≥0.25s gap between words).
+  - keep_segments edges MUST fall on breath pauses (≥0.25s gap between words).
+    NEVER start or end a segment mid-sentence. Every segment starts at a
+    sentence boundary (word after pause ≥0.25s) and ends at a sentence
+    boundary (word before pause ≥0.25s). Violating this creates audible glitches.
   - keep_segments: include role, score, cut_before_silence, retention_note.
   - Segments with score ≤ 3 must be dropped unless they are the hook or payoff.
+  - script_structure beats: HOOK · AMPLIFY · PATTERN_BREAK · OPEN_LOOP · STORY · REVELATION · PRINCIPLE · REFRAME · PAYOFF · CTA
   - script_structure lines: verbatim transcript words only, never invented.
-  - silences: only before PRINCIPE and PAYOFF, 0.3–0.5s max.
+  - silences: only before PRINCIPLE and PAYOFF, 0.3–0.5s max.
   - titres_ctr: 5 titles, each deliverable from the video content.
   - thumbnail_mot: ONE word, uppercase, maximum emotional charge.
   - One hyperframe per 7–10s window. Never inside b-roll.
@@ -1063,12 +1151,13 @@ Output content_type in the `summary` field of the JSON.
 """
 
 _EDUTAINMENT_BRAND = (
-    "edutainment — Visualize Value / Ali Abdaal / Iman Gadzhi style.\n"
+    "edutainment — Kiyosaki / Hormozi / MrBeast short-form standard.\n"
     "  accent: #FF7751 (salmon), dark bg #0A0A0A, white text #FFFFFF.\n"
-    "  Captions: Poppins Bold, 2–3 words/frame, bottom 15%, white with 2px black outline.\n"
-    "  Emphasis words: salmon #FF7751, 1.3× larger, Title Case — pick 5–10 per video.\n"
+    "  Captions: Poppins Bold, 2–3 words/frame, bottom 20%, white with 2px black outline.\n"
+    "  Emphasis words: salmon #FF7751, sentence case, Title Case only for emphasis — pick 5–10 per video.\n"
     "  Hyperframes: salmon color flashes every 7–10s.\n"
     "  Curiosity loops: open a new one every 15–20s throughout the edit.\n"
+    "  10-beat structure: HOOK/AMPLIFY/PATTERN_BREAK/OPEN_LOOP/STORY/REVELATION/PRINCIPLE/REFRAME/PAYOFF/CTA.\n"
     "  Style: clean, minimal, idea-driven. Every graphic reinforces a concept.\n"
     "  Tone: smart, direct, zero filler. The viewer feels smarter after watching."
 )
@@ -1112,16 +1201,19 @@ def system_prompt(
     if format_hint == "short":
         blocks.append(
             "TARGET FORMAT: short — apply the high-amplitude zoom arc, "
-            "2–3 word captions per frame, salmon emphasis on peak words, "
-            "max 2 b-roll, hyperframe every 7–10s. "
+            "kinetic word-by-word captions at frame center (y=45%), "
+            "category colors on time/action/emotion words, "
+            "salmon emphasis on hook/key words, "
+            "max 2 b-roll (2.0–3.5s each), hyperframe every 7–10s. "
             "1 cut per 2–3 seconds. Ruthless filler removal. "
-            "New curiosity loop every 15–20s."
+            "New curiosity loop every 15–20s. "
+            "10-beat spine: HOOK/AMPLIFY/PATTERN_BREAK/OPEN_LOOP/STORY/REVELATION/PRINCIPLE/REFRAME/PAYOFF/CTA."
         )
     elif format_hint == "long":
         blocks.append(
             "TARGET FORMAT: long — lower-amplitude zoom (100–110%), "
-            "re-hook every 30–60s, 2–3 word captions per frame, "
-            "salmon emphasis on key moments. "
+            "re-hook every 30–60s, kinetic word-by-word captions, "
+            "category colors on key words, salmon emphasis. "
             "1 cut per 4–6 seconds. Max 2 b-roll. "
             "New curiosity loop every 15–20s."
         )

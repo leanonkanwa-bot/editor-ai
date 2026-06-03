@@ -209,27 +209,72 @@ def _snap_to_word_boundary(
     words: list[tuple[float, float]],
     edge: str,
 ) -> float:
-    """
-    Snap a cut time to the nearest word boundary (Hard Rule 1).
-    edge='start' snaps to the START of the next word; edge='end' snaps to the
-    END of the previous word — so we never cut INTO a word.
+    """Snap a cut time to a SENTENCE boundary (Hard Rule 1 + FIX 2: no mid-sentence cuts).
+
+    Prefers boundaries where the gap between consecutive words is ≥ 0.3s
+    (a natural sentence/clause pause). Falls back to any word boundary only
+    if no sentence boundary is found within SEARCH_WINDOW_S.
+
+    edge='start' → start of the first word AFTER a sentence pause, at or near t.
+    edge='end'   → end of the last word BEFORE a sentence pause, at or near t.
     """
     if not words:
         return t
+
+    SENTENCE_GAP_S = 0.3    # gap that marks a sentence/clause boundary
+    SEARCH_WINDOW_S = 1.5   # how far to search for a sentence boundary
+
     if edge == "start":
-        # find earliest word that starts at or after t; if none, keep t.
-        for ws, _ in words:
-            if ws >= t - 0.01:
-                return ws
-        return t
-    # end: find the latest word that ends at or before t.
-    last = t
-    for _, we in words:
-        if we <= t + 0.01:
-            last = we
-        else:
-            break
-    return last
+        sent_best: float | None = None
+        sent_dist = float("inf")
+        word_best: float | None = None
+        word_dist = float("inf")
+
+        for i, (ws, _) in enumerate(words):
+            if ws < t - 0.01:
+                continue
+            dist = ws - t
+            if dist > SEARCH_WINDOW_S:
+                break
+            # Check if a sentence pause precedes this word
+            is_sentence_start = (
+                i == 0
+                or (ws - words[i - 1][1]) >= SENTENCE_GAP_S
+            )
+            if is_sentence_start and dist < sent_dist:
+                sent_best, sent_dist = ws, dist
+            if dist < word_dist:
+                word_best, word_dist = ws, dist
+
+        if sent_best is not None:
+            return sent_best
+        return word_best if word_best is not None else t
+
+    else:  # end
+        sent_best = None
+        sent_dist = float("inf")
+        word_best = None
+        word_dist = float("inf")
+
+        for i, (_, we) in enumerate(words):
+            if we > t + 0.01:
+                break
+            dist = t - we
+            if dist > SEARCH_WINDOW_S:
+                continue
+            # Check if a sentence pause follows this word
+            is_sentence_end = (
+                i + 1 >= len(words)
+                or (words[i + 1][0] - we) >= SENTENCE_GAP_S
+            )
+            if is_sentence_end and dist < sent_dist:
+                sent_best, sent_dist = we, dist
+            if dist < word_dist:
+                word_best, word_dist = we, dist
+
+        if sent_best is not None:
+            return sent_best
+        return word_best if word_best is not None else t
 
 
 def _cut_segment(
@@ -283,6 +328,107 @@ def _concat(parts: list[Path], dst: Path) -> None:
         str(dst),
     ])
     list_path.unlink(missing_ok=True)
+
+
+def _find_long_pauses(
+    words: list["WordTiming"],
+    min_gap_s: float = 0.4,
+) -> list[tuple[float, float]]:
+    """Return (start, end) pairs of gaps > min_gap_s between consecutive words."""
+    gaps: list[tuple[float, float]] = []
+    for i in range(1, len(words)):
+        gap_start = words[i - 1].end
+        gap_end = words[i].start
+        if gap_end - gap_start > min_gap_s:
+            gaps.append((gap_start, gap_end))
+    return gaps
+
+
+def _compress_pauses(
+    src: Path,
+    dst: Path,
+    work_dir: Path,
+    long_pauses: list[tuple[float, float]],
+    max_silence_s: float = 0.3,
+) -> list[tuple[float, float]]:
+    """Trim long pauses to max_silence_s in src, write result to dst.
+
+    Returns the list of (src_start, src_end) intervals that were kept,
+    so callers can remap timestamps from the original to the compressed timeline.
+    """
+    total_dur = _probe_duration(src)
+    sorted_pauses = sorted(long_pauses)
+    seg_dir = work_dir / "pause_segs"
+    seg_dir.mkdir(parents=True, exist_ok=True)
+
+    kept_intervals: list[tuple[float, float]] = []
+    cursor = 0.0
+    for gap_s, gap_e in sorted_pauses:
+        # Active audio before this pause
+        if gap_s > cursor + 0.05:
+            kept_intervals.append((cursor, gap_s))
+        # Keep first max_silence_s of the pause (preserves rhythm)
+        keep_end = min(gap_s + max_silence_s, gap_e)
+        if keep_end > gap_s + 0.02:
+            kept_intervals.append((gap_s, keep_end))
+        cursor = gap_e
+
+    if total_dur > cursor + 0.05:
+        kept_intervals.append((cursor, total_dur))
+
+    parts: list[Path] = []
+    for idx, (s, e) in enumerate(kept_intervals):
+        dur = e - s
+        if dur < 0.05:
+            continue
+        p = seg_dir / f"cmp_{idx:04d}.mp4"
+        _run([
+            FFMPEG_PATH, "-y", "-loglevel", "error",
+            "-ss", f"{s:.3f}", "-i", str(src),
+            "-t", f"{dur:.3f}", "-c", "copy", p,
+        ])
+        parts.append(p)
+
+    if parts:
+        _concat(parts, dst)
+    else:
+        _run([FFMPEG_PATH, "-y", "-loglevel", "error",
+              "-i", str(src), "-c", "copy", str(dst)])
+
+    import shutil as _sh
+    _sh.rmtree(seg_dir, ignore_errors=True)
+    return kept_intervals
+
+
+def _remap_time(t: float, kept_intervals: list[tuple[float, float]]) -> float:
+    """Map a timestamp from the pre-compression timeline to the compressed one."""
+    out = 0.0
+    for s, e in kept_intervals:
+        if t <= s:
+            return out
+        if t <= e:
+            return out + (t - s)
+        out += (e - s)
+    return out
+
+
+def _find_word_timestamp(
+    transcript: dict[str, Any],
+    anchor_word: str,
+) -> float | None:
+    """Find the start timestamp of the first occurrence of anchor_word."""
+    needle = anchor_word.strip().lower().strip(".,!?;:\"'")
+    for seg in transcript.get("segments", []):
+        for w in seg.get("words", []):
+            wt = str(w.get("text", "")).strip().lower().strip(".,!?;:\"'")
+            if wt == needle:
+                return float(w["start"])
+    return None
+
+
+def _escape_for_vf(expr: str) -> str:
+    """Escape commas in an expression for safe use in a -vf filter chain option value."""
+    return expr.replace(",", "\\,")
 
 
 def _build_zoom_expression(
@@ -561,7 +707,7 @@ def _build_pass1_filter_complex(
     if scale_filter:
         grade_parts.append(scale_filter)
     grade_parts.append(
-        f"zoompan=z=1.04"
+        f"zoompan=z=1.08"
         f":x=iw/2-(iw/zoom/2)"
         f":y=ih/2-(ih/zoom/2)"
         f":d=1:s={target_w}x{target_h}:fps={fps}"
@@ -636,10 +782,10 @@ def render(
     work_dir: Path,
     output_path: Path,
     *,
-    caption_font: str = "Poppins Bold",
+    caption_font: str = "Inter Bold",
     caption_color: str = "white",
     caption_position: str = "center",
-    caption_style: str = "impact",
+    caption_style: str = "kinetic",
     brand_color: str | None = None,
     aesthetic: str = "dark-pro",
     subject_position: dict | None = None,
@@ -649,9 +795,22 @@ def render(
     work_dir.mkdir(parents=True, exist_ok=True)
 
     short_form = plan.format == "short"
-    target_w, target_h = (1080, 1920) if short_form else (1920, 1080)
     fps = 30
     pad = SHORT_PAD_S if short_form else LONG_PAD_S
+
+    # Detect 4K input — preserve native resolution, don't downscale.
+    video_info = _probe_video_info(src)
+    src_w_raw = video_info.get("width", 0)
+    src_h_raw = video_info.get("height", 0)
+    is_4k = max(src_w_raw, src_h_raw) >= 3840
+
+    if short_form:
+        target_w, target_h = (2160, 3840) if is_4k else (1080, 1920)
+    else:
+        target_w, target_h = (3840, 2160) if is_4k else (1920, 1080)
+
+    # CRF 14 for 4K (high bitrate needed), 16 for 1080p. Preset slow for quality.
+    output_crf = 14 if is_4k else 16
 
     keep = plan.keep_segments or [
         {"start": 0.0, "end": float(transcript.get("duration", 0.0))}
@@ -662,7 +821,6 @@ def render(
     # Proxy: if the source is a heavy-decode format (ProRes, HEVC) or larger
     # than the target resolution, pre-transcode it once to a target-res H.264.
     # All segment cuts then use stream-copy on the proxy → zero decode RAM.
-    video_info = _probe_video_info(src)
     use_proxy = _needs_proxy(video_info, target_w, target_h)
     if use_proxy:
         proxy_path = work_dir / "proxy.mp4"
@@ -677,6 +835,7 @@ def render(
     remapped_words: list[WordTiming] = []
     remapped_silences: list[dict[str, Any]] = []
     remapped_vsm: list[dict[str, Any]] = []
+    cut_timestamps: list[float] = []  # output-timeline timestamps of cut points
 
     for i, seg in enumerate(keep):
         s_raw = float(seg["start"])
@@ -744,6 +903,8 @@ def render(
                     "duration": vm_dur,
                 })
 
+        if parts:  # not the first segment — record this cut point
+            cut_timestamps.append(cum)
         cum += (e - s)
 
     if not parts:
@@ -751,7 +912,6 @@ def render(
 
     concat_path = work_dir / "concat.mp4"
     _concat(parts, concat_path)
-    total_duration = _probe_duration(concat_path)
 
     # Remap b-roll windows to the cut timeline so captions pause there.
     # BUG FIX — B-ROLL TIMING:
@@ -759,8 +919,8 @@ def render(
     # confuses the viewer. Clamp the agent's suggestion into that window;
     # if the agent gave us 0s/0.1s of duration the clamp pulls it up to
     # the readable floor.
-    BROLL_MIN_S = 2.5
-    BROLL_MAX_S = 4.0
+    BROLL_MIN_S = 2.0
+    BROLL_MAX_S = 3.5
     remapped_broll: list[tuple[float, float]] = []
     for br in plan.broll_suggestions:
         try:
@@ -768,6 +928,12 @@ def render(
             br_dur = float(br.get("duration", 0))
         except (TypeError, ValueError):
             continue
+        # UPGRADE 1: anchor_word overrides at with the exact word timestamp
+        anchor = str(br.get("anchor_word") or "").strip()
+        if anchor:
+            anchor_ts = _find_word_timestamp(transcript, anchor)
+            if anchor_ts is not None:
+                br_at = anchor_ts
         br_dur = max(BROLL_MIN_S, min(BROLL_MAX_S, br_dur))
         # Find the keep_segment that contains br_at and remap.
         run = 0.0
@@ -802,6 +968,146 @@ def render(
                 break
             run += max(0.0, ee - ss)
 
+    # BREATHLESS PACING: tightest possible silence thresholds.
+    # Short-form: any pause > 0.25s → compress to 0.20s (competitor standard).
+    # Long-form: any pause > 0.6s → compress to 0.4s (cinematic breathing room).
+    _sil_min = 0.25 if short_form else 0.60
+    _sil_max = 0.20 if short_form else 0.40
+    if remapped_words:
+        long_pauses = _find_long_pauses(remapped_words, min_gap_s=_sil_min)
+        if long_pauses:
+            compressed_path = work_dir / "concat_compressed.mp4"
+            kept_intervals = _compress_pauses(
+                concat_path, compressed_path, work_dir,
+                long_pauses, max_silence_s=_sil_max,
+            )
+            if compressed_path.exists():
+                concat_path = compressed_path
+                remapped_words = [
+                    WordTiming(
+                        text=w.text,
+                        start=_remap_time(w.start, kept_intervals),
+                        end=_remap_time(w.end, kept_intervals),
+                    )
+                    for w in remapped_words
+                ]
+                remapped_zoom = [
+                    {**zp,
+                     "start": _remap_time(float(zp.get("start", 0)), kept_intervals),
+                     "end":   _remap_time(float(zp.get("end", 0)), kept_intervals)}
+                    for zp in remapped_zoom
+                ]
+                remapped_broll = [
+                    (_remap_time(bs, kept_intervals), _remap_time(be, kept_intervals))
+                    for bs, be in remapped_broll
+                ]
+                remapped_hyperframes = [
+                    {**hf, "at": _remap_time(float(hf.get("at", 0)), kept_intervals)}
+                    for hf in remapped_hyperframes
+                ]
+                remapped_silences = [
+                    {**sil, "at": _remap_time(float(sil.get("at", 0)), kept_intervals)}
+                    for sil in remapped_silences
+                ]
+                cut_timestamps = [
+                    _remap_time(ct, kept_intervals) for ct in cut_timestamps
+                ]
+
+    total_duration = _probe_duration(concat_path)
+
+    # MULTI-CAMERA SIMULATION: 4-step zoom cycle on every cut creates the
+    # illusion of different camera angles — wide / medium-CU / medium / CU.
+    _MC_ZOOM_CYCLE = [1.00, 1.12, 1.06, 1.18]
+    for ci, ct in enumerate(cut_timestamps):
+        if ct <= 0.5 or ct >= total_duration - 0.5:
+            continue
+        z_target = _MC_ZOOM_CYCLE[ci % 4]
+        remapped_zoom.append({
+            "start": ct - 0.05,
+            "end": ct + 0.15,
+            "from": 1.08,
+            "to": z_target,
+            "kind": "punch_in",
+        })
+        remapped_zoom.append({
+            "start": ct + 0.15,
+            "end": ct + 1.0,
+            "from": z_target,
+            "to": 1.08,
+            "kind": "drift",
+        })
+
+    # UPGRADE 2 — AUTO-PUNCH at hyperframe timestamps for felt impact.
+    _covered_times = {float(zp.get("start", 0)) for zp in remapped_zoom}
+    for hf in remapped_hyperframes:
+        hf_at = float(hf.get("at", 0))
+        if hf_at < 0.5 or hf_at > total_duration - 0.5:
+            continue
+        if not any(
+            abs(float(zp.get("start", 0)) - hf_at) < 0.5
+            for zp in remapped_zoom
+        ):
+            remapped_zoom.append({
+                "start": hf_at,
+                "end": hf_at + 0.05,
+                "from": 1.08,
+                "to": 1.15,
+                "kind": "punch_in",
+            })
+            remapped_zoom.append({
+                "start": hf_at + 0.05,
+                "end": hf_at + 1.2,
+                "from": 1.15,
+                "to": 1.08,
+                "kind": "drift",
+            })
+
+    # TECHNIQUE 4 — 15% DIGITAL PUNCH-IN EVERY 3 SECONDS.
+    # Insert full 1.08→1.15 punch at every 3s interval across the entire video.
+    # Skip positions already covered by another zoom event (±1.2s window).
+    _punch_t = 3.0
+    while _punch_t < total_duration - 0.5:
+        if not any(abs(float(zp.get("start", 0)) - _punch_t) < 1.2 for zp in remapped_zoom):
+            remapped_zoom.append({
+                "start": _punch_t,
+                "end": _punch_t + 0.15,
+                "from": 1.08, "to": 1.15, "kind": "punch_in",
+            })
+            remapped_zoom.append({
+                "start": _punch_t + 0.15,
+                "end": _punch_t + 1.65,
+                "from": 1.15, "to": 1.08, "kind": "drift",
+            })
+        _punch_t += 3.0
+
+    # VISUAL RHYTHM — 1.8s rule: fill any gap > 1.8s with no visual event.
+    # Rebuild the event list after all punches above have been added.
+    _all_event_times = sorted(
+        [0.0]
+        + [float(zp.get("start", 0)) for zp in remapped_zoom]
+        + [float(hf.get("at", 0)) for hf in remapped_hyperframes]
+        + [total_duration]
+    )
+    for _ei in range(len(_all_event_times) - 1):
+        _gap_s = _all_event_times[_ei]
+        _gap_e = _all_event_times[_ei + 1]
+        if _gap_e - _gap_s > 1.8:
+            _mid = (_gap_s + _gap_e) / 2
+            if 0.5 < _mid < total_duration - 0.5:
+                remapped_zoom.append({
+                    "start": _mid,
+                    "end": _mid + 0.15,
+                    "from": 1.08, "to": 1.12, "kind": "punch_in",
+                })
+                remapped_zoom.append({
+                    "start": _mid + 0.15,
+                    "end": _mid + 0.5,
+                    "from": 1.12, "to": 1.08, "kind": "drift",
+                })
+
+    # Sort the final zoom plan chronologically.
+    remapped_zoom.sort(key=lambda z: float(z.get("start", 0)))
+
     ass_path = work_dir / "captions.ass"
     build_ass(
         remapped_words,
@@ -813,6 +1119,8 @@ def render(
         position=caption_position,
         style=caption_style,
         broll_windows=remapped_broll,
+        word_colors=plan.word_colors,
+        word_categories=plan.word_categories,
     )
 
     face_cx_pct = 50.0
@@ -925,12 +1233,30 @@ def render(
     _tmp_dir = Path(_tempfile.gettempdir())
     _base_path = _tmp_dir / f"base_{output_path.stem}.mp4"
 
-    _zoom_str = (
-        f"zoompan=z=1.04"
-        f":x=iw/2-(iw/zoom/2)"
-        f":y=ih/2-(ih/zoom/2)"
-        f":d=1:s={target_w}x{target_h}:fps={fps}"
-    )
+    # UPGRADE 2 — DYNAMIC ZOOM EXPRESSION from the full zoom plan.
+    # Cap at 30 entries to keep expression length manageable.
+    _zoom_for_expr = remapped_zoom[:30] if len(remapped_zoom) > 30 else remapped_zoom
+    if _zoom_for_expr:
+        _z_expr, _xy_expr = _build_zoom_expression(
+            _zoom_for_expr, total_duration, fps, face_cx_pct, face_cy_pct
+        )
+        _zx_str, _zy_str = _xy_expr.split(";")
+        _z_safe = _escape_for_vf(_z_expr)
+        _zx_safe = _escape_for_vf(_zx_str)
+        _zy_safe = _escape_for_vf(_zy_str)
+        _zoom_str = (
+            f"zoompan=z='{_z_safe}'"
+            f":x='{_zx_safe}'"
+            f":y='{_zy_safe}'"
+            f":d=1:s={target_w}x{target_h}:fps={fps}"
+        )
+    else:
+        _zoom_str = (
+            f"zoompan=z=1.08"
+            f":x=iw/2-(iw/zoom/2)"
+            f":y=ih/2-(ih/zoom/2)"
+            f":d=1:s={target_w}x{target_h}:fps={fps}"
+        )
     _vf_p1 = [p for p in [color_grade, scale_filter, _zoom_str] if p]
     _cmd_p1: list[str] = [
         FFMPEG_PATH, "-y", "-loglevel", "error",
@@ -954,9 +1280,9 @@ def render(
     _cmd_p1 += ["-map", "0:a"]
     _cmd_p1 += [
         "-frames:v", str(total_frames),
-        "-c:v", "libx264", "-preset", "medium", "-crf", "16",
+        "-c:v", "libx264", "-preset", "slow", "-crf", str(output_crf),
         "-threads", "4",
-        "-x264-params", "rc-lookahead=32:bframes=3",
+        "-x264-params", "rc-lookahead=48:bframes=3",
         "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "192k",
         str(_base_path),
@@ -988,7 +1314,7 @@ def render(
             "-i", str(_clip_path),
             "-filter_complex", _fc_ov,
             "-map", "[out]", "-map", "0:a",
-            "-c:v", "libx264", "-preset", "medium", "-crf", "16",
+            "-c:v", "libx264", "-preset", "medium", "-crf", "14",
             "-threads", "4",
             "-x264-params", "rc-lookahead=32:bframes=3",
             "-pix_fmt", "yuv420p",
@@ -1010,9 +1336,9 @@ def render(
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-i", str(_nocap_path),
         "-vf", f"subtitles={_ass_str}",
-        "-c:v", "libx264", "-preset", "medium", "-crf", "16",
+        "-c:v", "libx264", "-preset", "slow", "-crf", str(output_crf),
         "-threads", "4",
-        "-x264-params", "rc-lookahead=32:bframes=3",
+        "-x264-params", "rc-lookahead=48:bframes=3",
         "-pix_fmt", "yuv420p",
         "-c:a", "copy",
         "-movflags", "+faststart",

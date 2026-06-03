@@ -1,13 +1,16 @@
 """Build .ass subtitle files.
 
 Caption system — professional short-form edutainment standard:
-  - 2–3 words per caption frame (grouped on pauses ≥ 0.25s)
+  - kinetic mode: 1 word per frame, each pops on its exact syllable timestamp
+  - impact mode: 2–3 words per frame (grouped on pauses ≥ 0.25s)
   - Every spoken word appears — no gaps in the caption track
   - Emphasis words: larger (1.3×) + salmon colour (#FF7751) — always Title Case
-  - Normal words: sentence case, white, clean 2px black outline
-  - Position: bottom 15% of frame (MarginV = 15% of PlayResY), never covers face
+  - Normal words: sentence case, white, clean 3px black outline (kinetic) / 2px (impact)
+  - Position: center 45% from top (kinetic, mobile eye focus zone)
+              bottom 20% of frame (impact, MarginV = 20% of PlayResY)
   - No shadow. Outline only.
-  - Font: DejaVu Sans Bold (maps from Poppins/Montserrat on Linux)
+  - Font: Inter Bold (installed) or DejaVu Sans Bold fallback
+  - Color hierarchy: time/location=cyan, action=purple, emotion=red, hook=salmon, normal=white
 """
 
 from __future__ import annotations
@@ -22,7 +25,7 @@ ALLOWED_FONTS = {
     "Poppins Bold", "Poppins ExtraBold", "Poppins SemiBold",
     "Inter Bold", "Montserrat Bold", "Montserrat Black",
     "Roboto Bold", "Bebas Neue", "DM Sans Bold", "Space Grotesk Bold",
-    "DejaVu Sans Bold",
+    "DejaVu Sans Bold", "SF Compact Bold",
 }
 
 ALLOWED_COLORS = {
@@ -36,20 +39,31 @@ ALLOWED_COLORS = {
 ALLOWED_POSITIONS = {"center", "bottom", "side-left", "side-right"}
 ALLOWED_STYLES    = {"impact", "kinetic"}
 
-# 5% of PlayResY — bold and readable at full screen.
-CAP_SIZE_SHORT      = 96   # 5% of 1920
-CAP_SIZE_LONG       = 54   # 5% of 1080
-# Emphasis words: 1.3× larger (Title Case, salmon #FF7751)
-CAP_SIZE_SHORT_EMPH = 125  # ~6.5% of 1920
-CAP_SIZE_LONG_EMPH  = 70   # ~6.5% of 1080
+# 5% of frame height — readable at full screen, TikTok/Reels standard.
+CAP_SIZE_SHORT      = 96   # 5.0% of 1920
+CAP_SIZE_LONG       = 54   # 5.0% of 1080
+# Emphasis / colored words: 6.5% frame height (Title Case, salmon #FF7751)
+CAP_SIZE_SHORT_EMPH = 125  # 6.5% of 1920
+CAP_SIZE_LONG_EMPH  = 70   # 6.5% of 1080
 
 # Salmon accent colour for emphasis words (matches brand)
 EMPHASIS_COLOR_ASS = "&H005177FF"  # BGR for #FF7751
 
+# Word category color map — kinetic color hierarchy
+# Key = category name from plan's word_categories dict
+# Value = ASS &H00BBGGRR color string
+CATEGORY_COLOR_ASS: dict[str, str] = {
+    "time":     "&H00FFFF00",  # cyan    #00FFFF
+    "location": "&H00FFFF00",  # cyan    #00FFFF
+    "action":   "&H00F020A0",  # purple  #A020F0
+    "emotion":  "&H00303BFF",  # red     #FF3B30
+    "hook":     "&H005177FF",  # salmon  #FF7751 (same as emphasis)
+}
+
 PUNCT_RE = re.compile(r"[.,!?;:\"'()\[\]…–—]")
 
-# 1-frame lead so captions feel synced (brain reads ~33ms ahead of audio).
-CAPTION_LEAD_S: float = 1.0 / 30.0  # 33 ms
+# 50ms delay: caption appears slightly after the word starts — feels most natural.
+CAPTION_DELAY_S: float = 0.05
 
 # Group words separated by less than this gap into one caption line.
 WORD_GROUP_GAP_S: float = 0.25   # 250 ms — natural breath pause threshold
@@ -70,13 +84,14 @@ _FONT_MAP: dict[str, str] = {
     "Poppins Bold":       "DejaVu Sans Bold",
     "Poppins ExtraBold":  "DejaVu Sans Bold",
     "Poppins SemiBold":   "DejaVu Sans Bold",
-    "Inter Bold":         "DejaVu Sans Bold",
+    # "Inter Bold" intentionally omitted — now installed via apt/download in Dockerfile
     "Montserrat Bold":    "DejaVu Sans Bold",
     "Montserrat Black":   "DejaVu Sans Bold",
     "Roboto Bold":        "DejaVu Sans Bold",
     "DM Sans Bold":       "DejaVu Sans Bold",
     "Space Grotesk Bold": "DejaVu Sans Bold",
     "Bebas Neue":         "DejaVu Sans Bold",
+    "SF Compact Bold":    "DejaVu Sans Bold",
 }
 
 
@@ -116,33 +131,39 @@ def _ass_header(
     cap_size      = CAP_SIZE_SHORT      if short_form else CAP_SIZE_LONG
     cap_size_emph = CAP_SIZE_SHORT_EMPH if short_form else CAP_SIZE_LONG_EMPH
 
-    # MarginV = 15% of PlayResY from bottom → captions sit in bottom 20% zone
-    margin_v = int(play_res_y * 0.15)
+    # Kinetic captions: center of frame (45% from top), mobile eye focus zone.
+    # Impact captions: bottom 20% of frame (traditional safe zone).
+    # ASS alignment: 8 = top-center (MarginV from top), 2 = bottom-center (MarginV from bottom).
+    if position == "center" or style == "kinetic":
+        alignment = 8
+        margin_v = int(play_res_y * 0.42)  # text top at 42% → center at ~45%
+    else:
+        alignment = 2
+        margin_v = int(play_res_y * 0.20)
 
     if style == "kinetic":
-        # Kinetic bar: dark semi-transparent background behind text
-        back     = "&HE61A1A1A"
-        # Default words: white on dark bar
+        # Kinetic: each word pops independently. 3px outline, no background bar.
+        # Background bar removed — cleaner look for single-word cards.
+        outline_px = 3
         default_line = (
             f"Style: Default,{font_name},{cap_size},{primary},{primary},"
-            f"&H00000000,{back},1,0,0,0,100,100,0,0,4,12,0,2,60,60,{margin_v},1"
+            f"&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,{outline_px},0,{alignment},60,60,{margin_v},1"
         )
-        # Emphasis: salmon on dark bar, slightly larger
         emphasis_line = (
             f"Style: Emphasis,{font_name},{cap_size_emph},{EMPHASIS_COLOR_ASS},{EMPHASIS_COLOR_ASS},"
-            f"&H00000000,{back},1,0,0,0,100,100,0,0,4,12,0,2,60,60,{margin_v},1"
+            f"&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,{outline_px},0,{alignment},60,60,{margin_v},1"
         )
     else:
         # Impact: clean 2px black outline, no shadow (Shadow=0)
         # Default words: white, outline only
         default_line = (
             f"Style: Default,{font_name},{cap_size},{primary},{primary},"
-            f"&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,2,0,2,60,60,{margin_v},1"
+            f"&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,2,0,{alignment},60,60,{margin_v},1"
         )
         # Emphasis: salmon colour, 1.3× size, bolder outline
         emphasis_line = (
             f"Style: Emphasis,{font_name},{cap_size_emph},{EMPHASIS_COLOR_ASS},{EMPHASIS_COLOR_ASS},"
-            f"&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,3,0,2,60,60,{margin_v},1"
+            f"&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,3,0,{alignment},60,60,{margin_v},1"
         )
 
     return (
@@ -202,18 +223,24 @@ def build_ass(
     out_path: Path,
     short_form: bool,
     emphasis_words: set[str] | None = None,
-    font: str = "Poppins Bold",
+    font: str = "Inter Bold",
     color: str = "white",
-    position: str = "bottom",
-    style: str = "impact",
+    position: str = "center",
+    style: str = "kinetic",
     broll_windows: Iterable[tuple[float, float]] = (),
     emphasis_only: bool = False,
+    word_colors: dict[str, str] | None = None,
+    word_categories: dict[str, str] | None = None,
 ) -> Path:
     """Render captions to an ASS file.
 
-    Groups words into 2–3-word caption frames. Every spoken word gets a
-    caption (emphasis_only=False by default). Emphasis words are displayed
-    larger and in salmon (#FF7751).
+    kinetic style (default): 1 word per frame, pops on its exact spoken timestamp.
+      Each word is independently timed. Color hierarchy: categories > word_colors >
+      emphasis > white.
+    impact style: 2–3-word caption frames grouped on natural pauses.
+
+    word_categories: {"word": "time"|"location"|"action"|"emotion"|"hook"} —
+      category-based color overrides applied per word.
     """
     # Font mapping: UI name → installed system font
     font = _FONT_MAP.get(font, font)
@@ -222,11 +249,12 @@ def build_ass(
 
     color_hex = ALLOWED_COLORS.get(color.lower(), color if color.startswith("#") else "FFFFFF")
     if position not in ALLOWED_POSITIONS:
-        position = "bottom"
+        position = "center"
     if style not in ALLOWED_STYLES:
-        style = "impact"
-    if style == "kinetic":
-        position = "bottom"
+        style = "kinetic"
+    # kinetic forces center positioning — mobile eye focus zone, avoids UI buttons.
+    if style == "kinetic" and position not in {"center"}:
+        position = "center"
 
     emphasis_set = {_strip_punct(w).lower() for w in (emphasis_words or set())}
     broll_list   = list(broll_windows)
@@ -234,7 +262,21 @@ def build_ass(
 
     lines = [_ass_header(short_form, font, color_hex, position, style)]
 
-    groups = _group_words(word_list)
+    word_color_map = {k.strip().lower(): v for k, v in (word_colors or {}).items()}
+    # word_categories: key is the ORIGINAL word (case-preserved from the plan).
+    # Normalise to lowercase for lookup.
+    word_cat_map = {k.strip().lower(): v.strip().lower()
+                    for k, v in (word_categories or {}).items()}
+
+    # Kinetic: 1 word per group so each pops independently on its exact timestamp.
+    # Impact: 2–3 words per group separated by natural breath pauses.
+    if style == "kinetic":
+        groups = _group_words(word_list, max_words=1)
+    else:
+        groups = _group_words(word_list)
+
+    cap_size_emph = CAP_SIZE_SHORT_EMPH if short_form else CAP_SIZE_LONG_EMPH
+
     for group in groups:
         # Skip groups entirely inside b-roll windows
         mid = (group[0].start + group[-1].end) / 2
@@ -251,24 +293,43 @@ def build_ass(
         if emphasis_only and not has_emphasis:
             continue
 
-        # Per-word inline ASS tags: emphasis words get salmon colour + larger size,
-        # all other words stay in Default style at normal size.
-        cap_size_emph = CAP_SIZE_SHORT_EMPH if short_form else CAP_SIZE_LONG_EMPH
+        # Color priority per word:
+        #   1. word_categories (time/location/action/emotion/hook) → category color
+        #   2. word_colors (direct hex override)
+        #   3. emphasis_set → salmon + larger size
+        #   4. default → white (no inline tag)
         display_parts: list[str] = []
         for i, w in enumerate(clean_words):
-            if w.lower() in emphasis_set:
-                # Inline override: salmon colour + emphasis size, then reset
+            w_lower = w.lower()
+            cat = word_cat_map.get(w_lower)
+            custom_color = word_color_map.get(w_lower)
+
+            if cat and cat in CATEGORY_COLOR_ASS:
+                # Category color — enlarged to emphasis size for visual pop.
+                cat_ass = CATEGORY_COLOR_ASS[cat]
+                label = w.upper() if style == "kinetic" else (w.capitalize() if i == 0 else w.lower())
+                display_parts.append(
+                    f"{{\\c{cat_ass}\\fs{cap_size_emph}}}{label}{{\\r}}"
+                )
+            elif custom_color:
+                color_ass = _hex_to_ass_bgr(custom_color)
+                label = w.capitalize() if i == 0 else w.lower()
+                display_parts.append(f"{{\\c{color_ass}}}{label}{{\\r}}")
+            elif w_lower in emphasis_set:
                 display_parts.append(
                     f"{{\\c{EMPHASIS_COLOR_ASS}\\fs{cap_size_emph}}}{w.title()}{{\\r}}"
                 )
+            elif style == "kinetic":
+                # Kinetic normal words: ALL CAPS for impact at the center.
+                display_parts.append(w.upper())
             elif i == 0:
                 display_parts.append(w.capitalize())
             else:
                 display_parts.append(w.lower())
         display = " ".join(display_parts)
 
-        # Always use Default style; per-word overrides handle emphasis inline
-        start = max(0.0, group[0].start - CAPTION_LEAD_S)
+        # Caption appears 50ms after the word starts — never before the speaker.
+        start = max(0.0, group[0].start + CAPTION_DELAY_S)
         end   = group[-1].end
         lines.append(
             f"Dialogue: 0,{_ts(start)},{_ts(end)},Default,,0,0,0,,{display}"
