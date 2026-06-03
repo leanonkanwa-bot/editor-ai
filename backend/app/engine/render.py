@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from app.agent.planner import EditPlan
+from app.core.config import settings
 from app.engine.captions import WordTiming, build_ass
 from app.engine.transcribe import FFMPEG_PATH, FFPROBE_PATH
 from app.engine.graphics import (
@@ -501,8 +502,9 @@ def _build_zoom_expression(
         t = f"min(1,max(0,(on-{f0})/{seg_dur}))"
 
         if kind == "punch_in":
-            # Hard cut — no interpolation. The whole window holds at z_to.
-            seg_expr = f"{z_to}"
+            # Smooth punch — smoothstep easing, no hard velocity jump.
+            ease = f"({t})*({t})*(3-2*({t}))"
+            seg_expr = f"({z_from}+({z_to}-{z_from})*({ease}))"
         else:
             # Smoothstep easing: s = t*t*(3-2*t). Zero derivative at both ends
             # → no velocity discontinuity at segment boundaries → no shake.
@@ -767,12 +769,42 @@ def _color_grade_filter(content_type: str) -> str:
     Applied FIRST in the filter chain so all subsequent overlays inherit the grade.
     """
     profiles: dict[str, str] = {
-        "coaching":   "eq=contrast=1.15:saturation=1.1,colorbalance=rs=0.05:bs=-0.03",
+        "coaching":   "eq=contrast=1.2:brightness=0.05:saturation=1.15,colorbalance=rs=0.03:gs=0.01:bs=-0.02",
         "education":  "eq=brightness=0.05:contrast=1.1,unsharp=5:5:1.0:5:5:0.0",
         "motivation": "eq=contrast=1.2:gamma=0.95,colorbalance=rs=0.08:gs=0.03",
         "story":      "eq=saturation=0.9:contrast=1.05,colorbalance=rs=0.03",
     }
     return profiles.get(content_type.lower(), "eq=contrast=1.1:saturation=1.05")
+
+
+def _apply_depth_of_field(src: Path, dst: Path, target_w: int, target_h: int) -> None:
+    """Background blur (depth-of-field simulation) for portrait talking-head content.
+
+    Splits the frame into a blurred background copy and a scaled-down sharp
+    foreground copy, then composites the sharp layer centered on the blur.
+    Only called for coaching/education content_type.
+    """
+    fg_w = int(target_w * 0.65) & ~1   # ensure even for yuv420p
+    fg_h = int(target_h * 0.65) & ~1
+    _run([
+        FFMPEG_PATH, "-y", "-loglevel", "error",
+        "-threads", "1",
+        "-i", str(src),
+        "-filter_complex",
+        (
+            "split[bg][fg];"
+            "[bg]boxblur=lr=8:lp=2[blurred];"
+            f"[fg]scale={fg_w}:{fg_h}[sharp];"
+            "[blurred][sharp]overlay=(W-w)/2:(H-h)/2[out]"
+        ),
+        "-map", "[out]",
+        "-map", "0:a",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+        "-threads", "1",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "copy",
+        str(dst),
+    ])
 
 
 def render(
@@ -1018,25 +1050,30 @@ def render(
 
     total_duration = _probe_duration(concat_path)
 
-    # MULTI-CAMERA SIMULATION: 4-step zoom cycle on every cut creates the
-    # illusion of different camera angles — wide / medium-CU / medium / CU.
-    _MC_ZOOM_CYCLE = [1.00, 1.12, 1.06, 1.18]
-    for ci, ct in enumerate(cut_timestamps):
-        if ct <= 0.5 or ct >= total_duration - 0.5:
+    # FIX 3: Background blur (depth-of-field) for coaching/education content.
+    # Simulates a shallow depth-of-field: blurred background + sharp subject overlay.
+    if content_type.lower() in {"coaching", "education"}:
+        _dof_path = work_dir / "concat_dof.mp4"
+        try:
+            _apply_depth_of_field(concat_path, _dof_path, target_w, target_h)
+            if _dof_path.exists():
+                concat_path = _dof_path
+        except Exception:
+            pass  # DoF is aesthetic-only; skip gracefully if it fails
+
+    # SMOOTH PUSH-IN per segment: cinematic slow zoom 1.0→1.06 over the full
+    # duration of each segment. Replaces the jarring multi-camera zoom-cut cycle.
+    _seg_boundaries = [0.0] + cut_timestamps + [total_duration]
+    for _si in range(len(_seg_boundaries) - 1):
+        _seg_s = _seg_boundaries[_si]
+        _seg_e = _seg_boundaries[_si + 1]
+        if _seg_e - _seg_s < 0.5:
             continue
-        z_target = _MC_ZOOM_CYCLE[ci % 4]
         remapped_zoom.append({
-            "start": ct - 0.05,
-            "end": ct + 0.15,
-            "from": 1.08,
-            "to": z_target,
-            "kind": "punch_in",
-        })
-        remapped_zoom.append({
-            "start": ct + 0.15,
-            "end": ct + 1.0,
-            "from": z_target,
-            "to": 1.08,
+            "start": _seg_s,
+            "end": _seg_e,
+            "from": 1.0,
+            "to": 1.06,
             "kind": "drift",
         })
 
@@ -1333,6 +1370,31 @@ def render(
     _nocap_path.unlink(missing_ok=True)
     for _p in _overlay_intermediates:
         _p.unlink(missing_ok=True)
+
+    # FIX 5: Background music infrastructure (-28dB ambient bed).
+    # Set BACKGROUND_MUSIC_PATH=/path/to/music.mp3 in .env to enable.
+    # When no file is configured or the file is missing, this is a no-op.
+    _music_path = Path(settings.background_music_path) if settings.background_music_path else None
+    if _music_path and _music_path.exists():
+        _music_out = output_path.with_suffix(".withmusic.mp4")
+        try:
+            _run([
+                FFMPEG_PATH, "-y", "-loglevel", "error",
+                "-i", str(output_path),
+                "-stream_loop", "-1", "-i", str(_music_path),
+                "-filter_complex",
+                "[1:a]volume=-28dB[music];[0:a][music]amix=inputs=2:duration=first[aout]",
+                "-map", "0:v",
+                "-map", "[aout]",
+                "-c:v", "copy",
+                "-c:a", "aac", "-b:a", "192k",
+                "-movflags", "+faststart",
+                str(_music_out),
+            ])
+            import os as _os
+            _os.replace(str(_music_out), str(output_path))
+        except Exception:
+            pass  # Music mix failed — ship clean audio instead
 
     return {
         "output": str(output_path),

@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     # How long to keep uploaded source videos on disk (hours).
     upload_retention_hours: int = 24
 
+    # Absolute path to a background music MP3/WAV to mix at -28dB under the voice.
+    # Leave empty to disable. Set BACKGROUND_MUSIC_PATH in .env to enable.
+    background_music_path: str = ""
+
     @property
     def uploads_dir(self) -> Path:
         return (BACKEND_DIR / self.storage_uploads).resolve()

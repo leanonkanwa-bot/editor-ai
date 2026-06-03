@@ -5,12 +5,12 @@ Caption system — professional short-form edutainment standard:
   - impact mode: 2–3 words per frame (grouped on pauses ≥ 0.25s)
   - Every spoken word appears — no gaps in the caption track
   - Emphasis words: larger (1.3×) + salmon colour (#FF7751) — always Title Case
-  - Normal words: sentence case, white, clean 3px black outline (kinetic) / 2px (impact)
+  - Normal words: sentence case, white, soft 1px drop shadow (no outline)
   - Position: center 45% from top (kinetic, mobile eye focus zone)
               bottom 20% of frame (impact, MarginV = 20% of PlayResY)
-  - No shadow. Outline only.
+  - Shadow only (no outline) — softer, more legible on mixed backgrounds.
   - Font: Inter Bold (installed) or DejaVu Sans Bold fallback
-  - Color hierarchy: time/location=cyan, action=purple, emotion=red, hook=salmon, normal=white
+  - Color hierarchy: time/location=sky-blue, action=white, emotion=light-red, hook=salmon, normal=white
 """
 
 from __future__ import annotations
@@ -53,11 +53,11 @@ EMPHASIS_COLOR_ASS = "&H005177FF"  # BGR for #FF7751
 # Key = category name from plan's word_categories dict
 # Value = ASS &H00BBGGRR color string
 CATEGORY_COLOR_ASS: dict[str, str] = {
-    "time":     "&H00FFFF00",  # cyan    #00FFFF
-    "location": "&H00FFFF00",  # cyan    #00FFFF
-    "action":   "&H00F020A0",  # purple  #A020F0
-    "emotion":  "&H00303BFF",  # red     #FF3B30
-    "hook":     "&H005177FF",  # salmon  #FF7751 (same as emphasis)
+    "time":     "&H00EBCE87",  # sky-blue  #87CEEB
+    "location": "&H00EBCE87",  # sky-blue  #87CEEB
+    "action":   "&H00FFFFFF",  # white     #FFFFFF (replaced harsh purple)
+    "emotion":  "&H006B6BFF",  # light-red #FF6B6B
+    "hook":     "&H005177FF",  # salmon    #FF7751 (same as emphasis)
 }
 
 PUNCT_RE = re.compile(r"[.,!?;:\"'()\[\]…–—]")
@@ -142,28 +142,26 @@ def _ass_header(
         margin_v = int(play_res_y * 0.20)
 
     if style == "kinetic":
-        # Kinetic: each word pops independently. 3px outline, no background bar.
-        # Background bar removed — cleaner look for single-word cards.
-        outline_px = 3
+        # Kinetic: each word pops independently. Soft 1px drop shadow, no outline.
+        # Shadow + no outline = legible on any background without the heavy stroke look.
         default_line = (
             f"Style: Default,{font_name},{cap_size},{primary},{primary},"
-            f"&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,{outline_px},0,{alignment},60,60,{margin_v},1"
+            f"&H00000000,&H40000000,1,0,0,0,100,100,0,0,1,0,1,{alignment},60,60,{margin_v},1"
         )
         emphasis_line = (
             f"Style: Emphasis,{font_name},{cap_size_emph},{EMPHASIS_COLOR_ASS},{EMPHASIS_COLOR_ASS},"
-            f"&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,{outline_px},0,{alignment},60,60,{margin_v},1"
+            f"&H00000000,&H40000000,1,0,0,0,100,100,0,0,1,0,1,{alignment},60,60,{margin_v},1"
         )
     else:
-        # Impact: clean 2px black outline, no shadow (Shadow=0)
-        # Default words: white, outline only
+        # Impact: soft 1px drop shadow, no outline — matches kinetic readability standard.
         default_line = (
             f"Style: Default,{font_name},{cap_size},{primary},{primary},"
-            f"&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,2,0,{alignment},60,60,{margin_v},1"
+            f"&H00000000,&H40000000,1,0,0,0,100,100,0,0,1,0,1,{alignment},60,60,{margin_v},1"
         )
-        # Emphasis: salmon colour, 1.3× size, bolder outline
+        # Emphasis: salmon colour, 1.3× size, same soft shadow
         emphasis_line = (
             f"Style: Emphasis,{font_name},{cap_size_emph},{EMPHASIS_COLOR_ASS},{EMPHASIS_COLOR_ASS},"
-            f"&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,3,0,{alignment},60,60,{margin_v},1"
+            f"&H00000000,&H40000000,1,0,0,0,100,100,0,0,1,0,1,{alignment},60,60,{margin_v},1"
         )
 
     return (
