@@ -1,12 +1,13 @@
 """Build .ass subtitle files.
 
-Hard rules (Hormozi/Sanchez/MrBeast caption system):
-  - ONE word per card. Always. No exceptions.
-  - One single color + subtle shadow/outline for readability.
-  - Font is Poppins Bold by default. User can pick from a small allowlist.
-  - Emphasis-only mode (default): captions appear ONLY for emphasis words.
-  - No punctuation in captions.
-  - Words appear ONLY when they are spoken — start..end of each word.
+Caption system — professional short-form edutainment standard:
+  - 2–3 words per caption frame (grouped on pauses ≥ 0.25s)
+  - Every spoken word appears — no gaps in the caption track
+  - Emphasis words: larger (1.3×) + salmon colour (#FF7751) — always Title Case
+  - Normal words: sentence case, white, clean 2px black outline
+  - Position: bottom 15% of frame (MarginV = 15% of PlayResY), never covers face
+  - No shadow. Outline only.
+  - Font: DejaVu Sans Bold (maps from Poppins/Montserrat on Linux)
 """
 
 from __future__ import annotations
@@ -17,46 +18,42 @@ from pathlib import Path
 from typing import Iterable
 
 
-# Allowed fonts — must be installed in the Docker image (see Dockerfile).
 ALLOWED_FONTS = {
-    "Poppins Bold",
-    "Poppins ExtraBold",
-    "Poppins SemiBold",
-    "Inter Bold",
-    "Montserrat Bold",
-    "Montserrat Black",
-    "Roboto Bold",
-    "Bebas Neue",
-    "DM Sans Bold",
-    "Space Grotesk Bold",
+    "Poppins Bold", "Poppins ExtraBold", "Poppins SemiBold",
+    "Inter Bold", "Montserrat Bold", "Montserrat Black",
+    "Roboto Bold", "Bebas Neue", "DM Sans Bold", "Space Grotesk Bold",
+    "DejaVu Sans Bold",
 }
 
 ALLOWED_COLORS = {
-    "white": "FFFFFF",
+    "white":  "FFFFFF",
     "yellow": "FFE500",
-    "red": "FF3B30",
-    "blue": "0A84FF",
+    "red":    "FF3B30",
+    "blue":   "0A84FF",
     "orange": "FF6B00",
 }
 
 ALLOWED_POSITIONS = {"center", "bottom", "side-left", "side-right"}
+ALLOWED_STYLES    = {"impact", "kinetic"}
 
-# Caption styles — each is a different visual treatment of the one-word card.
-ALLOWED_STYLES = {"impact", "kinetic"}
+# 5% of PlayResY — bold and readable at full screen.
+CAP_SIZE_SHORT      = 96   # 5% of 1920
+CAP_SIZE_LONG       = 54   # 5% of 1080
+# Emphasis words: 1.3× larger (Title Case, salmon #FF7751)
+CAP_SIZE_SHORT_EMPH = 125  # ~6.5% of 1920
+CAP_SIZE_LONG_EMPH  = 70   # ~6.5% of 1080
 
-# Single consistent caption size: ~7% of PlayResY.
-# One size for all captions — no tier system, no inconsistency between renders.
-# ASS PlayResY is 1920 for short form, 1080 for long form.
-CAP_SIZE_SHORT = 134    # 7.0% of 1920
-CAP_SIZE_LONG = 76      # 7.0% of 1080
+# Salmon accent colour for emphasis words (matches brand)
+EMPHASIS_COLOR_ASS = "&H005177FF"  # BGR for #FF7751
 
 PUNCT_RE = re.compile(r"[.,!?;:\"'()\[\]…–—]")
 
-# Prime the viewer 1 frame before the word is fully spoken (Typography Engine rule).
-# At 30fps one frame = 0.0333s. The caption appears this much earlier than the
-# word's detected start — the brain processes text ~100ms ahead of audio, so this
-# keeps perception in sync rather than making captions feel late.
-CAPTION_LEAD_S: float = 1.0 / 30.0  # ~33ms
+# 1-frame lead so captions feel synced (brain reads ~33ms ahead of audio).
+CAPTION_LEAD_S: float = 1.0 / 30.0  # 33 ms
+
+# Group words separated by less than this gap into one caption line.
+WORD_GROUP_GAP_S: float = 0.25   # 250 ms — natural breath pause threshold
+MAX_WORDS_PER_GROUP: int = 3
 
 
 @dataclass
@@ -64,6 +61,23 @@ class WordTiming:
     text: str
     start: float
     end: float
+
+
+# ── Font mapping ──────────────────────────────────────────────────────────────
+# Railway ships Debian; Poppins/Montserrat/Inter are not installed by default.
+# Map all UI font names to a font that is actually present on the server.
+_FONT_MAP: dict[str, str] = {
+    "Poppins Bold":       "DejaVu Sans Bold",
+    "Poppins ExtraBold":  "DejaVu Sans Bold",
+    "Poppins SemiBold":   "DejaVu Sans Bold",
+    "Inter Bold":         "DejaVu Sans Bold",
+    "Montserrat Bold":    "DejaVu Sans Bold",
+    "Montserrat Black":   "DejaVu Sans Bold",
+    "Roboto Bold":        "DejaVu Sans Bold",
+    "DM Sans Bold":       "DejaVu Sans Bold",
+    "Space Grotesk Bold": "DejaVu Sans Bold",
+    "Bebas Neue":         "DejaVu Sans Bold",
+}
 
 
 def _ts(t: float) -> str:
@@ -88,23 +102,6 @@ def _hex_to_ass_bgr(hex6: str) -> str:
     return f"&H00{b}{g}{r}"
 
 
-def _alignment_for(position: str) -> tuple[int, int, int, int]:
-    """Return (Alignment, MarginL, MarginR, MarginV) for ASS Default style.
-
-    Alignment numbers:
-       1 = bottom-left, 2 = bottom-center, 3 = bottom-right,
-       4 = mid-left,    5 = mid-center,    6 = mid-right,
-       7 = top-left,    8 = top-center,    9 = top-right.
-    """
-    if position == "bottom":
-        return (2, 60, 60, 320)
-    if position == "side-left":
-        return (4, 80, 60, 0)
-    if position == "side-right":
-        return (6, 60, 80, 0)
-    return (5, 60, 60, 0)  # center default
-
-
 def _ass_header(
     short_form: bool,
     font_name: str,
@@ -113,39 +110,39 @@ def _ass_header(
     style: str = "impact",
 ) -> str:
     primary = _hex_to_ass_bgr(color_hex)
-    align, ml, mr, mv = _alignment_for(position)
-
-    cap_size = CAP_SIZE_SHORT if short_form else CAP_SIZE_LONG
 
     play_res_y = 1920 if short_form else 1080
     play_res_x = 1080 if short_form else 1920
+    cap_size      = CAP_SIZE_SHORT      if short_form else CAP_SIZE_LONG
+    cap_size_emph = CAP_SIZE_SHORT_EMPH if short_form else CAP_SIZE_LONG_EMPH
+
+    # MarginV = 15% of PlayResY from bottom → captions sit in bottom 20% zone
+    margin_v = int(play_res_y * 0.15)
 
     if style == "kinetic":
-        # Style 4 — Kinetic Bottom Bar: dark bar background, white text on top.
-        # BorderStyle=4 makes BackColour fill a box behind the text.
-        # &HE61A1A1A = ~90% opaque dark grey (alpha 0xE6, BGR 1A1A1A).
-        back = "&HE61A1A1A"
-        align_v = 2  # bottom-center
-        margin_v = 200
+        # Kinetic bar: dark semi-transparent background behind text
+        back     = "&HE61A1A1A"
+        # Default words: white on dark bar
         default_line = (
             f"Style: Default,{font_name},{cap_size},{primary},{primary},"
-            f"&H00000000,{back},1,0,0,0,100,100,0,0,4,12,0,{align_v},80,80,{margin_v},1"
+            f"&H00000000,{back},1,0,0,0,100,100,0,0,4,12,0,2,60,60,{margin_v},1"
         )
+        # Emphasis: salmon on dark bar, slightly larger
         emphasis_line = (
-            f"Style: Emphasis,{font_name},{cap_size},{primary},{primary},"
-            f"&H00000000,{back},1,0,0,0,100,100,0,0,4,12,0,{align_v},80,80,{margin_v},1"
+            f"Style: Emphasis,{font_name},{cap_size_emph},{EMPHASIS_COLOR_ASS},{EMPHASIS_COLOR_ASS},"
+            f"&H00000000,{back},1,0,0,0,100,100,0,0,4,12,0,2,60,60,{margin_v},1"
         )
     else:
-        # Style 1 — Impact: single size, 2px outline + 2px drop shadow for
-        # readability. OutlineColour=black, shadow from semi-transparent black.
-        # BorderStyle=1: outline+shadow. Outline=2, Shadow=2.
+        # Impact: clean 2px black outline, no shadow (Shadow=0)
+        # Default words: white, outline only
         default_line = (
             f"Style: Default,{font_name},{cap_size},{primary},{primary},"
-            f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,2,2,{align},{ml},{mr},{mv},1"
+            f"&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,2,0,2,60,60,{margin_v},1"
         )
+        # Emphasis: salmon colour, 1.3× size, bolder outline
         emphasis_line = (
-            f"Style: Emphasis,{font_name},{cap_size},{primary},{primary},"
-            f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,2,2,{align},{ml},{mr},{mv},1"
+            f"Style: Emphasis,{font_name},{cap_size_emph},{EMPHASIS_COLOR_ASS},{EMPHASIS_COLOR_ASS},"
+            f"&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,3,0,2,60,60,{margin_v},1"
         )
 
     return (
@@ -171,6 +168,35 @@ def _in_window(t: float, windows: Iterable[tuple[float, float]]) -> bool:
     return any(s <= t <= e for s, e in windows)
 
 
+def _group_words(
+    words: list[WordTiming],
+    max_words: int = MAX_WORDS_PER_GROUP,
+    gap_s: float = WORD_GROUP_GAP_S,
+) -> list[list[WordTiming]]:
+    """Group consecutive words into caption frames.
+
+    A new group starts when either:
+      - The gap to the next word is ≥ gap_s (natural pause / breath)
+      - The current group already has max_words words
+    This produces 2–3 word caption cards that feel natural and readable.
+    """
+    groups: list[list[WordTiming]] = []
+    current: list[WordTiming] = []
+    for w in words:
+        if current:
+            gap = w.start - current[-1].end
+            if gap >= gap_s or len(current) >= max_words:
+                groups.append(current)
+                current = [w]
+            else:
+                current.append(w)
+        else:
+            current = [w]
+    if current:
+        groups.append(current)
+    return groups
+
+
 def build_ass(
     words: Iterable[WordTiming],
     out_path: Path,
@@ -178,49 +204,74 @@ def build_ass(
     emphasis_words: set[str] | None = None,
     font: str = "Poppins Bold",
     color: str = "white",
-    position: str = "center",
+    position: str = "bottom",
     style: str = "impact",
     broll_windows: Iterable[tuple[float, float]] = (),
-    emphasis_only: bool = True,
+    emphasis_only: bool = False,
 ) -> Path:
-    """Render captions.
+    """Render captions to an ASS file.
 
-    When emphasis_only=True (default), only words in emphasis_words get a
-    caption card — sparse, punchy, high-retention. When False, every spoken
-    word gets a card (legacy behavior).
+    Groups words into 2–3-word caption frames. Every spoken word gets a
+    caption (emphasis_only=False by default). Emphasis words are displayed
+    larger and in salmon (#FF7751).
     """
+    # Font mapping: UI name → installed system font
+    font = _FONT_MAP.get(font, font)
     if font not in ALLOWED_FONTS:
-        font = "Poppins Bold"
+        font = "DejaVu Sans Bold"
+
     color_hex = ALLOWED_COLORS.get(color.lower(), color if color.startswith("#") else "FFFFFF")
     if position not in ALLOWED_POSITIONS:
-        position = "center"
+        position = "bottom"
     if style not in ALLOWED_STYLES:
         style = "impact"
-    # Kinetic bar always sits at the bottom — that's part of its identity.
     if style == "kinetic":
         position = "bottom"
 
     emphasis_set = {_strip_punct(w).lower() for w in (emphasis_words or set())}
-    broll_list = list(broll_windows)
+    broll_list   = list(broll_windows)
+    word_list    = [w for w in words if _strip_punct(w.text)]
 
     lines = [_ass_header(short_form, font, color_hex, position, style)]
 
-    for w in words:
-        clean = _strip_punct(w.text).upper()
-        if not clean:
+    groups = _group_words(word_list)
+    for group in groups:
+        # Skip groups entirely inside b-roll windows
+        mid = (group[0].start + group[-1].end) / 2
+        if _in_window(mid, broll_list):
             continue
-        # Hard rule: no captions during B-roll windows.
-        if _in_window((w.start + w.end) / 2, broll_list):
+
+        clean_words = [_strip_punct(w.text) for w in group]
+        clean_words = [w for w in clean_words if w]
+        if not clean_words:
             continue
-        is_emphasis = clean.lower() in emphasis_set
-        if emphasis_only and not is_emphasis:
+
+        has_emphasis = any(w.lower() in emphasis_set for w in clean_words)
+
+        if emphasis_only and not has_emphasis:
             continue
-        style_name = "Emphasis" if is_emphasis else "Default"
-        # Apply 1-frame lead: caption appears slightly before the word is
-        # fully spoken so perception stays in sync (Typography Engine rule).
-        start = max(0.0, w.start - CAPTION_LEAD_S)
+
+        # Per-word inline ASS tags: emphasis words get salmon colour + larger size,
+        # all other words stay in Default style at normal size.
+        cap_size_emph = CAP_SIZE_SHORT_EMPH if short_form else CAP_SIZE_LONG_EMPH
+        display_parts: list[str] = []
+        for i, w in enumerate(clean_words):
+            if w.lower() in emphasis_set:
+                # Inline override: salmon colour + emphasis size, then reset
+                display_parts.append(
+                    f"{{\\c{EMPHASIS_COLOR_ASS}\\fs{cap_size_emph}}}{w.title()}{{\\r}}"
+                )
+            elif i == 0:
+                display_parts.append(w.capitalize())
+            else:
+                display_parts.append(w.lower())
+        display = " ".join(display_parts)
+
+        # Always use Default style; per-word overrides handle emphasis inline
+        start = max(0.0, group[0].start - CAPTION_LEAD_S)
+        end   = group[-1].end
         lines.append(
-            f"Dialogue: 0,{_ts(start)},{_ts(w.end)},{style_name},,0,0,0,,{clean}"
+            f"Dialogue: 0,{_ts(start)},{_ts(end)},Default,,0,0,0,,{display}"
         )
 
     out_path.write_text("\n".join(lines), encoding="utf-8")

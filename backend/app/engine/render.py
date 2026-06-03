@@ -500,25 +500,21 @@ def _render_hyperframe_png(
 
 
 def _png_to_timed_clip(png: Path, dst: Path, duration: float, fps: int) -> None:
-    """Convert a static PNG to a short RGBA video clip.
+    """Convert a static PNG to a short RGBA video clip at the target fps.
 
     Uses the PNG video codec in a Matroska (.mkv) container — the only
     widely-available combination that preserves a full RGBA alpha channel
     for transparent overlay compositing.
 
     Clip timestamps start at 0; the caller uses setpts=PTS+start/TB in
-    the filter_complex to shift it to the correct position in the edit
-    timeline. No enable= expression is needed: the clip simply doesn't
-    exist outside its window, so the overlay falls through to the base
-    video automatically (eof_action=pass).
+    the overlay filter_complex to shift it to the correct position in the
+    edit timeline.  No enable= expression is needed: the clip simply
+    doesn't exist outside its window, so the overlay falls through to the
+    base video automatically (eof_action=pass).
 
-    fps is intentionally hard-capped at 1 regardless of the caller value.
-    These clips contain a static PNG (no motion), so 1fps is visually
-    identical to 30fps — the overlay filter holds the last frame between
-    integer-second boundaries. At 30fps a 3-second clip is 90 RGBA frames
-    (~750 MB of decoded memory for a 1080×1920 source); at 1fps it is
-    3 frames (~25 MB). With 4–8 clips open simultaneously that difference
-    is the margin between a successful render and a SIGKILL.
+    fps matches the project fps (30).  With 48 GB RAM there is no longer
+    any reason to cap at 1 fps — the full 30-fps clip is used so the
+    overlay filter receives properly-timed frames throughout the clip.
     """
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
@@ -527,7 +523,7 @@ def _png_to_timed_clip(png: Path, dst: Path, duration: float, fps: int) -> None:
         "-t", f"{duration:.3f}",
         "-pix_fmt", "rgba",
         "-c:v", "png",
-        "-r", "1",          # always 1fps — static graphic, no motion
+        "-r", str(fps),
         str(dst),
     ])
 
@@ -922,71 +918,89 @@ def render(
         except Exception as _e:
             _log.warning("graphic clip failed (%s): %s", rg.kind, _e)
 
-    # ── Decide pipeline: filter_complex or simple -vf ─────────────────────
-    use_fc = bool(ok_graphics or remapped_silences)
-
+    # ── Pass 1: grade + scale + zoompan + audio duck → base ───────────────
+    # Overlays are applied sequentially below (one ffmpeg call per clip).
+    # This is more reliable than one giant filter_complex: memory is bounded
+    # by two inputs per call regardless of how many graphics exist.
     _tmp_dir = Path(_tempfile.gettempdir())
-    _nocap_path = _tmp_dir / f"nocap_{output_path.stem}.mp4"
+    _base_path = _tmp_dir / f"base_{output_path.stem}.mp4"
 
-    # ── Pass 1: grade + scale + zoompan + timed clips + volume duck ───────
-    if use_fc:
-        fc_str, v_out, a_out = _build_pass1_filter_complex(
-            target_w, target_h, fps,
-            color_grade, scale_filter,
-            remapped_silences,
-            ok_graphics,
-        )
-        cmd1: list[str] = [
-            FFMPEG_PATH, "-y", "-loglevel", "error",
-            "-i", str(concat_path),
-        ]
-        for cp in graphic_clip_paths:   # MKV clip inputs at indices 1..N
-            cmd1 += ["-i", str(cp)]
-        cmd1 += ["-filter_complex", fc_str, "-map", f"[{v_out}]"]
-        cmd1 += ["-map", f"[{a_out}]"] if a_out else ["-map", "0:a"]
-        _log.info(
-            "render pass1: filter_complex  hf=%d  graphics=%d  silences=%d",
-            len(hf_graphics), len([r for r in ok_graphics if r.kind != "hyperframe"]),
-            len(remapped_silences),
-        )
-    else:
-        # Simple -vf: grade + scale + constant zoompan
-        zoom_str = (
-            f"zoompan=z=1.04"
-            f":x=iw/2-(iw/zoom/2)"
-            f":y=ih/2-(ih/zoom/2)"
-            f":d=1:s={target_w}x{target_h}:fps={fps}"
-        )
-        vf_parts = [p for p in [color_grade, scale_filter, zoom_str] if p]
-        cmd1 = [
-            FFMPEG_PATH, "-y", "-loglevel", "error",
-            "-i", str(concat_path),
-            "-vf", ",".join(vf_parts),
-            "-map", "0:v", "-map", "0:a",
-        ]
-        _log.info("render pass1: simple -vf pipeline")
-
-    cmd1 += [
+    _zoom_str = (
+        f"zoompan=z=1.04"
+        f":x=iw/2-(iw/zoom/2)"
+        f":y=ih/2-(ih/zoom/2)"
+        f":d=1:s={target_w}x{target_h}:fps={fps}"
+    )
+    _vf_p1 = [p for p in [color_grade, scale_filter, _zoom_str] if p]
+    _cmd_p1: list[str] = [
+        FFMPEG_PATH, "-y", "-loglevel", "error",
+        "-i", str(concat_path),
+        "-vf", ",".join(_vf_p1),
+        "-map", "0:v",
+    ]
+    if remapped_silences:
+        _vol_nodes: list[str] = []
+        for _sil in remapped_silences:
+            try:
+                _sat = float(_sil.get("at", 0))
+                _sdur = max(0.05, min(0.5, float(_sil.get("duration", 0.3))))
+            except (TypeError, ValueError):
+                continue
+            _vol_nodes.append(
+                f"volume=enable=gte(t\\,{_sat:.3f})*lte(t\\,{_sat+_sdur:.3f}):volume=0"
+            )
+        if _vol_nodes:
+            _cmd_p1 += ["-af", ",".join(_vol_nodes)]
+    _cmd_p1 += ["-map", "0:a"]
+    _cmd_p1 += [
         "-frames:v", str(total_frames),
-        # Pass-1 intermediate — gets re-encoded in pass 2 (subtitle burn),
-        # so visual quality here only needs to be "good enough" to survive
-        # one generation loss. Use the most memory-conservative x264 settings:
-        #   rc-lookahead=0  — no frame lookahead buffer (~100 MB saved at 1080p)
-        #   bframes=0       — no B-frame reorder buffer
-        #   ref=1           — single reference frame
-        #   no-mbtree=1     — disable macroblock tree (uses lookahead internally)
-        # These settings trade a small quality delta for a large memory saving,
-        # which is the right trade-off for a throwaway intermediate file.
-        "-c:v", "libx264", "-preset", "faster", "-crf", "18",
-        "-threads", "1",
-        "-x264-params", "rc-lookahead=0:bframes=0:ref=1:no-mbtree=1",
+        "-c:v", "libx264", "-preset", "medium", "-crf", "16",
+        "-threads", "4",
+        "-x264-params", "rc-lookahead=32:bframes=3",
         "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "192k",
-        str(_nocap_path),
+        str(_base_path),
     ]
-    _run(cmd1)
+    _log.info(
+        "render pass1: grade+scale+zoompan  graphics=%d  silences=%d",
+        len(ok_graphics), len(remapped_silences),
+    )
+    _run(_cmd_p1)
 
-    # ── Pass 2: burn ASS captions ──────────────────────────────────────────
+    # ── Overlay passes: one ffmpeg call per graphic clip ──────────────────
+    _current_path = _base_path
+    _overlay_intermediates: list[Path] = []
+    for _j, (_clip_path, _rg) in enumerate(zip(graphic_clip_paths, ok_graphics)):
+        _next_path = _tmp_dir / f"ov{_j}_{output_path.stem}.mp4"
+        _x_esc = _rg.x_expr.replace(",", "\\,")
+        _y_esc = _rg.y_expr.replace(",", "\\,")
+        _fc_ov = (
+            f"[1:v]setpts=PTS+{_rg.at:.3f}/TB[gt];"
+            f"[0:v][gt]overlay=x={_x_esc}:y={_y_esc}:eof_action=pass[out]"
+        )
+        _log.info(
+            "render overlay %d/%d  kind=%s  at=%.2fs",
+            _j + 1, len(ok_graphics), _rg.kind, _rg.at,
+        )
+        _run([
+            FFMPEG_PATH, "-y", "-loglevel", "error",
+            "-i", str(_current_path),
+            "-i", str(_clip_path),
+            "-filter_complex", _fc_ov,
+            "-map", "[out]", "-map", "0:a",
+            "-c:v", "libx264", "-preset", "medium", "-crf", "16",
+            "-threads", "4",
+            "-x264-params", "rc-lookahead=32:bframes=3",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "copy",
+            str(_next_path),
+        ])
+        _overlay_intermediates.append(_current_path)
+        _current_path = _next_path
+
+    _nocap_path = _current_path
+
+    # ── Final pass: burn ASS captions ─────────────────────────────────────
     # Separate ffmpeg invocation so subtitle path escaping is handled by the
     # OS arg list (no shell expansion) — only the ffmpeg filter parser sees it.
     _ass_tmp = _tmp_dir / f"captions_{ass_path.parent.name}.ass"
@@ -997,7 +1011,7 @@ def render(
         "-i", str(_nocap_path),
         "-vf", f"subtitles={_ass_str}",
         "-c:v", "libx264", "-preset", "medium", "-crf", "16",
-        "-threads", "2",
+        "-threads", "4",
         "-x264-params", "rc-lookahead=32:bframes=3",
         "-pix_fmt", "yuv420p",
         "-c:a", "copy",
@@ -1005,6 +1019,8 @@ def render(
         str(output_path),
     ])
     _nocap_path.unlink(missing_ok=True)
+    for _p in _overlay_intermediates:
+        _p.unlink(missing_ok=True)
 
     return {
         "output": str(output_path),

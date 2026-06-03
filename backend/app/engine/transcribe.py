@@ -14,9 +14,10 @@ Public surface stays identical: `transcribe(path) -> Transcript` with
 from __future__ import annotations
 
 import os
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
+# 48 vCPU available — allow Whisper / CTranslate2 to use more threads.
+os.environ["OMP_NUM_THREADS"] = "8"
+os.environ["MKL_NUM_THREADS"] = "8"
+os.environ["OPENBLAS_NUM_THREADS"] = "8"
 
 import shutil
 import subprocess
@@ -58,11 +59,11 @@ def _load_model():
         from faster_whisper import WhisperModel  # noqa: PLC0415 — intentional lazy import
 
         _model = WhisperModel(
-            settings.whisper_model,
+            settings.whisper_model,   # reads WHISPER_MODEL env var (e.g. large-v3)
             device="cpu",
             compute_type="int8",
-            cpu_threads=1,   # default uses all cores → multiplies CTranslate2 RAM buffers
-            num_workers=1,
+            cpu_threads=8,   # 48 vCPU available — use 8 threads for faster transcription
+            num_workers=2,
         )
     return _model
 
@@ -176,7 +177,7 @@ def transcribe(video_path: Path) -> Transcript:
         seg_iter, info = model.transcribe(  # type: ignore[union-attr]
             str(wav_path),
             word_timestamps=True,
-            beam_size=1,        # save RAM + CPU vs the default beam_size=5
+            beam_size=5,        # 48 GB RAM — use full beam search for best accuracy
             vad_filter=False,   # silero-VAD adds ~60MB onnxruntime overhead on tight dynos
             language=None,      # auto-detect: French, English, Spanish, Arabic, etc.
         )

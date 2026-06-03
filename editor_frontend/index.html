@@ -842,6 +842,104 @@
         .analytics-stats-grid { grid-template-columns: 1fr; }
         .dash-stats { grid-template-columns: 1fr 1fr; }
       }
+
+      /* ── Features 17-25 ── */
+      .chapters-section { background:var(--card-inner,#111);border:1px solid var(--border);border-radius:10px;padding:.9rem 1rem;margin-bottom:.9rem }
+      .chapters-pre { font-size:.8rem;line-height:1.7;white-space:pre-wrap;color:var(--text);margin:.5rem 0 .6rem }
+      .btn-copy-sm { background:var(--border);color:var(--text);border:none;border-radius:6px;padding:.32rem .75rem;font-size:.75rem;cursor:pointer;transition:.15s }
+      .btn-copy-sm:hover { background:var(--salmon);color:#fff }
+      .desc-gen-section { background:var(--card-inner,#111);border:1px solid var(--border);border-radius:10px;padding:.9rem 1rem;margin-bottom:.9rem }
+      .desc-gen-btn { width:100%;background:linear-gradient(135deg,#FF7751,#ffb347);color:#fff;border:none;border-radius:8px;padding:.65rem 1rem;font-size:.85rem;font-weight:700;cursor:pointer;margin-bottom:.6rem;transition:.2s }
+      .desc-gen-btn:hover { opacity:.88 }
+      .desc-tabs { display:flex;gap:.4rem;margin-bottom:.6rem;flex-wrap:wrap }
+      .desc-tab { background:var(--border);color:var(--muted);border:none;border-radius:6px;padding:.32rem .7rem;font-size:.78rem;cursor:pointer;transition:.15s }
+      .desc-tab.active { background:var(--salmon);color:#fff }
+      .desc-platform { display:none }
+      .desc-platform.active { display:block }
+      .desc-output { font-size:.8rem;line-height:1.65;color:var(--text);white-space:pre-wrap;background:var(--bg);border-radius:7px;padding:.6rem .8rem;margin-bottom:.45rem;max-height:180px;overflow-y:auto }
+      /* Feature 20 */
+      .perf-connect-row { display:flex;gap:.5rem;flex-wrap:wrap;margin:.5rem 0 }
+      .perf-connect-btn { flex:1;min-width:120px;background:var(--card-inner,#111);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.45rem .6rem;font-size:.78rem;cursor:pointer;transition:.15s }
+      .perf-connect-btn:hover { border-color:var(--salmon);color:var(--salmon) }
+      .perf-accuracy { font-size:.85rem;font-weight:700;color:var(--salmon);margin:.4rem 0 }
+      .perf-video-list { display:flex;flex-direction:column;gap:.4rem;margin-top:.5rem }
+      .perf-video-row { display:flex;align-items:center;gap:.7rem;background:var(--card-inner,#111);border:1px solid var(--border);border-radius:8px;padding:.5rem .75rem }
+      .perf-title { flex:1;font-size:.8rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
+      .perf-pred,.perf-actual { font-size:.75rem;color:var(--muted) }
+      .perf-actual.good { color:#22c55e }
+      .perf-empty { color:var(--muted);font-size:.8rem;padding:.5rem 0 }
+      /* Feature 21 */
+      .team-invite-row { display:flex;gap:.4rem;flex-wrap:wrap;margin:.5rem 0 }
+      .team-member { display:flex;align-items:center;gap:.65rem;background:var(--card-inner,#111);border:1px solid var(--border);border-radius:8px;padding:.45rem .7rem;margin-bottom:.3rem }
+      .team-avatar { width:32px;height:32px;border-radius:50%;background:var(--salmon);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;flex-shrink:0 }
+      .team-info { flex:1 }
+      .team-name { font-size:.82rem;font-weight:600 }
+      .team-email { font-size:.74rem;color:var(--muted) }
+      .team-role { font-size:.72rem;background:var(--border);color:var(--text);padding:.15rem .45rem;border-radius:4px }
+      .team-comment-item { background:var(--card-inner,#111);border:1px solid var(--border);border-radius:7px;padding:.45rem .7rem;margin-bottom:.3rem }
+      .team-comment-author { font-size:.74rem;font-weight:700;color:var(--salmon) }
+      /* Feature 22 */
+      .wl-preview { background:var(--card-inner,#111);border:1px solid var(--border);border-radius:10px;padding:.8rem 1rem;margin:.5rem 0;text-align:center }
+      .wl-logo-box { width:48px;height:48px;border-radius:10px;background:var(--salmon);display:flex;align-items:center;justify-content:center;font-size:1.3rem;margin:0 auto .35rem }
+      .wl-brand-name { font-size:1rem;font-weight:800 }
+      .wl-tagline { font-size:.72rem;color:var(--muted) }
+      /* Feature 23 */
+      .api-key-row { display:flex;gap:.4rem;align-items:center;margin:.5rem 0 }
+      .api-key-display { flex:1;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:.4rem .65rem;font-family:monospace;font-size:.78rem;color:var(--text);letter-spacing:.04em }
+      .api-endpoint-table { width:100%;border-collapse:collapse;font-size:.78rem;margin-top:.6rem }
+      .api-endpoint-table td { padding:.35rem .5rem;border-bottom:1px solid var(--border) }
+      .method-badge { display:inline-block;border-radius:4px;padding:.1rem .4rem;font-weight:700;font-size:.7rem }
+      .method-post { background:#FF775122;color:#FF7751 }
+      .method-get { background:#22c55e22;color:#22c55e }
+      .api-path { font-family:monospace;font-size:.75rem }
+      /* Feature 24 */
+      .notif-bell { position:relative;background:none;border:none;font-size:1.25rem;cursor:pointer;padding:.2rem .4rem;border-radius:7px;transition:.15s }
+      .notif-bell:hover { background:var(--border) }
+      .notif-dot { position:absolute;top:2px;right:2px;width:8px;height:8px;border-radius:50%;background:#ff5c7a;display:none }
+      .notif-dot.active { display:block }
+      .notif-panel { position:fixed;top:58px;right:12px;width:320px;max-height:420px;overflow-y:auto;background:var(--card,#161616);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.5);z-index:200;display:none }
+      .notif-panel.open { display:block }
+      .notif-panel-head { display:flex;align-items:center;justify-content:space-between;padding:.65rem 1rem;border-bottom:1px solid var(--border) }
+      .notif-panel-head h4 { margin:0;font-size:.88rem }
+      .notif-item { display:flex;gap:.65rem;align-items:flex-start;padding:.6rem 1rem;border-bottom:1px solid var(--border) }
+      .notif-icon-wrap { font-size:1.1rem;flex-shrink:0;margin-top:.1rem }
+      .notif-body { flex:1 }
+      .notif-body strong { font-size:.82rem;display:block }
+      .notif-body p { font-size:.75rem;color:var(--muted);margin:.1rem 0 0 }
+      .notif-time { font-size:.68rem;color:var(--muted);white-space:nowrap }
+      .notif-empty { padding:1rem;font-size:.8rem;color:var(--muted);text-align:center }
+      .notif-clear { width:100%;background:none;border:none;border-top:1px solid var(--border);color:var(--muted);font-size:.78rem;padding:.55rem;cursor:pointer;transition:.15s }
+      .notif-clear:hover { color:var(--salmon) }
+      /* Feature 25 */
+      #learnSection .card { max-width:680px;margin:0 auto }
+      .learn-progress-wrap { display:flex;align-items:center;gap:.75rem;margin:.6rem 0 1rem }
+      .learn-progress-bar { flex:1;height:8px;background:var(--border);border-radius:99px;overflow:hidden }
+      .learn-progress-fill { height:100%;background:linear-gradient(90deg,#FF7751,#ffb347);border-radius:99px;transition:.4s }
+      .learn-tabs { display:flex;gap:.4rem;margin-bottom:1rem;border-bottom:1px solid var(--border);padding-bottom:.4rem }
+      .learn-tab { background:none;border:none;color:var(--muted);font-size:.85rem;padding:.35rem .7rem;cursor:pointer;border-radius:7px;transition:.15s }
+      .learn-tab.active { background:var(--salmon);color:#fff }
+      .learn-subview { display:none }
+      .learn-subview.active { display:block }
+      .lesson-card { display:flex;gap:.9rem;align-items:center;background:var(--card-inner,#111);border:1px solid var(--border);border-radius:10px;padding:.7rem 1rem;margin-bottom:.6rem;transition:.15s }
+      .lesson-card:hover { border-color:var(--salmon) }
+      .lesson-thumb { width:60px;height:40px;border-radius:6px;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0 }
+      .lesson-info { flex:1 }
+      .lesson-title { font-size:.85rem;font-weight:700 }
+      .lesson-meta { font-size:.74rem;color:var(--muted);margin-top:.15rem }
+      .lesson-pill { display:inline-block;background:var(--border);color:var(--text);font-size:.7rem;padding:.1rem .4rem;border-radius:4px;margin-right:.3rem }
+      .lesson-pill.done { background:#22c55e22;color:#22c55e }
+      .lesson-watch-btn { background:var(--salmon);color:#fff;border:none;border-radius:7px;padding:.4rem .8rem;font-size:.78rem;cursor:pointer;transition:.15s;white-space:nowrap }
+      .lesson-watch-btn.done-btn { background:var(--border);color:var(--muted) }
+      .quiz-card { background:var(--card-inner,#111);border:1px solid var(--border);border-radius:10px;padding:1rem 1.1rem;margin-bottom:.7rem }
+      .quiz-q { font-size:.88rem;font-weight:700;margin-bottom:.65rem }
+      .quiz-opts { display:flex;flex-direction:column;gap:.4rem }
+      .quiz-opt { background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:.45rem .75rem;font-size:.82rem;cursor:pointer;transition:.15s }
+      .quiz-opt:hover { border-color:var(--salmon) }
+      .quiz-opt.correct { background:#22c55e22;border-color:#22c55e;color:#22c55e }
+      .quiz-opt.wrong { background:#ff5c7a22;border-color:#ff5c7a;color:#ff5c7a }
+      .cert-card { text-align:center;background:linear-gradient(135deg,#1a1a1a,#111);border:2px solid var(--salmon);border-radius:16px;padding:2rem;margin:1rem 0 }
+      .cert-download { background:linear-gradient(135deg,#FF7751,#ffb347);color:#fff;border:none;border-radius:8px;padding:.65rem 1.4rem;font-size:.88rem;font-weight:700;cursor:pointer;margin-top:1rem }
+      .retention-badge { display:inline-block;background:var(--salmon);color:#fff;border-radius:99px;padding:.25rem .8rem;font-size:.78rem;font-weight:700;margin:.3rem 0 }
     </style>
   </head>
   <body>
@@ -858,9 +956,21 @@
         <button class="nav-tab" data-target="dashboardSection">Dashboard</button>
         <button class="nav-tab" data-target="analyticsSection">Analytique</button>
         <button class="nav-tab" data-target="profileSection">Profil</button>
+        <button class="nav-tab" data-target="learnSection">📚 Apprendre</button>
         <button id="brandBtn" class="btn btn-ghost" style="padding:.38rem .7rem;font-size:.8rem;margin-left:.5rem">⚙ Brand</button>
       </div>
+      <button class="notif-bell" id="notifBellBtn">🔔<span class="notif-dot" id="notifDot"></span></button>
     </nav>
+
+    <!-- Feature 24: Notification Panel -->
+    <div class="notif-panel" id="notifPanel">
+      <div class="notif-panel-head">
+        <h4>🔔 Notifications</h4>
+        <button id="notifClose" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem">✕</button>
+      </div>
+      <div id="notifList"><div class="notif-empty">Aucune notification pour l'instant.</div></div>
+      <button class="notif-clear" id="notifClearBtn">Tout marquer comme lu</button>
+    </div>
 
     <!-- AI COACH PANEL (Feature 9) -->
     <aside class="coach-panel" id="coachPanel" aria-label="Coach IA">
@@ -1127,6 +1237,75 @@
           Aucune vidéo éditée pour l'instant. Cliquez ci-dessus pour commencer !
         </div>
         <div class="video-library-grid" id="videoLibraryGrid" style="display:none"></div>
+
+        <!-- Feature 20: Performance Tracker -->
+        <p class="dash-recent-title" style="margin-top:1.1rem">📊 Performance Tracker</p>
+        <div style="background:var(--card,#161616);border:1px solid var(--border);border-radius:12px;padding:1rem">
+          <p class="perf-accuracy" id="perfAccuracy" style="display:none">Notre IA prédit avec <span id="perfAccuracyPct">—</span>% de précision</p>
+          <div class="perf-connect-row">
+            <button class="perf-connect-btn" data-platform="youtube" id="perfYtBtn">▶ Connecter YouTube</button>
+            <button class="perf-connect-btn" data-platform="tiktok" id="perfTtBtn">♪ Connecter TikTok</button>
+          </div>
+          <div class="perf-video-list" id="perfVideoList"><div class="perf-empty">Éditez une vidéo pour voir les prédictions.</div></div>
+        </div>
+
+        <!-- Feature 21: Team Collaboration -->
+        <p class="dash-recent-title" style="margin-top:1.1rem">👥 Collaboration Équipe</p>
+        <div style="background:var(--card,#161616);border:1px solid var(--border);border-radius:12px;padding:1rem">
+          <div class="team-invite-row">
+            <input type="email" id="teamInviteEmail" placeholder="email@équipe.com" style="flex:1;padding:.38rem .65rem;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:.8rem" />
+            <select id="teamInviteRole" style="padding:.38rem .5rem;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:.8rem">
+              <option value="editor">Éditeur</option>
+              <option value="viewer">Lecteur</option>
+            </select>
+            <button id="teamInviteBtn" class="btn btn-primary" style="font-size:.78rem;padding:.38rem .8rem">Inviter</button>
+          </div>
+          <div id="teamMemberList"></div>
+          <div style="margin-top:.65rem">
+            <textarea id="teamCommentInput" rows="2" placeholder="Laissez un commentaire (@mention possible)…" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:.8rem;padding:.5rem;box-sizing:border-box;resize:vertical"></textarea>
+            <button id="teamCommentBtn" class="btn btn-primary" style="font-size:.78rem;padding:.38rem .8rem;margin-top:.3rem">Commenter</button>
+          </div>
+          <div id="teamCommentList" style="margin-top:.5rem"></div>
+        </div>
+
+        <!-- Feature 22: White Label -->
+        <p class="dash-recent-title" style="margin-top:1.1rem">🏷️ White Label</p>
+        <div style="background:var(--card,#161616);border:1px solid var(--border);border-radius:12px;padding:1rem">
+          <div class="wl-preview" id="wlPreview">
+            <div class="wl-logo-box" id="wlLogoBox">🎬</div>
+            <div class="wl-brand-name" id="wlBrandNameDisplay">Mon Studio</div>
+            <div class="wl-tagline">Powered by AI · Édition professionnelle</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.6rem">
+            <label class="field"><span style="font-size:.75rem">Nom de marque</span><input type="text" id="wlBrandName" placeholder="Mon Studio" /></label>
+            <label class="field"><span style="font-size:.75rem">Couleur principale</span>
+              <div style="display:flex;gap:.4rem;align-items:center">
+                <input type="color" id="wlPrimaryColor" value="#FF7751" style="width:38px;height:32px;padding:0;border:none;background:none;cursor:pointer" />
+                <input type="text" id="wlColorHex" value="#FF7751" style="flex:1" />
+              </div>
+            </label>
+          </div>
+          <label class="field" style="margin-top:.4rem"><span style="font-size:.75rem">Logo (PNG/SVG)</span><input type="file" id="wlLogoUpload" accept="image/*" style="color:var(--muted);font-size:.78rem" /></label>
+          <button id="wlSaveBtn" class="btn btn-primary" style="width:100%;margin-top:.5rem;padding:.6rem">Appliquer le White Label</button>
+        </div>
+
+        <!-- Feature 23: API Access -->
+        <p class="dash-recent-title" style="margin-top:1.1rem">🔑 Accès API</p>
+        <div style="background:var(--card,#161616);border:1px solid var(--border);border-radius:12px;padding:1rem">
+          <p style="font-size:.8rem;color:var(--muted);margin:0 0 .5rem">Votre clé API pour intégrer LeanRetention dans vos workflows.</p>
+          <div class="api-key-row">
+            <div class="api-key-display" id="apiKeyDisplay">••••••••••••••••••••••••••••••••</div>
+            <button id="showApiKeyBtn" class="btn-copy-sm">👁 Voir</button>
+            <button id="copyApiKeyBtn" class="btn-copy-sm">📋</button>
+            <button id="regenApiKeyBtn" class="btn-copy-sm" title="Régénérer">🔄</button>
+          </div>
+          <table class="api-endpoint-table">
+            <tr><td><span class="method-badge method-post">POST</span></td><td class="api-path">/api/v1/edit</td><td style="color:var(--muted);font-size:.75rem">Soumettre une vidéo</td></tr>
+            <tr><td><span class="method-badge method-get">GET</span></td><td class="api-path">/api/v1/jobs/{id}</td><td style="color:var(--muted);font-size:.75rem">Statut du job</td></tr>
+            <tr><td><span class="method-badge method-get">GET</span></td><td class="api-path">/api/v1/download/{id}</td><td style="color:var(--muted);font-size:.75rem">Télécharger le résultat</td></tr>
+          </table>
+          <p style="font-size:.74rem;color:var(--muted);margin-top:.5rem">Authentification : header <code style="font-size:.74rem">X-API-Key: &lt;votre_clé&gt;</code></p>
+        </div>
       </div>
 
       <!-- EDITOR AREA -->
@@ -1462,6 +1641,31 @@
           <p id="reburnMsg" style="font-size:.75rem;color:var(--salmon);margin-top:.4rem;display:none">Captions mises à jour ✓</p>
         </div>
 
+        <!-- Feature 17: Auto-Chapters -->
+        <div class="chapters-section" id="chaptersSection" style="display:none">
+          <h4 style="margin:0 0 .4rem;font-size:.85rem">📑 Chapitres YouTube</h4>
+          <pre class="chapters-pre" id="chaptersOutput"></pre>
+          <button class="btn-copy-sm" id="copyChaptersBtn">📋 Copier les chapitres</button>
+        </div>
+
+        <!-- Feature 18: Description Generator -->
+        <div class="desc-gen-section">
+          <h4 style="margin:0 0 .5rem;font-size:.85rem">✍️ Descriptions plateformes</h4>
+          <button class="desc-gen-btn" id="descGenBtn"><span id="descGenBtnLabel">✨ Générer les descriptions</span></button>
+          <div id="descGenOutput" style="display:none">
+            <div class="desc-tabs">
+              <button class="desc-tab active" data-plat="youtube">YouTube</button>
+              <button class="desc-tab" data-plat="tiktok">TikTok</button>
+              <button class="desc-tab" data-plat="instagram">Instagram</button>
+              <button class="desc-tab" data-plat="linkedin">LinkedIn</button>
+            </div>
+            <div class="desc-platform active" id="desc-youtube"><div class="desc-output" id="desc-youtube-text"></div><button class="btn-copy-sm" data-copy="desc-youtube-text">📋 Copier</button></div>
+            <div class="desc-platform" id="desc-tiktok"><div class="desc-output" id="desc-tiktok-text"></div><button class="btn-copy-sm" data-copy="desc-tiktok-text">📋 Copier</button></div>
+            <div class="desc-platform" id="desc-instagram"><div class="desc-output" id="desc-instagram-text"></div><button class="btn-copy-sm" data-copy="desc-instagram-text">📋 Copier</button></div>
+            <div class="desc-platform" id="desc-linkedin"><div class="desc-output" id="desc-linkedin-text"></div><button class="btn-copy-sm" data-copy="desc-linkedin-text">📋 Copier</button></div>
+          </div>
+        </div>
+
         <details>
           <summary>Plan de montage (JSON brut)</summary>
           <pre id="planJson"></pre>
@@ -1689,6 +1893,40 @@
           <p id="profileSaveMsg" style="font-size:.8rem;color:var(--salmon);margin-top:.5rem;display:none">Profil sauvegardé ✓</p>
         </section>
       </div><!-- end profileSection -->
+
+      <!-- Feature 25: Learning Center -->
+      <div id="learnSection" class="app-section">
+        <section class="card">
+          <h2>📚 Centre d'apprentissage</h2>
+          <div class="learn-progress-wrap">
+            <div class="learn-progress-bar"><div class="learn-progress-fill" id="learnProgressFill" style="width:0%"></div></div>
+            <span id="learnProgressLabel" style="font-size:.8rem;color:var(--muted);white-space:nowrap">0 / 6 leçons</span>
+          </div>
+          <div class="learn-tabs">
+            <button class="learn-tab active" data-learn="lessons">📹 Leçons</button>
+            <button class="learn-tab" data-learn="quiz">🧠 Quiz</button>
+            <button class="learn-tab" data-learn="certificate">🏆 Certificat</button>
+          </div>
+          <div class="learn-subview active" id="learn-lessons">
+            <div id="lessonList"></div>
+          </div>
+          <div class="learn-subview" id="learn-quiz">
+            <div id="quizContainer"><p style="color:var(--muted);font-size:.85rem">Regardez une leçon pour débloquer le quiz correspondant.</p></div>
+          </div>
+          <div class="learn-subview" id="learn-certificate">
+            <div class="cert-card" id="certCard">
+              <div style="font-size:2.5rem;margin-bottom:.5rem">🏆</div>
+              <h3 style="margin:0 0 .25rem;font-size:1.1rem">Certificat de complétion</h3>
+              <p style="font-size:.82rem;color:var(--muted)">Complétez les 6 leçons et leurs quiz pour obtenir votre certificat.</p>
+              <div id="certContent" style="display:none">
+                <div class="retention-badge">LeanRetention Academy</div>
+                <p style="font-size:.9rem;margin:.5rem 0">Félicitations ! Vous avez maîtrisé la création de contenu haute-rétention.</p>
+                <button class="cert-download" id="certDownloadBtn">⬇ Télécharger le certificat PDF</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
 
     </main>
 

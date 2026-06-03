@@ -528,6 +528,7 @@ async def get_profile(profile_id: str) -> dict:
 
 
 @app.get("/api/download/{job_id}")
+@app.get("/api/v1/download/{job_id}")
 def download(
     job_id: str,
     request: Request,
@@ -992,6 +993,204 @@ def _digest_scheduler() -> None:
 _digest_t = threading.Timer(30, _digest_scheduler)
 _digest_t.daemon = True
 _digest_t.start()
+
+
+# ── Feature 17/18 — Description Generator ────────────────────────────────────
+@app.post("/api/generate-descriptions")
+async def generate_descriptions(payload: dict = Body(...)) -> dict:
+    """Generate platform-specific descriptions via Claude."""
+    from app.core.config import settings
+    import anthropic
+
+    job_id = payload.get("job_id", "")
+    title = payload.get("title", "")
+    fmt = payload.get("format", "")
+    context = payload.get("context", "")
+
+    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    prompt = f"""You are a social media copywriter expert. Generate platform-specific descriptions for a video.
+
+Video title: {title}
+Format: {fmt}
+Context: {context}
+
+Generate descriptions in French for:
+1. YouTube (SEO-optimized, ~500 words, include timestamps placeholder, 5 keywords)
+2. TikTok (max 150 chars + 5 hashtags)
+3. Instagram (emotional hook + CTA + 10 hashtags)
+4. LinkedIn (professional tone, insights, 3 paragraphs)
+
+Respond ONLY with valid JSON in this exact format:
+{{"youtube": "...", "tiktok": "...", "instagram": "...", "linkedin": "..."}}"""
+
+    msg = client.messages.create(
+        model=settings.anthropic_model,
+        max_tokens=2000,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    raw = msg.content[0].text.strip()
+    # Extract JSON if wrapped in markdown
+    if "```" in raw:
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    try:
+        return json.loads(raw)
+    except Exception:
+        return {"youtube": raw, "tiktok": "", "instagram": "", "linkedin": ""}
+
+
+# ── Feature 20 — Performance Storage ─────────────────────────────────────────
+_PERF_FILE = Path(__file__).resolve().parents[2] / "storage" / "performance.json"
+
+
+def _load_perf() -> dict:
+    try:
+        return json.loads(_PERF_FILE.read_text()) if _PERF_FILE.exists() else {}
+    except Exception:
+        return {}
+
+
+def _save_perf(data: dict) -> None:
+    _PERF_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _PERF_FILE.write_text(json.dumps(data, indent=2))
+
+
+@app.post("/api/performance/{job_id}")
+def save_performance(job_id: str, payload: dict = Body(...)) -> dict:
+    data = _load_perf()
+    data[job_id] = payload
+    _save_perf(data)
+    return {"ok": True}
+
+
+@app.get("/api/performance/{job_id}")
+def get_performance(job_id: str) -> dict:
+    data = _load_perf()
+    return data.get(job_id, {})
+
+
+# ── Feature 21 — Team Collaboration ──────────────────────────────────────────
+_TEAM_FILE = Path(__file__).resolve().parents[2] / "storage" / "teams.json"
+
+
+def _load_teams() -> dict:
+    try:
+        return json.loads(_TEAM_FILE.read_text()) if _TEAM_FILE.exists() else {}
+    except Exception:
+        return {}
+
+
+def _save_teams(data: dict) -> None:
+    _TEAM_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _TEAM_FILE.write_text(json.dumps(data, indent=2))
+
+
+@app.get("/api/team/{profile_id}")
+def get_team(profile_id: str) -> dict:
+    teams = _load_teams()
+    return {"members": teams.get(profile_id, {}).get("members", []),
+            "comments": teams.get(profile_id, {}).get("comments", [])}
+
+
+@app.post("/api/team/{profile_id}")
+def update_team(profile_id: str, payload: dict = Body(...)) -> dict:
+    teams = _load_teams()
+    if profile_id not in teams:
+        teams[profile_id] = {"members": [], "comments": []}
+    action = payload.get("action")
+    if action == "add":
+        member = payload.get("member", {})
+        existing = [m["email"] for m in teams[profile_id]["members"]]
+        if member.get("email") and member["email"] not in existing:
+            teams[profile_id]["members"].append(member)
+    elif action == "remove":
+        email = payload.get("email")
+        teams[profile_id]["members"] = [m for m in teams[profile_id]["members"] if m["email"] != email]
+    elif action == "comment":
+        comment = payload.get("comment", {})
+        teams[profile_id]["comments"].insert(0, comment)
+    _save_teams(teams)
+    return {"ok": True}
+
+
+# ── Feature 23 — API Keys ─────────────────────────────────────────────────────
+_API_KEYS_FILE = Path(__file__).resolve().parents[2] / "storage" / "api_keys.json"
+
+
+def _load_api_keys() -> dict:
+    try:
+        return json.loads(_API_KEYS_FILE.read_text()) if _API_KEYS_FILE.exists() else {}
+    except Exception:
+        return {}
+
+
+def _save_api_keys(data: dict) -> None:
+    _API_KEYS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _API_KEYS_FILE.write_text(json.dumps(data, indent=2))
+
+
+def _validate_api_key(key: str) -> bool:
+    if not key:
+        return False
+    data = _load_api_keys()
+    return any(v.get("key") == key for v in data.values())
+
+
+@app.post("/api/api-keys")
+def create_api_key(payload: dict = Body(...)) -> dict:
+    profile_id = payload.get("profile_id", "")
+    key = payload.get("key", "")
+    if not profile_id or not key:
+        raise HTTPException(400, "profile_id and key required")
+    data = _load_api_keys()
+    data[profile_id] = {"key": key, "created": datetime.utcnow().isoformat(), "usage": 0}
+    _save_api_keys(data)
+    return {"ok": True}
+
+
+@app.get("/api/api-keys/{profile_id}")
+def get_api_key(profile_id: str) -> dict:
+    data = _load_api_keys()
+    entry = data.get(profile_id)
+    return {"key": entry["key"] if entry else None, "usage": entry.get("usage", 0) if entry else 0}
+
+
+# ── Feature 23 — Versioned API endpoints ─────────────────────────────────────
+@app.post("/api/v1/edit")
+async def v1_edit(
+    request: Request,
+    background: BackgroundTasks,
+) -> JSONResponse:
+    """Public API endpoint for programmatic video editing."""
+    api_key = request.headers.get("x-api-key", "")
+    if not _validate_api_key(api_key):
+        raise HTTPException(401, "Invalid or missing X-API-Key")
+    # Increment usage counter
+    try:
+        data = _load_api_keys()
+        for v in data.values():
+            if v.get("key") == api_key:
+                v["usage"] = v.get("usage", 0) + 1
+        _save_api_keys(data)
+    except Exception:
+        pass
+    body = await request.json()
+    job_id = secrets.token_hex(8)
+    store.create(job_id)
+    store.update(job_id, status="queued", message="API job queued")
+    return JSONResponse({"job_id": job_id, "status": "queued"}, status_code=202)
+
+
+@app.get("/api/v1/jobs/{job_id}")
+def v1_get_job(job_id: str, request: Request) -> dict:
+    api_key = request.headers.get("x-api-key", "")
+    if not _validate_api_key(api_key):
+        raise HTTPException(401, "Invalid or missing X-API-Key")
+    job = store.get(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    return {"job_id": job_id, "status": job.status, "progress": job.progress, "message": job.message}
 
 
 editor_dir = Path(__file__).resolve().parents[2] / "editor_frontend"
