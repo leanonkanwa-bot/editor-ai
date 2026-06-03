@@ -19,13 +19,35 @@
       --salmon-glow2:  rgba(255,119,81,.10);
       --salmon-border: rgba(255,119,81,.18);
       --bg:            #080808;
-      --surface:       rgba(255,255,255,.03);
+      --surface:       #141414;
       --border:        rgba(255,255,255,.07);
       --text:          #F5F5F6;
       --muted:         rgba(245,245,246,.5);
+      --field-bg:      rgba(255,255,255,.03);
+      --nav-bg:        rgba(8,8,8,.88);
       --radius:        14px;
       --font:          'Poppins', system-ui, sans-serif;
     }
+
+    [data-theme="light"] {
+      --bg:            #FFFFFF;
+      --surface:       #F5F5F5;
+      --text:          #1A1A1A;
+      --border:        rgba(0,0,0,.08);
+      --muted:         rgba(26,26,26,.5);
+      --field-bg:      rgba(0,0,0,.04);
+      --nav-bg:        rgba(255,255,255,.9);
+      --salmon-border: rgba(255,119,81,.3);
+    }
+    [data-theme="light"] .logo-mark::after { border-left-color: #fff; }
+
+    .btn-theme-toggle {
+      background: transparent; border: 1px solid var(--border);
+      border-radius: 8px; cursor: pointer; padding: .32rem .5rem;
+      font-size: .95rem; color: var(--muted);
+      transition: color .15s, border-color .15s;
+    }
+    .btn-theme-toggle:hover { color: var(--text); }
 
     html { scroll-behavior: smooth; }
     body {
@@ -46,7 +68,7 @@
       border-bottom: 1px solid transparent;
     }
     .nav.scrolled {
-      background: rgba(8,8,8,.88);
+      background: var(--nav-bg);
       backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
       border-color: var(--border);
     }
@@ -364,6 +386,7 @@
       </a>
       <div class="nav-right">
         <a href="#" class="nav-link" id="seConnecterLink">Se connecter</a>
+        <button id="themeToggleLanding" class="btn-theme-toggle" title="Basculer thème">🌙</button>
         <button class="btn btn-salmon" onclick="openOnboarding()">Commencer gratuitement</button>
       </div>
     </div>
@@ -800,6 +823,26 @@
 
 
   <script>
+    // ── Theme management ────────────────────────────────────────────────
+    (function() {
+      const saved = localStorage.getItem('theme');
+      if (saved === 'light') document.documentElement.setAttribute('data-theme', 'light');
+      const btn = document.getElementById('themeToggleLanding');
+      if (btn) btn.textContent = saved === 'light' ? '☀️' : '🌙';
+      if (btn) btn.addEventListener('click', () => {
+        const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+        if (isLight) {
+          document.documentElement.removeAttribute('data-theme');
+          localStorage.setItem('theme', 'dark');
+          btn.textContent = '🌙';
+        } else {
+          document.documentElement.setAttribute('data-theme', 'light');
+          localStorage.setItem('theme', 'light');
+          btn.textContent = '☀️';
+        }
+      });
+    })();
+
     // ── Returning users (have profile + have edited at least one video) ─
     if (localStorage.getItem('coach_profile') && localStorage.getItem('has_edited_video')) {
       window.location.href = '/app';

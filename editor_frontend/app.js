@@ -1,5 +1,25 @@
 const $ = (id) => document.getElementById(id);
 
+// ── Theme management ──────────────────────────────────────────────────────────
+(function initTheme() {
+  const saved = localStorage.getItem("theme");
+  if (saved === "light") document.documentElement.setAttribute("data-theme", "light");
+  const btn = document.getElementById("themeToggle");
+  if (btn) btn.textContent = saved === "light" ? "☀️" : "🌙";
+})();
+document.getElementById("themeToggle")?.addEventListener("click", () => {
+  const isLight = document.documentElement.getAttribute("data-theme") === "light";
+  if (isLight) {
+    document.documentElement.removeAttribute("data-theme");
+    localStorage.setItem("theme", "dark");
+    document.getElementById("themeToggle").textContent = "🌙";
+  } else {
+    document.documentElement.setAttribute("data-theme", "light");
+    localStorage.setItem("theme", "light");
+    document.getElementById("themeToggle").textContent = "☀️";
+  }
+});
+
 // ── Auth helpers ─────────────────────────────────────────────────────────────
 function getToken() { return sessionStorage.getItem("lle_token") || ""; }
 function authHeaders() { const t = getToken(); return t ? { "x-access-token": t } : {}; }
@@ -11,7 +31,7 @@ function apiFetch(url, opts = {}) {
 
 // ── Section switching ─────────────────────────────────────────────────────────
 function switchSection(targetId) {
-  ["editorArea", "dashboardSection", "analyticsSection", "profileSection", "learnSection"].forEach(id => {
+  ["editorArea", "dashboardSection", "analyticsSection", "profileSection", "learnSection", "outilsSection"].forEach(id => {
     const el = $(id);
     if (el) el.classList.toggle("active", id === targetId);
   });
@@ -1110,16 +1130,16 @@ $("publishNowBtn")?.addEventListener("click", async () => {
   btn.disabled = false; btn.textContent = `Publier sur ${_selectedPlatforms.size} plateforme${_selectedPlatforms.size > 1 ? "s" : ""} →`;
 });
 
-// ── Content brief toggle ──────────────────────────────────────────────────────
-const briefToggle = $("briefToggle");
-const briefBody   = $("briefBody");
-const briefArrow  = $("briefArrow");
-briefToggle?.addEventListener("click", () => {
-  const open = briefBody?.classList.toggle("open");
-  if (briefArrow) briefArrow.textContent = open ? "↑" : "↓";
-  briefToggle.setAttribute("aria-expanded", String(open));
+// ── Instructions toggle ───────────────────────────────────────────────────────
+const instrToggle = $("instrToggle");
+const instrBody   = $("instrBody");
+const instrArrow  = $("instrArrow");
+instrToggle?.addEventListener("click", () => {
+  const open = instrBody?.classList.toggle("open");
+  if (instrArrow) instrArrow.textContent = open ? "↑" : "↓";
+  instrToggle.setAttribute("aria-expanded", String(open));
 });
-briefToggle?.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); briefToggle.click(); } });
+instrToggle?.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); instrToggle.click(); } });
 
 // ── Preview panel (ready_for_review) ─────────────────────────────────────────
 let _reviewJobId = null;

@@ -22,15 +22,43 @@
         --salmon-border: rgba(255,119,81,.22);
         --salmon-glow:   rgba(255,119,81,.35);
         --bg:            #080808;
-        --surface:       rgba(255,255,255,.04);
+        --surface:       #141414;
         --border:        rgba(255,255,255,.08);
         --text:          #F5F5F6;
         --muted:         rgba(245,245,246,.45);
+        --field-bg:      rgba(255,255,255,.03);
+        --nav-bg:        rgba(8,8,8,.88);
         --err:           #ff5c7a;
         --radius:        14px;
         --font:          'Poppins', system-ui, sans-serif;
         --mono:          'Courier New', monospace;
       }
+
+      [data-theme="light"] {
+        --bg:            #FFFFFF;
+        --surface:       #F5F5F5;
+        --text:          #1A1A1A;
+        --border:        rgba(0,0,0,.08);
+        --muted:         rgba(26,26,26,.5);
+        --field-bg:      rgba(0,0,0,.04);
+        --nav-bg:        rgba(255,255,255,.9);
+        --salmon-dim:    rgba(255,119,81,.1);
+        --salmon-border: rgba(255,119,81,.3);
+      }
+      [data-theme="light"] body {
+        background-image: radial-gradient(ellipse 80% 40% at 50% 0%, rgba(255,119,81,.05) 0%, transparent 60%);
+      }
+      [data-theme="light"] .logo-mark::after { border-left-color: #fff; }
+
+      /* Theme toggle button */
+      .btn-theme-toggle {
+        background: transparent; border: 1px solid var(--border);
+        border-radius: 8px; cursor: pointer; padding: .32rem .5rem;
+        font-size: .95rem; color: var(--muted);
+        transition: color .15s, border-color .15s; flex-shrink: 0;
+        margin-right: .4rem;
+      }
+      .btn-theme-toggle:hover { color: var(--text); border-color: rgba(128,128,128,.3); }
 
       html { scroll-behavior: smooth; }
 
@@ -53,7 +81,7 @@
         border-bottom: 1px solid var(--border);
         backdrop-filter: blur(14px);
         -webkit-backdrop-filter: blur(14px);
-        background: rgba(8,8,8,.88);
+        background: var(--nav-bg);
       }
       .logo { display: flex; align-items: center; gap: .55rem; text-decoration: none; color: var(--text); font-weight: 700; font-size: .95rem; }
       .logo-mark {
@@ -164,7 +192,7 @@
 
       textarea {
         width: 100%; padding: .75rem; border-radius: 8px;
-        background: rgba(255,255,255,.03); border: 1px solid var(--border);
+        background: var(--field-bg); border: 1px solid var(--border);
         color: var(--text); font-family: var(--font); font-size: .875rem;
         resize: vertical; min-height: 90px;
         transition: border-color .15s, box-shadow .15s;
@@ -177,7 +205,7 @@
 
       input[type="text"], input[type="email"], select {
         width: 100%; padding: .65rem .85rem; border-radius: 8px;
-        background: rgba(255,255,255,.03); border: 1px solid var(--border);
+        background: var(--field-bg); border: 1px solid var(--border);
         color: var(--text); font-family: var(--font); font-size: .875rem;
         transition: border-color .15s, box-shadow .15s; appearance: none;
       }
@@ -322,7 +350,7 @@
       /* ── BRAND PANEL ────────────────────────────────────────── */
       .brand-panel {
         position: fixed; top: 0; right: -420px; width: 400px; height: 100vh;
-        background: #0d0d0e; border-left: 1px solid var(--border);
+        background: var(--bg); border-left: 1px solid var(--border);
         z-index: 200; overflow-y: auto; padding: 1.5rem;
         transition: right .3s ease; box-shadow: -4px 0 32px rgba(0,0,0,.5);
       }
@@ -739,7 +767,7 @@
       /* ── AI VIDEO COACH (Feature 9) ─────────────────────────── */
       .coach-panel {
         position:fixed; top:0; right:-440px; width:420px; height:100vh;
-        background:#0c0c0d; border-left:1px solid var(--border);
+        background:var(--bg); border-left:1px solid var(--border);
         z-index:300; display:flex; flex-direction:column;
         transition:right .3s cubic-bezier(.4,0,.2,1);
         box-shadow:-4px 0 32px rgba(0,0,0,.6);
@@ -957,8 +985,10 @@
         <button class="nav-tab" data-target="analyticsSection">Analytique</button>
         <button class="nav-tab" data-target="profileSection">Profil</button>
         <button class="nav-tab" data-target="learnSection">📚 Apprendre</button>
+        <button class="nav-tab" data-target="outilsSection">🛠 Outils</button>
         <button id="brandBtn" class="btn btn-ghost" style="padding:.38rem .7rem;font-size:.8rem;margin-left:.5rem">⚙ Brand</button>
       </div>
+      <button id="themeToggle" class="btn-theme-toggle" title="Basculer thème">🌙</button>
       <button class="notif-bell" id="notifBellBtn">🔔<span class="notif-dot" id="notifDot"></span></button>
     </nav>
 
@@ -1392,18 +1422,6 @@
             <input id="video" name="video" type="file" accept="video/*" />
           </div>
 
-          <!-- Template selector -->
-          <div class="field" id="templateField">
-            <span>Template de style <em style="font-weight:400;color:var(--muted);text-transform:none">(optionnel)</em></span>
-            <div class="template-row">
-              <select id="templateSelect" name="template_id" style="flex:1">
-                <option value="">Pas de template — l'IA décide</option>
-              </select>
-              <button type="button" id="uploadTemplateBtn" class="btn btn-ghost" style="white-space:nowrap;font-size:.8rem">+ Référence</button>
-            </div>
-            <div class="template-chips" id="templateChips"></div>
-          </div>
-
           <div class="field">
             <span>Format</span>
             <div class="seg" role="tablist">
@@ -1416,65 +1434,18 @@
             </div>
           </div>
 
-          <div class="field">
+          <!-- Instructions (collapsible) -->
+          <div class="brief-toggle" id="instrToggle" role="button" tabindex="0" aria-expanded="false">
             <span>Instructions <em style="font-weight:400;color:var(--muted);text-transform:none">(optionnel)</em></span>
-            <textarea
-              name="instructions"
-              rows="3"
-              placeholder="ex. Le hook doit commencer par le moment clé. Tout couper après 3 minutes."
-            ></textarea>
+            <span class="arrow" id="instrArrow">↓</span>
           </div>
-
-          <!-- Content Brief (collapsible) -->
-          <div class="brief-toggle" id="briefToggle" role="button" tabindex="0" aria-expanded="false">
-            <span>Brief de contenu</span>
-            <span class="arrow" id="briefArrow">↓</span>
-          </div>
-          <div class="brief-body" id="briefBody">
-            <div class="field" style="margin-top:.75rem">
-              <span>Audience cible</span>
-              <input type="text" name="target_audience" placeholder="ex. entrepreneurs 25–40 ans qui veulent scaler leur business" />
-            </div>
-            <div class="field">
-              <span>Message principal</span>
-              <input type="text" name="main_message" placeholder="ex. Vous n'avez pas besoin de plus de contenu — vous avez besoin d'un meilleur montage" />
-            </div>
-            <div class="field">
-              <span>Émotion souhaitée</span>
-              <select name="desired_emotion">
-                <option value="">— choisir —</option>
-                <option value="inspired">Inspiré</option>
-                <option value="educated">Éduqué</option>
-                <option value="motivated">Motivé</option>
-                <option value="challenged">Challengé</option>
-                <option value="curious">Curieux</option>
-              </select>
-            </div>
-            <div class="field">
-              <span>Plateforme</span>
-              <div class="seg" role="tablist">
-                <input type="radio" name="platform" id="plt-auto" value="" checked />
-                <label for="plt-auto">Auto</label>
-                <input type="radio" name="platform" id="plt-shorts" value="YouTube Shorts" />
-                <label for="plt-shorts">Shorts</label>
-                <input type="radio" name="platform" id="plt-reels" value="Reels" />
-                <label for="plt-reels">Reels</label>
-                <input type="radio" name="platform" id="plt-yt" value="YouTube" />
-                <label for="plt-yt">YouTube</label>
-              </div>
-            </div>
-            <div class="field">
-              <span>Type de contenu</span>
-              <div class="seg" role="tablist">
-                <input type="radio" name="content_type_hint" id="ct-auto" value="" checked />
-                <label for="ct-auto">Auto</label>
-                <input type="radio" name="content_type_hint" id="ct-coaching" value="coaching" />
-                <label for="ct-coaching">Coaching</label>
-                <input type="radio" name="content_type_hint" id="ct-edu" value="education" />
-                <label for="ct-edu">Éducation</label>
-                <input type="radio" name="content_type_hint" id="ct-story" value="story" />
-                <label for="ct-story">Story</label>
-              </div>
+          <div class="brief-body" id="instrBody">
+            <div class="field" style="padding-top:.75rem">
+              <textarea
+                name="instructions"
+                rows="3"
+                placeholder="ex. Le hook doit commencer par le moment clé. Tout couper après 3 minutes."
+              ></textarea>
             </div>
           </div>
 
@@ -1489,23 +1460,6 @@
             <span class="btn-shimmer" aria-hidden="true"></span>
           </button>
         </form>
-      </section>
-
-      <!-- HOOK GENERATOR (Feature 4) -->
-      <section class="card" id="hookGenCard">
-        <div class="tool-head" style="margin-bottom:.85rem">
-          <h2>🎣 Générer un hook</h2>
-          <p>Décrivez votre sujet — l'IA génère 5 hooks haute-rétention scorés.</p>
-        </div>
-        <div class="field">
-          <span>Sujet de votre vidéo</span>
-          <input type="text" id="hookGenTopic" placeholder="ex. J'ai perdu 20kg sans salle de sport" />
-        </div>
-        <button type="button" id="hookGenBtn" class="btn-submit" style="margin-top:0;padding:.7rem">
-          <span id="hookGenBtnLabel">✨ Générer 5 hooks</span>
-          <span class="btn-shimmer" aria-hidden="true"></span>
-        </button>
-        <div id="hookGenResults" class="hook-options" style="display:none"></div>
       </section>
 
       <!-- STATUS -->
@@ -1702,35 +1656,60 @@
         </div>
       </section>
 
-      <!-- TEMPLATE SYSTEM (Feature 10) -->
-      <section class="card" id="templateSystemCard">
-        <div class="tool-head" style="margin-bottom:.85rem">
-          <h2>📐 Templates éprouvés</h2>
-          <p>5 structures de contenu haute-rétention. Appliquez en un clic.</p>
-        </div>
-        <div class="tpl-grid" id="tplGrid">
-          <!-- Populated by JS -->
-        </div>
-      </section>
-
-      <!-- COMPETITOR ANALYSIS (Feature 11) -->
-      <section class="card" id="competitorCard">
-        <div class="tool-head" style="margin-bottom:.85rem">
-          <h2>🔍 Analyser un créateur</h2>
-          <p>Entrez un URL TikTok/YouTube — l'IA décrypte sa structure et vous explique comment répliquer.</p>
-        </div>
-        <div class="field">
-          <span>URL de la vidéo</span>
-          <input type="url" id="compUrl" placeholder="https://www.tiktok.com/@creator/video/..." />
-        </div>
-        <button type="button" id="compAnalyzeBtn" class="btn-submit" style="padding:.7rem;margin-top:0">
-          <span id="compBtnLabel">🔍 Analyser la structure</span>
-          <span class="btn-shimmer" aria-hidden="true"></span>
-        </button>
-        <div id="compResult" class="comp-result" style="display:none"></div>
-      </section>
-
       </div><!-- end editorArea -->
+
+      <!-- OUTILS SECTION -->
+      <div id="outilsSection" class="app-section">
+        <section class="hero" style="padding:2.5rem 0 1.5rem;text-align:center">
+          <h1 style="font-size:1.6rem;margin-bottom:.4rem">🛠 Outils</h1>
+          <p class="tagline">Hooks, templates et analyse de créateurs.</p>
+        </section>
+
+        <!-- HOOK GENERATOR -->
+        <section class="card" id="hookGenCard">
+          <div class="tool-head" style="margin-bottom:.85rem">
+            <h2>🎣 Générer un hook</h2>
+            <p>Décrivez votre sujet — l'IA génère 5 hooks haute-rétention scorés.</p>
+          </div>
+          <div class="field">
+            <span>Sujet de votre vidéo</span>
+            <input type="text" id="hookGenTopic" placeholder="ex. J'ai perdu 20kg sans salle de sport" />
+          </div>
+          <button type="button" id="hookGenBtn" class="btn-submit" style="margin-top:0;padding:.7rem">
+            <span id="hookGenBtnLabel">✨ Générer 5 hooks</span>
+            <span class="btn-shimmer" aria-hidden="true"></span>
+          </button>
+          <div id="hookGenResults" class="hook-options" style="display:none"></div>
+        </section>
+
+        <!-- TEMPLATE SYSTEM -->
+        <section class="card" id="templateSystemCard">
+          <div class="tool-head" style="margin-bottom:.85rem">
+            <h2>📐 Templates éprouvés</h2>
+            <p>5 structures de contenu haute-rétention. Appliquez en un clic.</p>
+          </div>
+          <div class="tpl-grid" id="tplGrid">
+            <!-- Populated by JS -->
+          </div>
+        </section>
+
+        <!-- COMPETITOR ANALYSIS -->
+        <section class="card" id="competitorCard">
+          <div class="tool-head" style="margin-bottom:.85rem">
+            <h2>🔍 Analyser un créateur</h2>
+            <p>Entrez un URL TikTok/YouTube — l'IA décrypte sa structure et vous explique comment répliquer.</p>
+          </div>
+          <div class="field">
+            <span>URL de la vidéo</span>
+            <input type="url" id="compUrl" placeholder="https://www.tiktok.com/@creator/video/..." />
+          </div>
+          <button type="button" id="compAnalyzeBtn" class="btn-submit" style="padding:.7rem;margin-top:0">
+            <span id="compBtnLabel">🔍 Analyser la structure</span>
+            <span class="btn-shimmer" aria-hidden="true"></span>
+          </button>
+          <div id="compResult" class="comp-result" style="display:none"></div>
+        </section>
+      </div><!-- end outilsSection -->
 
       <!-- ANALYTICS SECTION -->
       <div id="analyticsSection" class="app-section">
