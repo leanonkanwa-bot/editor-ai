@@ -53,7 +53,27 @@ except Exception:
     analytics_router = None
 
 
+def _cleanup_old_uploads() -> None:
+    """Delete uploaded source videos older than upload_retention_hours."""
+    import time as _time
+    cutoff = _time.time() - settings.upload_retention_hours * 3600
+    try:
+        for f in settings.uploads_dir.iterdir():
+            if f.is_file() and f.stat().st_mtime < cutoff:
+                try:
+                    f.unlink()
+                except OSError:
+                    pass
+    except Exception:
+        pass
+
+
 app = FastAPI(title="AI Video Editor Agent", version="0.1.0")
+
+
+@app.on_event("startup")
+def _on_startup() -> None:
+    _cleanup_old_uploads()
 
 app.add_middleware(
     CORSMiddleware,

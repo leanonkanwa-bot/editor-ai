@@ -27,10 +27,7 @@ from app.core.config import BACKEND_DIR
 
 JOBS_FILE = BACKEND_DIR / "storage" / "jobs.json"
 TERMINAL_STATUSES = {"done", "error"}
-INTERRUPT_MESSAGE = (
-    "Server restarted while this job was running. "
-    "The work cannot be resumed — please re-upload your video."
-)
+INTERRUPT_MESSAGE = "Serveur redémarré - veuillez re-uploader votre vidéo"
 
 
 @dataclass

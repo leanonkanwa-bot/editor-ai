@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     # Leave empty to allow anonymous access (only do this for local dev).
     access_password: str = ""
 
+    # How long to keep uploaded source videos on disk (hours).
+    upload_retention_hours: int = 24
+
     @property
     def uploads_dir(self) -> Path:
         return (BACKEND_DIR / self.storage_uploads).resolve()
