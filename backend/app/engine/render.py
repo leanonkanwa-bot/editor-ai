@@ -1409,3 +1409,4 @@ def render(
         "vignette_moments": len(remapped_vsm),
     }
 
+
