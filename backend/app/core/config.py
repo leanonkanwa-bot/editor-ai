@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     # Leave empty to disable. Set BACKGROUND_MUSIC_PATH in .env to enable.
     background_music_path: str = ""
 
+    # Pexels API key for b-roll stock video fetching (free tier is sufficient).
+    # Set PEXELS_API_KEY in .env / Railway variables to enable automatic b-roll.
+    # Leave empty to disable — b-roll suggestions will be noted in the plan but
+    # no stock video is downloaded or overlaid.
+    pexels_api_key: str = ""
+
     @property
     def uploads_dir(self) -> Path:
         return (BACKEND_DIR / self.storage_uploads).resolve()

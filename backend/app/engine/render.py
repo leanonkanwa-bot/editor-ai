@@ -37,8 +37,8 @@ from app.engine.graphics import (
 )
 
 
-SHORT_PAD_S    = 0.15   # 150ms — word-safe start/end buffer (was 50ms)
-LONG_PAD_S     = 0.25   # 250ms — cinematic breathing room (was 150ms)
+SHORT_PAD_S    = 0.12   # 120ms — word-safe start/end buffer
+LONG_PAD_S     = 0.20   # 200ms — cinematic breathing room
 AUDIO_FADE_S   = 0.05   # 50ms — anti-pop fade at every segment boundary
 AUDIO_HANDLE_S = 0.08   # 80ms audio handle kept before/after each cut edge
 
@@ -844,6 +844,133 @@ def _color_grade_filter(content_type: str) -> str:
     return profiles.get(content_type.lower(), "eq=contrast=1.1:saturation=1.05")
 
 
+def _fetch_broll_clip(
+    search_query: str,
+    work_dir: Path,
+    clip_name: str,
+    target_w: int,
+    target_h: int,
+    duration: float,
+    fps: int,
+) -> Path | None:
+    """Fetch a portrait stock video from Pexels and crop-to-fill to target dims.
+
+    Returns path to a ready-to-overlay MP4 clip, or None if PEXELS_API_KEY is
+    not configured, the search returns no results, or any network/ffmpeg error
+    occurs. Caller should silently skip b-roll when None is returned.
+    """
+    api_key = settings.pexels_api_key if hasattr(settings, "pexels_api_key") else ""
+    if not api_key:
+        return None
+    try:
+        import json as _json
+        import urllib.error
+        import urllib.parse
+        import urllib.request
+
+        q = urllib.parse.quote(search_query[:100])
+        url = (
+            f"https://api.pexels.com/videos/search"
+            f"?query={q}&per_page=5&orientation=portrait&size=medium"
+        )
+        req = urllib.request.Request(url, headers={"Authorization": api_key})
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            data = _json.loads(resp.read())
+
+        videos = data.get("videos", [])
+        if not videos:
+            # Retry without orientation filter (some queries have no portrait results)
+            url2 = (
+                f"https://api.pexels.com/videos/search"
+                f"?query={q}&per_page=5&size=medium"
+            )
+            req2 = urllib.request.Request(url2, headers={"Authorization": api_key})
+            with urllib.request.urlopen(req2, timeout=12) as resp2:
+                data = _json.loads(resp2.read())
+            videos = data.get("videos", [])
+        if not videos:
+            return None
+
+        # Prefer HD portrait files; fall back to any available file
+        best_file = None
+        for v in videos:
+            for f in v.get("video_files", []):
+                w, h = f.get("width", 0), f.get("height", 1)
+                if h >= w and f.get("quality") in ("hd", "sd"):
+                    best_file = f
+                    break
+            if best_file:
+                break
+        if not best_file:
+            best_file = videos[0].get("video_files", [{}])[0]
+        if not best_file.get("link"):
+            return None
+
+        dl_path = work_dir / f"{clip_name}_raw.mp4"
+        req_dl = urllib.request.Request(
+            best_file["link"], headers={"User-Agent": "LeanLead/1.0"}
+        )
+        with urllib.request.urlopen(req_dl, timeout=45) as resp_dl:
+            dl_path.write_bytes(resp_dl.read())
+
+        out_path = work_dir / f"{clip_name}_broll.mp4"
+        vf = (
+            f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
+            f"crop={target_w}:{target_h},fps={fps},"
+            f"trim=duration={duration:.2f},setpts=PTS-STARTPTS"
+        )
+        _run([
+            FFMPEG_PATH, "-y", "-loglevel", "error",
+            "-i", str(dl_path),
+            "-vf", vf,
+            "-an",
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
+            "-threads", "2",
+            "-pix_fmt", "yuv420p",
+            str(out_path),
+        ])
+        dl_path.unlink(missing_ok=True)
+        return out_path if out_path.exists() else None
+    except Exception:
+        return None
+
+
+def _verify_caption_sync(
+    words: list["WordTiming"],
+    edited_duration: float,
+) -> list["WordTiming"]:
+    """Drop caption words outside the edited video's duration and log anomalies.
+
+    Called just before build_ass() to prevent captions from appearing at
+    times that don't exist in the final video — which looks like frozen or
+    ghost captions at the end of the video.
+    """
+    import logging as _lg
+    _log = _lg.getLogger(__name__)
+    issues: list[str] = []
+    valid: list["WordTiming"] = []
+    for w in words:
+        if w.start < 0:
+            issues.append(f"'{w.text}' negative start={w.start:.3f}s")
+            continue
+        if w.start > edited_duration:
+            issues.append(
+                f"'{w.text}' start={w.start:.3f}s > video duration={edited_duration:.3f}s"
+            )
+            continue
+        if w.end > edited_duration + 0.5:
+            issues.append(
+                f"'{w.text}' end={w.end:.3f}s exceeds video duration={edited_duration:.3f}s"
+            )
+            # Clamp rather than drop — the word starts inside the video.
+            valid.append(WordTiming(text=w.text, start=w.start, end=min(w.end, edited_duration)))
+            continue
+        valid.append(w)
+    if issues:
+        _log.warning("caption sync anomalies (%d words): %s", len(issues), issues[:10])
+    return valid
+
+
 def render(
     src: Path,
     transcript: dict[str, Any],
@@ -927,25 +1054,32 @@ def render(
             _cut_segment(cut_src, s, e, part, target_w, target_h, fps)
         parts.append(part)
 
+        # PROBLEM 1 FIX: use the actual cut boundaries (with audio handles) as
+        # the reference for all timeline remapping so captions, zooms, and
+        # silences are placed at the correct positions in the concatenated video.
+        actual_s = max(0.0, s - AUDIO_HANDLE_S)
+        actual_e = e + AUDIO_HANDLE_S
+        seg_offset = cum  # concat-timeline start of this segment
+
         for zp in plan.zoom_plan:
             zs = float(zp.get("start", 0))
             ze = float(zp.get("end", zs))
             if zs >= s and ze <= e:
                 remapped_zoom.append({
                     **zp,
-                    "start": cum + (zs - s),
-                    "end": cum + (ze - s),
+                    "start": seg_offset + (zs - actual_s),
+                    "end": seg_offset + (ze - actual_s),
                 })
 
         for tseg in transcript.get("segments", []):
             for w in tseg.get("words", []):
                 ws = float(w["start"])
                 we = float(w["end"])
-                if ws >= s and we <= e:
+                if ws >= s and we <= e:  # only content words (not handle region)
                     remapped_words.append(WordTiming(
                         text=w["text"].strip(),
-                        start=cum + (ws - s),
-                        end=cum + (we - s),
+                        start=seg_offset + (ws - actual_s),
+                        end=seg_offset + (we - actual_s),
                     ))
 
         for sil in (plan.silences or []):
@@ -956,7 +1090,7 @@ def render(
             if s <= sil_at <= e:
                 remapped_silences.append({
                     **sil,
-                    "at": cum + (sil_at - s),
+                    "at": seg_offset + (sil_at - actual_s),
                 })
 
         for vm in (plan.visual_style_moments or []):
@@ -968,13 +1102,13 @@ def render(
             if s <= vm_at <= e:
                 remapped_vsm.append({
                     **vm,
-                    "at": cum + (vm_at - s),
+                    "at": seg_offset + (vm_at - actual_s),
                     "duration": vm_dur,
                 })
 
         if parts:  # not the first segment — record this cut point
             cut_timestamps.append(cum)
-        cum += (e - s)
+        cum += (actual_e - actual_s)  # advance by the actual part file duration
 
     if not parts:
         raise RuntimeError("No keep_segments produced any clip.")
@@ -991,13 +1125,14 @@ def render(
     BROLL_MIN_S = 2.0
     BROLL_MAX_S = 3.5
     remapped_broll: list[tuple[float, float]] = []
+    broll_queries: list[str] = []   # parallel to remapped_broll — Pexels search terms
     for br in plan.broll_suggestions:
         try:
             br_at = float(br.get("at", 0))
             br_dur = float(br.get("duration", 0))
         except (TypeError, ValueError):
             continue
-        # UPGRADE 1: anchor_word overrides at with the exact word timestamp
+        # anchor_word overrides `at` with the exact word timestamp
         anchor = str(br.get("anchor_word") or "").strip()
         if anchor:
             anchor_ts = _find_word_timestamp(transcript, anchor)
@@ -1012,6 +1147,9 @@ def render(
             if ss <= br_at <= ee and ee > ss:
                 start = run + (br_at - ss)
                 remapped_broll.append((start, start + br_dur))
+                broll_queries.append(
+                    str(br.get("search_query") or br.get("concept") or "")
+                )
                 break
             run += max(0.0, ee - ss)
 
@@ -1173,6 +1311,10 @@ def render(
 
     # Sort the final zoom plan chronologically.
     remapped_zoom.sort(key=lambda z: float(z.get("start", 0)))
+
+    # VERIFICATION: drop caption words outside the edited video duration and log
+    # any sync anomalies so mismatches are visible in server logs.
+    remapped_words = _verify_caption_sync(remapped_words, total_duration)
 
     ass_path = work_dir / "captions.ass"
     build_ass(
@@ -1345,9 +1487,47 @@ def render(
     )
     _run(_cmd_p1)
 
-    # ── Overlay passes: one ffmpeg call per graphic clip ──────────────────
+    # ── B-roll overlay passes (full-screen Pexels stock video) ───────────
+    # For each remapped b-roll window: fetch a stock clip from Pexels,
+    # crop-to-fill to target dims, then overlay it full-screen for the
+    # duration of the window. Speaker audio continues underneath.
+    _broll_dir = work_dir / "broll_clips"
+    _broll_dir.mkdir(parents=True, exist_ok=True)
     _current_path = _base_path
     _overlay_intermediates: list[Path] = []
+    for _bi, ((br_s, br_e), br_q) in enumerate(zip(remapped_broll, broll_queries)):
+        if not br_q:
+            continue
+        br_dur = br_e - br_s
+        br_clip = _fetch_broll_clip(
+            br_q, _broll_dir, f"br_{_bi:02d}", target_w, target_h, br_dur, fps
+        )
+        if not br_clip:
+            _log.info("broll %d: no stock clip (Pexels key missing or no results)", _bi)
+            continue
+        _next_br_path = _tmp_dir / f"br{_bi}_{output_path.stem}.mp4"
+        _fc_br = (
+            f"[1:v]setpts=PTS-STARTPTS+{br_s:.3f}/TB[bv];"
+            f"[0:v][bv]overlay=x=0:y=0:enable='between(t,{br_s:.3f},{br_e:.3f})'[vout]"
+        )
+        _log.info("broll overlay %d: query=%r at=%.2fs–%.2fs", _bi, br_q, br_s, br_e)
+        _run([
+            FFMPEG_PATH, "-y", "-loglevel", "error",
+            "-i", str(_current_path),
+            "-i", str(br_clip),
+            "-filter_complex", _fc_br,
+            "-map", "[vout]", "-map", "0:a",
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
+            "-threads", "4",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "copy",
+            str(_next_br_path),
+        ])
+        if _next_br_path.exists():
+            _overlay_intermediates.append(_current_path)
+            _current_path = _next_br_path
+
+    # ── Overlay passes: one ffmpeg call per graphic clip ──────────────────
     for _j, (_clip_path, _rg) in enumerate(zip(graphic_clip_paths, ok_graphics)):
         _next_path = _tmp_dir / f"ov{_j}_{output_path.stem}.mp4"
         _x_esc = _rg.x_expr.replace(",", "\\,")

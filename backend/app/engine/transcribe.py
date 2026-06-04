@@ -177,10 +177,20 @@ def transcribe(video_path: Path) -> Transcript:
         seg_iter, info = model.transcribe(  # type: ignore[union-attr]
             str(wav_path),
             word_timestamps=True,
-            beam_size=5,        # 48 GB RAM — use full beam search for best accuracy
-            vad_filter=False,   # silero-VAD adds ~60MB onnxruntime overhead on tight dynos
-            language=None,      # auto-detect: French, English, Spanish, Arabic, etc.
+            beam_size=10,                   # higher beam = fewer word errors
+            best_of=10,                     # pick best of N random samples
+            temperature=[0.0],              # deterministic — no hallucination variance
+            condition_on_previous_text=True,  # use context for proper nouns / numbers
+            no_speech_threshold=0.4,        # filter non-speech segments
+            compression_ratio_threshold=2.0,  # drop garbage repetition transcriptions
+            vad_filter=False,               # silero-VAD adds ~60MB onnxruntime overhead
+            language=None,                  # auto-detect: French, English, Spanish, Arabic
         )
+
+        # Minimum word duration: shorter than 30ms is almost always an artifact.
+        _MIN_WORD_DUR = 0.03
+        # Minimum word probability: below 0.5 the transcription is likely wrong.
+        _MIN_WORD_PROB = 0.5
 
         segments: list[Segment] = []
         last_end = 0.0
@@ -192,7 +202,13 @@ def transcribe(video_path: Path) -> Transcript:
                     end=float(w.end),
                 )
                 for w in (seg.words or [])
-                if w.start is not None and w.end is not None
+                if (
+                    w.start is not None
+                    and w.end is not None
+                    and (w.end - w.start) >= _MIN_WORD_DUR   # drop sub-30ms artifacts
+                    and getattr(w, "probability", 1.0) >= _MIN_WORD_PROB  # drop low-conf words
+                    and (w.word or "").strip()               # drop blank tokens
+                )
             ]
             segments.append(
                 Segment(

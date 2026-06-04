@@ -25,6 +25,31 @@ from app.engine.template_engine import apply_template, get_template
 from app.engine.transcribe import transcribe, unload_model
 
 
+def verify_caption_sync(remapped_words: list, edited_duration: float) -> list:
+    """Filter caption words to only those that fall within the edited video.
+
+    This is a utility wrapper around render._verify_caption_sync() exposed
+    here for testing and external use. The render pipeline calls the private
+    version directly before build_ass().
+    """
+    import logging
+    log = logging.getLogger(__name__)
+    issues = []
+    valid = []
+    for w in remapped_words:
+        start = getattr(w, "start", w.get("start", 0) if isinstance(w, dict) else 0)
+        if start < 0:
+            issues.append(f"'{getattr(w, 'text', '')}' negative start={start:.3f}s")
+            continue
+        if start > edited_duration:
+            issues.append(f"'{getattr(w, 'text', '')}' start={start:.3f}s > duration={edited_duration:.3f}s")
+            continue
+        valid.append(w)
+    if issues:
+        log.warning("caption sync issues (%d): %s", len(issues), issues[:10])
+    return valid
+
+
 def run_job(
     job_id: str,
     src: Path,
@@ -307,6 +332,37 @@ def run_job(
         )
 
 
+def quality_check(plan, result: dict) -> list[str]:
+    """Post-render quality gate — returns a list of warning/error strings.
+
+    Called automatically after every render. Issues are logged at WARNING
+    level and surfaced in Railway logs so they are easy to spot.
+    """
+    issues: list[str] = []
+    edited_duration = float(result.get("duration", 0.0))
+
+    # Hook strength
+    segs = plan.keep_segments or []
+    if segs and segs[0].get("score", 5) < 10:
+        issues.append(
+            f"WARN: Hook segment score={segs[0].get('score','?')} — retention risk"
+        )
+
+    # Duration guard for short-form
+    if edited_duration > 90 and plan.format == "short":
+        issues.append(f"WARN: Short-form is {edited_duration:.1f}s — exceeds 90s target")
+
+    # Minimum segment count
+    if len(segs) < 3:
+        issues.append(f"WARN: Only {len(segs)} segment(s) — may feel incomplete")
+
+    # No empty output
+    if edited_duration < 5:
+        issues.append(f"ERROR: Output duration {edited_duration:.1f}s is suspiciously short")
+
+    return issues
+
+
 def run_render_phase(job_id: str, src: Path) -> None:
     """Phase 2: render the approved edit plan → status: done."""
     job = store.get(job_id)
@@ -380,6 +436,13 @@ def run_render_phase(job_id: str, src: Path) -> None:
             graphic_specs=graphic_specs,
             content_type=content_type,
         )
+
+        # Post-render quality check — logs warnings so they surface in Railway logs.
+        import logging as _logging
+        _qlog = _logging.getLogger(__name__)
+        _issues = quality_check(plan, result)
+        for _issue in _issues:
+            _qlog.warning("quality_check: %s", _issue)
 
         # ── Brand: apply intro/outro bumpers (Feature 2) ──────────────────
         brand_kit  = plan_data.get("brand_kit", {})
