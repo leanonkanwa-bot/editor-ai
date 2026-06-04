@@ -1,14 +1,14 @@
-"""Build .ass subtitle files.
+﻿"""Build .ass subtitle files.
 
-Caption system — professional short-form edutainment standard:
+Caption system â€” professional short-form edutainment standard:
   - kinetic mode: 1 word per frame, each pops on its exact syllable timestamp
-  - impact mode: 2–3 words per frame (grouped on pauses ≥ 0.25s)
-  - Every spoken word appears — no gaps in the caption track
-  - Emphasis words: larger (1.3×) + salmon colour (#FF7751) — always Title Case
+  - impact mode: 2â€“3 words per frame (grouped on pauses â‰¥ 0.25s)
+  - Every spoken word appears â€” no gaps in the caption track
+  - Emphasis words: larger (1.3Ã—) + salmon colour (#FF7751) â€” always Title Case
   - Normal words: sentence case, white, soft 1px drop shadow (no outline)
   - Position: center 45% from top (kinetic, mobile eye focus zone)
               bottom 20% of frame (impact, MarginV = 20% of PlayResY)
-  - Shadow only (no outline) — softer, more legible on mixed backgrounds.
+  - Shadow only (no outline) â€” softer, more legible on mixed backgrounds.
   - Font: Inter Bold (installed) or DejaVu Sans Bold fallback
   - Color hierarchy: time/location=sky-blue, action=white, emotion=light-red, hook=salmon, normal=white
 """
@@ -39,7 +39,7 @@ ALLOWED_COLORS = {
 ALLOWED_POSITIONS = {"center", "bottom", "side-left", "side-right"}
 ALLOWED_STYLES    = {"impact", "kinetic"}
 
-# 5% of frame height — readable at full screen, TikTok/Reels standard.
+# 5% of frame height â€” readable at full screen, TikTok/Reels standard.
 CAP_SIZE_SHORT      = 96   # 5.0% of 1920
 CAP_SIZE_LONG       = 54   # 5.0% of 1080
 # Emphasis / colored words: 6.5% frame height (Title Case, salmon #FF7751)
@@ -49,7 +49,7 @@ CAP_SIZE_LONG_EMPH  = 70   # 6.5% of 1080
 # Salmon accent colour for emphasis words (matches brand)
 EMPHASIS_COLOR_ASS = "&H005177FF"  # BGR for #FF7751
 
-# Word category color map — kinetic color hierarchy
+# Word category color map â€” kinetic color hierarchy
 # Key = category name from plan's word_categories dict
 # Value = ASS &H00BBGGRR color string
 CATEGORY_COLOR_ASS: dict[str, str] = {
@@ -60,13 +60,13 @@ CATEGORY_COLOR_ASS: dict[str, str] = {
     "hook":     "&H005177FF",  # salmon    #FF7751 (same as emphasis)
 }
 
-PUNCT_RE = re.compile(r"[.,!?;:\"'()\[\]…–—]")
+PUNCT_RE = re.compile(r"[.,!?;:\"'()\[\]â€¦â€“â€”]")
 
-# 0ms delay: caption appears exactly when the word is spoken — perfect sync.
+# 0ms delay: caption appears exactly when the word is spoken â€” perfect sync.
 CAPTION_DELAY_S: float = 0.0
 
 # Group words separated by less than this gap into one caption line.
-WORD_GROUP_GAP_S: float = 0.25   # 250 ms — natural breath pause threshold
+WORD_GROUP_GAP_S: float = 0.25   # 250 ms â€” natural breath pause threshold
 MAX_WORDS_PER_GROUP: int = 3
 
 
@@ -77,14 +77,14 @@ class WordTiming:
     end: float
 
 
-# ── Font mapping ──────────────────────────────────────────────────────────────
+# â”€â”€ Font mapping â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Railway ships Debian; Poppins/Montserrat/Inter are not installed by default.
 # Map all UI font names to a font that is actually present on the server.
 _FONT_MAP: dict[str, str] = {
     "Poppins Bold":       "DejaVu Sans Bold",
     "Poppins ExtraBold":  "DejaVu Sans Bold",
     "Poppins SemiBold":   "DejaVu Sans Bold",
-    # "Inter Bold" intentionally omitted — now installed via apt/download in Dockerfile
+    # "Inter Bold" intentionally omitted â€” now installed via apt/download in Dockerfile
     "Montserrat Bold":    "DejaVu Sans Bold",
     "Montserrat Black":   "DejaVu Sans Bold",
     "Roboto Bold":        "DejaVu Sans Bold",
@@ -136,7 +136,7 @@ def _ass_header(
     # ASS alignment: 8 = top-center (MarginV from top), 2 = bottom-center (MarginV from bottom).
     if position == "center" or style == "kinetic":
         alignment = 8
-        margin_v = int(play_res_y * 0.42)  # text top at 42% → center at ~45%
+        margin_v = int(play_res_y * 0.42)  # text top at 42% â†’ center at ~45%
     else:
         alignment = 2
         margin_v = int(play_res_y * 0.20)
@@ -153,12 +153,12 @@ def _ass_header(
             f"&H00000000,&H40000000,1,0,0,0,100,100,0,0,1,0,1,{alignment},60,60,{margin_v},1"
         )
     else:
-        # Impact: soft 1px drop shadow, no outline — matches kinetic readability standard.
+        # Impact: soft 1px drop shadow, no outline â€” matches kinetic readability standard.
         default_line = (
             f"Style: Default,{font_name},{cap_size},{primary},{primary},"
             f"&H00000000,&H40000000,1,0,0,0,100,100,0,0,1,0,1,{alignment},60,60,{margin_v},1"
         )
-        # Emphasis: salmon colour, 1.3× size, same soft shadow
+        # Emphasis: salmon colour, 1.3Ã— size, same soft shadow
         emphasis_line = (
             f"Style: Emphasis,{font_name},{cap_size_emph},{EMPHASIS_COLOR_ASS},{EMPHASIS_COLOR_ASS},"
             f"&H00000000,&H40000000,1,0,0,0,100,100,0,0,1,0,1,{alignment},60,60,{margin_v},1"
@@ -195,9 +195,9 @@ def _group_words(
     """Group consecutive words into caption frames.
 
     A new group starts when either:
-      - The gap to the next word is ≥ gap_s (natural pause / breath)
+      - The gap to the next word is â‰¥ gap_s (natural pause / breath)
       - The current group already has max_words words
-    This produces 2–3 word caption cards that feel natural and readable.
+    This produces 2â€“3 word caption cards that feel natural and readable.
     """
     groups: list[list[WordTiming]] = []
     current: list[WordTiming] = []
@@ -235,12 +235,12 @@ def build_ass(
     kinetic style (default): 1 word per frame, pops on its exact spoken timestamp.
       Each word is independently timed. Color hierarchy: categories > word_colors >
       emphasis > white.
-    impact style: 2–3-word caption frames grouped on natural pauses.
+    impact style: 2â€“3-word caption frames grouped on natural pauses.
 
-    word_categories: {"word": "time"|"location"|"action"|"emotion"|"hook"} —
+    word_categories: {"word": "time"|"location"|"action"|"emotion"|"hook"} â€”
       category-based color overrides applied per word.
     """
-    # Font mapping: UI name → installed system font
+    # Font mapping: UI name â†’ installed system font
     font = _FONT_MAP.get(font, font)
     if font not in ALLOWED_FONTS:
         font = "DejaVu Sans Bold"
@@ -250,7 +250,7 @@ def build_ass(
         position = "center"
     if style not in ALLOWED_STYLES:
         style = "kinetic"
-    # kinetic forces center positioning — mobile eye focus zone, avoids UI buttons.
+    # kinetic forces center positioning â€” mobile eye focus zone, avoids UI buttons.
     if style == "kinetic" and position not in {"center"}:
         position = "center"
 
@@ -267,7 +267,7 @@ def build_ass(
                     for k, v in (word_categories or {}).items()}
 
     # Kinetic: 1 word per group so each pops independently on its exact timestamp.
-    # Impact: 2–3 words per group separated by natural breath pauses.
+    # Impact: 2â€“3 words per group separated by natural breath pauses.
     if style == "kinetic":
         groups = _group_words(word_list, max_words=1)
     else:
@@ -292,10 +292,10 @@ def build_ass(
             continue
 
         # Color priority per word:
-        #   1. word_categories (time/location/action/emotion/hook) → category color
+        #   1. word_categories (time/location/action/emotion/hook) â†’ category color
         #   2. word_colors (direct hex override)
-        #   3. emphasis_set → salmon + larger size
-        #   4. default → white (no inline tag)
+        #   3. emphasis_set â†’ salmon + larger size
+        #   4. default â†’ white (no inline tag)
         display_parts: list[str] = []
         for i, w in enumerate(clean_words):
             w_lower = w.lower()
@@ -303,7 +303,7 @@ def build_ass(
             custom_color = word_color_map.get(w_lower)
 
             if cat and cat in CATEGORY_COLOR_ASS:
-                # Category color — enlarged to emphasis size for visual pop.
+                # Category color â€” enlarged to emphasis size for visual pop.
                 cat_ass = CATEGORY_COLOR_ASS[cat]
                 label = w.upper() if style == "kinetic" else (w.capitalize() if i == 0 else w.lower())
                 display_parts.append(
@@ -326,7 +326,7 @@ def build_ass(
                 display_parts.append(w.lower())
         display = " ".join(display_parts)
 
-        # Caption appears 50ms after the word starts — never before the speaker.
+        # Caption appears 50ms after the word starts â€” never before the speaker.
         start = max(0.0, group[0].start + CAPTION_DELAY_S)
         end   = group[-1].end
         lines.append(
@@ -335,3 +335,4 @@ def build_ass(
 
     out_path.write_text("\n".join(lines), encoding="utf-8")
     return out_path
+
