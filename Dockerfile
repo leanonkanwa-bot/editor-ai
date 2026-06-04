@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Inter Bold — try apt package first, fall back to GitHub release download.
+# Inter Bold ??? try apt package first, fall back to GitHub release download.
 RUN apt-get update && ( apt-get install -y fonts-inter 2>/dev/null || ( \
     curl -fsSL https://github.com/rsms/inter/releases/download/v4.0/Inter-4.0.zip \
          -o /tmp/inter.zip && \
@@ -16,7 +16,7 @@ RUN apt-get update && ( apt-get install -y fonts-inter 2>/dev/null || ( \
     cp /tmp/inter/extras/otf/Inter-Bold.otf /usr/local/share/fonts/leanlead/ && \
     rm -rf /tmp/inter /tmp/inter.zip ) ) && rm -rf /var/lib/apt/lists/*
 
-# Google Fonts: Montserrat, DM Sans, Bebas Neue, Anton — direct TTF from GitHub raw
+# Google Fonts: Montserrat, DM Sans, Bebas Neue, Anton ??? direct TTF from GitHub raw
 RUN mkdir -p /usr/local/share/fonts/leanlead && \
     curl -fsSL "https://github.com/google/fonts/raw/main/ofl/montserrat/static/Montserrat-Bold.ttf" \
          -o /usr/local/share/fonts/leanlead/Montserrat-Bold.ttf && \
@@ -28,7 +28,7 @@ RUN mkdir -p /usr/local/share/fonts/leanlead && \
          -o /usr/local/share/fonts/leanlead/DMSans-Bold.ttf && \
     fc-cache -f -v
 
-# Custom fonts (Quicksand, SF Compact Bold, etc.) — drop TTF/OTF files into fonts/ before building.
+# Custom fonts (Quicksand, SF Compact Bold, etc.) ??? drop TTF/OTF files into fonts/ before building.
 COPY fonts/ /usr/local/share/fonts/leanlead/
 RUN fc-cache -f -v 2>/dev/null || true
 
@@ -44,3 +44,5 @@ COPY frontend/ /app/frontend/
 EXPOSE 8000
 
 CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+
+# cache-bust 20260604-233503
