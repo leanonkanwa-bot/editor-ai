@@ -295,10 +295,11 @@ def _cut_segment(
         f":flags=fast_bilinear,"
         f"crop={target_w}:{target_h},fps={fps}"
     )
-    # Intermediate segments are re-encoded in the final zoompan+subs pass,
-    # so quality here doesn't affect the output. Use CRF 35 + strict memory
-    # caps. Most importantly: no +faststart (moov-atom rewrite buffers the
-    # entire mdat, doubling peak RSS on large videos → SIGKILL on small dynos).
+    # CRF 0 = lossless H.264. Every subsequent pass (zoompan, overlays, caption
+    # burn) re-encodes from this; any quality loss here compounds through all
+    # later passes. The ONLY lossy encode is the final caption-burn pass (CRF 16).
+    # No +faststart: moov-atom rewrite buffers the entire mdat, doubling peak
+    # RSS on large videos → SIGKILL on small dynos.
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-threads", "1",        # global: limits decoder threads too, not just encoder
@@ -306,7 +307,7 @@ def _cut_segment(
         "-t", f"{duration:.3f}",
         "-vf", vf,
         "-af", af,
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "35",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
         "-x264-params", "rc-lookahead=0:bframes=0:ref=1:no-mbtree=1:sync-lookahead=0",
         "-threads", "1",
         "-pix_fmt", "yuv420p",
@@ -1312,9 +1313,22 @@ def render(
     # Sort the final zoom plan chronologically.
     remapped_zoom.sort(key=lambda z: float(z.get("start", 0)))
 
+    import logging as _logging
+    import shutil as _shutil
+    import tempfile as _tempfile
+    _log = _logging.getLogger(__name__)
+
     # VERIFICATION: drop caption words outside the edited video duration and log
     # any sync anomalies so mismatches are visible in server logs.
     remapped_words = _verify_caption_sync(remapped_words, total_duration)
+
+    # PROBLEM 2 DEBUG: log first 3 remapped words so caption sync is verifiable
+    # in production logs. Format: [('word', start_s, end_s), ...]
+    _log.info(
+        "caption sync: %d remapped words; first 3: %s",
+        len(remapped_words),
+        [(w.text, round(w.start, 3), round(w.end, 3)) for w in remapped_words[:3]],
+    )
 
     ass_path = work_dir / "captions.ass"
     build_ass(
@@ -1342,24 +1356,17 @@ def render(
         face_cy_pct = (ft + fb) / 2
     total_frames = max(1, int(total_duration * fps))
 
-    import logging as _logging
-    import shutil as _shutil
-    import tempfile as _tempfile
-    _log = _logging.getLogger(__name__)
-
     # Motion graphics disabled — clean professional output.
     # Only cuts + captions + zoom are applied.
     rendered_graphics: list[RenderedGraphic] = []
 
     # ── Smart dimension detection ─────────────────────────────────────────
-    # _cut_segment / _create_proxy already scale to target dims, so this
-    # is usually a no-op — but we handle every edge case explicitly.
     color_grade = _color_grade_filter(content_type)
     concat_info = _probe_video_info(concat_path)
     src_w = concat_info.get("width",  0) or target_w
     src_h = concat_info.get("height", 0) or target_h
 
-    # PROBLEM 1 FIX: always apply explicit crop-to-fill regardless of concat
+    # Always apply explicit crop-to-fill regardless of concat
     # dimensions. This guarantees no letterbox / pillarbox bars even when the
     # concat is already nominally the right size (avoids subtle off-by-one edge
     # cases that produce the video-in-video effect).
@@ -1491,6 +1498,13 @@ def render(
     # For each remapped b-roll window: fetch a stock clip from Pexels,
     # crop-to-fill to target dims, then overlay it full-screen for the
     # duration of the window. Speaker audio continues underneath.
+    _pexels_key_set = bool(settings.pexels_api_key)
+    _log.info(
+        "broll: plan has %d suggestion(s); remapped=%d; PEXELS_API_KEY=%s",
+        len(plan.broll_suggestions),
+        len(remapped_broll),
+        "SET" if _pexels_key_set else "NOT SET — skipping all broll",
+    )
     _broll_dir = work_dir / "broll_clips"
     _broll_dir.mkdir(parents=True, exist_ok=True)
     _current_path = _base_path
@@ -1503,7 +1517,8 @@ def render(
             br_q, _broll_dir, f"br_{_bi:02d}", target_w, target_h, br_dur, fps
         )
         if not br_clip:
-            _log.info("broll %d: no stock clip (Pexels key missing or no results)", _bi)
+            _reason = "PEXELS_API_KEY not set" if not _pexels_key_set else "no results or network error"
+            _log.info("broll %d skipped (%s): query=%r", _bi, _reason, br_q)
             continue
         _next_br_path = _tmp_dir / f"br{_bi}_{output_path.stem}.mp4"
         _fc_br = (
@@ -1546,9 +1561,9 @@ def render(
             "-i", str(_clip_path),
             "-filter_complex", _fc_ov,
             "-map", "[out]", "-map", "0:a",
-            "-c:v", "libx264", "-preset", "medium", "-crf", "14",
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
             "-threads", "4",
-            "-x264-params", "rc-lookahead=32:bframes=3",
+            "-x264-params", "rc-lookahead=0:bframes=0",
             "-pix_fmt", "yuv420p",
             "-c:a", "copy",
             str(_next_path),
