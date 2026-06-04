@@ -217,6 +217,21 @@ LONG-FORM (> 3 minutes) — same beats, expanded:
 
 CUTTING RULES (apply to ALL videos):
 
+  SEMANTIC COMPLETENESS RULE — ABSOLUTE:
+    Every kept segment must contain a COMPLETE THOUGHT.
+    A complete thought = subject + verb + object/resolution.
+
+    NEVER end a segment with these words — they signal an incomplete thought:
+      which · that · because · so · but · and · when · if · as
+      while · since · although · where · who · what · how · whether
+      though · unless · until · after · before
+
+    If a segment end falls on one of these words → extend to the next
+    sentence-ending punctuation or the next pause ≥ 0.3s.
+
+    NEVER start a segment mid-sentence unless the fragment is self-contained
+    and makes complete emotional sense when heard alone without context.
+
   ALWAYS CUT:
     "So yeah basically…" / "And then after that…" / "You know what I mean?"
     "Like I said…" / filler "um" "uh" "like" / "honestly" / "basically"

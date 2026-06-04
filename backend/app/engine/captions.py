@@ -25,8 +25,10 @@ from typing import Iterable
 ALLOWED_FONTS = {
     "Poppins Bold", "Poppins ExtraBold", "Poppins SemiBold",
     "Inter Bold", "Montserrat Bold", "Montserrat Black",
-    "Roboto Bold", "Bebas Neue", "DM Sans Bold", "Space Grotesk Bold",
-    "DejaVu Sans Bold", "SF Compact Bold",
+    "Roboto Bold", "Bebas Neue", "DM Sans Bold", "DM Sans",
+    "Space Grotesk Bold", "DejaVu Sans Bold", "SF Compact Bold",
+    "Quicksand Bold", "Quicksand SemiBold", "Quicksand Medium",
+    "Anton",
 }
 
 ALLOWED_COLORS = {
@@ -61,7 +63,12 @@ CATEGORY_COLOR_ASS: dict[str, str] = {
 
 PUNCT_RE = re.compile(r"[.,!?;:\"'()\[\]…–—]")
 
-# 0ms delay: caption appears exactly when the word is spoken — perfect sync.
+# Whisper word timestamps are systematically 50–150ms earlier than when words
+# are actually spoken (known faster-whisper alignment bias). This constant
+# shifts all captions forward so they match actual lip movement.
+WHISPER_TIMESTAMP_CORRECTION: float = 0.05   # 50ms forward shift (reduced after remapping fix)
+
+# Additional per-group delay on top of the Whisper correction (usually 0).
 CAPTION_DELAY_S: float = 0.0
 
 # Group words separated by less than this gap into one caption line.
@@ -80,17 +87,18 @@ class WordTiming:
 # Railway ships Debian; Poppins/Montserrat/Inter are not installed by default.
 # Map all UI font names to a font that is actually present on the server.
 _FONT_MAP: dict[str, str] = {
+    # Fonts installed in Dockerfile pass through unchanged (their face names match).
+    # Fonts NOT installed are remapped to the DejaVu fallback.
     "Poppins Bold":       "DejaVu Sans Bold",
     "Poppins ExtraBold":  "DejaVu Sans Bold",
     "Poppins SemiBold":   "DejaVu Sans Bold",
-    # "Inter Bold" intentionally omitted — now installed via apt/download in Dockerfile
-    "Montserrat Bold":    "DejaVu Sans Bold",
-    "Montserrat Black":   "DejaVu Sans Bold",
+    "Montserrat Black":   "Montserrat Bold",   # Black weight not installed → Bold
     "Roboto Bold":        "DejaVu Sans Bold",
-    "DM Sans Bold":       "DejaVu Sans Bold",
+    "DM Sans Bold":       "DM Sans",           # face registered as "DM Sans"
     "Space Grotesk Bold": "DejaVu Sans Bold",
-    "Bebas Neue":         "DejaVu Sans Bold",
     "SF Compact Bold":    "DejaVu Sans Bold",
+    # Installed fonts — no remapping needed (listed in ALLOWED_FONTS):
+    # Inter Bold, Montserrat Bold, Bebas Neue, Anton, Quicksand Bold/SemiBold/Medium
 }
 
 
@@ -315,9 +323,9 @@ def build_ass(
                 display_parts.append(w.lower())
         display = _anim + " ".join(display_parts)
 
-        # Caption appears exactly when the word is spoken — no delay.
-        start = max(0.0, group[0].start + CAPTION_DELAY_S)
-        end   = group[-1].end
+        # Apply Whisper correction + any explicit delay.
+        start = max(0.0, group[0].start + WHISPER_TIMESTAMP_CORRECTION + CAPTION_DELAY_S)
+        end   = group[-1].end + WHISPER_TIMESTAMP_CORRECTION
         lines.append(
             f"Dialogue: 0,{_ts(start)},{_ts(end)},Default,,0,0,0,,{display}"
         )

@@ -271,6 +271,61 @@ def _snap_to_word_boundary(
         return gap_best if gap_best is not None else (word_best if word_best is not None else t)
 
 
+_DANGLING_WORDS = frozenset([
+    "which", "that", "because", "so", "but", "and", "when", "if", "as",
+    "while", "since", "although", "where", "who", "what", "how",
+    "whether", "though", "unless", "until", "after", "before",
+])
+
+
+def _extend_for_semantic_completeness(
+    end_t: float,
+    transcript: dict[str, Any],
+    src_duration: float,
+    search_window: float = 3.0,
+) -> float:
+    """Extend a segment end time if the last word is a dangling conjunction.
+
+    Example: "I ran 10 miles which is..." — cutting after "is" leaves an
+    incomplete thought. This function scans forward up to search_window seconds
+    to find the next natural pause (≥0.3s) or sentence-ending punctuation.
+    """
+    import re as _re
+    last_text: str | None = None
+    last_end: float = 0.0
+    for seg in transcript.get("segments", []):
+        for w in seg.get("words", []):
+            we = float(w.get("end", 0))
+            if we <= end_t + 0.05:
+                raw = str(w.get("text", "")).strip()
+                last_text = _re.sub(r"[.,!?;:\"\'-]", "", raw).lower()
+                last_end = we
+
+    if not last_text or last_text not in _DANGLING_WORDS:
+        return end_t
+
+    # Scan forward: find the next pause ≥ 0.3s or sentence-ending punctuation.
+    prev_word_end: float | None = last_end
+    for seg in transcript.get("segments", []):
+        for w in seg.get("words", []):
+            ws_t = float(w.get("start", 0))
+            we = float(w.get("end", 0))
+            if ws_t <= end_t:
+                prev_word_end = we
+                continue
+            if ws_t > end_t + search_window:
+                break
+            # Natural pause before this word → cut here
+            if prev_word_end is not None and ws_t - prev_word_end >= 0.3:
+                return min(prev_word_end, src_duration)
+            # Sentence-ending punctuation on this word → include it
+            if str(w.get("text", "")).strip().endswith((".", "!", "?")):
+                return min(we, src_duration)
+            prev_word_end = we
+
+    return end_t  # no clean extension found — keep original end
+
+
 def _cut_segment(
     src: Path,
     start: float,
@@ -860,36 +915,58 @@ def _fetch_broll_clip(
     not configured, the search returns no results, or any network/ffmpeg error
     occurs. Caller should silently skip b-roll when None is returned.
     """
+    import json as _json
+    import logging as _lg
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+    _broll_log = _lg.getLogger(__name__)
+
     api_key = settings.pexels_api_key if hasattr(settings, "pexels_api_key") else ""
     if not api_key:
+        _broll_log.info("broll fetch skipped: PEXELS_API_KEY not set")
         return None
     try:
-        import json as _json
-        import urllib.error
-        import urllib.parse
-        import urllib.request
-
         q = urllib.parse.quote(search_query[:100])
         url = (
-            f"https://api.pexels.com/videos/search"
+            "https://api.pexels.com/videos/search"
             f"?query={q}&per_page=5&orientation=portrait&size=medium"
         )
+        _broll_log.info("broll fetch: GET %s", url)
         req = urllib.request.Request(url, headers={"Authorization": api_key})
-        with urllib.request.urlopen(req, timeout=12) as resp:
-            data = _json.loads(resp.read())
+        try:
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                status = resp.status
+                raw = resp.read()
+                _broll_log.info("broll fetch: HTTP %d  body_len=%d", status, len(raw))
+                data = _json.loads(raw)
+        except urllib.error.HTTPError as _he:
+            _broll_log.error(
+                "broll fetch: HTTP %d for %s — response: %s",
+                _he.code, url, _he.read()[:500],
+            )
+            return None
 
         videos = data.get("videos", [])
+        _broll_log.info("broll fetch: portrait search returned %d videos", len(videos))
         if not videos:
-            # Retry without orientation filter (some queries have no portrait results)
+            # Retry without orientation filter
             url2 = (
-                f"https://api.pexels.com/videos/search"
+                "https://api.pexels.com/videos/search"
                 f"?query={q}&per_page=5&size=medium"
             )
+            _broll_log.info("broll fetch: retrying without orientation: GET %s", url2)
             req2 = urllib.request.Request(url2, headers={"Authorization": api_key})
-            with urllib.request.urlopen(req2, timeout=12) as resp2:
-                data = _json.loads(resp2.read())
+            try:
+                with urllib.request.urlopen(req2, timeout=12) as resp2:
+                    data = _json.loads(resp2.read())
+            except urllib.error.HTTPError as _he2:
+                _broll_log.error("broll fetch: retry HTTP %d — %s", _he2.code, _he2.read()[:300])
+                return None
             videos = data.get("videos", [])
+            _broll_log.info("broll fetch: retry returned %d videos", len(videos))
         if not videos:
+            _broll_log.info("broll fetch: no videos for query=%r", search_query)
             return None
 
         # Prefer HD portrait files; fall back to any available file
@@ -905,14 +982,21 @@ def _fetch_broll_clip(
         if not best_file:
             best_file = videos[0].get("video_files", [{}])[0]
         if not best_file.get("link"):
+            _broll_log.warning("broll fetch: no download link in video_files")
             return None
 
         dl_path = work_dir / f"{clip_name}_raw.mp4"
+        _broll_log.info(
+            "broll download: %s  (w=%s h=%s quality=%s)",
+            best_file["link"][:80], best_file.get("width"), best_file.get("height"),
+            best_file.get("quality"),
+        )
         req_dl = urllib.request.Request(
             best_file["link"], headers={"User-Agent": "LeanLead/1.0"}
         )
         with urllib.request.urlopen(req_dl, timeout=45) as resp_dl:
             dl_path.write_bytes(resp_dl.read())
+        _broll_log.info("broll download: saved %d bytes → %s", dl_path.stat().st_size, dl_path.name)
 
         out_path = work_dir / f"{clip_name}_broll.mp4"
         vf = (
@@ -931,8 +1015,13 @@ def _fetch_broll_clip(
             str(out_path),
         ])
         dl_path.unlink(missing_ok=True)
-        return out_path if out_path.exists() else None
-    except Exception:
+        if out_path.exists():
+            _broll_log.info("broll ready: %s", out_path.name)
+            return out_path
+        _broll_log.warning("broll ffmpeg produced no output file")
+        return None
+    except Exception as _exc:
+        _broll_log.error("broll fetch exception: %s", _exc, exc_info=True)
         return None
 
 
@@ -1042,6 +1131,8 @@ def render(
         # Hard Rule 1 — snap to word boundaries
         s = _snap_to_word_boundary(s_raw, words, edge="start")
         e = _snap_to_word_boundary(e_raw, words, edge="end")
+        # Semantic completeness: extend end if snapped edge is a dangling conjunction
+        e = _extend_for_semantic_completeness(e, transcript, src_duration)
         # Hard Rule 2 — pad cut edges
         s = max(0.0, s - pad)
         e = min(src_duration, e + pad) if src_duration > 0 else e + pad
@@ -1077,10 +1168,14 @@ def render(
                 ws = float(w["start"])
                 we = float(w["end"])
                 if ws >= s and we <= e:  # only content words (not handle region)
+                    # Use segment.start (s), not actual_s, so the remapped timestamp
+                    # represents when the word was spoken relative to the edit timeline
+                    # start. WHISPER_TIMESTAMP_CORRECTION in captions.py applies the
+                    # remaining per-word shift to align captions with actual lip movement.
                     remapped_words.append(WordTiming(
                         text=w["text"].strip(),
-                        start=seg_offset + (ws - actual_s),
-                        end=seg_offset + (we - actual_s),
+                        start=seg_offset + (ws - s),
+                        end=seg_offset + (we - s),
                     ))
 
         for sil in (plan.silences or []):
@@ -1366,14 +1461,16 @@ def render(
     src_w = concat_info.get("width",  0) or target_w
     src_h = concat_info.get("height", 0) or target_h
 
-    # Always apply explicit crop-to-fill regardless of concat
-    # dimensions. This guarantees no letterbox / pillarbox bars even when the
-    # concat is already nominally the right size (avoids subtle off-by-one edge
-    # cases that produce the video-in-video effect).
-    scale_filter = (
-        f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
-        f"crop={target_w}:{target_h}"
-    )
+    # Skip scaling entirely when the concat is already exactly the target size —
+    # re-scaling a compressed stream (stream capture, h264) introduces blurring.
+    # Apply crop-to-fill only when actual dimensions differ from target.
+    if src_w == target_w and src_h == target_h:
+        scale_filter = None
+    else:
+        scale_filter = (
+            f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
+            f"crop={target_w}:{target_h}"
+        )
 
     system_font = _find_system_font()
 
