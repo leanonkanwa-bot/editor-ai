@@ -45,9 +45,36 @@ function switchSection(targetId) {
   if (targetId === "learnSection") renderLessons();
 }
 
-// Nav tab clicks
-document.querySelectorAll(".nav-tab[data-target]").forEach(tab => {
-  tab.addEventListener("click", () => switchSection(tab.dataset.target));
+// Nav tab clicks — DOMContentLoaded guarantees all buttons exist in the DOM.
+// Without this guard, querySelectorAll can run before the nav HTML is parsed.
+document.addEventListener("DOMContentLoaded", () => {
+  const navTabs = document.querySelectorAll(".nav-tab[data-target]");
+  navTabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+      // Remove active from all tabs, add to clicked tab
+      navTabs.forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      // Show only the matching section
+      ["editorArea", "dashboardSection", "analyticsSection", "profileSection",
+       "learnSection", "outilsSection"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.toggle("active", id === tab.dataset.target);
+      });
+      // Side-effects per section
+      const t = tab.dataset.target;
+      if (t === "analyticsSection") loadAnalytics();
+      if (t === "dashboardSection") {
+        updateDashboardStats(); loadVideoLibrary(); updateStreak();
+        updateAchievements(); initReferral(); loadPerfTracker(); loadTeam(); loadApiKey();
+      }
+      if (t === "profileSection") loadProfileSection();
+      if (t === "editorArea") updateOnboardingProgress();
+      if (t === "learnSection") renderLessons();
+    });
+  });
+  // Default: Éditeur tab is active on page load
+  const defaultTab = document.querySelector('.nav-tab[data-target="editorArea"]');
+  if (defaultTab) defaultTab.classList.add("active");
 });
 
 // Dashboard → Editor button
@@ -760,8 +787,46 @@ loginForm?.addEventListener("submit", async (e) => {
 const CHUNK_SIZE = 200 * 1024 * 1024; // 200 MB
 
 // ── Drop zone ─────────────────────────────────────────────────────────────────
+const VALID_EXTS = ["mp4", "mov", "mkv"];
+
+function _dropZoneError(msg) {
+  if (!dropLabel) return;
+  dropLabel.textContent = msg;
+  dropLabel.style.color = "var(--err)";
+  setTimeout(() => {
+    dropLabel.textContent = "Déposer votre vidéo ici";
+    dropLabel.style.color = "";
+  }, 3500);
+}
+
+function _dropZoneAcceptFile(file) {
+  if (!file || !videoInput) return;
+  const ext = file.name.split(".").pop().toLowerCase();
+  if (!VALID_EXTS.includes(ext)) {
+    _dropZoneError(`Format non supporté (.${ext}) — acceptés : MP4, MOV, MKV`);
+    return;
+  }
+  // Assign the file to the hidden input
+  try {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    videoInput.files = dt.files;
+  } catch (_) {}
+  // Update drop zone appearance
+  const mb = (file.size / (1024 * 1024)).toFixed(1);
+  if (dropLabel) {
+    dropLabel.textContent = `${file.name} — ${mb} MB`;
+    dropLabel.style.color = "";
+  }
+  drop?.classList.add("has-file");
+}
+
 if (drop) {
-  drop.addEventListener("click", () => {
+  // Click: open file picker.
+  // videoInput is a child of drop, so its synthetic click bubbles back up.
+  // We guard with e.target to break the re-entry loop.
+  drop.addEventListener("click", (e) => {
+    if (e.target === videoInput) return;
     if (videoInput) videoInput.click();
   });
 
@@ -769,20 +834,16 @@ if (drop) {
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); videoInput?.click(); }
   });
 
-  ["dragenter", "dragover"].forEach(ev =>
-    drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("dragover"); })
-  );
-  drop.addEventListener("dragleave", (e) => { e.preventDefault(); drop.classList.remove("dragover"); });
+  // dragover: BOTH preventDefault (allows drop) AND stopPropagation (required by spec)
+  drop.addEventListener("dragenter", (e) => { e.preventDefault(); e.stopPropagation(); drop.classList.add("dragover"); });
+  drop.addEventListener("dragover",  (e) => { e.preventDefault(); e.stopPropagation(); drop.classList.add("dragover"); });
+  drop.addEventListener("dragleave", (e) => { e.preventDefault(); e.stopPropagation(); drop.classList.remove("dragover"); });
   drop.addEventListener("drop", (e) => {
     e.preventDefault();
+    e.stopPropagation();
     drop.classList.remove("dragover");
-    const files = e.dataTransfer?.files;
-    if (files?.length && videoInput) {
-      const dt = new DataTransfer();
-      dt.items.add(files[0]);
-      videoInput.files = dt.files;
-      videoInput.dispatchEvent(new Event("change"));
-    }
+    const file = e.dataTransfer?.files?.[0];
+    if (file) _dropZoneAcceptFile(file);
   });
 }
 
@@ -792,8 +853,19 @@ if (videoInput && form && submitBtn) {
 videoInput.addEventListener("change", () => {
   const f = videoInput.files?.[0];
   if (!f) return;
+  const ext = f.name.split(".").pop().toLowerCase();
+  if (!VALID_EXTS.includes(ext)) {
+    // Clear the invalid selection and show inline error — no alert()
+    videoInput.value = "";
+    _dropZoneError(`Format non supporté (.${ext}) — acceptés : MP4, MOV, MKV`);
+    drop?.classList.remove("has-file");
+    return;
+  }
   const mb = (f.size / (1024 * 1024)).toFixed(1);
-  if (dropLabel) dropLabel.textContent = `${f.name} — ${mb} MB`;
+  if (dropLabel) {
+    dropLabel.textContent = `${f.name} — ${mb} MB`;
+    dropLabel.style.color = "";
+  }
   drop?.classList.add("has-file");
 });
 
