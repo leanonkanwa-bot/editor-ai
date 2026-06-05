@@ -162,6 +162,31 @@ def run_job(
         except Exception:
             brand_kit = {}
 
+        # ── Step 5b+: Override from coach_profile (highest priority) ──────
+        _FONT_EXPAND = {
+            "Poppins":     "Poppins Bold",
+            "Inter":       "Inter Bold",
+            "Montserrat":  "Montserrat Bold",
+            "Bebas":       "Bebas Neue",
+            "Anton":       "Anton",
+            "DM Sans":     "DM Sans Bold",
+            "Quicksand":   "Quicksand Bold",
+            "Roboto":      "Roboto Bold",
+        }
+        if coach_profile:
+            _profile_color = coach_profile.get("primaryColor", "")
+            if _profile_color and not brand_color:
+                brand_color = _profile_color
+            _profile_font = coach_profile.get("font", "")
+            if _profile_font and caption_font == "Poppins Bold":
+                caption_font = _FONT_EXPAND.get(_profile_font, _profile_font)
+            print(
+                f"[BRAND] Loaded profile: font={coach_profile.get('font', '')!r} "
+                f"color={coach_profile.get('primaryColor', '')!r} "
+                f"secondary={coach_profile.get('secondaryColor', '')!r}"
+            )
+        print(f"[BRAND] Passing to render: caption_font={caption_font!r} brand_color={brand_color!r}")
+
         # ── Step 5c: Load analytics insights (Feature 4) ──────────────────
         insights_instructions = ""
         try:

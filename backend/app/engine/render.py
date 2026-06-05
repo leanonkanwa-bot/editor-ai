@@ -1465,6 +1465,7 @@ def render(
         broll_windows=remapped_broll,
         word_colors=plan.word_colors,
         word_categories=plan.word_categories,
+        brand_color=brand_color,
     )
     print(f"[CAPTIONS] ASS file written: {ass_path}")
     print(f"[CAPTIONS] ASS file size: {ass_path.stat().st_size} bytes")

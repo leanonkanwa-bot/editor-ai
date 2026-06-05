@@ -40,7 +40,7 @@ ALLOWED_COLORS = {
 }
 
 ALLOWED_POSITIONS = {"center", "bottom", "side-left", "side-right"}
-ALLOWED_STYLES    = {"impact", "kinetic", "popup"}
+ALLOWED_STYLES    = {"impact", "kinetic", "popup", "twolevel"}
 
 # Reference font sizes at 1080p — scaled proportionally to PlayResY in _ass_header().
 # Normal captions: 58px · Emphasis captions: 72px (per professional caption spec).
@@ -130,6 +130,7 @@ def _ass_header(
     color_hex: str,
     position: str,
     style: str = "impact",
+    brand_color: str | None = None,
 ) -> str:
     primary = _hex_to_ass_bgr(color_hex)
 
@@ -145,15 +146,48 @@ def _ass_header(
     alignment = 2
     margin_v  = round(play_res_y * 0.18)  # 346px for 9:16, 194px for 16:9
 
+    # Emphasis color: brand primary overrides the default salmon
+    _emph_ass = _hex_to_ass_bgr(brand_color) if brand_color else EMPHASIS_COLOR_ASS
+
     # Both styles use the same positioning; style only affects grouping / animations.
     default_line = (
         f"Style: Default,{font_name},{cap_size},{primary},{primary},"
         f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,0,1,{alignment},60,60,{margin_v},1"
     )
     emphasis_line = (
-        f"Style: Emphasis,{font_name},{cap_size_emph},{EMPHASIS_COLOR_ASS},{EMPHASIS_COLOR_ASS},"
+        f"Style: Emphasis,{font_name},{cap_size_emph},{_emph_ass},{_emph_ass},"
         f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,0,1,{alignment},60,60,{margin_v},1"
     )
+
+    # ── Two-level kinetic typography styles ──────────────────────────────────
+    # TL_Large: large emphasis line at the bottom — bold, gold/cream, dark pill bg
+    # TL_Small: small context line above — lighter, white 70% opacity, subtle bg
+    # BorderStyle=3 → opaque box (BackColour fills the area behind each text block)
+    # Outline= sets padding inside the box; Shadow=0 (box provides contrast)
+    tl_extra = ""
+    if style == "twolevel":
+        tl_large_sz  = round(78  * play_res_y / 1080)
+        tl_small_sz  = round(32  * play_res_y / 1080)
+        tl_large_mv  = round(play_res_y * 0.13)
+        # Small line sits directly above the large line with ~12px clearance
+        tl_small_mv  = tl_large_mv + tl_large_sz + round(play_res_y * 0.012)
+        # TL_Large color: use brand primary if provided, else gold/cream (#F5E6C8)
+        tl_large_color = _hex_to_ass_bgr(brand_color) if brand_color else "&H00C8E6F5"
+        # White at ~70% opacity: ASS alpha 0x4D ≈ 30% transparent → 70% visible
+        tl_small_color = "&H4DFFFFFF"
+        tl_large_line = (
+            f"Style: TL_Large,{font_name},{tl_large_sz},"
+            f"{tl_large_color},{tl_large_color},"
+            f"&H00000000,&H80000000,"   # OutlineColour, BackColour (50% black box)
+            f"1,0,0,0,100,100,0,0,3,10,0,{alignment},60,60,{tl_large_mv},1"
+        )
+        tl_small_line = (
+            f"Style: TL_Small,{font_name},{tl_small_sz},"
+            f"{tl_small_color},{tl_small_color},"
+            f"&H00000000,&H70000000,"   # OutlineColour, BackColour (56% black box)
+            f"0,0,0,0,100,100,0,0,3,6,0,{alignment},60,60,{tl_small_mv},1"
+        )
+        tl_extra = f"{tl_large_line}\n{tl_small_line}\n"
 
     return (
         "[Script Info]\n"
@@ -167,8 +201,9 @@ def _ass_header(
         "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
         "Alignment, MarginL, MarginR, MarginV, Encoding\n"
         f"{default_line}\n"
-        f"{emphasis_line}\n\n"
-        "[Events]\n"
+        f"{emphasis_line}\n"
+        f"{tl_extra}"
+        "\n[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, "
         "Effect, Text\n"
     )
@@ -220,6 +255,7 @@ def build_ass(
     emphasis_only: bool = False,
     word_colors: dict[str, str] | None = None,
     word_categories: dict[str, str] | None = None,
+    brand_color: str | None = None,
 ) -> Path:
     """Render captions to an ASS file.
 
@@ -242,11 +278,14 @@ def build_ass(
     if style not in ALLOWED_STYLES:
         style = "kinetic"
 
+    # Derive emphasis color from brand primary (or fall back to default salmon)
+    _emphasis_color_ass = _hex_to_ass_bgr(brand_color) if brand_color else EMPHASIS_COLOR_ASS
+
     emphasis_set = {_strip_punct(w).lower() for w in (emphasis_words or set())}
     broll_list   = list(broll_windows)
     word_list    = [w for w in words if _strip_punct(w.text)]
 
-    lines = [_ass_header(short_form, font, color_hex, position, style)]
+    lines = [_ass_header(short_form, font, color_hex, position, style, brand_color=brand_color)]
 
     word_color_map = {k.strip().lower(): v for k, v in (word_colors or {}).items()}
     # word_categories: key is the ORIGINAL word (case-preserved from the plan).
@@ -256,6 +295,8 @@ def build_ass(
 
     # Kinetic: 1 word per group so each pops independently on its exact timestamp.
     # Impact: 2–3 words per group separated by natural breath pauses.
+    # Twolevel: same grouping as impact (2–4 words), rendered as two simultaneous
+    #   layers — large emphasis phrase (bottom) + small context phrase (top).
     if style in ("kinetic", "popup"):
         groups = _group_words(word_list, max_words=1)
     else:
@@ -263,6 +304,81 @@ def build_ass(
 
     play_res_y    = 1920 if short_form else 1080
     cap_size_emph = round(CAP_SIZE_REF_EMPH * play_res_y / 1080)
+
+    # ── Two-level kinetic typography rendering ────────────────────────────────
+    # Each phrase group produces two simultaneous Dialogue lines:
+    #   Layer 1 (TL_Large): current phrase — large, gold/cream, bounce animation
+    #   Layer 0 (TL_Small): previous phrase — small, white 70%, gentle fade-in
+    # This creates the reference-image look: small context above, bold focus below.
+    if style == "twolevel":
+        # Bounce animation for the large emphasis phrase
+        _tl_anim = r"{\fscx80\fscy80\t(0,200,\fscx105\fscy105)\t(200,300,\fscx100\fscy100)}"
+        # Soft fade-in for the small context phrase (already "been said")
+        _tl_fade = r"{\fad(120,0)}"
+        # Inline size for category/emphasis overrides within the large line
+        tl_emph_sz = round(88 * play_res_y / 1080)
+
+        prev_words: list[str] = []   # clean words of the last rendered group
+
+        for gi, group in enumerate(groups):
+            mid = (group[0].start + group[-1].end) / 2
+            if _in_window(mid, broll_list):
+                prev_words = []   # reset context at b-roll boundary
+                continue
+
+            clean = [_strip_punct(w.text) for w in group]
+            clean = [w for w in clean if w]
+            if not clean:
+                continue
+
+            has_emphasis = any(w.lower() in emphasis_set for w in clean)
+            if emphasis_only and not has_emphasis:
+                continue
+
+            # Timing: hold until the next non-broll phrase starts
+            start    = max(0.0, group[0].start + WHISPER_TIMESTAMP_CORRECTION + CAPTION_DELAY_S)
+            end_base = group[-1].end + WHISPER_TIMESTAMP_CORRECTION
+            next_start: float | None = None
+            for ngi in range(gi + 1, len(groups)):
+                ng = groups[ngi]
+                if not _in_window((ng[0].start + ng[-1].end) / 2, broll_list):
+                    next_start = ng[0].start + WHISPER_TIMESTAMP_CORRECTION
+                    break
+            end = next_start if (next_start is not None and next_start > end_base + 0.05) \
+                else end_base + 0.4
+
+            # ── TL_Large: current phrase with per-word color overrides ────────
+            parts: list[str] = []
+            for i, w in enumerate(clean):
+                wl = w.lower()
+                cat  = word_cat_map.get(wl)
+                cust = word_color_map.get(wl)
+                label = w.capitalize() if i == 0 else w.lower()
+                if cat and cat in CATEGORY_COLOR_ASS:
+                    parts.append(
+                        f"{{\\c{CATEGORY_COLOR_ASS[cat]}\\fs{tl_emph_sz}}}{label}{{\\r}}"
+                    )
+                elif cust:
+                    parts.append(f"{{\\c{_hex_to_ass_bgr(cust)}}}{label}{{\\r}}")
+                elif wl in emphasis_set:
+                    parts.append(
+                        f"{{\\c{_emphasis_color_ass}\\fs{tl_emph_sz}}}{label}{{\\r}}"
+                    )
+                else:
+                    parts.append(label)
+
+            large_text = _tl_anim + " ".join(parts)
+            lines.append(f"Dialogue: 1,{_ts(start)},{_ts(end)},TL_Large,,0,0,0,,{large_text}")
+
+            # ── TL_Small: previous phrase as faded context ────────────────────
+            if prev_words:
+                small_text = _tl_fade + " ".join(w.lower() for w in prev_words)
+                lines.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},TL_Small,,0,0,0,,{small_text}")
+
+            prev_words = clean
+
+        out_path.write_text("\n".join(lines), encoding="utf-8")
+        return out_path
 
     # Entry animation tags — prepended to every Dialogue line text.
     # kinetic/popup: overshoot bounce — scale 0→112%→100% in 300ms, no pre-fade.
@@ -315,7 +431,7 @@ def build_ass(
                 display_parts.append(f"{{\\c{color_ass}}}{label}{{\\r}}")
             elif w_lower in emphasis_set:
                 display_parts.append(
-                    f"{{\\c{EMPHASIS_COLOR_ASS}\\fs{cap_size_emph}}}{w.title()}{{\\r}}"
+                    f"{{\\c{_emphasis_color_ass}\\fs{cap_size_emph}}}{w.title()}{{\\r}}"
                 )
             elif style in ("kinetic", "popup"):
                 # Kinetic/popup normal words: ALL CAPS for impact at the center.
