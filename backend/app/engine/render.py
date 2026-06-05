@@ -886,128 +886,109 @@ def _color_grade_filter(content_type: str) -> str:
 
 
 def _fetch_broll_clip(
-    search_query: str,
-    work_dir: Path,
-    clip_name: str,
+    query: str,
+    dst: Path,
+    duration: float,
     target_w: int,
     target_h: int,
-    duration: float,
-    fps: int,
-) -> Path | None:
-    """Fetch a portrait stock video from Pexels and crop-to-fill to target dims.
+) -> bool:
+    """Fetch a Pexels video matching query, trim to duration, crop to target dims.
 
-    Returns path to a ready-to-overlay MP4 clip, or None if PEXELS_API_KEY is
-    not configured, the search returns no results, or any network/ffmpeg error
-    occurs. Caller should silently skip b-roll when None is returned.
+    Returns True on success (dst exists and is ready), False on any failure.
+    All steps are logged via print() so Railway logs show exact failure point.
     """
-    import json as _json
-    import logging as _lg
-    import urllib.error
-    import urllib.parse
-    import urllib.request
-    _broll_log = _lg.getLogger(__name__)
+    import os as _os
+    import requests as _requests
 
-    api_key = settings.pexels_api_key if hasattr(settings, "pexels_api_key") else ""
-    if not api_key:
-        _broll_log.info("broll fetch skipped: PEXELS_API_KEY not set")
-        return None
+    key = _os.environ.get("PEXELS_API_KEY", "") or (
+        settings.pexels_api_key if hasattr(settings, "pexels_api_key") else ""
+    )
+    print(f"[BROLL] Called with query={query!r}  dst={dst}  key_set={bool(key)}")
+    if not key:
+        print("[BROLL] No PEXELS_API_KEY — skipping")
+        return False
+
+    orientation = "portrait" if target_h > target_w else "landscape"
     try:
-        q = urllib.parse.quote(search_query[:100])
-        url = (
-            "https://api.pexels.com/videos/search"
-            f"?query={q}&per_page=5&orientation=portrait&size=medium"
+        r = _requests.get(
+            "https://api.pexels.com/videos/search",
+            headers={"Authorization": key},
+            params={"query": query, "per_page": 5, "orientation": orientation},
+            timeout=15,
         )
-        _broll_log.info("broll fetch: GET %s", url)
-        req = urllib.request.Request(url, headers={"Authorization": api_key})
-        try:
-            with urllib.request.urlopen(req, timeout=12) as resp:
-                status = resp.status
-                raw = resp.read()
-                _broll_log.info("broll fetch: HTTP %d  body_len=%d", status, len(raw))
-                data = _json.loads(raw)
-        except urllib.error.HTTPError as _he:
-            _broll_log.error(
-                "broll fetch: HTTP %d for %s — response: %s",
-                _he.code, url, _he.read()[:500],
-            )
-            return None
+        print(f"[BROLL] API status: {r.status_code}")
+        if r.status_code != 200:
+            print(f"[BROLL] API error body: {r.text[:300]}")
+            return False
 
-        videos = data.get("videos", [])
-        _broll_log.info("broll fetch: portrait search returned %d videos", len(videos))
+        videos = r.json().get("videos", [])
+        print(f"[BROLL] Found {len(videos)} videos for query={query!r}")
         if not videos:
-            # Retry without orientation filter
-            url2 = (
-                "https://api.pexels.com/videos/search"
-                f"?query={q}&per_page=5&size=medium"
-            )
-            _broll_log.info("broll fetch: retrying without orientation: GET %s", url2)
-            req2 = urllib.request.Request(url2, headers={"Authorization": api_key})
-            try:
-                with urllib.request.urlopen(req2, timeout=12) as resp2:
-                    data = _json.loads(resp2.read())
-            except urllib.error.HTTPError as _he2:
-                _broll_log.error("broll fetch: retry HTTP %d — %s", _he2.code, _he2.read()[:300])
-                return None
-            videos = data.get("videos", [])
-            _broll_log.info("broll fetch: retry returned %d videos", len(videos))
-        if not videos:
-            _broll_log.info("broll fetch: no videos for query=%r", search_query)
-            return None
+            return False
 
-        # Prefer HD portrait files; fall back to any available file
-        best_file = None
-        for v in videos:
-            for f in v.get("video_files", []):
-                w, h = f.get("width", 0), f.get("height", 1)
-                if h >= w and f.get("quality") in ("hd", "sd"):
-                    best_file = f
-                    break
-            if best_file:
+        # Select best file: prefer 1080×1920 portrait HD, then any HD, then first
+        video = videos[0]
+        files = video.get("video_files", [])
+        print(f"[BROLL] Video files available: {[(f.get('width'), f.get('height'), f.get('quality')) for f in files]}")
+
+        best = None
+        for f in files:
+            if f.get("width") == 1080 and f.get("height") == 1920:
+                best = f
                 break
-        if not best_file:
-            best_file = videos[0].get("video_files", [{}])[0]
-        if not best_file.get("link"):
-            _broll_log.warning("broll fetch: no download link in video_files")
-            return None
+        if not best:
+            for f in files:
+                if f.get("quality") == "hd":
+                    best = f
+                    break
+        if not best and files:
+            best = files[0]
 
-        dl_path = work_dir / f"{clip_name}_raw.mp4"
-        _broll_log.info(
-            "broll download: %s  (w=%s h=%s quality=%s)",
-            best_file["link"][:80], best_file.get("width"), best_file.get("height"),
-            best_file.get("quality"),
-        )
-        req_dl = urllib.request.Request(
-            best_file["link"], headers={"User-Agent": "LeanLead/1.0"}
-        )
-        with urllib.request.urlopen(req_dl, timeout=45) as resp_dl:
-            dl_path.write_bytes(resp_dl.read())
-        _broll_log.info("broll download: saved %d bytes → %s", dl_path.stat().st_size, dl_path.name)
+        if not best or not best.get("link"):
+            print("[BROLL] No suitable file found in video_files")
+            return False
 
-        out_path = work_dir / f"{clip_name}_broll.mp4"
-        vf = (
-            f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
-            f"crop={target_w}:{target_h},fps={fps},"
-            f"trim=duration={duration:.2f},setpts=PTS-STARTPTS"
-        )
+        url = best["link"]
+        print(f"[BROLL] Downloading: {url[:80]}  w={best.get('width')} h={best.get('height')}")
+
+        tmp_path = dst.with_suffix(".tmp.mp4")
+        dl = _requests.get(url, timeout=45, stream=True)
+        if dl.status_code != 200:
+            print(f"[BROLL] Download failed: HTTP {dl.status_code}")
+            return False
+        with open(str(tmp_path), "wb") as fh:
+            for chunk in dl.iter_content(chunk_size=65536):
+                fh.write(chunk)
+        print(f"[BROLL] Downloaded {tmp_path.stat().st_size} bytes → {tmp_path.name}")
+
+        # Trim to required duration and crop-to-fill target dimensions
         _run([
             FFMPEG_PATH, "-y", "-loglevel", "error",
-            "-i", str(dl_path),
-            "-vf", vf,
+            "-i", str(tmp_path),
+            "-t", f"{duration:.3f}",
+            "-vf", (
+                f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
+                f"crop={target_w}:{target_h},"
+                f"setpts=PTS-STARTPTS"
+            ),
+            "-vsync", "cfr",
+            "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+            "-threads", "2", "-pix_fmt", "yuv420p",
             "-an",
-            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "18",
-            "-threads", "2",
-            "-pix_fmt", "yuv420p",
-            str(out_path),
+            str(dst),
         ])
-        dl_path.unlink(missing_ok=True)
-        if out_path.exists():
-            _broll_log.info("broll ready: %s", out_path.name)
-            return out_path
-        _broll_log.warning("broll ffmpeg produced no output file")
-        return None
+        tmp_path.unlink(missing_ok=True)
+
+        if dst.exists() and dst.stat().st_size > 0:
+            print(f"[BROLL] Successfully created: {dst.name}  ({dst.stat().st_size} bytes)")
+            return True
+        print(f"[BROLL] FFmpeg produced no output at {dst}")
+        return False
+
     except Exception as _exc:
-        _broll_log.error("broll fetch exception: %s", _exc, exc_info=True)
-        return None
+        import traceback as _tb
+        print(f"[BROLL] Exception: {_exc}\n{_tb.format_exc()[:800]}")
+        return False
 
 
 def _verify_caption_sync(
@@ -1130,6 +1111,7 @@ def render(
             _cut_proxy_segment(cut_src, s, e, part)
         else:
             _cut_segment(cut_src, s, e, part, target_w, target_h, fps)
+        print(f"[CUT] Segment {i}: {s:.3f}s → {e:.3f}s (duration: {e-s:.3f}s)  part={part.name}")
         parts.append(part)
 
         # PROBLEM 1 FIX: use the actual cut boundaries (with audio handles) as
@@ -1201,6 +1183,33 @@ def render(
 
     concat_path = work_dir / "concat.mp4"
     _concat(parts, concat_path)
+    print(f"[AUDIO] Concat complete: {concat_path}")
+    _audio_expected = sum(float(s["end"]) - float(s["start"]) for s in keep
+                         if float(s["end"]) > float(s["start"]))
+    print(f"[AUDIO] Expected duration (plan boundaries): {_audio_expected:.3f}s")
+
+    # Probe both audio and video streams on concat output
+    import subprocess as _sp, json as _js
+    def _probe_streams(path: Path) -> None:
+        try:
+            _r = _sp.run(
+                [FFPROBE_PATH, "-v", "quiet", "-print_format", "json",
+                 "-show_streams", str(path)],
+                capture_output=True, text=True, timeout=15,
+            )
+            _data = _js.loads(_r.stdout) if _r.stdout.strip() else {}
+            for _st in _data.get("streams", []):
+                print(
+                    f"[PROBE] {path.name}  codec_type={_st.get('codec_type')} "
+                    f"codec={_st.get('codec_name')}  duration={_st.get('duration','?')}s  "
+                    f"size={_st.get('width','')}"
+                    + (f"x{_st.get('height','')}" if _st.get('codec_type') == 'video' else "")
+                    + f"  r_frame_rate={_st.get('r_frame_rate','')}"
+                )
+        except Exception as _pe:
+            print(f"[PROBE] {path.name} probe failed: {_pe}")
+
+    _probe_streams(concat_path)
 
     # FIX 5 — Verify concat duration matches expected plan-boundary sum.
     import logging as _logging_early
@@ -1426,8 +1435,17 @@ def render(
     # any sync anomalies so mismatches are visible in server logs.
     remapped_words = _verify_caption_sync(remapped_words, total_duration)
 
-    # PROBLEM 2 DEBUG: log first 3 remapped words so caption sync is verifiable
-    # in production logs. Format: [('word', start_s, end_s), ...]
+    print(f"[CAPTIONS] Total remapped words: {len(remapped_words)}")
+    print(f"[CAPTIONS] Total edited duration (cap_offset): {cap_offset:.3f}s")
+    print(f"[CAPTIONS] Actual video duration (total_duration): {total_duration:.3f}s")
+    if remapped_words:
+        print(f"[CAPTIONS] First word: '{remapped_words[0].text}' at {remapped_words[0].start:.3f}s")
+        print(f"[CAPTIONS] Last word: '{remapped_words[-1].text}' at {remapped_words[-1].start:.3f}s")
+        _words_after = [w for w in remapped_words if w.start > total_duration]
+        print(f"[CAPTIONS] Words after video duration (should be 0): {len(_words_after)}")
+    else:
+        print("[CAPTIONS] WARNING: no remapped words — captions will be empty!")
+
     _log.info(
         "caption sync: %d remapped words; first 3: %s",
         len(remapped_words),
@@ -1448,6 +1466,8 @@ def render(
         word_colors=plan.word_colors,
         word_categories=plan.word_categories,
     )
+    print(f"[CAPTIONS] ASS file written: {ass_path}")
+    print(f"[CAPTIONS] ASS file size: {ass_path.stat().st_size} bytes")
 
     face_cx_pct = 50.0
     face_cy_pct = 50.0
@@ -1589,7 +1609,15 @@ def render(
     # For each remapped b-roll window: fetch a stock clip from Pexels,
     # crop-to-fill to target dims, then overlay it full-screen for the
     # duration of the window. Speaker audio continues underneath.
-    _pexels_key_set = bool(settings.pexels_api_key)
+    _pexels_key_set = bool(
+        (settings.pexels_api_key if hasattr(settings, "pexels_api_key") else None)
+        or __import__("os").environ.get("PEXELS_API_KEY", "")
+    )
+    print(f"[BROLL DEBUG] plan.broll_suggestions count: {len(plan.broll_suggestions)}")
+    print(f"[BROLL DEBUG] remapped_broll count: {len(remapped_broll)}")
+    for _rbi, (_rb_window, _rb_q) in enumerate(zip(remapped_broll, broll_queries)):
+        print(f"[BROLL DEBUG] broll[{_rbi}] at={_rb_window[0]:.2f}s–{_rb_window[1]:.2f}s query={_rb_q!r}")
+    print(f"[BROLL DEBUG] PEXELS_API_KEY set: {_pexels_key_set}")
     _log.info(
         "broll: plan has %d suggestion(s); remapped=%d; PEXELS_API_KEY=%s",
         len(plan.broll_suggestions),
@@ -1600,17 +1628,18 @@ def render(
     _broll_dir.mkdir(parents=True, exist_ok=True)
     _current_path = _base_path
     _overlay_intermediates: list[Path] = []
+    _broll_clips_downloaded = 0
     for _bi, ((br_s, br_e), br_q) in enumerate(zip(remapped_broll, broll_queries)):
         if not br_q:
             continue
         br_dur = br_e - br_s
-        br_clip = _fetch_broll_clip(
-            br_q, _broll_dir, f"br_{_bi:02d}", target_w, target_h, br_dur, fps
-        )
-        if not br_clip:
-            _reason = "PEXELS_API_KEY not set" if not _pexels_key_set else "no results or network error"
-            _log.info("broll %d skipped (%s): query=%r", _bi, _reason, br_q)
+        _br_clip_path = _broll_dir / f"br_{_bi:02d}.mp4"
+        _br_ok = _fetch_broll_clip(br_q, _br_clip_path, br_dur, target_w, target_h)
+        if not _br_ok:
+            _log.info("broll %d skipped: query=%r", _bi, br_q)
             continue
+        _broll_clips_downloaded += 1
+        br_clip = _br_clip_path
         _next_br_path = _tmp_dir / f"br{_bi}_{output_path.stem}.mp4"
         # Slide-in from right edge (0→x=0 over _slide s), hold, slide-out to left.
         _slide = max(0.1, min(0.25, br_dur * 0.15))
@@ -1643,6 +1672,8 @@ def render(
         if _next_br_path.exists():
             _overlay_intermediates.append(_current_path)
             _current_path = _next_br_path
+
+    print(f"[BROLL] Downloaded {_broll_clips_downloaded} clip(s) successfully")
 
     # ── Overlay passes: one ffmpeg call per graphic clip ──────────────────
     for _j, (_clip_path, _rg) in enumerate(zip(graphic_clip_paths, ok_graphics)):
@@ -1700,6 +1731,8 @@ def render(
         "-movflags", "+faststart",
         str(output_path),
     ])
+    print(f"[FINAL] Output: {output_path}")
+    _probe_streams(output_path)
     _nocap_path.unlink(missing_ok=True)
     for _p in _overlay_intermediates:
         _p.unlink(missing_ok=True)
