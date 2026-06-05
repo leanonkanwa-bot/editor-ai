@@ -914,7 +914,16 @@ function directUpload(file) {
   xhr.addEventListener("abort",   () => fail("Upload annulé."));
   xhr.addEventListener("timeout", () => fail("Upload expiré."));
 
-  xhr.send(new FormData(form));
+  const _xfd = new FormData(form);
+  try {
+    const _cp = JSON.parse(localStorage.getItem("coach_profile") || "{}");
+    const _fm = { Poppins: "Poppins Bold", Inter: "Inter Bold", Montserrat: "Montserrat Bold",
+      Bebas: "Bebas Neue", Anton: "Anton", "DM Sans": "DM Sans Bold", Quicksand: "Quicksand Bold" };
+    if (_cp.primaryColor && !_xfd.get("brand_color")) _xfd.set("brand_color", _cp.primaryColor);
+    if (_cp.font && (!_xfd.get("caption_font") || _xfd.get("caption_font") === "Poppins Bold"))
+      _xfd.set("caption_font", _fm[_cp.font] || _cp.font);
+  } catch (_e) {}
+  xhr.send(_xfd);
 }
 
 async function poll(jobId) {

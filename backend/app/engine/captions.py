@@ -243,243 +243,158 @@ def _group_words(
 
 
 def build_ass(
-    words: Iterable[WordTiming],
-    out_path: Path,
-    short_form: bool,
-    emphasis_words: set[str] | None = None,
-    font: str = "Inter Bold",
-    color: str = "white",
-    position: str = "center",
-    style: str = "kinetic",
-    broll_windows: Iterable[tuple[float, float]] = (),
-    emphasis_only: bool = False,
-    word_colors: dict[str, str] | None = None,
-    word_categories: dict[str, str] | None = None,
-    brand_color: str | None = None,
+    words: list,
+    output_path,
+    video_w: int = 1080,
+    video_h: int = 1920,
+    brand_color: str = "#FF7751",
+    caption_font: str = "Inter Bold",
+    caption_style_map: dict | None = None,
+    video_duration: float | None = None,
 ) -> Path:
-    """Render captions to an ASS file.
+    """Render two-level Jordan Belfort phrase captions to an ASS file.
 
-    kinetic style (default): 1 word per frame, pops on its exact spoken timestamp.
-      Each word is independently timed. Color hierarchy: categories > word_colors >
-      emphasis > white.
-    impact style: 2–3-word caption frames grouped on natural pauses.
-
-    word_categories: {"word": "time"|"location"|"action"|"emotion"|"hook"} —
-      category-based color overrides applied per word.
+    Two-level system:
+      Layer 1 (Large): current phrase — big, brand color, bounce animation
+      Layer 0 (Small): previous phrase — small, white 70%, gentle fade-in
+    Phrases are 3–4 words grouped on natural breath pauses.
+    caption_style_map: {source_segment_start: "normal"|"emphasis"|"highlight"}
+      Segments with "emphasis" render in ALL CAPS for extra impact.
     """
-    # Font mapping: UI name → installed system font
-    font = _FONT_MAP.get(font, font)
+    output_path = Path(output_path)
+
+    # Resolve font: UI name → installed font face
+    font = _FONT_MAP.get(caption_font, caption_font)
     if font not in ALLOWED_FONTS:
         font = "DejaVu Sans Bold"
 
-    color_hex = ALLOWED_COLORS.get(color.lower(), color if color.startswith("#") else "FFFFFF")
-    if position not in ALLOWED_POSITIONS:
-        position = "bottom"
-    if style not in ALLOWED_STYLES:
-        style = "kinetic"
+    play_res_x = video_w
+    play_res_y = video_h
 
-    # Derive emphasis color from brand primary (or fall back to default salmon)
-    _emphasis_color_ass = _hex_to_ass_bgr(brand_color) if brand_color else EMPHASIS_COLOR_ASS
+    # Font sizes — calibrated for 9:16 1080×1920 reference, scaled to actual height
+    large_sz = round(80 * play_res_y / 1920)
+    small_sz = round(34 * play_res_y / 1920)
+    # Slightly larger for XL "emphasis" segment phrases
+    xlarge_sz = round(96 * play_res_y / 1920)
 
-    emphasis_set = {_strip_punct(w).lower() for w in (emphasis_words or set())}
-    broll_list   = list(broll_windows)
-    word_list    = [w for w in words if _strip_punct(w.text)]
+    # Colors
+    large_color = _hex_to_ass_bgr(brand_color) if brand_color else EMPHASIS_COLOR_ASS
+    # White at ~70% opacity: ASS alpha 0x4D ≈ 30% transparent
+    small_color = "&H4DFFFFFF"
 
-    lines = [_ass_header(short_form, font, color_hex, position, style, brand_color=brand_color)]
+    # Position from bottom edge (MarginV)
+    large_mv = round(play_res_y * 0.15)
+    small_mv = large_mv + large_sz + round(play_res_y * 0.015)
 
-    word_color_map = {k.strip().lower(): v for k, v in (word_colors or {}).items()}
-    # word_categories: key is the ORIGINAL word (case-preserved from the plan).
-    # Normalise to lowercase for lookup.
-    word_cat_map = {k.strip().lower(): v.strip().lower()
-                    for k, v in (word_categories or {}).items()}
+    header = (
+        "[Script Info]\n"
+        "ScriptType: v4.00+\n"
+        f"PlayResX: {play_res_x}\n"
+        f"PlayResY: {play_res_y}\n"
+        "ScaledBorderAndShadow: yes\n\n"
+        "[V4+ Styles]\n"
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
+        "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
+        "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+        "Alignment, MarginL, MarginR, MarginV, Encoding\n"
+        # Large: current phrase — bold, brand color, semi-transparent dark pill bg
+        f"Style: Large,{font},{large_sz},{large_color},{large_color},"
+        f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,0,1,2,60,60,{large_mv},1\n"
+        # LargeBrand: emphasis segments — even bigger, same brand color
+        f"Style: LargeBrand,{font},{xlarge_sz},{large_color},{large_color},"
+        f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,0,1,2,60,60,{large_mv},1\n"
+        # Small: previous phrase — lighter weight, white 70%, subtle pill bg
+        f"Style: Small,{font},{small_sz},{small_color},{small_color},"
+        f"&H00000000,&H70000000,0,0,0,0,100,100,0,0,3,5,0,2,60,60,{small_mv},1\n"
+        "\n[Events]\n"
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, "
+        "Effect, Text\n"
+    )
 
-    # Kinetic: 1 word per group so each pops independently on its exact timestamp.
-    # Impact: 2–3 words per group separated by natural breath pauses.
-    # Twolevel: same grouping as impact (2–4 words), rendered as two simultaneous
-    #   layers — large emphasis phrase (bottom) + small context phrase (top).
-    if style in ("kinetic", "popup"):
-        groups = _group_words(word_list, max_words=1)
-    else:
-        groups = _group_words(word_list)
+    # Phrase grouping: 3–4 words, split on natural breath pauses (≥ 250ms)
+    word_list = [w for w in words if _strip_punct(w.text)]
+    groups = _group_words(word_list, max_words=4, gap_s=WORD_GROUP_GAP_S)
 
-    play_res_y    = 1920 if short_form else 1080
-    cap_size_emph = round(CAP_SIZE_REF_EMPH * play_res_y / 1080)
+    # Bounce animation: scale 80%→105%→100% over 300ms (Jordan Belfort pop)
+    _bounce = r"{\fscx80\fscy80\t(0,200,\fscx105\fscy105)\t(200,300,\fscx100\fscy100)}"
+    # Fade-in for previous phrase (already "been said", softer appearance)
+    _fade_in = r"{\fad(120,0)}"
 
-    # ── Two-level kinetic typography rendering ────────────────────────────────
-    # Each phrase group produces two simultaneous Dialogue lines:
-    #   Layer 1 (TL_Large): current phrase — large, gold/cream, bounce animation
-    #   Layer 0 (TL_Small): previous phrase — small, white 70%, gentle fade-in
-    # This creates the reference-image look: small context above, bold focus below.
-    if style == "twolevel":
-        # Bounce animation for the large emphasis phrase
-        _tl_anim = r"{\fscx80\fscy80\t(0,200,\fscx105\fscy105)\t(200,300,\fscx100\fscy100)}"
-        # Soft fade-in for the small context phrase (already "been said")
-        _tl_fade = r"{\fad(120,0)}"
-        # Inline size for category/emphasis overrides within the large line
-        tl_emph_sz = round(88 * play_res_y / 1080)
-
-        prev_words: list[str] = []   # clean words of the last rendered group
-
-        for gi, group in enumerate(groups):
-            mid = (group[0].start + group[-1].end) / 2
-            if _in_window(mid, broll_list):
-                prev_words = []   # reset context at b-roll boundary
-                continue
-
-            clean = [_strip_punct(w.text) for w in group]
-            clean = [w for w in clean if w]
-            if not clean:
-                continue
-
-            has_emphasis = any(w.lower() in emphasis_set for w in clean)
-            if emphasis_only and not has_emphasis:
-                continue
-
-            # Timing: hold until the next non-broll phrase starts
-            start    = max(0.0, group[0].start + WHISPER_TIMESTAMP_CORRECTION + CAPTION_DELAY_S)
-            end_base = group[-1].end + WHISPER_TIMESTAMP_CORRECTION
-            next_start: float | None = None
-            for ngi in range(gi + 1, len(groups)):
-                ng = groups[ngi]
-                if not _in_window((ng[0].start + ng[-1].end) / 2, broll_list):
-                    next_start = ng[0].start + WHISPER_TIMESTAMP_CORRECTION
-                    break
-            end = next_start if (next_start is not None and next_start > end_base + 0.05) \
-                else end_base + 0.4
-
-            # ── TL_Large: current phrase with per-word color overrides ────────
-            parts: list[str] = []
-            for i, w in enumerate(clean):
-                wl = w.lower()
-                cat  = word_cat_map.get(wl)
-                cust = word_color_map.get(wl)
-                label = w.capitalize() if i == 0 else w.lower()
-                if cat and cat in CATEGORY_COLOR_ASS:
-                    parts.append(
-                        f"{{\\c{CATEGORY_COLOR_ASS[cat]}\\fs{tl_emph_sz}}}{label}{{\\r}}"
-                    )
-                elif cust:
-                    parts.append(f"{{\\c{_hex_to_ass_bgr(cust)}}}{label}{{\\r}}")
-                elif wl in emphasis_set:
-                    parts.append(
-                        f"{{\\c{_emphasis_color_ass}\\fs{tl_emph_sz}}}{label}{{\\r}}"
-                    )
-                else:
-                    parts.append(label)
-
-            large_text = _tl_anim + " ".join(parts)
-            lines.append(f"Dialogue: 1,{_ts(start)},{_ts(end)},TL_Large,,0,0,0,,{large_text}")
-
-            # ── TL_Small: previous phrase as faded context ────────────────────
-            if prev_words:
-                small_text = _tl_fade + " ".join(w.lower() for w in prev_words)
-                lines.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},TL_Small,,0,0,0,,{small_text}")
-
-            prev_words = clean
-
-        out_path.write_text("\n".join(lines), encoding="utf-8")
-        return out_path
-
-    # Entry animation tags — prepended to every Dialogue line text.
-    # kinetic/popup: overshoot bounce — scale 0→112%→100% in 300ms, no pre-fade.
-    #   Emphasis words overshoot further: 0→120%→100% in 350ms.
-    # impact: subtle scale 97%→100% + fade over 400ms.
-    if style in ("kinetic", "popup"):
-        _anim = r"{\fad(0,80)\fscx0\fscy0\t(0,180,\fscx112\fscy112)\t(180,300,\fscx100\fscy100)}"
-        _anim_emph = r"{\fad(0,80)\fscx0\fscy0\t(0,200,\fscx120\fscy120)\t(200,350,\fscx100\fscy100)}"
-    else:
-        _anim = r"{\fad(400,300)\fscx97\fscy97\t(0,400,\fscx100\fscy100)}"
-        _anim_emph = _anim
-
-    for gi, group in enumerate(groups):
-        # Skip groups entirely inside b-roll windows
-        mid = (group[0].start + group[-1].end) / 2
-        if _in_window(mid, broll_list):
-            continue
-
-        clean_words = [_strip_punct(w.text) for w in group]
-        clean_words = [w for w in clean_words if w]
-        if not clean_words:
-            continue
-
-        has_emphasis = any(w.lower() in emphasis_set for w in clean_words)
-
-        if emphasis_only and not has_emphasis:
-            continue
-
-        # Color priority per word:
-        #   1. word_categories (time/location/action/emotion/hook) → category color
-        #   2. word_colors (direct hex override)
-        #   3. emphasis_set → salmon + larger size
-        #   4. default → white (no inline tag)
-        display_parts: list[str] = []
-        for i, w in enumerate(clean_words):
-            w_lower = w.lower()
-            cat = word_cat_map.get(w_lower)
-            custom_color = word_color_map.get(w_lower)
-
-            if cat and cat in CATEGORY_COLOR_ASS:
-                # Category color — enlarged to emphasis size for visual pop.
-                cat_ass = CATEGORY_COLOR_ASS[cat]
-                label = w.upper() if style in ("kinetic", "popup") else (w.capitalize() if i == 0 else w.lower())
-                display_parts.append(
-                    f"{{\\c{cat_ass}\\fs{cap_size_emph}}}{label}{{\\r}}"
-                )
-            elif custom_color:
-                color_ass = _hex_to_ass_bgr(custom_color)
-                label = w.capitalize() if i == 0 else w.lower()
-                display_parts.append(f"{{\\c{color_ass}}}{label}{{\\r}}")
-            elif w_lower in emphasis_set:
-                display_parts.append(
-                    f"{{\\c{_emphasis_color_ass}\\fs{cap_size_emph}}}{w.title()}{{\\r}}"
-                )
-            elif style in ("kinetic", "popup"):
-                # Kinetic/popup normal words: ALL CAPS for impact at the center.
-                display_parts.append(w.upper())
-            elif i == 0:
-                display_parts.append(w.capitalize())
-            else:
-                display_parts.append(w.lower())
-
-        # Pick animation: emphasis words get the bigger overshoot.
-        word_anim = _anim_emph if (style in ("kinetic", "popup") and has_emphasis) else _anim
-        display = word_anim + " ".join(display_parts)
-
-        # Apply Whisper correction + any explicit delay.
-        start    = max(0.0, group[0].start + WHISPER_TIMESTAMP_CORRECTION + CAPTION_DELAY_S)
-        end_base = group[-1].end + WHISPER_TIMESTAMP_CORRECTION
-
-        # kinetic/popup dim effect: extend line to next word start, then dim.
-        # The word pops in full brightness, then fades to ~56% opacity + slight
-        # shrink as it waits for the next caption — eyes naturally drift to the
-        # next word rather than re-reading this one.
-        if style in ("kinetic", "popup"):
-            # Find the next non-b-roll group for look-ahead.
-            next_start: float | None = None
-            for ngi in range(gi + 1, len(groups)):
-                ng = groups[ngi]
-                ng_mid = (ng[0].start + ng[-1].end) / 2
-                if not _in_window(ng_mid, broll_list):
-                    next_start = ng[0].start + WHISPER_TIMESTAMP_CORRECTION
-                    break
-
-            if next_start is not None and next_start > end_base + 0.02:
-                # spoken_ms: milliseconds from line start until word finishes.
-                spoken_ms = max(50, round((end_base - start) * 1000))
-                dim_tag = (
-                    rf"{{\t({spoken_ms},{spoken_ms + 80},"
-                    r"\alpha&H71&\fscx97\fscy97)}}"
-                )
-                display = word_anim + " ".join(display_parts) + dim_tag
-                end = next_start
-            else:
-                end = end_base
-        else:
-            end = end_base
-
-        lines.append(
-            f"Dialogue: 0,{_ts(start)},{_ts(end)},Default,,0,0,0,,{display}"
+    # Build sorted list of (timestamp, style) pairs from caption_style_map
+    _style_entries: list[tuple[float, str]] = []
+    if caption_style_map:
+        _style_entries = sorted(
+            ((float(k), str(v)) for k, v in caption_style_map.items()),
+            key=lambda x: x[0],
         )
 
-    out_path.write_text("\n".join(lines), encoding="utf-8")
-    return out_path
+    def _segment_style_for(t: float) -> str:
+        """Return the caption style name for timestamp t based on caption_style_map."""
+        if not _style_entries:
+            return "normal"
+        style_name = "normal"
+        for seg_start, seg_style in _style_entries:
+            if t >= seg_start:
+                style_name = seg_style
+            else:
+                break
+        return style_name
+
+    lines = [header]
+    prev_text = ""
+
+    for gi, group in enumerate(groups):
+        clean = [_strip_punct(w.text) for w in group]
+        clean = [w for w in clean if w]
+        if not clean:
+            continue
+
+        start = max(0.0, group[0].start + WHISPER_TIMESTAMP_CORRECTION + CAPTION_DELAY_S)
+        end_base = group[-1].end + WHISPER_TIMESTAMP_CORRECTION
+
+        # Skip phrases that start after the video ends
+        if video_duration is not None and start > video_duration:
+            break
+
+        # Find next group's start for hold-until-next behaviour
+        next_start: float | None = None
+        for ngi in range(gi + 1, len(groups)):
+            ng = groups[ngi]
+            nc = [_strip_punct(w.text) for w in ng]
+            if any(nc):
+                next_start = ng[0].start + WHISPER_TIMESTAMP_CORRECTION
+                break
+
+        end = (
+            next_start
+            if (next_start is not None and next_start > end_base + 0.05)
+            else end_base + 0.4
+        )
+
+        if video_duration is not None and end > video_duration:
+            end = video_duration
+
+        # Determine ASS style from caption_style_map
+        seg_style = _segment_style_for(start)
+        ass_style = "LargeBrand" if seg_style == "emphasis" else "Large"
+
+        # Build phrase text: "Capitalize first word, lower rest" for readability.
+        # ALL CAPS for "emphasis" segments (high-energy Jordan Belfort moments).
+        if seg_style == "emphasis":
+            phrase_text = " ".join(w.upper() for w in clean)
+        else:
+            phrase_text = " ".join(w.capitalize() if i == 0 else w.lower() for i, w in enumerate(clean))
+
+        large_text = _bounce + phrase_text
+        lines.append(f"Dialogue: 1,{_ts(start)},{_ts(end)},{ass_style},,0,0,0,,{large_text}")
+
+        # Previous phrase shown above in small faded text
+        if prev_text:
+            small_text = _fade_in + prev_text
+            lines.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},Small,,0,0,0,,{small_text}")
+
+        # Update prev_text for next iteration (always lowercase for "been said" feel)
+        prev_text = " ".join(w.lower() for w in clean)
+
+    output_path.write_text("\n".join(lines), encoding="utf-8")
+    return output_path

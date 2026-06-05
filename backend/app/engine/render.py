@@ -338,7 +338,12 @@ def _cut_segment(
     fps: int,
 ) -> None:
     """Per-segment extract with 80ms audio handles. Stream-copy audio to prevent
-    acrossfade drift and preserve exact A/V sync through the concat stage."""
+    acrossfade drift and preserve exact A/V sync through the concat stage.
+
+    BUG 2 FIX — AV SYNC: -avoid_negative_ts make_zero + -fflags +genpts fix
+    timestamp discontinuities that accumulate across cuts and cause drift between
+    the audio, video, and caption tracks in the concatenated output.
+    """
     actual_start = max(0.0, start - AUDIO_HANDLE_S)
     actual_end   = end + AUDIO_HANDLE_S
     duration     = max(0.1, actual_end - actual_start)
@@ -351,8 +356,10 @@ def _cut_segment(
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-threads", "1",
-        "-ss", f"{actual_start:.3f}", "-i", str(src),
-        "-t", f"{duration:.3f}",
+        "-fflags", "+genpts",               # regenerate PTS — prevents drift
+        "-ss", f"{actual_start:.6f}", "-i", str(src),
+        "-t", f"{duration:.6f}",
+        "-avoid_negative_ts", "make_zero",  # zero-base all timestamps
         "-vf", vf,
         "-vsync", "cfr",
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
@@ -374,6 +381,43 @@ def _concat(parts: list[Path], dst: Path) -> None:
         str(dst),
     ])
     list_path.unlink(missing_ok=True)
+
+
+def _probe_av(path: Path) -> tuple[float, float]:
+    """Probe audio and video durations to detect AV sync drift.
+
+    BUG 2 FIX — AV SYNC: runs after _concat() to surface timestamp
+    mismatches before they propagate through the rest of the pipeline.
+    Returns (video_duration, audio_duration).
+    """
+    import json as _json
+    try:
+        r = subprocess.run(
+            [FFPROBE_PATH, "-v", "quiet", "-print_format", "json",
+             "-show_streams", str(path)],
+            capture_output=True, text=True, timeout=20,
+        )
+        data = _json.loads(r.stdout) if r.stdout.strip() else {}
+        v_dur = next(
+            (float(s["duration"]) for s in data.get("streams", [])
+             if s.get("codec_type") == "video" and "duration" in s),
+            0.0,
+        )
+        a_dur = next(
+            (float(s["duration"]) for s in data.get("streams", [])
+             if s.get("codec_type") == "audio" and "duration" in s),
+            0.0,
+        )
+        print(f"[AV PROBE] {path.name}: video={v_dur:.3f}s  audio={a_dur:.3f}s")
+        if v_dur > 0 and a_dur > 0 and abs(v_dur - a_dur) > 0.1:
+            print(
+                f"[AV PROBE] WARNING: AV SYNC MISMATCH — delta={abs(v_dur-a_dur):.3f}s "
+                f"(>{0.1:.1f}s threshold) in {path.name}"
+            )
+        return v_dur, a_dur
+    except Exception as _e:
+        print(f"[AV PROBE] probe failed for {path.name}: {_e}")
+        return 0.0, 0.0
 
 
 def _concat_audio_xfade(parts: list[Path], dst: Path) -> None:
@@ -921,31 +965,57 @@ def _fetch_broll_clip(
             print(f"[BROLL] API error body: {r.text[:300]}")
             return False
 
-        videos = r.json().get("videos", [])
-        print(f"[BROLL] Found {len(videos)} videos for query={query!r}")
-        if not videos:
+        all_videos = r.json().get("videos", [])
+        print(f"[BROLL] Found {len(all_videos)} videos for query={query!r}")
+        if not all_videos:
             return False
 
-        # Select best file: prefer 1080×1920 portrait HD, then any HD, then first
+        # BUG 3 FIX — minimum duration: only use videos >= 4s so we can trim
+        # cleanly and still have quality frames throughout the b-roll window.
+        videos = [v for v in all_videos if v.get("duration", 0) >= 4]
+        if not videos:
+            print(f"[BROLL] All {len(all_videos)} videos too short (<4s) — skipping")
+            return False
+        print(f"[BROLL] {len(videos)} video(s) pass the >=4s duration filter")
+
+        # BUG 3 FIX — quality filter: only download HD or UHD files.
+        # SD files are visibly blurry at 1080p — they degrade the output.
+        # Priority: portrait UHD (1080×1920) → portrait HD → any HD → skip.
         video = videos[0]
         files = video.get("video_files", [])
         print(f"[BROLL] Video files available: {[(f.get('width'), f.get('height'), f.get('quality')) for f in files]}")
 
+        preferred_files = [f for f in files if f.get("quality") in ("uhd", "hd")]
+        if not preferred_files:
+            print(f"[BROLL] No HD/UHD files for query {query!r} — skipping (SD only)")
+            return False
+
         best = None
-        for f in files:
-            if f.get("width") == 1080 and f.get("height") == 1920:
+        # 1. Portrait UHD 1080×1920
+        for f in preferred_files:
+            if f.get("width") == 1080 and f.get("height") == 1920 and f.get("quality") == "uhd":
                 best = f
                 break
+        # 2. Portrait HD 1080×1920
         if not best:
-            for f in files:
-                if f.get("quality") == "hd":
+            for f in preferred_files:
+                if f.get("width") == 1080 and f.get("height") == 1920:
                     best = f
                     break
-        if not best and files:
-            best = files[0]
+        # 3. Any portrait HD (height > width)
+        if not best:
+            for f in preferred_files:
+                w = f.get("width", 0) or 0
+                h = f.get("height", 0) or 0
+                if h > w:
+                    best = f
+                    break
+        # 4. Any HD/UHD
+        if not best:
+            best = preferred_files[0]
 
         if not best or not best.get("link"):
-            print("[BROLL] No suitable file found in video_files")
+            print("[BROLL] No suitable HD/UHD file found in video_files")
             return False
 
         url = best["link"]
@@ -1184,6 +1254,8 @@ def render(
     concat_path = work_dir / "concat.mp4"
     _concat(parts, concat_path)
     print(f"[AUDIO] Concat complete: {concat_path}")
+    # BUG 2 FIX — verify AV sync immediately after concat
+    _probe_av(concat_path)
     _audio_expected = sum(float(s["end"]) - float(s["start"]) for s in keep
                          if float(s["end"]) > float(s["start"]))
     print(f"[AUDIO] Expected duration (plan boundaries): {_audio_expected:.3f}s")
@@ -1336,6 +1408,13 @@ def render(
 
     # Cap hyperframes to max 2 — simple color flashes only at peak moments.
     remapped_hyperframes = remapped_hyperframes[:2]
+    # BUG 1 FIX — SALMON SCREEN: remove any hyperframe that starts before 2.0s.
+    # A hyperframe at t=0 renders as a solid color screen covering the entire
+    # opening of the video. The minimum safe offset is 2.0s so the viewer
+    # always sees the speaker's face first.
+    remapped_hyperframes = [
+        hf for hf in remapped_hyperframes if float(hf.get("at", 0)) >= 2.0
+    ]
 
     total_duration = _probe_duration(concat_path)
 
@@ -1431,6 +1510,20 @@ def render(
     import tempfile as _tempfile
     _log = _logging.getLogger(__name__)
 
+    # BUG 4 FIX — CAPTION BOUNDARY SHIFT: any caption word whose remapped start
+    # coincides exactly with a segment cut boundary gets a +0.05s nudge.
+    # On the cut frame the decoder may show a black or transitional frame; a
+    # caption appearing at that exact instant can look frozen or misplaced.
+    _cut_set = set(cut_timestamps)
+    remapped_words = [
+        WordTiming(
+            text=w.text,
+            start=w.start + 0.05 if any(abs(w.start - ct) < 0.02 for ct in _cut_set) else w.start,
+            end=w.end,
+        )
+        for w in remapped_words
+    ]
+
     # VERIFICATION: drop caption words outside the edited video duration and log
     # any sync anomalies so mismatches are visible in server logs.
     remapped_words = _verify_caption_sync(remapped_words, total_duration)
@@ -1452,20 +1545,24 @@ def render(
         [(w.text, round(w.start, 3), round(w.end, 3)) for w in remapped_words[:3]],
     )
 
+    # PART 4 — caption_style_map: per-segment style hints from the planner.
+    # Maps source segment start time → caption style ("normal" | "emphasis" | "highlight").
+    caption_style_map = {
+        float(seg.get("start", 0)): seg.get("caption_style", "normal")
+        for seg in (plan.keep_segments or [])
+        if isinstance(seg, dict)
+    }
+
     ass_path = work_dir / "captions.ass"
     build_ass(
         remapped_words,
         ass_path,
-        short_form=short_form,
-        emphasis_words=set(plan.caption_emphasis_words),
-        font=caption_font,
-        color=caption_color,
-        position=caption_position,
-        style=caption_style,
-        broll_windows=remapped_broll,
-        word_colors=plan.word_colors,
-        word_categories=plan.word_categories,
-        brand_color=brand_color,
+        video_w=target_w,
+        video_h=target_h,
+        brand_color=brand_color or "#FF7751",
+        caption_font=caption_font,
+        caption_style_map=caption_style_map,
+        video_duration=total_duration,
     )
     print(f"[CAPTIONS] ASS file written: {ass_path}")
     print(f"[CAPTIONS] ASS file size: {ass_path.stat().st_size} bytes")
@@ -1516,7 +1613,8 @@ def render(
         try:
             hf_at = float(hf.get("at", 0))
             hf_color = _hex_to_rgb_at(hf.get("color") or brand_color or "#FF7751")
-            hf_dur = max(0.05, min(0.1, float(hf.get("duration", 0.08))))
+            # BUG 1 FIX: cap to 0.06s (2 frames at 30fps) — a flash, not a screen.
+            hf_dur = max(0.033, min(0.06, float(hf.get("duration", 0.05))))
             hf_png = hf_dir / f"hf_{i:03d}.png"
             # Color flash only — no text overlay on hyperframes.
             _render_hyperframe_png(
