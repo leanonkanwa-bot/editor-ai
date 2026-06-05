@@ -1213,6 +1213,29 @@ def v1_get_job(job_id: str, request: Request) -> dict:
     return {"job_id": job_id, "status": job.status, "progress": job.progress, "message": job.message}
 
 
+@app.get("/api/test-broll")
+async def test_broll():
+    import requests, os
+    key = os.environ.get("PEXELS_API_KEY", "")
+    if not key:
+        return {"error": "PEXELS_API_KEY not set", "key_set": False}
+    try:
+        r = requests.get(
+            "https://api.pexels.com/videos/search",
+            headers={"Authorization": key},
+            params={"query": "running", "per_page": 1, "orientation": "portrait"},
+            timeout=10
+        )
+        return {
+            "status": r.status_code,
+            "key_set": True,
+            "key_prefix": key[:8] + "...",
+            "response": r.json()
+        }
+    except Exception as e:
+        return {"error": str(e), "key_set": bool(key)}
+
+
 editor_dir = Path(__file__).resolve().parents[2] / "editor_frontend"
 if not editor_dir.exists():
     # fallback for local dev where files live in frontend/
