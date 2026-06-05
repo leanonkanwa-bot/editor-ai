@@ -3,62 +3,47 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#080808" />
+    <meta name="theme-color" content="#FFFFFF" />
     <title>LeanRetention — Éditeur IA</title>
     <meta name="description" content="Déposez votre vidéo brute. Obtenez un montage pro en quelques minutes." />
 
-    <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23FF7751'/><path d='M11 9l13 7-13 7V9z' fill='%23080808'/></svg>" />
+    <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23FF7751'/><path d='M11 9l13 7-13 7V9z' fill='%23fff'/></svg>" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800&family=Inter:wght@400;500;600&family=DM+Sans:wght@400;500;600&family=Bebas+Neue&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800&family=DM+Sans:wght@400;500;600&family=Bebas+Neue&display=swap" rel="stylesheet" />
 
     <style>
       *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
       :root {
         --salmon:        #FF7751;
-        --salmon-dim:    rgba(255,119,81,.1);
-        --salmon-border: rgba(255,119,81,.22);
-        --salmon-glow:   rgba(255,119,81,.35);
-        --bg:            #080808;
-        --surface:       #141414;
-        --border:        rgba(255,255,255,.08);
-        --text:          #F5F5F6;
-        --muted:         rgba(245,245,246,.45);
-        --field-bg:      rgba(255,255,255,.03);
-        --nav-bg:        rgba(8,8,8,.88);
-        --err:           #ff5c7a;
-        --radius:        14px;
-        --font:          'Poppins', system-ui, sans-serif;
+        --salmon-dim:    rgba(255,119,81,.08);
+        --salmon-border: rgba(255,119,81,.25);
+        --bg:            #FFFFFF;
+        --surface:       #FAFAFA;
+        --border:        #F0F0F0;
+        --text:          #1A1A1A;
+        --text-secondary:#666666;
+        --field-bg:      #F8F8F8;
+        --nav-bg:        rgba(255,255,255,.96);
+        --err:           #e53e3e;
+        --radius:        12px;
+        --font:          'Inter', system-ui, sans-serif;
         --mono:          'Courier New', monospace;
       }
 
-      [data-theme="light"] {
-        --bg:            #FFFFFF;
-        --surface:       #F5F5F5;
-        --text:          #1A1A1A;
-        --border:        rgba(0,0,0,.08);
-        --muted:         rgba(26,26,26,.5);
-        --field-bg:      rgba(0,0,0,.04);
-        --nav-bg:        rgba(255,255,255,.9);
+      [data-theme="dark"] {
+        --bg:            #0D0D0D;
+        --surface:       #161616;
+        --border:        rgba(255,255,255,.08);
+        --text:          #F5F5F6;
+        --text-secondary:rgba(245,245,246,.5);
+        --field-bg:      rgba(255,255,255,.04);
+        --nav-bg:        rgba(13,13,13,.92);
         --salmon-dim:    rgba(255,119,81,.1);
-        --salmon-border: rgba(255,119,81,.3);
+        --salmon-border: rgba(255,119,81,.22);
       }
-      [data-theme="light"] body {
-        background-image: radial-gradient(ellipse 80% 40% at 50% 0%, rgba(255,119,81,.05) 0%, transparent 60%);
-      }
-      [data-theme="light"] .logo-mark::after { border-left-color: #fff; }
-
-      /* Theme toggle button */
-      .btn-theme-toggle {
-        background: transparent; border: 1px solid var(--border);
-        border-radius: 8px; cursor: pointer; padding: .32rem .5rem;
-        font-size: .95rem; color: var(--muted);
-        transition: color .15s, border-color .15s; flex-shrink: 0;
-        margin-right: .4rem;
-      }
-      .btn-theme-toggle:hover { color: var(--text); border-color: rgba(128,128,128,.3); }
 
       html { scroll-behavior: smooth; }
 
@@ -67,1099 +52,962 @@
         background: var(--bg);
         color: var(--text);
         min-height: 100vh;
+        font-size: 14px;
         -webkit-font-smoothing: antialiased;
-        background-image:
-          radial-gradient(ellipse 80% 40% at 50% 0%, rgba(255,119,81,.07) 0%, transparent 60%);
       }
 
-      /* ── NAV ───────────────────────────────────────────────── */
+      /* ── NAV ─────────────────────────────────────────────────── */
       .nav {
         position: sticky; top: 0; z-index: 100;
         display: flex; align-items: center; justify-content: space-between;
         padding: 0 1.5rem;
-        height: 58px;
+        height: 56px;
         border-bottom: 1px solid var(--border);
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
         background: var(--nav-bg);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
       }
-      .logo { display: flex; align-items: center; gap: .55rem; text-decoration: none; color: var(--text); font-weight: 700; font-size: .95rem; }
-      .logo-mark {
-        width: 28px; height: 28px; border-radius: 7px;
-        background: var(--salmon);
-        display: grid; place-items: center; flex-shrink: 0;
+      .logo {
+        text-decoration: none; color: var(--text);
+        font-size: .95rem; font-weight: 700; letter-spacing: -.01em;
+        flex-shrink: 0;
       }
-      .logo-mark::after {
-        content: "";
-        border-left: 9px solid var(--bg);
-        border-top: 6px solid transparent;
-        border-bottom: 6px solid transparent;
-        margin-left: 2px;
-      }
-      .logo-name { color: var(--salmon); }
-      .nav-right { display: flex; align-items: center; gap: 1rem; }
-      .nav-link { color: var(--muted); text-decoration: none; font-size: .85rem; font-weight: 500; transition: color .15s; }
-      .nav-link:hover { color: var(--text); }
-      .btn {
-        display: inline-flex; align-items: center; justify-content: center;
-        gap: .4rem; padding: .55rem 1.1rem;
-        border-radius: 8px; font-family: var(--font); font-size: .85rem; font-weight: 600;
-        cursor: pointer; text-decoration: none; border: none;
-        transition: opacity .15s, transform .1s, box-shadow .2s;
-      }
-      .btn:active { transform: scale(.97); }
-      .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
-      .btn-ghost:hover { color: var(--text); border-color: rgba(255,255,255,.18); }
+      .logo span { color: var(--salmon); }
 
-      /* ── LAYOUT ─────────────────────────────────────────────── */
-      main { max-width: 660px; margin: 0 auto; padding: 0 1.25rem 6rem; }
+      .nav-tabs { display: flex; align-items: center; gap: 0; }
+      .nav-tab {
+        background: transparent; border: none; border-bottom: 2px solid transparent;
+        cursor: pointer; font-family: var(--font); font-size: .875rem; font-weight: 500;
+        color: var(--text-secondary); padding: 0 1rem; height: 56px;
+        transition: color .15s, border-color .15s; white-space: nowrap;
+      }
+      .nav-tab:hover { color: var(--text); }
+      .nav-tab.active { color: var(--salmon); border-bottom-color: var(--salmon); }
 
-      /* ── HERO ───────────────────────────────────────────────── */
-      .hero { padding: 4rem 0 2.5rem; text-align: center; }
-      .badge {
-        display: inline-flex; align-items: center; gap: .45rem;
-        padding: .28rem .8rem; border-radius: 99px;
-        border: 1px solid var(--salmon-border);
-        background: var(--salmon-dim);
-        font-size: .72rem; color: var(--salmon); font-weight: 600;
-        margin-bottom: 1.5rem; letter-spacing: .04em;
+      .nav-right { display: flex; align-items: center; gap: .75rem; }
+      .btn-upgrade {
+        padding: .4rem .9rem; border: 1px solid var(--border); border-radius: 8px;
+        background: transparent; color: var(--text); font-family: var(--font);
+        font-size: .8rem; font-weight: 500; cursor: pointer;
+        transition: border-color .15s, color .15s;
       }
-      .badge-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--salmon); animation: pulse 2s infinite; }
-      @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
-      h1 {
-        font-size: clamp(1.9rem, 5vw, 2.8rem);
-        font-weight: 800; line-height: 1.1; letter-spacing: -.035em;
-        margin-bottom: .6rem;
+      .btn-upgrade:hover { border-color: var(--salmon); color: var(--salmon); }
+      .nav-avatar {
+        width: 32px; height: 32px; border-radius: 50%;
+        background: var(--salmon); color: #fff;
+        display: flex; align-items: center; justify-content: center;
+        font-size: .7rem; font-weight: 700; flex-shrink: 0; cursor: pointer;
+        user-select: none;
       }
-      .gradient {
-        background: linear-gradient(135deg, var(--salmon) 0%, #ffb347 100%);
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        background-clip: text;
+      .btn-theme-toggle {
+        background: transparent; border: 1px solid var(--border); border-radius: 7px;
+        cursor: pointer; padding: .3rem .55rem; font-size: .82rem;
+        color: var(--text-secondary); transition: color .15s, border-color .15s;
       }
-      .tagline { font-size: .95rem; color: var(--muted); margin-bottom: 0; line-height: 1.6; }
+      .btn-theme-toggle:hover { color: var(--text); }
 
-      /* ── CARD ───────────────────────────────────────────────── */
+      /* ── LAYOUT ──────────────────────────────────────────────── */
+      main { max-width: 640px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+
+      /* ── CARDS ───────────────────────────────────────────────── */
       .card {
-        background: var(--surface);
+        background: var(--bg);
         border: 1px solid var(--border);
         border-radius: var(--radius);
-        padding: 1.75rem;
+        padding: 1.5rem;
         margin-bottom: 1rem;
       }
       .card.hidden { display: none; }
-      .card:focus-within { border-color: var(--salmon-border); }
+      .card-surface {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+      }
 
-      .tool-head { margin-bottom: 1.5rem; }
-      .tool-head h2 { font-size: 1.05rem; font-weight: 700; margin-bottom: .2rem; }
-      .tool-head p { font-size: .85rem; color: var(--muted); }
+      .section-label {
+        font-size: .72rem; font-weight: 600; color: var(--text-secondary);
+        text-transform: uppercase; letter-spacing: .06em; margin-bottom: .65rem;
+        display: block;
+      }
 
-      /* ── DROP ZONE ──────────────────────────────────────────── */
+      /* ── HERO (editor top) ───────────────────────────────────── */
+      .editor-hero { padding: 2rem 0 1rem; text-align: center; }
+      .editor-hero h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -.02em; margin-bottom: .3rem; }
+      .editor-hero p  { font-size: .875rem; color: var(--text-secondary); }
+
+      /* ── DROP ZONE ───────────────────────────────────────────── */
       .drop {
         display: flex; flex-direction: column; align-items: center; justify-content: center;
-        gap: .45rem; padding: 2.5rem 1.5rem;
-        border: 1px dashed var(--border);
-        border-radius: var(--radius);
-        cursor: pointer;
-        transition: border-color .2s, background .2s, box-shadow .2s;
-        margin-bottom: 1.25rem; text-align: center; position: relative;
-        background: radial-gradient(ellipse 60% 50% at 50% 100%, rgba(255,119,81,.04) 0%, transparent 70%);
+        gap: .4rem; height: 280px;
+        border: 1.5px dashed var(--border); border-radius: var(--radius);
+        cursor: pointer; transition: border-color .2s, background .2s;
+        margin-bottom: 1rem; text-align: center; position: relative;
+        background: var(--surface);
       }
-      .drop:hover, .drop.dragover {
-        border-color: var(--salmon);
-        background: var(--salmon-dim);
-        box-shadow: 0 0 40px rgba(255,119,81,.12), 0 0 80px rgba(255,119,81,.05);
-      }
+      .drop:hover, .drop.dragover { border-color: var(--salmon); background: var(--salmon-dim); }
       .drop.has-file { border-color: var(--salmon); border-style: solid; }
       .drop input[type="file"] { display: none; }
-      .drop-icon { color: var(--muted); }
+      .drop-icon { color: var(--text-secondary); }
       .drop.has-file .drop-icon { color: var(--salmon); }
-      #dropLabel { font-size: .9rem; font-weight: 500; }
-      .drop-hint { font-size: .75rem; color: var(--muted); }
+      #dropLabel { font-size: .875rem; font-weight: 500; color: var(--text); }
+      .drop-hint  { font-size: .75rem; color: var(--text-secondary); }
 
-      /* ── FIELDS ─────────────────────────────────────────────── */
-      .field { display: flex; flex-direction: column; gap: .4rem; margin-bottom: 1.25rem; }
-      .field > span { font-size: .78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
-
-      .seg { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-      .seg input[type="radio"] { display: none; }
-      .seg label {
-        flex: 1; text-align: center; padding: .5rem .75rem;
-        font-size: .8rem; font-weight: 500; cursor: pointer;
-        color: var(--muted); transition: background .15s, color .15s;
+      /* ── FORMAT PILLS ────────────────────────────────────────── */
+      .format-pills { display: flex; gap: .5rem; margin-bottom: 1rem; }
+      .format-pill  { display: flex; align-items: center; justify-content: center; gap: .4rem; flex: 1; }
+      .format-pill input[type="radio"] { display: none; }
+      .format-pill label {
+        flex: 1; text-align: center; padding: .6rem 1rem;
+        font-size: .8rem; font-weight: 500; cursor: pointer; border-radius: 99px;
+        border: 1px solid var(--border); color: var(--text-secondary);
+        background: var(--surface);
+        transition: background .15s, color .15s, border-color .15s;
       }
-      .seg label:not(:last-child) { border-right: 1px solid var(--border); }
-      .seg input:checked + label { background: var(--salmon); color: #fff; }
+      .format-pill input:checked + label {
+        background: var(--salmon); color: #fff; border-color: var(--salmon);
+      }
 
+      /* ── FIELDS / INPUTS ─────────────────────────────────────── */
+      .field { margin-bottom: 1rem; }
       textarea {
-        width: 100%; padding: .75rem; border-radius: 8px;
+        width: 100%; padding: .75rem 1rem; border-radius: 8px;
         background: var(--field-bg); border: 1px solid var(--border);
         color: var(--text); font-family: var(--font); font-size: .875rem;
-        resize: vertical; min-height: 90px;
-        transition: border-color .15s, box-shadow .15s;
+        resize: vertical; min-height: 76px;
+        transition: border-color .15s;
       }
-      textarea:focus {
-        outline: none; border-color: var(--salmon);
-        box-shadow: 0 0 0 3px rgba(255,119,81,.1);
-      }
-      textarea::placeholder { color: var(--muted); }
+      textarea:focus { outline: none; border-color: var(--salmon); }
+      textarea::placeholder { color: var(--text-secondary); }
 
       input[type="text"], input[type="email"], select {
-        width: 100%; padding: .65rem .85rem; border-radius: 8px;
+        width: 100%; padding: .65rem 1rem; border-radius: 8px;
         background: var(--field-bg); border: 1px solid var(--border);
         color: var(--text); font-family: var(--font); font-size: .875rem;
-        transition: border-color .15s, box-shadow .15s; appearance: none;
+        transition: border-color .15s; appearance: none;
       }
       input[type="text"]:focus, input[type="email"]:focus, select:focus {
         outline: none; border-color: var(--salmon);
-        box-shadow: 0 0 0 3px rgba(255,119,81,.1);
       }
-      input::placeholder { color: var(--muted); }
+      input::placeholder { color: var(--text-secondary); }
       select { cursor: pointer; }
+      input[type="color"] { width: 40px; height: 40px; border: none; border-radius: 8px; cursor: pointer; padding: 2px; background: transparent; }
 
-      /* ── SUBMIT BUTTON ──────────────────────────────────────── */
+      /* ── SUBMIT BUTTON ───────────────────────────────────────── */
       .btn-submit {
-        width: 100%; padding: .95rem; font-size: 1rem;
-        font-family: var(--font); font-weight: 700;
-        border: none; border-radius: 10px; cursor: pointer;
+        width: 100%; height: 48px; font-size: .95rem;
+        font-family: var(--font); font-weight: 600;
+        border: none; border-radius: 8px; cursor: pointer;
         background: var(--salmon); color: #fff;
-        box-shadow: 0 0 30px rgba(255,119,81,.4), 0 4px 16px rgba(255,119,81,.25);
-        transition: opacity .15s, transform .1s, box-shadow .2s;
-        position: relative; overflow: hidden;
-        margin-top: .5rem;
+        transition: opacity .15s, transform .1s;
         display: flex; align-items: center; justify-content: center; gap: .5rem;
+        position: relative; overflow: hidden;
       }
-      .btn-submit:hover { box-shadow: 0 0 50px rgba(255,119,81,.5), 0 6px 24px rgba(255,119,81,.3); }
+      .btn-submit:hover { opacity: .9; }
       .btn-submit:active { transform: scale(.98); }
-      .btn-submit:disabled { opacity: .45; cursor: not-allowed; transform: none; box-shadow: none; }
-      .btn-submit.loading .btn-shimmer { animation: shimmer 1.4s infinite; }
+      .btn-submit:disabled { opacity: .45; cursor: not-allowed; transform: none; }
       .btn-shimmer {
         position: absolute; inset: 0;
-        background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,.18) 50%, transparent 60%);
+        background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,.15) 50%, transparent 60%);
         transform: translateX(-100%);
-        animation: shimmer 2.6s infinite;
+        animation: shimmer 2.4s infinite;
       }
       @keyframes shimmer { to { transform: translateX(200%); } }
 
-      /* ── LOGIN ──────────────────────────────────────────────── */
+      /* ── AUTH ───────────────────────────────────────────────── */
       #login h2 { font-size: 1.05rem; font-weight: 700; margin-bottom: .25rem; }
-      #login .muted { font-size: .875rem; color: var(--muted); margin-bottom: 1.25rem; }
+      #login .muted { font-size: .875rem; color: var(--text-secondary); margin-bottom: 1.25rem; }
       #loginForm { display: flex; flex-direction: column; gap: .75rem; }
       .err { color: var(--err); font-size: .8rem; }
-      .btn-primary {
-        background: var(--salmon); color: #fff;
-        box-shadow: 0 0 20px rgba(255,119,81,.3);
-      }
+      .btn-primary { background: var(--salmon); color: #fff; border: none; border-radius: 8px; padding: .65rem 1.1rem; font-family: var(--font); font-size: .875rem; font-weight: 600; cursor: pointer; transition: opacity .15s; }
       .btn-primary:hover { opacity: .9; }
       .btn-primary:disabled { opacity: .45; cursor: not-allowed; }
 
       /* ── STATUS ─────────────────────────────────────────────── */
-      .status .row { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1rem; }
-      .status strong { font-size: .95rem; display: block; margin-bottom: .2rem; }
-      .status .muted { font-size: .8rem; color: var(--muted); }
-      .step-pip { font-size: 1.3rem; color: var(--salmon); }
+      .status-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: .85rem; }
+      .status-header strong { font-size: .95rem; font-weight: 600; }
+      .status-pip { font-size: .8rem; color: var(--text-secondary); }
+      .status-msg { font-size: .8rem; color: var(--text-secondary); margin-bottom: .65rem; }
       .bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
-      #barFill {
-        height: 100%; border-radius: 2px; width: 0; transition: width .4s ease;
-        background: linear-gradient(90deg, var(--salmon), #ffb347);
-        box-shadow: 0 0 10px rgba(255,119,81,.5);
-      }
+      #barFill { height: 100%; border-radius: 2px; width: 0; transition: width .4s ease; background: var(--salmon); }
 
       /* ── RESULT ─────────────────────────────────────────────── */
-      .result .row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1.25rem; }
-      .result h2 { font-size: 1.05rem; font-weight: 700; }
-      .btn-download {
-        background: var(--salmon); color: #fff; border: none;
-        box-shadow: 0 0 20px rgba(255,119,81,.4);
-        padding: .6rem 1.25rem; border-radius: 8px;
-        font-family: var(--font); font-size: .875rem; font-weight: 600;
-        cursor: pointer; text-decoration: none;
-        transition: opacity .15s, box-shadow .2s;
+      video { width: 100%; border-radius: 10px; background: #000; margin-bottom: 1rem; display: block; }
+      .download-buttons-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; margin-bottom: 1rem; }
+      .btn-download-fmt {
+        display: flex; flex-direction: column; align-items: center; gap: .2rem;
+        padding: .65rem .4rem; border-radius: 8px; font-family: var(--font);
+        border: 1px solid var(--border); background: transparent;
+        color: var(--text); cursor: pointer; text-decoration: none;
+        font-size: .75rem; font-weight: 500;
+        transition: border-color .15s, color .15s, background .15s;
       }
-      .btn-download:hover { opacity: .9; box-shadow: 0 0 30px rgba(255,119,81,.5); }
-      video { width: 100%; border-radius: 10px; background: #000; margin-bottom: 1.25rem; }
-      .packaging { display: grid; gap: .75rem; }
-      .packaging > div { background: rgba(255,255,255,.03); border: 1px solid var(--border); border-radius: 10px; padding: .85rem 1rem; }
-      .tag-label { font-size: .68rem; font-weight: 700; color: var(--salmon); letter-spacing: .08em; text-transform: uppercase; display: block; margin-bottom: .3rem; }
-      .packaging p { font-size: .875rem; }
-      .thumb-word { font-size: 1.8rem; font-weight: 800; letter-spacing: -.02em; }
-      .ctr-block { margin-top: .75rem; }
-      #ctrTitles { display: flex; flex-direction: column; gap: .4rem; margin-top: .5rem; }
-      .ctr-title { font-size: .875rem; padding: .6rem .85rem; background: rgba(255,255,255,.03); border: 1px solid var(--border); border-radius: 8px; display: flex; gap: .5rem; align-items: flex-start; }
-      .ctr-num { color: var(--salmon); font-weight: 700; flex-shrink: 0; }
-      details { margin-top: 1rem; }
-      summary { cursor: pointer; font-size: .8rem; color: var(--muted); user-select: none; }
-      pre { margin-top: .5rem; font-family: var(--mono); font-size: .7rem; color: var(--muted); overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto; }
+      .btn-download-fmt:hover { border-color: var(--salmon); color: var(--salmon); background: var(--salmon-dim); }
+      .btn-download-fmt.fmt-primary { background: var(--salmon); color: #fff; border-color: var(--salmon); }
+      .btn-download-fmt.fmt-primary:hover { opacity: .9; }
+      .fmt-icon { font-size: 1rem; }
+      .fmt-name { font-size: .75rem; font-weight: 600; text-align: center; }
+      .fmt-sub  { font-size: .62rem; opacity: .7; }
 
-      /* ── BRIEF ──────────────────────────────────────────────── */
-      .brief-toggle {
-        display: flex; align-items: center; justify-content: space-between;
-        cursor: pointer; padding: .6rem 0; font-size: .85rem;
-        font-weight: 600; color: var(--muted); user-select: none;
-        border-top: 1px solid var(--border); margin-top: .75rem;
+      .suggested-title {
+        font-size: .875rem; font-weight: 500; color: var(--text);
+        padding: .75rem 1rem; border-radius: 8px; background: var(--surface);
+        border: 1px solid var(--border); margin-bottom: 1rem;
+      }
+      .details-toggle {
+        background: transparent; border: none; color: var(--text-secondary);
+        font-size: .8rem; cursor: pointer; font-family: var(--font);
+        padding: .4rem 0; display: block; width: 100%; text-align: center;
         transition: color .15s;
       }
-      .brief-toggle:hover { color: var(--text); }
-      .brief-toggle .arrow { transition: transform .2s; }
-      .brief-body { display: none; padding-top: .75rem; }
-      .brief-body.open { display: block; }
+      .details-toggle:hover { color: var(--text); }
+      .details-body { display: none; padding-top: 1rem; border-top: 1px solid var(--border); margin-top: .6rem; }
+      .details-body.open { display: block; }
+      .tag-label { font-size: .68rem; font-weight: 600; color: var(--salmon); letter-spacing: .07em; text-transform: uppercase; display: block; margin-bottom: .3rem; }
+      #ctrTitles { display: flex; flex-direction: column; gap: .4rem; margin-top: .5rem; }
+      .ctr-title { font-size: .875rem; padding: .6rem .85rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; display: flex; gap: .5rem; align-items: flex-start; }
+      .ctr-num { color: var(--salmon); font-weight: 700; flex-shrink: 0; }
+      details { margin-top: 1rem; }
+      summary { cursor: pointer; font-size: .8rem; color: var(--text-secondary); user-select: none; }
+      pre { margin-top: .5rem; font-family: var(--mono); font-size: .7rem; color: var(--text-secondary); overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto; }
 
-      /* ── PREVIEW PANEL ──────────────────────────────────────── */
+      /* ── PREVIEW PANEL ─────────────────────────────────────── */
       .preview-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
       .preview-header h2 { font-size: 1.05rem; font-weight: 700; }
       .preview-actions { display: flex; gap: .6rem; }
-      .btn-replan {
-        background: transparent; color: var(--muted); border: 1px solid var(--border);
-        padding: .5rem 1rem; border-radius: 8px; font-family: var(--font); font-size: .8rem;
-        font-weight: 600; cursor: pointer; transition: color .15s, border-color .15s;
-      }
-      .btn-replan:hover { color: var(--text); border-color: rgba(255,255,255,.18); }
-      .btn-render {
-        background: var(--salmon); color: #fff;
-        box-shadow: 0 0 20px rgba(255,119,81,.35);
-        padding: .5rem 1.1rem; border-radius: 8px; font-family: var(--font); font-size: .8rem;
-        font-weight: 600; cursor: pointer; border: none; transition: opacity .15s, box-shadow .2s;
-      }
-      .btn-render:hover { opacity: .9; box-shadow: 0 0 30px rgba(255,119,81,.45); }
+      .btn-replan { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); padding: .45rem 1rem; border-radius: 8px; font-family: var(--font); font-size: .8rem; font-weight: 500; cursor: pointer; transition: color .15s, border-color .15s; }
+      .btn-replan:hover { color: var(--text); border-color: rgba(0,0,0,.2); }
+      .btn-render { background: var(--salmon); color: #fff; padding: .45rem 1.1rem; border-radius: 8px; font-family: var(--font); font-size: .8rem; font-weight: 600; cursor: pointer; border: none; transition: opacity .15s; }
+      .btn-render:hover { opacity: .9; }
 
-      .preview-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: .75rem; margin-bottom: 1.25rem; }
-      .preview-stat-card {
-        background: rgba(255,255,255,.03); border: 1px solid var(--border);
-        border-radius: 8px; padding: .7rem .85rem;
-        display: flex; flex-direction: column; gap: .2rem;
-      }
-      .preview-stat-card .val { font-size: 1.3rem; font-weight: 800; letter-spacing: -.02em; }
-      .preview-stat-card .lbl { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+      .preview-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; margin-bottom: 1.25rem; }
+      .preview-stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .65rem .85rem; }
+      .preview-stat-card .val { font-size: 1.2rem; font-weight: 700; letter-spacing: -.02em; }
+      .preview-stat-card .lbl { font-size: .68rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; }
+      .preview-timeline { display: flex; flex-direction: column; gap: .35rem; margin-bottom: 1rem; }
+      .tl-row { display: flex; align-items: baseline; gap: .6rem; padding: .45rem .75rem; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); font-size: .8rem; }
+      .tl-num  { color: var(--salmon); font-weight: 700; min-width: 1.4rem; }
+      .tl-role { color: var(--text-secondary); flex: 1; }
+      .tl-time { color: var(--text-secondary); font-size: .7rem; font-family: var(--mono); }
+      .tl-row-hook { border-color: var(--salmon-border); background: var(--salmon-dim); }
+      .tl-crown { font-size: .85rem; flex-shrink: 0; }
+      .tl-row { position: relative; }
+      .score-badge { font-size: .63rem; font-weight: 700; padding: .1rem .38rem; border-radius: 99px; cursor: default; letter-spacing: .03em; flex-shrink: 0; }
+      .hook-rewrite { padding: .75rem 1rem; border-radius: 8px; border-left: 3px solid var(--salmon); background: var(--salmon-dim); margin-bottom: 1rem; font-size: .875rem; font-style: italic; }
 
-      .preview-timeline { display: flex; flex-direction: column; gap: .4rem; margin-bottom: 1rem; }
-      .tl-row {
-        display: flex; align-items: baseline; gap: .6rem;
-        padding: .5rem .75rem; border-radius: 6px;
-        background: rgba(255,255,255,.02); border: 1px solid var(--border); font-size: .8rem;
-      }
-      .tl-num { color: var(--salmon); font-weight: 700; min-width: 1.4rem; }
-      .tl-role { color: var(--muted); flex: 1; }
-      .tl-time { color: var(--muted); font-size: .72rem; font-family: var(--mono); }
+      /* Retention prediction */
+      .ret-pred-wrap { display: flex; align-items: center; gap: .75rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .6rem .85rem; margin-bottom: 1rem; }
+      .ret-pred-label { font-size: .68rem; color: var(--text-secondary); white-space: nowrap; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+      .ret-pred-bar-wrap { flex: 1; background: var(--border); border-radius: 99px; height: 6px; overflow: hidden; }
+      .ret-pred-bar-fill { height: 100%; border-radius: 99px; transition: width .9s cubic-bezier(.4,0,.2,1); background: var(--salmon); }
+      .ret-pred-pct { font-size: .95rem; font-weight: 700; min-width: 3rem; text-align: right; letter-spacing: -.02em; }
 
-      .hook-rewrite {
-        padding: .75rem 1rem; border-radius: 8px;
-        border-left: 3px solid var(--salmon);
-        background: var(--salmon-dim); margin-bottom: 1rem;
-        font-size: .875rem; font-style: italic;
-      }
+      /* Split compare */
+      .split-compare { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-top: .85rem; }
+      .split-ver { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: .85rem 1rem; text-align: center; }
+      .split-ver.winner { border-color: #22c55e; background: rgba(34,197,94,.05); }
+      .sv-label { font-size: .63rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-secondary); margin-bottom: .4rem; }
+      .sv-score { font-size: 2rem; font-weight: 800; letter-spacing: -.04em; margin-bottom: .25rem; }
+      .split-ver.winner .sv-score { color: #22c55e; }
+      .sv-verdict { font-size: .7rem; color: var(--text-secondary); line-height: 1.4; }
+      .sv-winner-pill { display: inline-block; font-size: .65rem; font-weight: 700; background: rgba(34,197,94,.12); color: #22c55e; border: 1px solid rgba(34,197,94,.25); border-radius: 99px; padding: .14rem .45rem; margin-top: .3rem; }
 
-      /* ── BRAND PANEL ────────────────────────────────────────── */
-      .brand-panel {
-        position: fixed; top: 0; right: -420px; width: 400px; height: 100vh;
-        background: var(--bg); border-left: 1px solid var(--border);
-        z-index: 200; overflow-y: auto; padding: 1.5rem;
-        transition: right .3s ease; box-shadow: -4px 0 32px rgba(0,0,0,.5);
-      }
-      .brand-panel.open { right: 0; }
-      .brand-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
-      .brand-panel-head h3 { font-size: 1rem; font-weight: 700; }
-      .brand-close { background: none; border: none; color: var(--muted); font-size: 1.2rem; cursor: pointer; padding: .25rem; transition: color .15s; }
-      .brand-close:hover { color: var(--text); }
-      .brand-section { margin-bottom: 1.25rem; border-top: 1px solid var(--border); padding-top: 1rem; }
-      .brand-section h4 { font-size: .75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: .75rem; }
-      .color-row { display: flex; gap: .6rem; flex-wrap: wrap; }
-      .color-swatch { display: flex; flex-direction: column; gap: .3rem; align-items: center; }
-      .color-swatch label { font-size: .7rem; color: var(--muted); }
-      input[type="color"] { width: 40px; height: 40px; border: none; border-radius: 8px; cursor: pointer; padding: 2px; background: var(--bg); }
-
-      /* Brand font selector */
-      .font-selector { display: flex; flex-direction: column; gap: .4rem; }
-      .font-option {
-        padding: .5rem .85rem; border-radius: 8px;
-        border: 1px solid var(--border); background: rgba(255,255,255,.03);
-        color: var(--muted); font-size: .9rem; cursor: pointer;
-        transition: border-color .15s, color .15s, background .15s;
-        text-align: left;
-      }
-      .font-option:hover { border-color: rgba(255,255,255,.2); color: var(--text); }
-      .font-option.active { border-color: var(--salmon); background: rgba(255,119,81,.1); color: var(--text); }
-
-      /* Editing style selector */
-      .style-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
-      .style-option {
-        padding: .6rem .75rem; border-radius: 8px;
-        border: 1px solid var(--border); background: rgba(255,255,255,.03);
-        color: var(--muted); font-size: .8rem; font-weight: 600; cursor: pointer;
-        transition: border-color .15s, color .15s, background .15s; text-align: center;
-      }
-      .style-option:hover { border-color: rgba(255,255,255,.2); color: var(--text); }
-      .style-option.active { border-color: var(--salmon); background: rgba(255,119,81,.1); color: var(--text); }
-
-      /* ── TEMPLATE SELECTOR ──────────────────────────────────── */
-      .template-row { display: flex; align-items: center; gap: .6rem; margin-bottom: 1.25rem; }
-      .template-chips { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .4rem; }
-      .chip { font-size: .72rem; font-weight: 500; padding: .2rem .55rem; border-radius: 99px; border: 1px solid var(--border); color: var(--muted); background: rgba(255,255,255,.03); }
-      .chip.accent { border-color: var(--salmon-border); color: var(--salmon); background: var(--salmon-dim); }
-
-      /* ── PUBLISH SECTION ────────────────────────────────────── */
+      /* Publish section */
       .publish-section { margin-top: 1.25rem; }
-      .publish-section h3 { font-size: .875rem; font-weight: 700; margin-bottom: .75rem; }
+      .publish-section h3 { font-size: .875rem; font-weight: 600; margin-bottom: .75rem; }
       .platform-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-bottom: 1rem; }
-      .platform-btn {
-        display: flex; align-items: center; gap: .5rem; padding: .6rem .85rem;
-        border-radius: 8px; border: 1px solid var(--border); background: rgba(255,255,255,.03);
-        font-size: .8rem; font-weight: 500; cursor: pointer; color: var(--muted);
-        font-family: var(--font);
-        transition: border-color .15s, color .15s;
-      }
-      .platform-btn:hover { border-color: rgba(255,255,255,.2); color: var(--text); }
+      .platform-btn { display: flex; align-items: center; gap: .5rem; padding: .55rem .85rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); font-size: .8rem; font-weight: 500; cursor: pointer; color: var(--text-secondary); font-family: var(--font); transition: border-color .15s, color .15s; }
+      .platform-btn:hover { border-color: rgba(0,0,0,.15); color: var(--text); }
       .platform-btn.selected { border-color: var(--salmon); color: var(--text); background: var(--salmon-dim); }
       .platform-btn.connected::after { content: " ✓"; color: var(--salmon); }
       .platform-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
       .platform-dot.connected { background: #22c55e; }
 
-      /* ── ANALYTICS ──────────────────────────────────────────── */
-      .analytics-stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .75rem; margin-bottom: 1.5rem; }
-      .analytics-stat { background: rgba(255,255,255,.03); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; }
-      .analytics-stat .big { font-size: 1.8rem; font-weight: 800; letter-spacing: -.04em; color: var(--salmon); display: block; line-height: 1.1; margin-bottom: .2rem; }
-      .analytics-stat .sub { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
-      .analytics-section-title { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: .75rem; }
-      .video-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
-      .video-table th { text-align: left; color: var(--muted); font-weight: 600; padding: .5rem .6rem; border-bottom: 1px solid var(--border); font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; }
-      .video-table td { padding: .6rem .6rem; border-bottom: 1px solid rgba(255,255,255,.04); vertical-align: middle; }
-      .video-table tr:last-child td { border-bottom: none; }
-      .status-badge { display: inline-block; padding: .15rem .5rem; border-radius: 99px; font-size: .7rem; font-weight: 600; }
-      .status-done { background: rgba(34,197,94,.15); color: #22c55e; }
-      .status-processing { background: rgba(255,119,81,.12); color: var(--salmon); }
-      .retention-badge { display: inline-block; padding: .15rem .5rem; border-radius: 99px; font-size: .7rem; font-weight: 700; background: rgba(255,119,81,.15); color: var(--salmon); }
-      .action-btn { background: rgba(255,255,255,.05); border: 1px solid var(--border); color: var(--muted); font-family: var(--font); font-size: .72rem; padding: .25rem .6rem; border-radius: 6px; cursor: pointer; transition: color .15s, border-color .15s; margin-right: .3rem; }
-      .action-btn:hover { color: var(--text); border-color: rgba(255,255,255,.18); }
-      .perf-chart { display: flex; flex-direction: column; gap: .5rem; }
-      .chart-row { display: flex; align-items: center; gap: .75rem; font-size: .78rem; }
-      .chart-label { min-width: 100px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .chart-bar-wrap { flex: 1; background: rgba(255,255,255,.04); border-radius: 99px; height: 8px; overflow: hidden; }
-      .chart-bar-fill { height: 100%; background: linear-gradient(90deg, var(--salmon), #ffb347); border-radius: 99px; transition: width .6s ease; }
-      .chart-val { min-width: 50px; text-align: right; color: var(--muted); font-size: .72rem; }
-      .insight-cards { display: flex; flex-direction: column; gap: .6rem; }
-      .insight-card { background: rgba(255,255,255,.03); border: 1px solid var(--border); border-radius: 10px; padding: .85rem 1rem; display: flex; gap: .75rem; align-items: flex-start; }
-      .insight-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: .1rem; color: var(--salmon); }
-      .insight-card h4 { font-size: .82rem; font-weight: 700; margin-bottom: .2rem; }
-      .insight-card p { font-size: .78rem; color: var(--muted); line-height: 1.5; }
-      .analytics-empty { text-align: center; padding: 2.5rem 1rem; color: var(--muted); font-size: .875rem; }
-      .analytics-empty-icon { font-size: 2rem; display: block; margin-bottom: .6rem; }
+      /* Caption editor */
+      .caption-editor { margin-top: 1.25rem; }
+      .caption-list { max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+      .cap-row { display: flex; gap: .5rem; padding: .38rem .55rem; border-bottom: 1px solid var(--border); transition: background .1s; }
+      .cap-row:last-child { border-bottom: none; }
+      .cap-row:hover { background: var(--surface); }
+      .cap-tc  { font-size: .62rem; color: var(--text-secondary); font-family: var(--mono); flex-shrink: 0; min-width: 62px; margin-top: .2rem; }
+      .cap-txt { flex: 1; font-size: .78rem; border: none; background: transparent; color: var(--text); font-family: var(--font); outline: none; resize: none; padding: 0; min-height: 1em; }
+      .cap-txt:focus { color: var(--salmon); }
 
-      /* SVG retention curve */
-      .retention-chart-wrap { background: rgba(255,255,255,.02); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; margin-bottom: 1.5rem; }
-      .retention-chart-title { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: .75rem; }
-      .retention-svg { width: 100%; height: 80px; }
-
-      /* ── NAV TABS ───────────────────────────────────────────── */
-      .nav-tabs { display: flex; align-items: center; gap: .25rem; }
-      .nav-tab {
-        background: transparent; border: none; cursor: pointer;
-        font-family: var(--font); font-size: .82rem; font-weight: 500;
-        color: var(--muted); padding: .38rem .75rem; border-radius: 8px;
-        transition: background .15s, color .15s; white-space: nowrap;
-      }
-      .nav-tab:hover { background: rgba(255,255,255,.06); color: var(--text); }
-      .nav-tab.active { background: rgba(255,119,81,.12); color: var(--salmon); }
-
-      /* ── DASHBOARD ──────────────────────────────────────────── */
+      /* ── DASHBOARD ───────────────────────────────────────────── */
       #dashboardSection { padding-top: 1.5rem; }
-      .dash-welcome {
-        padding: 1.1rem 1.25rem; border-radius: 12px;
-        border: 1px solid var(--salmon-border);
-        background: rgba(255,119,81,.07);
-        font-size: .9rem; font-weight: 600; color: var(--text);
-        margin-bottom: 1.25rem;
-      }
+      .dash-welcome { font-size: 1.05rem; font-weight: 600; margin-bottom: 1.25rem; color: var(--text); }
       .dash-welcome span { color: var(--salmon); }
-      .dash-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: .75rem; margin-bottom: 1.25rem; }
-      .dash-stat {
-        background: var(--surface); border: 1px solid var(--border);
-        border-radius: 12px; padding: 1rem 1.1rem;
-      }
-      .dash-stat .big { font-size: 1.8rem; font-weight: 800; letter-spacing: -.04em; color: var(--salmon); display: block; line-height: 1.1; }
-      .dash-stat .lbl { font-size: .72rem; color: var(--muted); margin-top: .2rem; display: block; }
-      .dash-edit-btn {
-        width: 100%; padding: .9rem; border-radius: 10px; border: none;
-        background: var(--salmon); color: #fff; font-family: var(--font);
-        font-size: .95rem; font-weight: 700; cursor: pointer;
-        box-shadow: 0 0 24px rgba(255,119,81,.35);
-        transition: opacity .15s, box-shadow .2s;
-        margin-bottom: 1.25rem;
-      }
-      .dash-edit-btn:hover { opacity: .9; box-shadow: 0 0 36px rgba(255,119,81,.5); }
-      .dash-recent-title { font-size: .72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: .75rem; }
-      .dash-empty {
-        text-align: center; padding: 2rem 1rem;
-        border: 1px dashed rgba(255,255,255,.1); border-radius: 10px;
-        color: var(--muted); font-size: .85rem;
-      }
-      .dash-empty-icon { font-size: 2rem; display: block; margin-bottom: .5rem; }
+      .dash-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: .65rem; margin-bottom: 1.25rem; }
+      .dash-stat { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.1rem; }
+      .dash-stat .big { font-size: 1.6rem; font-weight: 700; letter-spacing: -.03em; color: var(--text); display: block; line-height: 1.1; }
+      .dash-stat .lbl { font-size: .72rem; color: var(--text-secondary); margin-top: .25rem; display: block; }
+      .dash-edit-btn { width: 100%; height: 44px; border-radius: 8px; border: none; background: var(--salmon); color: #fff; font-family: var(--font); font-size: .875rem; font-weight: 600; cursor: pointer; margin-bottom: 1.25rem; transition: opacity .15s; }
+      .dash-edit-btn:hover { opacity: .9; }
+      .dash-empty { text-align: center; padding: 2rem 1rem; border: 1.5px dashed var(--border); border-radius: var(--radius); color: var(--text-secondary); font-size: .875rem; }
 
-      /* ── STREAK & GAMIFICATION ──────────────────────────────── */
-      .streak-card {
-        background: var(--surface); border: 1px solid var(--border);
-        border-radius: 12px; padding: 1rem 1.1rem; margin-bottom: .75rem;
-        display: flex; flex-direction: column; gap: .6rem;
-      }
-      .streak-header { display: flex; align-items: center; justify-content: space-between; }
-      .streak-count { font-size: 1.6rem; font-weight: 800; display: flex; align-items: center; gap: .3rem; }
-      .streak-label { font-size: .75rem; color: var(--muted); }
-      .streak-bar-wrap { background: rgba(255,255,255,.06); border-radius: 99px; height: 6px; overflow: hidden; }
-      .streak-bar-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--salmon), #ffb347); transition: width .6s ease; }
-      .streak-milestone { font-size: .72rem; color: var(--muted); }
-
-      .goal-row { display: flex; align-items: center; gap: .75rem; margin-bottom: .75rem; }
-      .goal-label { font-size: .82rem; color: var(--muted); flex: 1; }
-      .goal-val { font-size: .82rem; font-weight: 700; color: var(--salmon); white-space: nowrap; }
-      .goal-bar-wrap { width: 100%; background: rgba(255,255,255,.06); border-radius: 99px; height: 5px; overflow: hidden; margin-bottom: .75rem; }
-      .goal-bar-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--salmon), #ffb347); transition: width .6s ease; }
-
-      .achievements-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .5rem; margin-bottom: 1.25rem; }
-      .achievement {
-        background: rgba(255,255,255,.03); border: 1px solid var(--border);
-        border-radius: 10px; padding: .75rem .85rem;
-        display: flex; align-items: center; gap: .6rem;
-        transition: border-color .15s;
-      }
-      .achievement.unlocked { border-color: var(--salmon-border); background: rgba(255,119,81,.06); }
-      .achievement-icon { font-size: 1.2rem; flex-shrink: 0; }
-      .achievement.locked .achievement-icon { filter: grayscale(1); opacity: .35; }
-      .achievement-text { }
-      .achievement-name { font-size: .78rem; font-weight: 700; }
-      .achievement.locked .achievement-name { color: var(--muted); }
-      .achievement-desc { font-size: .68rem; color: var(--muted); }
-
-      /* ── VIDEO LIBRARY ──────────────────────────────────────── */
+      /* Video library */
       .video-library-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-bottom: 1.25rem; }
-      .video-lib-card {
-        background: var(--surface); border: 1px solid var(--border);
-        border-radius: 12px; overflow: hidden;
-        transition: border-color .2s, box-shadow .2s;
-        cursor: pointer; position: relative;
-      }
-      .video-lib-card:hover { border-color: var(--salmon-border); box-shadow: 0 0 20px rgba(255,119,81,.1); }
-      .video-lib-thumb {
-        width: 100%; aspect-ratio: 16/9;
-        background: linear-gradient(135deg, rgba(255,119,81,.3) 0%, rgba(255,119,81,.08) 100%);
-        display: flex; align-items: center; justify-content: center;
-        font-size: 1.5rem; position: relative;
-      }
-      .video-lib-retention {
-        position: absolute; top: .4rem; right: .4rem;
-        background: rgba(8,8,8,.85); border-radius: 6px; padding: .15rem .4rem;
-        font-size: .68rem; font-weight: 700; color: var(--salmon);
-      }
-      .video-lib-overlay {
-        position: absolute; inset: 0;
-        background: rgba(8,8,8,.85);
-        display: flex; align-items: center; justify-content: center; gap: .5rem;
-        opacity: 0; transition: opacity .2s;
-      }
+      .video-lib-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: border-color .2s; cursor: pointer; }
+      .video-lib-card:hover { border-color: rgba(0,0,0,.15); }
+      [data-theme="dark"] .video-lib-card:hover { border-color: rgba(255,255,255,.15); }
+      .video-lib-thumb { width: 100%; aspect-ratio: 16/9; background: #2A2A2A; display: flex; align-items: center; justify-content: center; position: relative; }
+      .video-lib-thumb img { width: 100%; height: 100%; object-fit: cover; }
+      .video-lib-thumb-placeholder { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+      .video-lib-play { width: 32px; height: 32px; color: rgba(255,255,255,.7); }
+      .video-lib-retention { position: absolute; top: .4rem; right: .4rem; background: rgba(0,0,0,.75); border-radius: 5px; padding: .12rem .38rem; font-size: .68rem; font-weight: 700; color: #fff; }
+      .video-lib-overlay { position: absolute; inset: 0; background: rgba(0,0,0,.65); display: flex; align-items: center; justify-content: center; gap: .5rem; opacity: 0; transition: opacity .2s; }
       .video-lib-card:hover .video-lib-overlay { opacity: 1; }
       .video-lib-info { padding: .65rem .75rem; }
-      .video-lib-title { font-size: .78rem; font-weight: 600; margin-bottom: .15rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .video-lib-meta { font-size: .68rem; color: var(--muted); }
+      .video-lib-title { font-size: .8rem; font-weight: 600; margin-bottom: .12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .video-lib-meta { font-size: .7rem; color: var(--text-secondary); }
+      .action-btn { background: var(--surface); border: 1px solid var(--border); color: var(--text); font-family: var(--font); font-size: .72rem; padding: .25rem .6rem; border-radius: 6px; cursor: pointer; transition: color .15s, border-color .15s; text-decoration: none; display: inline-block; }
+      .action-btn:hover { border-color: rgba(0,0,0,.2); }
 
-      /* ── PROFILE SECTION ────────────────────────────────────── */
+      /* ── ANALYTICS ───────────────────────────────────────────── */
+      #analyticsSection { padding-top: 1.5rem; }
+      .analytics-stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .65rem; margin-bottom: 1.5rem; }
+      .analytics-stat { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.1rem; }
+      .analytics-stat .big { font-size: 1.6rem; font-weight: 700; letter-spacing: -.03em; color: var(--salmon); display: block; line-height: 1.1; margin-bottom: .2rem; }
+      .analytics-stat .sub { font-size: .72rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; }
+      .analytics-section-title { font-size: .72rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .07em; margin-bottom: .75rem; display: block; }
+
+      .retention-chart-wrap { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin-bottom: 1.5rem; }
+      .retention-chart-title { font-size: .72rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .07em; margin-bottom: .75rem; }
+      .retention-svg { width: 100%; height: 80px; }
+
+      .video-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+      .video-table th { text-align: left; color: var(--text-secondary); font-weight: 500; padding: .5rem .6rem; border-bottom: 1px solid var(--border); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+      .video-table td { padding: .6rem .6rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+      .video-table tr:last-child td { border-bottom: none; }
+      .status-badge { display: inline-block; padding: .15rem .5rem; border-radius: 99px; font-size: .7rem; font-weight: 600; }
+      .status-done { background: rgba(34,197,94,.12); color: #16a34a; }
+      .status-processing { background: var(--salmon-dim); color: var(--salmon); }
+      .retention-badge { display: inline-block; padding: .15rem .5rem; border-radius: 99px; font-size: .7rem; font-weight: 700; background: var(--salmon-dim); color: var(--salmon); border: 1px solid var(--salmon-border); }
+      .analytics-empty { text-align: center; padding: 2.5rem 1rem; color: var(--text-secondary); font-size: .875rem; }
+
+      .perf-chart { display: flex; flex-direction: column; gap: .5rem; }
+      .chart-row { display: flex; align-items: center; gap: .75rem; font-size: .78rem; }
+      .chart-label { min-width: 100px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .chart-bar-wrap { flex: 1; background: var(--border); border-radius: 99px; height: 6px; overflow: hidden; }
+      .chart-bar-fill { height: 100%; background: var(--salmon); border-radius: 99px; transition: width .6s ease; }
+      .chart-val { min-width: 50px; text-align: right; color: var(--text-secondary); font-size: .72rem; }
+
+      /* ── PROFILE ─────────────────────────────────────────────── */
       #profileSection { padding-top: 1.5rem; }
       .profile-avatar-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
-      .profile-avatar {
-        width: 64px; height: 64px; border-radius: 50%;
-        background: linear-gradient(135deg, var(--salmon), rgba(255,119,81,.4));
-        display: flex; align-items: center; justify-content: center;
-        font-size: 1.4rem; font-weight: 800; color: #fff; flex-shrink: 0;
-        border: 2px solid var(--salmon-border);
-      }
+      .profile-avatar { width: 64px; height: 64px; border-radius: 50%; background: var(--salmon); display: flex; align-items: center; justify-content: center; font-size: 1.3rem; font-weight: 700; color: #fff; flex-shrink: 0; }
       .profile-info { flex: 1; }
       .profile-name { font-size: 1.05rem; font-weight: 700; margin-bottom: .15rem; }
-      .profile-brand { font-size: .82rem; color: var(--muted); margin-bottom: .3rem; }
+      .profile-brand { font-size: .82rem; color: var(--text-secondary); margin-bottom: .35rem; }
       .profile-badges { display: flex; gap: .35rem; flex-wrap: wrap; }
-      .profile-badge {
-        font-size: .68rem; font-weight: 600; padding: .15rem .5rem;
-        border-radius: 99px; background: var(--salmon-dim);
-        border: 1px solid var(--salmon-border); color: var(--salmon);
-      }
-      .profile-section-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: .75rem; }
-      .profile-section-card h4 { font-size: .75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: .85rem; }
+      .profile-badge { font-size: .7rem; font-weight: 500; padding: .2rem .6rem; border-radius: 99px; background: var(--surface); border: 1px solid var(--border); color: var(--text-secondary); }
+      .profile-section-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: .75rem; }
+      .profile-section-card h4 { font-size: .72rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .07em; margin-bottom: .85rem; }
       .profile-pillars { display: flex; flex-direction: column; gap: .5rem; }
       .profile-pillar { display: flex; align-items: center; gap: .6rem; }
       .pillar-num { width: 20px; height: 20px; border-radius: 50%; background: var(--salmon-dim); border: 1px solid var(--salmon-border); color: var(--salmon); font-size: .65rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-      .pillar-input { flex: 1; padding: .5rem .7rem; border-radius: 8px; background: rgba(255,255,255,.03); border: 1px solid var(--border); color: var(--text); font-family: var(--font); font-size: .82rem; outline: none; }
+      .pillar-input { flex: 1; padding: .5rem .75rem; border-radius: 8px; background: var(--field-bg); border: 1px solid var(--border); color: var(--text); font-family: var(--font); font-size: .82rem; outline: none; transition: border-color .15s; }
       .pillar-input:focus { border-color: var(--salmon); }
       .platform-badges { display: flex; gap: .4rem; flex-wrap: wrap; }
-      .platform-badge { padding: .25rem .65rem; border-radius: 99px; font-size: .72rem; font-weight: 600; background: rgba(255,255,255,.06); border: 1px solid var(--border); color: var(--muted); }
+      .platform-badge { padding: .25rem .65rem; border-radius: 99px; font-size: .72rem; font-weight: 500; background: var(--surface); border: 1px solid var(--border); color: var(--text-secondary); }
+      .save-msg { display: none; color: #16a34a; font-size: .8rem; margin-top: .5rem; }
 
-      /* ── CONFETTI ───────────────────────────────────────────── */
-      .confetti-piece {
-        position: fixed; width: 8px; height: 8px; border-radius: 2px;
-        pointer-events: none; z-index: 9999;
-        animation: confetti-fall 2.5s ease-in forwards;
-      }
-      @keyframes confetti-fall {
-        0% { transform: translateY(-20px) rotate(0deg); opacity: 1; }
-        100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
-      }
+      /* ── BRAND PANEL (slide-out) ─────────────────────────────── */
+      .brand-panel { position: fixed; top: 0; right: -420px; width: 400px; height: 100vh; background: var(--bg); border-left: 1px solid var(--border); z-index: 200; overflow-y: auto; padding: 1.5rem; transition: right .3s ease; box-shadow: -4px 0 24px rgba(0,0,0,.08); }
+      .brand-panel.open { right: 0; }
+      .brand-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+      .brand-panel-head h3 { font-size: 1rem; font-weight: 700; }
+      .brand-close { background: none; border: none; color: var(--text-secondary); font-size: 1.2rem; cursor: pointer; padding: .25rem; transition: color .15s; }
+      .brand-close:hover { color: var(--text); }
+      .brand-section { margin-bottom: 1.25rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+      .brand-section h4 { font-size: .72rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .07em; margin-bottom: .75rem; }
+      .color-row { display: flex; gap: .6rem; flex-wrap: wrap; }
+      .color-swatch { display: flex; flex-direction: column; gap: .3rem; align-items: center; }
+      .color-swatch label { font-size: .7rem; color: var(--text-secondary); }
+      .font-selector { display: flex; flex-direction: column; gap: .4rem; }
+      .font-option { padding: .5rem .85rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary); font-size: .9rem; cursor: pointer; transition: border-color .15s, color .15s; text-align: left; }
+      .font-option:hover { border-color: rgba(0,0,0,.15); color: var(--text); }
+      .font-option.active { border-color: var(--salmon); background: var(--salmon-dim); color: var(--text); }
+      .style-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+      .style-option { padding: .6rem .75rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary); font-size: .8rem; font-weight: 600; cursor: pointer; transition: border-color .15s, color .15s; text-align: center; }
+      .style-option:hover { border-color: rgba(0,0,0,.15); color: var(--text); }
+      .style-option.active { border-color: var(--salmon); background: var(--salmon-dim); color: var(--text); }
+      .brand-preview { padding: .75rem 1rem; border-radius: 8px; border-left: 3px solid var(--salmon); margin-top: .75rem; font-size: .82rem; font-weight: 500; }
 
-      /* ── TOOLTIPS ───────────────────────────────────────────── */
+      /* ── COACH PANEL ─────────────────────────────────────────── */
+      .coach-panel { position: fixed; top: 0; right: -440px; width: 420px; height: 100vh; background: var(--bg); border-left: 1px solid var(--border); z-index: 300; display: flex; flex-direction: column; transition: right .3s cubic-bezier(.4,0,.2,1); box-shadow: -4px 0 24px rgba(0,0,0,.08); }
+      .coach-panel.open { right: 0; }
+      .coach-panel-head { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+      .coach-panel-head h3 { font-size: .9rem; font-weight: 700; }
+      .chat-messages { flex: 1; overflow-y: auto; padding: .85rem 1rem; display: flex; flex-direction: column; gap: .5rem; scroll-behavior: smooth; }
+      .chat-msg { padding: .58rem .82rem; border-radius: 10px; font-size: .8rem; line-height: 1.55; max-width: 92%; }
+      .chat-msg.user { background: var(--salmon-dim); border: 1px solid var(--salmon-border); align-self: flex-end; }
+      .chat-msg.ai   { background: var(--surface); border: 1px solid var(--border); align-self: flex-start; }
+      .chat-msg.loading { color: var(--text-secondary); font-style: italic; }
+      .chat-quick-pills { display: flex; gap: .3rem; flex-wrap: wrap; padding: .5rem 1rem; border-top: 1px solid var(--border); flex-shrink: 0; }
+      .chat-quick { font-size: .67rem; padding: .2rem .55rem; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary); cursor: pointer; font-family: var(--font); transition: color .15s, border-color .15s; white-space: nowrap; }
+      .chat-quick:hover { color: var(--salmon); border-color: var(--salmon-border); }
+      .chat-input-row { display: flex; gap: .4rem; padding: .8rem 1rem; border-top: 1px solid var(--border); flex-shrink: 0; }
+      .chat-input { flex: 1; padding: .55rem .75rem; border-radius: 8px; background: var(--field-bg); border: 1px solid var(--border); color: var(--text); font-family: var(--font); font-size: .8rem; outline: none; }
+      .chat-input:focus { border-color: var(--salmon); }
+      .chat-send { background: var(--salmon); color: #fff; border: none; border-radius: 8px; padding: .55rem .75rem; cursor: pointer; font-size: .95rem; transition: opacity .15s; flex-shrink: 0; }
+      .chat-send:hover { opacity: .85; }
+
+      /* ── CAPTION STYLE PRESETS ───────────────────────────────── */
+      .caption-preset-grid { display: flex; flex-direction: column; gap: .4rem; }
+      .caption-preset-btn { display: flex; align-items: center; gap: .7rem; padding: .55rem .8rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; font-family: var(--font); text-align: left; transition: border-color .15s, background .15s; width: 100%; }
+      .caption-preset-btn:hover { border-color: rgba(0,0,0,.15); }
+      .caption-preset-btn.active { border-color: var(--salmon); background: var(--salmon-dim); }
+      .caption-preset-thumb { width: 54px; height: 30px; border-radius: 4px; background: #1A1A1A; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; border: 1px solid rgba(0,0,0,.1); }
+      .caption-preset-info .cp-name { font-size: .8rem; font-weight: 700; color: var(--text); }
+      .caption-preset-info .cp-desc { font-size: .67rem; color: var(--text-secondary); margin-top: .1rem; }
+
+      /* ── TEMPLATE SYSTEM ─────────────────────────────────────── */
+      .template-row { display: flex; align-items: center; gap: .6rem; margin-bottom: 1rem; }
+      .template-chips { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .4rem; }
+      .chip { font-size: .72rem; font-weight: 500; padding: .2rem .55rem; border-radius: 99px; border: 1px solid var(--border); color: var(--text-secondary); background: var(--surface); }
+      .chip.accent { border-color: var(--salmon-border); color: var(--salmon); background: var(--salmon-dim); }
+      .tpl-grid { display: flex; flex-direction: column; gap: .4rem; }
+      .tpl-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .65rem .85rem; display: flex; gap: .65rem; align-items: flex-start; transition: border-color .15s; }
+      .tpl-card:hover { border-color: rgba(0,0,0,.15); }
+      .tpl-icon { font-size: 1.05rem; flex-shrink: 0; margin-top: .05rem; }
+      .tpl-body { flex: 1; min-width: 0; }
+      .tpl-name { font-size: .8rem; font-weight: 700; margin-bottom: .1rem; }
+      .tpl-hook { font-size: .71rem; color: var(--salmon); font-style: italic; margin-bottom: .15rem; line-height: 1.35; }
+      .tpl-row { display: flex; gap: .4rem; flex-wrap: wrap; }
+      .tpl-tag  { font-size: .62rem; color: var(--text-secondary); background: var(--surface); border: 1px solid var(--border); padding: .1rem .4rem; border-radius: 99px; }
+      .tpl-score{ font-size: .62rem; color: #16a34a; background: rgba(34,197,94,.08); border: 1px solid rgba(34,197,94,.2); padding: .1rem .4rem; border-radius: 99px; }
+      .tpl-use  { font-size: .68rem; font-weight: 600; background: transparent; border: 1px solid var(--border); color: var(--text-secondary); border-radius: 6px; padding: .2rem .48rem; cursor: pointer; font-family: var(--font); transition: color .15s, border-color .15s; flex-shrink: 0; align-self: center; }
+      .tpl-use:hover { color: var(--salmon); border-color: var(--salmon-border); }
+
+      /* ── HOOK GENERATOR ─────────────────────────────────────── */
+      .hook-options { display: flex; flex-direction: column; gap: .5rem; margin-top: .75rem; }
+      .hook-option { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .75rem .85rem; display: flex; gap: .65rem; align-items: flex-start; transition: border-color .15s; }
+      .hook-option:hover { border-color: rgba(0,0,0,.15); }
+      .hook-score-pill { font-size: .68rem; font-weight: 800; padding: .15rem .4rem; border-radius: 99px; flex-shrink: 0; margin-top: .1rem; }
+      .hook-option-body { flex: 1; min-width: 0; }
+      .hook-option-text { font-size: .82rem; font-weight: 500; margin-bottom: .25rem; line-height: 1.45; font-style: italic; }
+      .hook-option-why { font-size: .7rem; color: var(--text-secondary); line-height: 1.4; }
+      .hook-use-btn { font-size: .7rem; font-weight: 600; background: transparent; border: 1px solid var(--border); color: var(--text-secondary); border-radius: 6px; padding: .2rem .5rem; cursor: pointer; font-family: var(--font); transition: color .15s, border-color .15s; flex-shrink: 0; margin-top: .1rem; white-space: nowrap; }
+      .hook-use-btn:hover { color: var(--text); border-color: rgba(0,0,0,.2); }
+
+      /* ── COMPETITOR ANALYSIS ─────────────────────────────────── */
+      .comp-result { margin-top: .75rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .75rem .9rem; }
+      .comp-result h4 { font-size: .7rem; font-weight: 700; color: var(--salmon); text-transform: uppercase; letter-spacing: .06em; margin-bottom: .55rem; }
+      .comp-row { display: flex; gap: .6rem; font-size: .78rem; margin-bottom: .4rem; }
+      .comp-lbl { color: var(--text-secondary); min-width: 110px; flex-shrink: 0; font-size: .72rem; }
+      .comp-val { color: var(--text); font-weight: 500; line-height: 1.4; }
+      .comp-action { margin-top: .6rem; font-size: .78rem; color: var(--salmon); font-weight: 600; border-top: 1px solid var(--border); padding-top: .5rem; line-height: 1.5; }
+
+      /* ── CALENDAR ────────────────────────────────────────────── */
+      .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: .55rem; }
+      .cal-month { font-size: .85rem; font-weight: 700; }
+      .cal-nav-btn { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); border-radius: 6px; padding: .2rem .58rem; cursor: pointer; font-family: var(--font); font-size: .75rem; transition: color .15s; }
+      .cal-nav-btn:hover { color: var(--text); }
+      .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+      .cal-day-hd { text-align: center; font-size: .58rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; padding-bottom: .3rem; }
+      .cal-day { min-height: 34px; border-radius: 4px; background: var(--surface); border: 1px solid transparent; display: flex; flex-direction: column; align-items: center; padding: .2rem .1rem; cursor: pointer; transition: background .12s, border-color .12s; }
+      .cal-day:hover { background: var(--border); }
+      .cal-today { border-color: var(--salmon-border) !important; background: var(--salmon-dim) !important; }
+      .cal-other { opacity: .3; pointer-events: none; }
+      .cal-day-n { font-size: .65rem; color: var(--text-secondary); font-weight: 500; line-height: 1; margin-bottom: 2px; }
+      .cal-today .cal-day-n { color: var(--salmon); font-weight: 700; }
+      .cal-dots { display: flex; gap: 1px; justify-content: center; flex-wrap: wrap; }
+      .cal-dot { width: 4px; height: 4px; border-radius: 50%; }
+
+      /* ── ONBOARDING ──────────────────────────────────────────── */
+      .onboarding-card { background: var(--salmon-dim); border: 1px solid var(--salmon-border); border-radius: var(--radius); padding: .9rem 1.1rem; margin-bottom: 1rem; }
+      .onboarding-card-title { font-size: .72rem; font-weight: 700; color: var(--salmon); text-transform: uppercase; letter-spacing: .06em; margin-bottom: .6rem; }
+      .onboarding-steps { display: flex; flex-direction: column; gap: .3rem; }
+      .ob-step { display: flex; align-items: center; gap: .55rem; font-size: .79rem; }
+      .ob-icon { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: .65rem; flex-shrink: 0; }
+      .ob-step.step-done .ob-icon { background: var(--salmon); border-color: var(--salmon); color: #fff; }
+      .ob-step.step-active .ob-icon { border-color: var(--salmon); color: var(--salmon); }
+      .ob-label { flex: 1; }
+      .ob-step.step-done .ob-label { color: var(--text-secondary); }
+      .ob-step.step-active .ob-label { font-weight: 600; }
+      .ob-unlock { font-size: .63rem; color: var(--salmon); font-weight: 600; background: var(--salmon-dim); padding: .1rem .38rem; border-radius: 99px; white-space: nowrap; }
+
+      /* ── FEATURES 17-25 ─────────────────────────────────────── */
+      .chapters-section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: .9rem 1rem; margin-bottom: .9rem; }
+      .chapters-pre { font-size: .8rem; line-height: 1.7; white-space: pre-wrap; color: var(--text); margin: .5rem 0 .6rem; }
+      .btn-copy-sm { background: var(--border); color: var(--text); border: none; border-radius: 6px; padding: .32rem .75rem; font-size: .75rem; cursor: pointer; transition: .15s; }
+      .btn-copy-sm:hover { background: var(--salmon); color: #fff; }
+      .desc-gen-section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: .9rem 1rem; margin-bottom: .9rem; }
+      .desc-gen-btn { width: 100%; background: var(--salmon); color: #fff; border: none; border-radius: 8px; padding: .65rem 1rem; font-size: .85rem; font-weight: 600; cursor: pointer; margin-bottom: .6rem; transition: opacity .2s; }
+      .desc-gen-btn:hover { opacity: .9; }
+      .desc-tabs { display: flex; gap: .4rem; margin-bottom: .6rem; flex-wrap: wrap; }
+      .desc-tab { background: var(--surface); color: var(--text-secondary); border: 1px solid var(--border); border-radius: 6px; padding: .32rem .7rem; font-size: .78rem; cursor: pointer; transition: .15s; }
+      .desc-tab.active { background: var(--salmon); color: #fff; border-color: var(--salmon); }
+      .desc-platform { display: none; }
+      .desc-platform.active { display: block; }
+      .desc-output { font-size: .8rem; line-height: 1.65; color: var(--text); white-space: pre-wrap; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: .6rem .8rem; margin-bottom: .45rem; max-height: 180px; overflow-y: auto; }
+      .perf-video-list { display: flex; flex-direction: column; gap: .4rem; margin-top: .5rem; }
+      .perf-video-row { display: flex; align-items: center; gap: .7rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .5rem .75rem; }
+      .perf-title { flex: 1; font-size: .8rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .perf-pred, .perf-actual { font-size: .75rem; color: var(--text-secondary); }
+      .perf-actual.good { color: #16a34a; }
+      .perf-empty { color: var(--text-secondary); font-size: .8rem; padding: .5rem 0; }
+      .team-member { display: flex; align-items: center; gap: .65rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .45rem .7rem; margin-bottom: .3rem; }
+      .team-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--salmon); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; }
+      .team-info { flex: 1; }
+      .team-name { font-size: .82rem; font-weight: 600; }
+      .team-email { font-size: .74rem; color: var(--text-secondary); }
+      .team-role { font-size: .72rem; background: var(--border); color: var(--text); padding: .15rem .45rem; border-radius: 4px; }
+      .api-key-row { display: flex; gap: .4rem; align-items: center; margin: .5rem 0; }
+      .api-key-display { flex: 1; background: var(--field-bg); border: 1px solid var(--border); border-radius: 7px; padding: .4rem .65rem; font-family: monospace; font-size: .78rem; color: var(--text); letter-spacing: .04em; }
+      .method-badge { display: inline-block; border-radius: 4px; padding: .1rem .4rem; font-weight: 700; font-size: .7rem; }
+      .method-post { background: rgba(255,119,81,.12); color: var(--salmon); }
+      .method-get  { background: rgba(34,197,94,.1); color: #16a34a; }
+      .referral-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.1rem; margin-bottom: .75rem; }
+      .referral-link-row { display: flex; gap: .4rem; align-items: center; margin: .6rem 0; }
+      .referral-link-input { flex: 1; padding: .42rem .65rem; border-radius: 8px; background: var(--field-bg); border: 1px solid var(--border); color: var(--salmon); font-family: var(--mono); font-size: .7rem; outline: none; cursor: pointer; }
+      .btn-copy { padding: .42rem .75rem; border-radius: 8px; background: var(--salmon-dim); border: 1px solid var(--salmon-border); color: var(--salmon); font-family: var(--font); font-size: .72rem; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background .15s; }
+      .btn-copy:hover { background: rgba(255,119,81,.15); }
+
+      /* Learn */
+      .learn-progress-wrap { display: flex; align-items: center; gap: .75rem; margin: .6rem 0 1rem; }
+      .learn-progress-bar { flex: 1; height: 6px; background: var(--border); border-radius: 99px; overflow: hidden; }
+      .learn-progress-fill { height: 100%; background: var(--salmon); border-radius: 99px; transition: .4s; }
+      .learn-tabs { display: flex; gap: .4rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: .4rem; }
+      .learn-tab { background: none; border: none; color: var(--text-secondary); font-size: .85rem; padding: .35rem .7rem; cursor: pointer; border-radius: 7px; transition: .15s; }
+      .learn-tab.active { background: var(--salmon); color: #fff; }
+      .learn-subview { display: none; }
+      .learn-subview.active { display: block; }
+      .lesson-card { display: flex; gap: .9rem; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: .7rem 1rem; margin-bottom: .6rem; transition: .15s; }
+      .lesson-card:hover { border-color: var(--salmon); }
+      .lesson-thumb { width: 60px; height: 40px; border-radius: 6px; background: var(--border); display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0; }
+      .lesson-info { flex: 1; }
+      .lesson-title { font-size: .85rem; font-weight: 700; }
+      .lesson-meta { font-size: .74rem; color: var(--text-secondary); margin-top: .15rem; }
+      .lesson-pill { display: inline-block; background: var(--border); color: var(--text); font-size: .7rem; padding: .1rem .4rem; border-radius: 4px; margin-right: .3rem; }
+      .lesson-pill.done { background: rgba(34,197,94,.1); color: #16a34a; }
+      .lesson-watch-btn { background: var(--salmon); color: #fff; border: none; border-radius: 7px; padding: .4rem .8rem; font-size: .78rem; cursor: pointer; transition: .15s; white-space: nowrap; }
+      .lesson-watch-btn.done-btn { background: var(--border); color: var(--text-secondary); }
+      .quiz-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; margin-bottom: .7rem; }
+      .quiz-q { font-size: .88rem; font-weight: 700; margin-bottom: .65rem; }
+      .quiz-opts { display: flex; flex-direction: column; gap: .4rem; }
+      .quiz-opt { background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: .45rem .75rem; font-size: .82rem; cursor: pointer; transition: .15s; }
+      .quiz-opt:hover { border-color: var(--salmon); }
+      .quiz-opt.correct { background: rgba(34,197,94,.08); border-color: #22c55e; color: #16a34a; }
+      .quiz-opt.wrong { background: rgba(229,62,62,.08); border-color: #e53e3e; color: #e53e3e; }
+
+      /* ── CONFETTI ────────────────────────────────────────────── */
+      .confetti-piece { position: fixed; width: 8px; height: 8px; border-radius: 2px; pointer-events: none; z-index: 9999; animation: confetti-fall 2.5s ease-in forwards; }
+      @keyframes confetti-fall { 0% { transform: translateY(-20px) rotate(0deg); opacity: 1; } 100% { transform: translateY(100vh) rotate(720deg); opacity: 0; } }
+
+      /* ── TOOLTIPS ────────────────────────────────────────────── */
       [data-tooltip] { position: relative; }
-      [data-tooltip]::after {
-        content: attr(data-tooltip);
-        position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%);
-        background: #1a1a1c; border: 1px solid var(--border); border-radius: 6px;
-        padding: .3rem .6rem; font-size: .72rem; color: var(--text); white-space: nowrap;
-        pointer-events: none; opacity: 0; transition: opacity .15s;
-        z-index: 50;
-      }
+      [data-tooltip]::after { content: attr(data-tooltip); position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: #1A1A1A; border-radius: 6px; padding: .3rem .6rem; font-size: .72rem; color: #fff; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .15s; z-index: 50; }
       [data-tooltip]:hover::after { opacity: 1; }
 
-      /* ── SECTION VISIBILITY ─────────────────────────────────── */
+      /* ── SECTION VISIBILITY ──────────────────────────────────── */
       .app-section { display: none; }
       .app-section.active { display: block; }
 
-      /* ── FOOTER ─────────────────────────────────────────────── */
-      .foot {
-        text-align: center; padding: 2rem 1rem;
-        font-size: .8rem; color: var(--muted);
-        border-top: 1px solid var(--border);
-        display: flex; justify-content: center; gap: 1.5rem; flex-wrap: wrap;
-      }
-      .foot a { color: var(--muted); text-decoration: none; transition: color .15s; }
-      .foot a:hover { color: var(--text); }
+      /* ── NOTIFICATIONS (hidden panels) ──────────────────────── */
+      .notif-panel { position: fixed; top: 56px; right: 12px; width: 320px; max-height: 420px; overflow-y: auto; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 32px rgba(0,0,0,.08); z-index: 200; display: none; }
+      .notif-panel.open { display: block; }
+      .notif-panel-head { display: flex; align-items: center; justify-content: space-between; padding: .65rem 1rem; border-bottom: 1px solid var(--border); }
+      .notif-panel-head h4 { margin: 0; font-size: .88rem; }
+      .notif-item { display: flex; gap: .65rem; align-items: flex-start; padding: .6rem 1rem; border-bottom: 1px solid var(--border); }
+      .notif-icon-wrap { font-size: 1.1rem; flex-shrink: 0; margin-top: .1rem; }
+      .notif-body { flex: 1; }
+      .notif-body strong { font-size: .82rem; display: block; }
+      .notif-body p { font-size: .75rem; color: var(--text-secondary); margin: .1rem 0 0; }
+      .notif-time { font-size: .68rem; color: var(--text-secondary); white-space: nowrap; }
+      .notif-empty { padding: 1rem; font-size: .8rem; color: var(--text-secondary); text-align: center; }
+      .notif-clear { width: 100%; background: none; border: none; border-top: 1px solid var(--border); color: var(--text-secondary); font-size: .78rem; padding: .55rem; cursor: pointer; transition: .15s; }
+      .notif-clear:hover { color: var(--salmon); }
 
-      /* ── SCORE BADGES (Feature 1) ──────────────────────────── */
-      .score-badge {
-        font-size:.63rem; font-weight:700; padding:.1rem .38rem;
-        border-radius:99px; cursor:default; letter-spacing:.03em; flex-shrink:0;
-      }
-      .tl-row-hook {
-        border-color:var(--salmon-border);
-        background:rgba(255,119,81,.07);
-      }
-      .tl-row { position:relative; }
-      .tl-crown { font-size:.85rem; flex-shrink:0; }
-
-      /* ── RETENTION PREDICTION (Feature 5) ───────────────── */
-      .ret-pred-wrap {
-        display:flex; align-items:center; gap:.75rem;
-        background:rgba(255,255,255,.03); border:1px solid var(--border);
-        border-radius:8px; padding:.6rem .85rem; margin-bottom:1rem;
-      }
-      .ret-pred-label { font-size:.68rem; color:var(--muted); white-space:nowrap;
-        text-transform:uppercase; letter-spacing:.05em; font-weight:600; }
-      .ret-pred-bar-wrap { flex:1; background:rgba(255,255,255,.06);
-        border-radius:99px; height:8px; overflow:hidden; }
-      .ret-pred-bar-fill { height:100%; border-radius:99px; transition:width .9s cubic-bezier(.4,0,.2,1); }
-      .ret-pred-pct { font-size:1rem; font-weight:800; min-width:3rem;
-        text-align:right; letter-spacing:-.02em; }
-
-      /* ── MULTI-FORMAT DOWNLOAD (Feature 2) ──────────────── */
-      .download-buttons-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:.5rem; margin-bottom:1rem; }
-      .btn-download-fmt {
-        display:flex; flex-direction:column; align-items:center; gap:.2rem;
-        padding:.65rem .4rem; border-radius:8px;
-        background:var(--salmon); color:#fff; border:none; cursor:pointer;
-        text-decoration:none; font-family:var(--font);
-        transition:opacity .15s, box-shadow .2s;
-        box-shadow:0 0 16px rgba(255,119,81,.3);
-      }
-      .btn-download-fmt:hover { opacity:.9; }
-      .btn-download-fmt.fmt-outline {
-        background:transparent; border:1px solid var(--salmon-border);
-        color:var(--salmon); box-shadow:none;
-      }
-      .btn-download-fmt.fmt-outline:hover { background:var(--salmon-dim); }
-      .fmt-icon { font-size:1rem; }
-      .fmt-name { font-size:.75rem; font-weight:700; text-align:center; }
-      .fmt-sub { font-size:.6rem; opacity:.7; }
-
-      /* ── CAPTION STYLE PRESETS (Feature 3) ──────────────── */
-      .caption-preset-grid { display:flex; flex-direction:column; gap:.4rem; }
-      .caption-preset-btn {
-        display:flex; align-items:center; gap:.7rem;
-        padding:.55rem .8rem; border-radius:8px;
-        border:1px solid var(--border); background:rgba(255,255,255,.03);
-        cursor:pointer; font-family:var(--font); text-align:left;
-        transition:border-color .15s, background .15s; width:100%;
-      }
-      .caption-preset-btn:hover { border-color:rgba(255,255,255,.2); }
-      .caption-preset-btn.active { border-color:var(--salmon); background:var(--salmon-dim); }
-      .caption-preset-thumb {
-        width:54px; height:30px; border-radius:4px; background:#111;
-        display:flex; align-items:center; justify-content:center;
-        flex-shrink:0; overflow:hidden; border:1px solid rgba(255,255,255,.1);
-      }
-      .caption-preset-info .cp-name { font-size:.8rem; font-weight:700; color:var(--text); }
-      .caption-preset-info .cp-desc { font-size:.67rem; color:var(--muted); margin-top:.1rem; }
-
-      /* ── HOOK GENERATOR (Feature 4) ─────────────────────── */
-      .hook-options { display:flex; flex-direction:column; gap:.5rem; margin-top:.75rem; }
-      .hook-option {
-        background:rgba(255,255,255,.03); border:1px solid var(--border);
-        border-radius:8px; padding:.75rem .85rem;
-        display:flex; gap:.65rem; align-items:flex-start;
-        transition:border-color .15s;
-      }
-      .hook-option:hover { border-color:var(--salmon-border); }
-      .hook-score-pill {
-        font-size:.68rem; font-weight:800; padding:.15rem .4rem;
-        border-radius:99px; flex-shrink:0; margin-top:.1rem;
-      }
-      .hook-option-body { flex:1; min-width:0; }
-      .hook-option-text { font-size:.82rem; font-weight:500; margin-bottom:.25rem;
-        line-height:1.45; font-style:italic; }
-      .hook-option-why { font-size:.7rem; color:var(--muted); line-height:1.4; }
-      .hook-use-btn {
-        font-size:.7rem; font-weight:600; background:transparent;
-        border:1px solid var(--border); color:var(--muted); border-radius:6px;
-        padding:.2rem .5rem; cursor:pointer; font-family:var(--font);
-        transition:color .15s, border-color .15s; flex-shrink:0; margin-top:.1rem;
-        white-space:nowrap;
-      }
-      .hook-use-btn:hover { color:var(--text); border-color:var(--salmon-border); }
-
-      /* ── REFERRAL (Feature 6) ───────────────────────────── */
-      .referral-card {
-        background:var(--surface); border:1px solid var(--border);
-        border-radius:12px; padding:1rem 1.1rem; margin-bottom:.75rem;
-      }
-      .referral-link-row {
-        display:flex; gap:.4rem; align-items:center; margin:.6rem 0;
-      }
-      .referral-link-input {
-        flex:1; padding:.42rem .65rem; border-radius:8px;
-        background:rgba(255,255,255,.04); border:1px solid var(--border);
-        color:var(--salmon); font-family:var(--mono); font-size:.7rem;
-        outline:none; cursor:pointer;
-      }
-      .btn-copy {
-        padding:.42rem .75rem; border-radius:8px;
-        background:var(--salmon-dim); border:1px solid var(--salmon-border);
-        color:var(--salmon); font-family:var(--font); font-size:.72rem;
-        font-weight:600; cursor:pointer; white-space:nowrap;
-        transition:background .15s;
-      }
-      .btn-copy:hover { background:rgba(255,119,81,.2); }
-
-      /* ── ONBOARDING PROGRESS (Feature 8) ───────────────── */
-      .onboarding-card {
-        background:rgba(255,119,81,.05); border:1px solid var(--salmon-border);
-        border-radius:12px; padding:.9rem 1.1rem; margin-bottom:1rem;
-      }
-      .onboarding-card-title {
-        font-size:.72rem; font-weight:700; color:var(--salmon);
-        text-transform:uppercase; letter-spacing:.06em; margin-bottom:.6rem;
-      }
-      .onboarding-steps { display:flex; flex-direction:column; gap:.3rem; }
-      .ob-step {
-        display:flex; align-items:center; gap:.55rem; font-size:.79rem;
-      }
-      .ob-icon {
-        width:18px; height:18px; border-radius:50%; border:1.5px solid rgba(255,255,255,.18);
-        display:flex; align-items:center; justify-content:center;
-        font-size:.65rem; flex-shrink:0; color:#fff;
-      }
-      .ob-step.step-done .ob-icon { background:var(--salmon); border-color:var(--salmon); }
-      .ob-step.step-active .ob-icon { border-color:var(--salmon); color:var(--salmon); animation:pulse 2s infinite; }
-      .ob-label { flex:1; }
-      .ob-step.step-done .ob-label { color:var(--muted); }
-      .ob-step.step-active .ob-label { font-weight:600; }
-      .ob-unlock { font-size:.63rem; color:var(--salmon); font-weight:600;
-        background:var(--salmon-dim); padding:.1rem .38rem; border-radius:99px;
-        white-space:nowrap; }
-
-      /* ── AI VIDEO COACH (Feature 9) ─────────────────────────── */
-      .coach-panel {
-        position:fixed; top:0; right:-440px; width:420px; height:100vh;
-        background:var(--bg); border-left:1px solid var(--border);
-        z-index:300; display:flex; flex-direction:column;
-        transition:right .3s cubic-bezier(.4,0,.2,1);
-        box-shadow:-4px 0 32px rgba(0,0,0,.6);
-      }
-      .coach-panel.open { right:0; }
-      .coach-panel-head {
-        display:flex; align-items:center; justify-content:space-between;
-        padding:1rem 1.25rem; border-bottom:1px solid var(--border); flex-shrink:0;
-      }
-      .coach-panel-head h3 { font-size:.9rem; font-weight:700; }
-      .chat-messages {
-        flex:1; overflow-y:auto; padding:.85rem 1rem;
-        display:flex; flex-direction:column; gap:.5rem; scroll-behavior:smooth;
-      }
-      .chat-msg {
-        padding:.58rem .82rem; border-radius:10px;
-        font-size:.8rem; line-height:1.55; max-width:92%;
-      }
-      .chat-msg.user { background:rgba(255,119,81,.14); border:1px solid var(--salmon-border); align-self:flex-end; }
-      .chat-msg.ai   { background:rgba(255,255,255,.05); border:1px solid var(--border); align-self:flex-start; }
-      .chat-msg.loading { color:var(--muted); font-style:italic; animation:pulse 1.4s infinite; }
-      .chat-quick-pills { display:flex; gap:.3rem; flex-wrap:wrap; padding:.5rem 1rem; border-top:1px solid rgba(255,255,255,.04); flex-shrink:0; }
-      .chat-quick { font-size:.67rem; padding:.2rem .55rem; border-radius:99px; border:1px solid var(--border); background:rgba(255,255,255,.04); color:var(--muted); cursor:pointer; font-family:var(--font); transition:color .15s, border-color .15s; white-space:nowrap; }
-      .chat-quick:hover { color:var(--salmon); border-color:var(--salmon-border); }
-      .chat-input-row { display:flex; gap:.4rem; padding:.8rem 1rem; border-top:1px solid var(--border); flex-shrink:0; }
-      .chat-input { flex:1; padding:.55rem .75rem; border-radius:8px; background:rgba(255,255,255,.05); border:1px solid var(--border); color:var(--text); font-family:var(--font); font-size:.8rem; outline:none; }
-      .chat-input:focus { border-color:var(--salmon); }
-      .chat-send { background:var(--salmon); color:#fff; border:none; border-radius:8px; padding:.55rem .75rem; cursor:pointer; font-size:.95rem; transition:opacity .15s; flex-shrink:0; }
-      .chat-send:hover { opacity:.85; }
-      .coach-btn { background:transparent; border:1px solid var(--border); color:var(--muted); border-radius:8px; padding:.38rem .65rem; font-size:.78rem; font-weight:600; cursor:pointer; font-family:var(--font); display:flex; align-items:center; gap:.3rem; transition:color .15s, border-color .15s; }
-      .coach-btn:hover { color:var(--salmon); border-color:var(--salmon-border); }
-
-      /* ── TEMPLATE SYSTEM (Feature 10) ────────────────────────── */
-      .tpl-grid { display:flex; flex-direction:column; gap:.4rem; }
-      .tpl-card { background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:8px; padding:.65rem .85rem; display:flex; gap:.65rem; align-items:flex-start; transition:border-color .15s; }
-      .tpl-card:hover { border-color:rgba(255,255,255,.15); }
-      .tpl-icon { font-size:1.05rem; flex-shrink:0; margin-top:.05rem; }
-      .tpl-body { flex:1; min-width:0; }
-      .tpl-name { font-size:.8rem; font-weight:700; margin-bottom:.1rem; }
-      .tpl-hook { font-size:.71rem; color:var(--salmon); font-style:italic; margin-bottom:.15rem; line-height:1.35; }
-      .tpl-row { display:flex; gap:.4rem; flex-wrap:wrap; }
-      .tpl-tag  { font-size:.62rem; color:var(--muted); background:rgba(255,255,255,.05); border:1px solid var(--border); padding:.1rem .4rem; border-radius:99px; }
-      .tpl-score{ font-size:.62rem; color:#22c55e; background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.2); padding:.1rem .4rem; border-radius:99px; }
-      .tpl-use  { font-size:.68rem; font-weight:600; background:transparent; border:1px solid var(--border); color:var(--muted); border-radius:6px; padding:.2rem .48rem; cursor:pointer; font-family:var(--font); transition:color .15s, border-color .15s; flex-shrink:0; align-self:center; }
-      .tpl-use:hover { color:var(--salmon); border-color:var(--salmon-border); }
-
-      /* ── COMPETITOR ANALYSIS (Feature 11) ───────────────────── */
-      .comp-result { margin-top:.75rem; background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:8px; padding:.75rem .9rem; }
-      .comp-result h4 { font-size:.7rem; font-weight:700; color:var(--salmon); text-transform:uppercase; letter-spacing:.06em; margin-bottom:.55rem; }
-      .comp-row { display:flex; gap:.6rem; font-size:.78rem; margin-bottom:.4rem; }
-      .comp-lbl { color:var(--muted); min-width:110px; flex-shrink:0; font-size:.72rem; }
-      .comp-val { color:var(--text); font-weight:500; line-height:1.4; }
-      .comp-action { margin-top:.6rem; font-size:.78rem; color:var(--salmon); font-weight:600; border-top:1px solid var(--border); padding-top:.5rem; line-height:1.5; }
-
-      /* ── CONTENT CALENDAR (Feature 12) ──────────────────────── */
-      .cal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:.55rem; }
-      .cal-month  { font-size:.85rem; font-weight:700; }
-      .cal-nav-btn{ background:transparent; border:1px solid var(--border); color:var(--muted); border-radius:6px; padding:.2rem .58rem; cursor:pointer; font-family:var(--font); font-size:.75rem; transition:color .15s; }
-      .cal-nav-btn:hover { color:var(--text); }
-      .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
-      .cal-day-hd { text-align:center; font-size:.58rem; color:var(--muted); font-weight:600; text-transform:uppercase; padding-bottom:.3rem; }
-      .cal-day { min-height:34px; border-radius:4px; background:rgba(255,255,255,.02); border:1px solid transparent; display:flex; flex-direction:column; align-items:center; padding:.2rem .1rem; cursor:pointer; transition:background .12s, border-color .12s; }
-      .cal-day:hover { background:rgba(255,255,255,.06); border-color:rgba(255,255,255,.09); }
-      .cal-today { border-color:var(--salmon-border) !important; background:rgba(255,119,81,.06) !important; }
-      .cal-other  { opacity:.3; pointer-events:none; }
-      .cal-day-n  { font-size:.65rem; color:var(--muted); font-weight:500; line-height:1; margin-bottom:2px; }
-      .cal-today .cal-day-n { color:var(--salmon); font-weight:800; }
-      .cal-dots { display:flex; gap:1px; justify-content:center; flex-wrap:wrap; }
-      .cal-dot { width:4px; height:4px; border-radius:50%; }
-
-      /* ── SPLIT TEST (Feature 13) ─────────────────────────────── */
-      .split-compare { display:grid; grid-template-columns:1fr 1fr; gap:.75rem; margin-top:.85rem; }
-      .split-ver { background:rgba(255,255,255,.03); border:1px solid var(--border); border-radius:10px; padding:.85rem 1rem; text-align:center; }
-      .split-ver.winner { border-color:#22c55e; background:rgba(34,197,94,.05); }
-      .sv-label  { font-size:.63rem; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin-bottom:.4rem; }
-      .sv-score  { font-size:2.1rem; font-weight:800; letter-spacing:-.04em; margin-bottom:.25rem; }
-      .split-ver.winner .sv-score { color:#22c55e; }
-      .sv-verdict { font-size:.7rem; color:var(--muted); line-height:1.4; }
-      .sv-winner-pill { display:inline-block; font-size:.65rem; font-weight:700; background:rgba(34,197,94,.15); color:#22c55e; border:1px solid rgba(34,197,94,.25); border-radius:99px; padding:.14rem .45rem; margin-top:.3rem; }
-
-      /* ── CAPTION EDITOR (Feature 14) ─────────────────────────── */
-      .caption-editor { margin-top:1.25rem; }
-      .caption-list { max-height:260px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; }
-      .cap-row { display:flex; gap:.5rem; padding:.38rem .55rem; border-bottom:1px solid rgba(255,255,255,.04); transition:background .1s; }
-      .cap-row:last-child { border-bottom:none; }
-      .cap-row:hover { background:rgba(255,255,255,.04); }
-      .cap-tc  { font-size:.62rem; color:var(--muted); font-family:var(--mono); flex-shrink:0; min-width:62px; margin-top:.2rem; }
-      .cap-txt { flex:1; font-size:.78rem; border:none; background:transparent; color:var(--text); font-family:var(--font); outline:none; resize:none; padding:0; min-height:1em; }
-      .cap-txt:focus { color:var(--salmon); }
-
-      /* ── RESPONSIVE ─────────────────────────────────────────── */
-      @media (max-width: 480px) {
-        .nav-right .nav-link:first-child { display: none; }
-        h1 { font-size: 1.75rem; }
-        .card { padding: 1.25rem; }
-        .preview-stats { grid-template-columns: 1fr 1fr; }
-        .nav-tab { font-size: .75rem; padding: .38rem .55rem; }
-        .video-library-grid { grid-template-columns: 1fr; }
-        .achievements-grid { grid-template-columns: 1fr; }
-        .analytics-stats-grid { grid-template-columns: 1fr; }
+      /* ── RESPONSIVE ──────────────────────────────────────────── */
+      @media (max-width: 540px) {
         .dash-stats { grid-template-columns: 1fr 1fr; }
+        .nav-tab { font-size: .78rem; padding: 0 .6rem; }
+        .preview-stats { grid-template-columns: 1fr 1fr; }
+        .video-library-grid { grid-template-columns: 1fr; }
+        .analytics-stats-grid { grid-template-columns: 1fr; }
+        .btn-upgrade { display: none; }
       }
 
-      /* ── Features 17-25 ── */
-      .chapters-section { background:var(--card-inner,#111);border:1px solid var(--border);border-radius:10px;padding:.9rem 1rem;margin-bottom:.9rem }
-      .chapters-pre { font-size:.8rem;line-height:1.7;white-space:pre-wrap;color:var(--text);margin:.5rem 0 .6rem }
-      .btn-copy-sm { background:var(--border);color:var(--text);border:none;border-radius:6px;padding:.32rem .75rem;font-size:.75rem;cursor:pointer;transition:.15s }
-      .btn-copy-sm:hover { background:var(--salmon);color:#fff }
-      .desc-gen-section { background:var(--card-inner,#111);border:1px solid var(--border);border-radius:10px;padding:.9rem 1rem;margin-bottom:.9rem }
-      .desc-gen-btn { width:100%;background:linear-gradient(135deg,#FF7751,#ffb347);color:#fff;border:none;border-radius:8px;padding:.65rem 1rem;font-size:.85rem;font-weight:700;cursor:pointer;margin-bottom:.6rem;transition:.2s }
-      .desc-gen-btn:hover { opacity:.88 }
-      .desc-tabs { display:flex;gap:.4rem;margin-bottom:.6rem;flex-wrap:wrap }
-      .desc-tab { background:var(--border);color:var(--muted);border:none;border-radius:6px;padding:.32rem .7rem;font-size:.78rem;cursor:pointer;transition:.15s }
-      .desc-tab.active { background:var(--salmon);color:#fff }
-      .desc-platform { display:none }
-      .desc-platform.active { display:block }
-      .desc-output { font-size:.8rem;line-height:1.65;color:var(--text);white-space:pre-wrap;background:var(--bg);border-radius:7px;padding:.6rem .8rem;margin-bottom:.45rem;max-height:180px;overflow-y:auto }
-      /* Feature 20 */
-      .perf-connect-row { display:flex;gap:.5rem;flex-wrap:wrap;margin:.5rem 0 }
-      .perf-connect-btn { flex:1;min-width:120px;background:var(--card-inner,#111);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:.45rem .6rem;font-size:.78rem;cursor:pointer;transition:.15s }
-      .perf-connect-btn:hover { border-color:var(--salmon);color:var(--salmon) }
-      .perf-accuracy { font-size:.85rem;font-weight:700;color:var(--salmon);margin:.4rem 0 }
-      .perf-video-list { display:flex;flex-direction:column;gap:.4rem;margin-top:.5rem }
-      .perf-video-row { display:flex;align-items:center;gap:.7rem;background:var(--card-inner,#111);border:1px solid var(--border);border-radius:8px;padding:.5rem .75rem }
-      .perf-title { flex:1;font-size:.8rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis }
-      .perf-pred,.perf-actual { font-size:.75rem;color:var(--muted) }
-      .perf-actual.good { color:#22c55e }
-      .perf-empty { color:var(--muted);font-size:.8rem;padding:.5rem 0 }
-      /* Feature 21 */
-      .team-invite-row { display:flex;gap:.4rem;flex-wrap:wrap;margin:.5rem 0 }
-      .team-member { display:flex;align-items:center;gap:.65rem;background:var(--card-inner,#111);border:1px solid var(--border);border-radius:8px;padding:.45rem .7rem;margin-bottom:.3rem }
-      .team-avatar { width:32px;height:32px;border-radius:50%;background:var(--salmon);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;flex-shrink:0 }
-      .team-info { flex:1 }
-      .team-name { font-size:.82rem;font-weight:600 }
-      .team-email { font-size:.74rem;color:var(--muted) }
-      .team-role { font-size:.72rem;background:var(--border);color:var(--text);padding:.15rem .45rem;border-radius:4px }
-      .team-comment-item { background:var(--card-inner,#111);border:1px solid var(--border);border-radius:7px;padding:.45rem .7rem;margin-bottom:.3rem }
-      .team-comment-author { font-size:.74rem;font-weight:700;color:var(--salmon) }
-      /* Feature 22 */
-      .wl-preview { background:var(--card-inner,#111);border:1px solid var(--border);border-radius:10px;padding:.8rem 1rem;margin:.5rem 0;text-align:center }
-      .wl-logo-box { width:48px;height:48px;border-radius:10px;background:var(--salmon);display:flex;align-items:center;justify-content:center;font-size:1.3rem;margin:0 auto .35rem }
-      .wl-brand-name { font-size:1rem;font-weight:800 }
-      .wl-tagline { font-size:.72rem;color:var(--muted) }
-      /* Feature 23 */
-      .api-key-row { display:flex;gap:.4rem;align-items:center;margin:.5rem 0 }
-      .api-key-display { flex:1;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:.4rem .65rem;font-family:monospace;font-size:.78rem;color:var(--text);letter-spacing:.04em }
-      .api-endpoint-table { width:100%;border-collapse:collapse;font-size:.78rem;margin-top:.6rem }
-      .api-endpoint-table td { padding:.35rem .5rem;border-bottom:1px solid var(--border) }
-      .method-badge { display:inline-block;border-radius:4px;padding:.1rem .4rem;font-weight:700;font-size:.7rem }
-      .method-post { background:#FF775122;color:#FF7751 }
-      .method-get { background:#22c55e22;color:#22c55e }
-      .api-path { font-family:monospace;font-size:.75rem }
-      /* Feature 24 */
-      .notif-bell { position:relative;background:none;border:none;font-size:1.25rem;cursor:pointer;padding:.2rem .4rem;border-radius:7px;transition:.15s }
-      .notif-bell:hover { background:var(--border) }
-      .notif-dot { position:absolute;top:2px;right:2px;width:8px;height:8px;border-radius:50%;background:#ff5c7a;display:none }
-      .notif-dot.active { display:block }
-      .notif-panel { position:fixed;top:58px;right:12px;width:320px;max-height:420px;overflow-y:auto;background:var(--card,#161616);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.5);z-index:200;display:none }
-      .notif-panel.open { display:block }
-      .notif-panel-head { display:flex;align-items:center;justify-content:space-between;padding:.65rem 1rem;border-bottom:1px solid var(--border) }
-      .notif-panel-head h4 { margin:0;font-size:.88rem }
-      .notif-item { display:flex;gap:.65rem;align-items:flex-start;padding:.6rem 1rem;border-bottom:1px solid var(--border) }
-      .notif-icon-wrap { font-size:1.1rem;flex-shrink:0;margin-top:.1rem }
-      .notif-body { flex:1 }
-      .notif-body strong { font-size:.82rem;display:block }
-      .notif-body p { font-size:.75rem;color:var(--muted);margin:.1rem 0 0 }
-      .notif-time { font-size:.68rem;color:var(--muted);white-space:nowrap }
-      .notif-empty { padding:1rem;font-size:.8rem;color:var(--muted);text-align:center }
-      .notif-clear { width:100%;background:none;border:none;border-top:1px solid var(--border);color:var(--muted);font-size:.78rem;padding:.55rem;cursor:pointer;transition:.15s }
-      .notif-clear:hover { color:var(--salmon) }
-      /* Feature 25 */
-      #learnSection .card { max-width:680px;margin:0 auto }
-      .learn-progress-wrap { display:flex;align-items:center;gap:.75rem;margin:.6rem 0 1rem }
-      .learn-progress-bar { flex:1;height:8px;background:var(--border);border-radius:99px;overflow:hidden }
-      .learn-progress-fill { height:100%;background:linear-gradient(90deg,#FF7751,#ffb347);border-radius:99px;transition:.4s }
-      .learn-tabs { display:flex;gap:.4rem;margin-bottom:1rem;border-bottom:1px solid var(--border);padding-bottom:.4rem }
-      .learn-tab { background:none;border:none;color:var(--muted);font-size:.85rem;padding:.35rem .7rem;cursor:pointer;border-radius:7px;transition:.15s }
-      .learn-tab.active { background:var(--salmon);color:#fff }
-      .learn-subview { display:none }
-      .learn-subview.active { display:block }
-      .lesson-card { display:flex;gap:.9rem;align-items:center;background:var(--card-inner,#111);border:1px solid var(--border);border-radius:10px;padding:.7rem 1rem;margin-bottom:.6rem;transition:.15s }
-      .lesson-card:hover { border-color:var(--salmon) }
-      .lesson-thumb { width:60px;height:40px;border-radius:6px;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0 }
-      .lesson-info { flex:1 }
-      .lesson-title { font-size:.85rem;font-weight:700 }
-      .lesson-meta { font-size:.74rem;color:var(--muted);margin-top:.15rem }
-      .lesson-pill { display:inline-block;background:var(--border);color:var(--text);font-size:.7rem;padding:.1rem .4rem;border-radius:4px;margin-right:.3rem }
-      .lesson-pill.done { background:#22c55e22;color:#22c55e }
-      .lesson-watch-btn { background:var(--salmon);color:#fff;border:none;border-radius:7px;padding:.4rem .8rem;font-size:.78rem;cursor:pointer;transition:.15s;white-space:nowrap }
-      .lesson-watch-btn.done-btn { background:var(--border);color:var(--muted) }
-      .quiz-card { background:var(--card-inner,#111);border:1px solid var(--border);border-radius:10px;padding:1rem 1.1rem;margin-bottom:.7rem }
-      .quiz-q { font-size:.88rem;font-weight:700;margin-bottom:.65rem }
-      .quiz-opts { display:flex;flex-direction:column;gap:.4rem }
-      .quiz-opt { background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:.45rem .75rem;font-size:.82rem;cursor:pointer;transition:.15s }
-      .quiz-opt:hover { border-color:var(--salmon) }
-      .quiz-opt.correct { background:#22c55e22;border-color:#22c55e;color:#22c55e }
-      .quiz-opt.wrong { background:#ff5c7a22;border-color:#ff5c7a;color:#ff5c7a }
-      .cert-card { text-align:center;background:linear-gradient(135deg,#1a1a1a,#111);border:2px solid var(--salmon);border-radius:16px;padding:2rem;margin:1rem 0 }
-      .cert-download { background:linear-gradient(135deg,#FF7751,#ffb347);color:#fff;border:none;border-radius:8px;padding:.65rem 1.4rem;font-size:.88rem;font-weight:700;cursor:pointer;margin-top:1rem }
-      .retention-badge { display:inline-block;background:var(--salmon);color:#fff;border-radius:99px;padding:.25rem .8rem;font-size:.78rem;font-weight:700;margin:.3rem 0 }
+      /* ── BRIEF / ADVANCED TOGGLE ─────────────────────────────── */
+      .brief-toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: .55rem 0; font-size: .875rem; font-weight: 500; color: var(--text-secondary); border-top: 1px solid var(--border); margin-top: .75rem; transition: color .15s; user-select: none; }
+      .brief-toggle:hover { color: var(--text); }
+      .brief-toggle .arrow { transition: transform .2s; }
+      .brief-body { display: none; padding-top: .75rem; }
+      .brief-body.open { display: block; }
+
+      /* Seg selector */
+      .seg { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+      .seg input[type="radio"] { display: none; }
+      .seg label { flex: 1; text-align: center; padding: .5rem .75rem; font-size: .8rem; font-weight: 500; cursor: pointer; color: var(--text-secondary); transition: background .15s, color .15s; }
+      .seg label:not(:last-child) { border-right: 1px solid var(--border); }
+      .seg input:checked + label { background: var(--salmon); color: #fff; }
+
+      /* White label / API */
+      .wl-preview { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: .8rem 1rem; margin: .5rem 0; text-align: center; }
+      .wl-logo-box { width: 48px; height: 48px; border-radius: 10px; background: var(--salmon); display: flex; align-items: center; justify-content: center; margin: 0 auto .35rem; }
+      .wl-brand-name { font-size: 1rem; font-weight: 800; }
+      .wl-tagline { font-size: .72rem; color: var(--text-secondary); }
+      .api-endpoint-table { width: 100%; border-collapse: collapse; font-size: .78rem; margin-top: .6rem; }
+      .api-endpoint-table td { padding: .35rem .5rem; border-bottom: 1px solid var(--border); }
+      .api-path { font-family: monospace; font-size: .75rem; }
+      .perf-connect-row { display: flex; gap: .5rem; flex-wrap: wrap; margin: .5rem 0; }
+      .perf-connect-btn { flex: 1; min-width: 120px; background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 7px; padding: .45rem .6rem; font-size: .78rem; cursor: pointer; transition: .15s; }
+      .perf-connect-btn:hover { border-color: var(--salmon); color: var(--salmon); }
+      .perf-accuracy { font-size: .85rem; font-weight: 700; color: var(--salmon); margin: .4rem 0; }
+      .team-comment-item { background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: .45rem .7rem; margin-bottom: .3rem; }
+      .team-comment-author { font-size: .74rem; font-weight: 700; color: var(--salmon); }
+      .team-invite-row { display: flex; gap: .4rem; flex-wrap: wrap; margin: .5rem 0; }
+      #learnSection .card { max-width: 680px; margin: 0 auto; }
     </style>
   </head>
   <body>
 
+    <!-- ── NAV ───────────────────────────────────────────────── -->
     <nav class="nav">
-      <a class="logo" href="/">
-        <span class="logo-mark"></span>
-        <span class="logo-name">LeanRetention</span>
-      </a>
-      <span id="navGreeting" style="font-size:.78rem;color:var(--salmon);font-weight:600;display:none;margin-left:auto;margin-right:.5rem"></span>
-      <button class="coach-btn" id="coachBtn" style="margin-right:.5rem">🤖 Coach IA</button>
+      <a class="logo" href="/"><span>Lean</span>Retention</a>
+
       <div class="nav-tabs" id="navTabs">
         <button class="nav-tab active" data-target="editorArea">Éditeur</button>
         <button class="nav-tab" data-target="dashboardSection">Dashboard</button>
-        <button class="nav-tab" data-target="analyticsSection">Analytique</button>
+        <button class="nav-tab" data-target="analyticsSection">Analytics</button>
         <button class="nav-tab" data-target="profileSection">Profil</button>
-        <button class="nav-tab" data-target="learnSection">📚 Apprendre</button>
-        <button class="nav-tab" data-target="outilsSection">🛠 Outils</button>
-        <button id="brandBtn" class="btn btn-ghost" style="padding:.38rem .7rem;font-size:.8rem;margin-left:.5rem">⚙ Brand</button>
       </div>
-      <button id="themeToggle" class="btn-theme-toggle" title="Basculer thème">🌙</button>
-      <button class="notif-bell" id="notifBellBtn">🔔<span class="notif-dot" id="notifDot"></span></button>
+
+      <div class="nav-right">
+        <span id="navGreeting" style="font-size:.78rem;color:var(--text-secondary);display:none"></span>
+        <button id="themeToggle" class="btn-theme-toggle">Thème</button>
+        <button class="btn-upgrade">Upgrade</button>
+        <div class="nav-avatar" id="navAvatar" title="Profil">?</div>
+      </div>
     </nav>
 
-    <!-- Feature 24: Notification Panel -->
+    <!-- Feature 24: Notification Panel (hidden) -->
     <div class="notif-panel" id="notifPanel">
       <div class="notif-panel-head">
-        <h4>🔔 Notifications</h4>
-        <button id="notifClose" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem">✕</button>
+        <h4>Notifications</h4>
+        <button id="notifClose" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:1rem">×</button>
       </div>
-      <div id="notifList"><div class="notif-empty">Aucune notification pour l'instant.</div></div>
-      <button class="notif-clear" id="notifClearBtn">Tout marquer comme lu</button>
+      <div id="notifList"><p class="notif-empty">Aucune notification</p></div>
+      <button class="notif-clear" id="notifClearBtn">Tout effacer</button>
     </div>
 
-    <!-- AI COACH PANEL (Feature 9) -->
-    <aside class="coach-panel" id="coachPanel" aria-label="Coach IA">
-      <div class="coach-panel-head">
-        <h3>🤖 Coach IA</h3>
-        <button class="brand-close" id="coachClose" aria-label="Fermer">✕</button>
-      </div>
-      <div class="chat-messages" id="chatMessages">
-        <div class="chat-msg ai">
-          Bonjour ! Je suis votre coach IA. Je peux analyser votre historique vidéo et vous donner des conseils précis. Posez-moi une question.
-        </div>
-      </div>
-      <div class="chat-quick-pills">
-        <button class="chat-quick" data-q="Pourquoi ma vidéo performe mal ?">Pourquoi ça performe mal ?</button>
-        <button class="chat-quick" data-q="Comment améliorer mon hook ?">Améliorer mon hook</button>
-        <button class="chat-quick" data-q="Quel est mon meilleur format ?">Meilleur format</button>
-        <button class="chat-quick" data-q="Donne-moi 3 idées de hooks pour cette semaine">3 idées de hooks</button>
-      </div>
-      <div class="chat-input-row">
-        <input class="chat-input" id="chatInput" placeholder="Posez une question…" />
-        <button class="chat-send" id="chatSend">↑</button>
-      </div>
-    </aside>
-
-    <!-- BRAND PANEL -->
-    <aside class="brand-panel" id="brandPanel" aria-label="Brand Kit">
-      <div class="brand-panel-head">
-        <h3>Brand Kit</h3>
-        <button class="brand-close" id="brandClose" aria-label="Fermer">✕</button>
-      </div>
-      <p style="font-size:.8rem;color:var(--muted);margin-bottom:1rem">Configurez une fois. Appliqué à chaque vidéo automatiquement.</p>
-
-      <div class="field">
-        <span>Nom de la marque</span>
-        <input type="text" id="brandName" placeholder="ex. Mon Studio" />
-      </div>
-
-      <div class="brand-section">
-        <h4>Couleurs</h4>
-        <div class="color-row">
-          <div class="color-swatch"><input type="color" id="brandPrimary" value="#FF7751" /><label>Primaire</label></div>
-          <div class="color-swatch"><input type="color" id="brandSecondary" value="#FFFFFF" /><label>Secondaire</label></div>
-          <div class="color-swatch"><input type="color" id="brandBg" value="#080808" /><label>Fond</label></div>
-        </div>
-        <!-- Live preview -->
-        <div id="brandPreview" style="margin-top:.75rem;height:36px;border-radius:8px;display:flex;align-items:center;padding:0 .75rem;font-size:.8rem;font-weight:600;transition:background .2s,color .2s">
-          Aperçu de votre marque
-        </div>
-      </div>
-
-      <div class="brand-section">
-        <h4>Police de caractères</h4>
-        <div class="font-selector" id="brandFontSelector">
-          <button class="font-option active" data-font="Poppins" style="font-family:'Poppins',sans-serif">Poppins</button>
-          <button class="font-option" data-font="Montserrat" style="font-family:'Montserrat',sans-serif;font-weight:700">Montserrat</button>
-          <button class="font-option" data-font="Inter" style="font-family:'Inter',sans-serif">Inter</button>
-          <button class="font-option" data-font="DM Sans" style="font-family:'DM Sans',sans-serif">DM Sans</button>
-          <button class="font-option" data-font="Bebas Neue" style="font-family:'Bebas Neue',sans-serif;letter-spacing:.06em;font-size:1rem">BEBAS NEUE</button>
-        </div>
-      </div>
-
-      <div class="brand-section">
-        <h4>Style de montage</h4>
-        <div class="style-grid" id="brandStyleSelector">
-          <button class="style-option" data-style="Kiyosaki">📈 Kiyosaki</button>
-          <button class="style-option" data-style="Hormozi">⚡ Hormozi</button>
-          <button class="style-option" data-style="Documentary">🎬 Documentary</button>
-          <button class="style-option" data-style="Minimal">✦ Minimal</button>
-        </div>
-      </div>
-
-      <div class="brand-section">
-        <h4>Logo</h4>
-        <input type="file" id="brandLogo" accept="image/*" style="color:var(--muted);font-size:.8rem" />
-        <div id="brandLogoPreview" style="margin-top:.5rem;display:none">
-          <img id="brandLogoImg" style="max-height:40px;border-radius:6px;border:1px solid var(--border)" alt="Logo" />
-        </div>
-      </div>
-
-      <div class="brand-section">
-        <h4>Watermark</h4>
-        <div class="field"><span>Pseudo / texte</span>
-          <input type="text" id="brandWatermark" placeholder="@votrehandle" />
-        </div>
-      </div>
-
-      <div class="brand-section">
-        <h4>Lower Third</h4>
-        <div class="field"><span>Nom</span>
-          <input type="text" id="brandLtName" placeholder="Votre Nom" />
-        </div>
-        <div class="field"><span>Titre</span>
-          <input type="text" id="brandLtTitle" placeholder="Votre Titre / Chaîne" />
-        </div>
-      </div>
-
-      <div class="brand-section">
-        <h4>Intro &amp; Outro</h4>
-        <div class="field"><span>Vidéo intro (max 10s)</span>
-          <input type="file" id="brandIntro" accept="video/*" style="color:var(--muted);font-size:.8rem" />
-        </div>
-        <div class="field"><span>Vidéo outro (max 10s)</span>
-          <input type="file" id="brandOutro" accept="video/*" style="color:var(--muted);font-size:.8rem" />
-        </div>
-      </div>
-
-      <!-- Caption style presets (Feature 3) -->
-      <div class="brand-section">
-        <h4>Style de captions</h4>
-        <div class="caption-preset-grid" id="captionPresetSelector">
-          <button class="caption-preset-btn active" data-preset="impact" data-style="impact">
-            <div class="caption-preset-thumb">
-              <span style="color:#fff;font-size:.55rem;font-weight:900;text-shadow:0 0 4px #000">IMPACT</span>
-            </div>
-            <div class="caption-preset-info">
-              <div class="cp-name">Impact</div>
-              <div class="cp-desc">Gras, mot clé salmon &amp; grand</div>
-            </div>
-          </button>
-          <button class="caption-preset-btn" data-preset="cinematic" data-style="impact">
-            <div class="caption-preset-thumb">
-              <span style="color:rgba(255,255,255,.55);font-size:.4rem;font-style:italic">cinematic</span>
-            </div>
-            <div class="caption-preset-info">
-              <div class="cp-name">Cinématique</div>
-              <div class="cp-desc">Élégant, petit, bas de cadre</div>
-            </div>
-          </button>
-          <button class="caption-preset-btn" data-preset="kiyosaki" data-style="kinetic">
-            <div class="caption-preset-thumb" style="flex-direction:column;gap:2px;padding:3px 4px;align-items:flex-start">
-              <span style="font-size:.35rem;color:rgba(255,255,255,.4)">contexte</span>
-              <span style="font-size:.55rem;color:#FF7751;font-weight:800">MOT CLÉ</span>
-            </div>
-            <div class="caption-preset-info">
-              <div class="cp-name">Kiyosaki</div>
-              <div class="cp-desc">2 niveaux: contexte + mot clé</div>
-            </div>
-          </button>
-        </div>
-      </div>
-
-      <button id="saveBrandBtn" class="btn btn-primary" style="width:100%;margin-top:.5rem;padding:.7rem">Sauvegarder</button>
-      <p id="brandSaveMsg" style="font-size:.8rem;color:var(--salmon);margin-top:.5rem;display:none">Sauvegardé ✓</p>
-    </aside>
-
     <main>
+      <!-- ── LOGIN ────────────────────────────────────────────── -->
+      <div id="login" class="card hidden" style="margin-top:2rem">
+        <h2>Connexion requise</h2>
+        <p class="muted" style="margin-bottom:1rem">Entrez votre mot de passe pour accéder à l'éditeur.</p>
+        <form id="loginForm" style="display:flex;flex-direction:column;gap:.75rem">
+          <input id="loginPwd" type="password" placeholder="Mot de passe" />
+          <button type="submit" class="btn-primary">Se connecter</button>
+          <p id="loginErr" class="err"></p>
+        </form>
+        <div id="retryBlock" class="hidden" style="margin-top:.75rem">
+          <button id="retryBtn" class="btn-primary" style="width:100%">Réessayer</button>
+        </div>
+      </div>
 
-      <!-- WELCOME BANNER (shown when coach_profile exists) -->
-      <div id="welcomeBanner" style="display:none; margin-top:1.5rem; padding:.75rem 1.1rem;border-radius:10px; border: 1px solid var(--salmon-border);background:rgba(255,119,81,.08); font-size:.875rem; font-weight:500;color:var(--text);"></div>
+      <!-- ── EDITOR ────────────────────────────────────────────── -->
+      <section id="editorArea" class="app-section active">
+        <div id="tool">
 
-      <!-- DASHBOARD SECTION -->
-      <div id="dashboardSection" class="app-section">
-        <div class="dash-welcome">Bonjour, <span id="dashName">—</span> 👋</div>
+          <!-- Onboarding progress -->
+          <div class="onboarding-card" id="onboardingCard" style="margin-top:1.5rem">
+            <div class="onboarding-card-title">Démarrage rapide</div>
+            <div class="onboarding-steps">
+              <div class="ob-step" id="step-account"><div class="ob-icon"></div><span class="ob-label">Créer votre profil coach</span></div>
+              <div class="ob-step" id="step-first-video"><div class="ob-icon"></div><span class="ob-label">Éditer votre 1ère vidéo</span><span class="ob-unlock">Débloque l'analyse</span></div>
+              <div class="ob-step" id="step-brand"><div class="ob-icon"></div><span class="ob-label">Configurer votre identité de marque</span></div>
+              <div class="ob-step" id="step-5videos"><div class="ob-icon"></div><span class="ob-label">Atteindre 5 vidéos éditées</span><span class="ob-unlock">Débloque Analytics</span></div>
+              <div class="ob-step" id="step-profile"><div class="ob-icon"></div><span class="ob-label">Compléter votre profil ICP</span></div>
+            </div>
+          </div>
 
-        <!-- Stats row -->
+          <form id="form" style="margin-top:1rem">
+            <!-- Hidden fields -->
+            <input type="hidden" name="caption_style" value="impact" />
+            <input type="hidden" name="brand_color" value="#FF7751" />
+            <input type="hidden" name="caption_font" value="Poppins Bold" />
+            <input type="hidden" name="target_audience" />
+            <input type="hidden" name="main_message" />
+
+            <!-- Drop zone -->
+            <div class="drop" id="drop" role="button" tabindex="0" aria-label="Déposer une vidéo">
+              <input type="file" id="video" name="video" accept="video/*" />
+              <svg class="drop-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              <div id="dropLabel">Déposer votre vidéo ici</div>
+              <div class="drop-hint">MP4, MOV, MKV · Jusqu'à 4 Go</div>
+            </div>
+
+            <!-- Format -->
+            <div class="format-pills">
+              <div class="format-pill">
+                <input type="radio" name="format_hint" id="fmt-short" value="short" checked />
+                <label for="fmt-short">Court · Reels</label>
+              </div>
+              <div class="format-pill">
+                <input type="radio" name="format_hint" id="fmt-long" value="long" />
+                <label for="fmt-long">Long · YouTube</label>
+              </div>
+            </div>
+
+            <!-- Instructions -->
+            <div class="field">
+              <span class="section-label">Instructions (optionnel)</span>
+              <textarea name="instructions" placeholder="Décrivez le contenu, le public cible, le style de montage souhaité…" rows="2"></textarea>
+            </div>
+
+            <!-- Advanced options (collapsed) -->
+            <div class="brief-toggle" id="advToggle" role="button" tabindex="0">
+              <span>Options avancées</span>
+              <svg class="arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+            <div class="brief-body" id="advBody">
+              <!-- Template selector -->
+              <div class="template-row">
+                <select id="templateSelect" name="template_id" style="flex:1">
+                  <option value="">Template de montage — Auto</option>
+                </select>
+              </div>
+              <div class="template-chips" id="templateChips"></div>
+
+              <!-- Platform -->
+              <div class="field" style="margin-top:.75rem">
+                <span class="section-label">Plateforme cible</span>
+                <div class="seg">
+                  <input type="radio" name="platform_hint" id="plt-reels" value="reels" checked />
+                  <label for="plt-reels">Reels / TikTok</label>
+                  <input type="radio" name="platform_hint" id="plt-yt" value="youtube" />
+                  <label for="plt-yt">YouTube</label>
+                  <input type="radio" name="platform_hint" id="plt-shorts" value="shorts" />
+                  <label for="plt-shorts">Shorts</label>
+                </div>
+              </div>
+
+              <!-- Caption style -->
+              <div class="field">
+                <span class="section-label">Style de captions</span>
+                <div class="caption-preset-grid" id="captionPresetSelector">
+                  <button type="button" class="caption-preset-btn active" data-preset="impact" data-style="impact">
+                    <div class="caption-preset-thumb"><span style="color:#FF7751;font-size:.55rem;font-weight:900;text-transform:uppercase">MOT</span></div>
+                    <div class="caption-preset-info">
+                      <div class="cp-name">Impact</div>
+                      <div class="cp-desc">Un mot à la fois, très dynamique</div>
+                    </div>
+                  </button>
+                  <button type="button" class="caption-preset-btn" data-preset="twolevel" data-style="twolevel">
+                    <div class="caption-preset-thumb"><span style="color:#ccc;font-size:.38rem;font-weight:700;line-height:1.2;text-align:center">PHRASE<br><span style="color:#FF7751">ACCENT</span></span></div>
+                    <div class="caption-preset-info">
+                      <div class="cp-name">Two-Level</div>
+                      <div class="cp-desc">Phrase + mot-clé mis en valeur</div>
+                    </div>
+                  </button>
+                  <button type="button" class="caption-preset-btn" data-preset="kinetic" data-style="kinetic">
+                    <div class="caption-preset-thumb"><span style="color:#60a5fa;font-size:.5rem;font-weight:800">KINETIC</span></div>
+                    <div class="caption-preset-info">
+                      <div class="cp-name">Kinetic</div>
+                      <div class="cp-desc">Animation mot par mot</div>
+                    </div>
+                  </button>
+                  <button type="button" class="caption-preset-btn" data-preset="karaoke" data-style="karaoke">
+                    <div class="caption-preset-thumb"><span style="color:#f472b6;font-size:.5rem;font-weight:700">KARAOKE</span></div>
+                    <div class="caption-preset-info">
+                      <div class="cp-name">Karaoké</div>
+                      <div class="cp-desc">Surlignage progressif</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Notification email -->
+              <div class="field">
+                <span class="section-label">Notification par email (optionnel)</span>
+                <input type="email" id="notifEmail" name="notification_email" placeholder="you@email.com" />
+              </div>
+            </div>
+
+            <div style="margin-top:1rem">
+              <button type="submit" class="btn-submit" id="submit">
+                <span class="btn-shimmer"></span>
+                <span class="btn-label">Éditer ma vidéo</span>
+              </button>
+            </div>
+          </form>
+
+          <!-- ── STATUS ─────────────────────────────────────────── -->
+          <div class="card hidden" id="statusCard" style="margin-top:1rem">
+            <div class="status-header">
+              <strong id="statusLabel">En attente</strong>
+              <span class="status-pip" id="statusPip">1/5</span>
+            </div>
+            <p class="status-msg" id="statusMsg"></p>
+            <div class="bar"><div id="barFill"></div></div>
+          </div>
+
+          <!-- ── PREVIEW (ready_for_review) ──────────────────────── -->
+          <div class="card hidden" id="previewCard" style="margin-top:1rem">
+            <div class="preview-header">
+              <h2>Plan de montage</h2>
+              <div class="preview-actions">
+                <button class="btn-replan" id="replanBtn">Re-planifier</button>
+                <button class="btn-render" id="renderBtn">Valider et rendre</button>
+              </div>
+            </div>
+
+            <div class="hook-rewrite hidden" id="hookRewrite">
+              <strong style="font-size:.72rem;color:var(--salmon);text-transform:uppercase;letter-spacing:.05em;font-style:normal">Hook suggéré</strong><br>
+              <span id="hookText"></span>
+            </div>
+
+            <div class="preview-stats">
+              <div class="preview-stat-card"><div class="val" id="prevOrigDur">—</div><div class="lbl">Durée originale</div></div>
+              <div class="preview-stat-card"><div class="val" id="prevEditDur">—</div><div class="lbl">Durée éditée</div></div>
+              <div class="preview-stat-card"><div class="val" id="prevSegments">—</div><div class="lbl">Segments</div></div>
+            </div>
+
+            <p id="prevContentType" style="font-size:.78rem;color:var(--text-secondary);margin-bottom:.25rem"></p>
+            <p id="prevSpeakers" style="font-size:.78rem;color:var(--text-secondary);margin-bottom:.25rem"></p>
+            <p id="prevGraphics" style="font-size:.78rem;color:var(--text-secondary);margin-bottom:.75rem"></p>
+
+            <div class="ret-pred-wrap" id="retentionPrediction" style="display:none">
+              <span class="ret-pred-label">Rétention prédite</span>
+              <div class="ret-pred-bar-wrap"><div class="ret-pred-bar-fill" id="retPredBar"></div></div>
+              <span class="ret-pred-pct" id="retPredPct">—</span>
+            </div>
+
+            <div class="preview-timeline" id="previewTimeline"></div>
+
+            <!-- Split compare -->
+            <div id="splitComparePanel" style="display:none">
+              <span class="section-label">Comparaison A/B</span>
+              <p id="splitWinnerLabel" style="font-size:.78rem;color:var(--text-secondary);margin-bottom:.5rem"></p>
+              <div class="split-compare" id="splitCompare"></div>
+            </div>
+
+            <button class="action-btn" id="versionBBtn" style="margin-top:.75rem">Générer Version B</button>
+
+            <details style="margin-top:1rem">
+              <summary>Voir le JSON brut</summary>
+              <pre id="previewJson"></pre>
+            </details>
+          </div>
+
+          <!-- ── RESULT ──────────────────────────────────────────── -->
+          <div class="card hidden" id="resultCard" style="margin-top:1rem">
+            <video id="player" controls playsinline></video>
+
+            <div class="download-buttons-grid">
+              <a id="downloadLink" href="#" download class="btn-download-fmt fmt-primary">
+                <span class="fmt-name">TikTok / Reels</span>
+                <span class="fmt-sub">9:16</span>
+              </a>
+              <a href="#" download class="btn-download-fmt" id="downloadYt">
+                <span class="fmt-name">YouTube</span>
+                <span class="fmt-sub">16:9</span>
+              </a>
+              <a href="#" download class="btn-download-fmt" id="downloadThumb">
+                <span class="fmt-name">Miniature</span>
+                <span class="fmt-sub">JPG</span>
+              </a>
+            </div>
+
+            <div class="suggested-title" id="suggestedTitleResult" style="display:none"></div>
+
+            <!-- CTR Titles -->
+            <div id="ctrBlock" style="display:none;margin-bottom:1rem">
+              <span class="tag-label">Titres optimisés CTR</span>
+              <div id="ctrTitles"></div>
+            </div>
+
+            <button class="details-toggle" id="detailsToggle">Voir plus</button>
+            <div class="details-body" id="detailsBody">
+
+              <!-- Caption editor -->
+              <div class="caption-editor" id="captionEditorWrap" style="display:none">
+                <span class="section-label">Éditeur de captions</span>
+                <div class="caption-list" id="captionList"></div>
+                <div style="display:flex;gap:.5rem;margin-top:.6rem;align-items:center">
+                  <button class="btn-submit" id="reburnBtn" style="width:auto;padding:.5rem 1rem;height:auto;font-size:.8rem">Re-brûler les captions</button>
+                  <span id="reburnMsg" class="save-msg">Captions mis à jour !</span>
+                </div>
+              </div>
+
+              <!-- Auto-chapters -->
+              <div class="chapters-section" id="chaptersSection" style="display:none;margin-top:.85rem">
+                <span class="section-label">Chapitres YouTube</span>
+                <pre class="chapters-pre" id="chaptersOutput"></pre>
+                <button class="btn-copy-sm" id="copyChaptersBtn">Copier les chapitres</button>
+              </div>
+
+              <!-- Description generator -->
+              <div class="desc-gen-section" style="margin-top:.85rem">
+                <button class="desc-gen-btn" id="descGenBtn" type="button">
+                  <span id="descGenBtnLabel">Générer les descriptions</span>
+                </button>
+                <div id="descGenOutput" style="display:none">
+                  <div class="desc-tabs">
+                    <button class="desc-tab active" data-plat="youtube">YouTube</button>
+                    <button class="desc-tab" data-plat="tiktok">TikTok</button>
+                    <button class="desc-tab" data-plat="instagram">Instagram</button>
+                    <button class="desc-tab" data-plat="linkedin">LinkedIn</button>
+                  </div>
+                  <div id="desc-youtube" class="desc-platform active">
+                    <div class="desc-output" id="desc-youtube-text"></div>
+                    <button class="btn-copy-sm" data-copy="desc-youtube-text">Copier</button>
+                  </div>
+                  <div id="desc-tiktok" class="desc-platform">
+                    <div class="desc-output" id="desc-tiktok-text"></div>
+                    <button class="btn-copy-sm" data-copy="desc-tiktok-text">Copier</button>
+                  </div>
+                  <div id="desc-instagram" class="desc-platform">
+                    <div class="desc-output" id="desc-instagram-text"></div>
+                    <button class="btn-copy-sm" data-copy="desc-instagram-text">Copier</button>
+                  </div>
+                  <div id="desc-linkedin" class="desc-platform">
+                    <div class="desc-output" id="desc-linkedin-text"></div>
+                    <button class="btn-copy-sm" data-copy="desc-linkedin-text">Copier</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Platform descriptions -->
+              <div class="publish-section">
+                <h3>Publier</h3>
+                <div class="platform-grid">
+                  <button class="platform-btn" data-platform="youtube"><span class="platform-dot" id="dot-youtube"></span>YouTube</button>
+                  <button class="platform-btn" data-platform="tiktok"><span class="platform-dot" id="dot-tiktok"></span>TikTok</button>
+                  <button class="platform-btn" data-platform="instagram"><span class="platform-dot" id="dot-instagram"></span>Instagram</button>
+                  <button class="platform-btn" data-platform="linkedin"><span class="platform-dot" id="dot-linkedin"></span>LinkedIn</button>
+                </div>
+                <div id="publishMetaPreview" style="display:none;margin-bottom:.75rem">
+                  <input type="text" id="publishTitle" placeholder="Titre de la publication" />
+                </div>
+                <button class="btn-submit" id="publishNowBtn" disabled style="margin-bottom:.5rem;height:40px;font-size:.82rem">Publier sur les plateformes sélectionnées</button>
+                <p id="publishStatus" style="font-size:.78rem;color:var(--text-secondary)"></p>
+              </div>
+
+            </div><!-- /detailsBody -->
+          </div>
+
+        </div><!-- /tool -->
+      </section>
+
+      <!-- ── DASHBOARD ──────────────────────────────────────────── -->
+      <section id="dashboardSection" class="app-section">
+        <p class="dash-welcome">Bonjour, <span id="dashName">toi</span></p>
+
         <div class="dash-stats">
           <div class="dash-stat">
             <span class="big" id="dashVideos">0</span>
             <span class="lbl">Vidéos éditées</span>
+          </div>
+          <div class="dash-stat">
+            <span class="big" id="dashScoreMoyen">—</span>
+            <span class="lbl">Score moyen</span>
           </div>
           <div class="dash-stat">
             <span class="big" id="dashTimeSaved">0h</span>
@@ -1167,664 +1015,71 @@
           </div>
           <div class="dash-stat">
             <span class="big" id="dashViews">—</span>
-            <span class="lbl">Vues potentielles</span>
+            <span class="lbl">Vues estimées</span>
           </div>
         </div>
 
-        <!-- Streak card -->
-        <div class="streak-card" id="streakCard">
-          <div class="streak-header">
-            <div>
-              <div class="streak-count">🔥 <span id="streakCount">0</span></div>
-              <div class="streak-label" id="streakLabel">jours consécutifs</div>
-            </div>
-            <div style="text-align:right">
-              <div style="font-size:.75rem;color:var(--muted)">Objectif semaine</div>
-              <div style="font-size:.82rem;font-weight:700;color:var(--salmon)" id="weeklyGoalDisplay">0 / 3 vidéos</div>
-            </div>
-          </div>
-          <div class="streak-bar-wrap">
-            <div class="streak-bar-fill" id="streakBarFill" style="width:0%"></div>
-          </div>
-          <div class="streak-milestone" id="streakMilestone">Prochain palier : 7 jours 🏆</div>
+        <button class="dash-edit-btn" id="dashEditBtn">Nouvelle vidéo</button>
 
-          <!-- Weekly goal bar -->
-          <div class="goal-bar-wrap" style="margin-bottom:0">
-            <div class="goal-bar-fill" id="weeklyGoalBar" style="width:0%"></div>
-          </div>
-        </div>
-
-        <!-- Achievements -->
-        <p class="dash-recent-title" style="margin-top:.25rem">Succès</p>
-        <div class="achievements-grid" id="achievementsGrid">
-          <div class="achievement locked" id="ach-first">
-            <span class="achievement-icon">🎬</span>
-            <div class="achievement-text">
-              <div class="achievement-name">Première vidéo</div>
-              <div class="achievement-desc">Éditez votre 1ère vidéo</div>
-            </div>
-          </div>
-          <div class="achievement locked" id="ach-streak7">
-            <span class="achievement-icon">🔥</span>
-            <div class="achievement-text">
-              <div class="achievement-name">7 jours consécutifs</div>
-              <div class="achievement-desc">Maintenez le rythme</div>
-            </div>
-          </div>
-          <div class="achievement locked" id="ach-10videos">
-            <span class="achievement-icon">💰</span>
-            <div class="achievement-text">
-              <div class="achievement-name">10 vidéos éditées</div>
-              <div class="achievement-desc">Créateur régulier</div>
-            </div>
-          </div>
-          <div class="achievement locked" id="ach-active">
-            <span class="achievement-icon">⚡</span>
-            <div class="achievement-text">
-              <div class="achievement-name">Créateur actif</div>
-              <div class="achievement-desc">3 vidéos en 1 semaine</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Content Calendar (Feature 12) -->
-        <div class="card" style="padding:1.25rem;margin-bottom:.75rem">
-          <div class="cal-header">
-            <span class="cal-month" id="calMonthLabel">—</span>
-            <div style="display:flex;gap:.4rem">
-              <button class="cal-nav-btn" id="calPrev">‹</button>
-              <button class="cal-nav-btn" id="calNext">›</button>
-            </div>
-          </div>
-          <div class="cal-grid" id="calGrid">
-            <div class="cal-day-hd">L</div><div class="cal-day-hd">M</div><div class="cal-day-hd">M</div>
-            <div class="cal-day-hd">J</div><div class="cal-day-hd">V</div><div class="cal-day-hd">S</div>
-            <div class="cal-day-hd">D</div>
-          </div>
-          <p style="font-size:.72rem;color:var(--muted);margin-top:.5rem">Cliquez un jour pour planifier une publication.</p>
-        </div>
-
-        <!-- Referral (Feature 6) -->
-        <div class="referral-card" id="referralCard">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.2rem">
-            <span style="font-size:.82rem;font-weight:700">🎁 Invitez un ami, gagnez 1 mois gratuit</span>
-            <span id="referralCount" style="font-size:.72rem;color:var(--salmon);font-weight:700">0 invité</span>
-          </div>
-          <p style="font-size:.74rem;color:var(--muted);margin-bottom:.3rem">Partagez votre lien — chaque inscription vous offre 1 mois Pro.</p>
-          <div class="referral-link-row">
-            <input class="referral-link-input" id="referralLinkInput" readonly onclick="this.select()" value="" />
-            <button class="btn-copy" id="copyReferralBtn">Copier</button>
-          </div>
-          <p id="referralEarned" style="font-size:.72rem;color:var(--salmon);min-height:.9rem"></p>
-        </div>
-
-        <button class="dash-edit-btn" id="dashEditBtn">Éditer une nouvelle vidéo →</button>
-
-        <!-- Video Library -->
-        <p class="dash-recent-title">Bibliothèque vidéos</p>
-        <div id="videoLibraryEmpty" class="dash-empty">
-          <span class="dash-empty-icon">🎬</span>
-          Aucune vidéo éditée pour l'instant. Cliquez ci-dessus pour commencer !
-        </div>
+        <span class="section-label">Bibliothèque de vidéos</span>
         <div class="video-library-grid" id="videoLibraryGrid" style="display:none"></div>
-
-        <!-- Feature 20: Performance Tracker -->
-        <p class="dash-recent-title" style="margin-top:1.1rem">📊 Performance Tracker</p>
-        <div style="background:var(--card,#161616);border:1px solid var(--border);border-radius:12px;padding:1rem">
-          <p class="perf-accuracy" id="perfAccuracy" style="display:none">Notre IA prédit avec <span id="perfAccuracyPct">—</span>% de précision</p>
-          <div class="perf-connect-row">
-            <button class="perf-connect-btn" data-platform="youtube" id="perfYtBtn">▶ Connecter YouTube</button>
-            <button class="perf-connect-btn" data-platform="tiktok" id="perfTtBtn">♪ Connecter TikTok</button>
-          </div>
-          <div class="perf-video-list" id="perfVideoList"><div class="perf-empty">Éditez une vidéo pour voir les prédictions.</div></div>
-        </div>
-
-        <!-- Feature 21: Team Collaboration -->
-        <p class="dash-recent-title" style="margin-top:1.1rem">👥 Collaboration Équipe</p>
-        <div style="background:var(--card,#161616);border:1px solid var(--border);border-radius:12px;padding:1rem">
-          <div class="team-invite-row">
-            <input type="email" id="teamInviteEmail" placeholder="email@équipe.com" style="flex:1;padding:.38rem .65rem;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:.8rem" />
-            <select id="teamInviteRole" style="padding:.38rem .5rem;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:.8rem">
-              <option value="editor">Éditeur</option>
-              <option value="viewer">Lecteur</option>
-            </select>
-            <button id="teamInviteBtn" class="btn btn-primary" style="font-size:.78rem;padding:.38rem .8rem">Inviter</button>
-          </div>
-          <div id="teamMemberList"></div>
-          <div style="margin-top:.65rem">
-            <textarea id="teamCommentInput" rows="2" placeholder="Laissez un commentaire (@mention possible)…" style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);font-size:.8rem;padding:.5rem;box-sizing:border-box;resize:vertical"></textarea>
-            <button id="teamCommentBtn" class="btn btn-primary" style="font-size:.78rem;padding:.38rem .8rem;margin-top:.3rem">Commenter</button>
-          </div>
-          <div id="teamCommentList" style="margin-top:.5rem"></div>
-        </div>
-
-        <!-- Feature 22: White Label -->
-        <p class="dash-recent-title" style="margin-top:1.1rem">🏷️ White Label</p>
-        <div style="background:var(--card,#161616);border:1px solid var(--border);border-radius:12px;padding:1rem">
-          <div class="wl-preview" id="wlPreview">
-            <div class="wl-logo-box" id="wlLogoBox">🎬</div>
-            <div class="wl-brand-name" id="wlBrandNameDisplay">Mon Studio</div>
-            <div class="wl-tagline">Powered by AI · Édition professionnelle</div>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.6rem">
-            <label class="field"><span style="font-size:.75rem">Nom de marque</span><input type="text" id="wlBrandName" placeholder="Mon Studio" /></label>
-            <label class="field"><span style="font-size:.75rem">Couleur principale</span>
-              <div style="display:flex;gap:.4rem;align-items:center">
-                <input type="color" id="wlPrimaryColor" value="#FF7751" style="width:38px;height:32px;padding:0;border:none;background:none;cursor:pointer" />
-                <input type="text" id="wlColorHex" value="#FF7751" style="flex:1" />
-              </div>
-            </label>
-          </div>
-          <label class="field" style="margin-top:.4rem"><span style="font-size:.75rem">Logo (PNG/SVG)</span><input type="file" id="wlLogoUpload" accept="image/*" style="color:var(--muted);font-size:.78rem" /></label>
-          <button id="wlSaveBtn" class="btn btn-primary" style="width:100%;margin-top:.5rem;padding:.6rem">Appliquer le White Label</button>
-        </div>
-
-        <!-- Feature 23: API Access -->
-        <p class="dash-recent-title" style="margin-top:1.1rem">🔑 Accès API</p>
-        <div style="background:var(--card,#161616);border:1px solid var(--border);border-radius:12px;padding:1rem">
-          <p style="font-size:.8rem;color:var(--muted);margin:0 0 .5rem">Votre clé API pour intégrer LeanRetention dans vos workflows.</p>
-          <div class="api-key-row">
-            <div class="api-key-display" id="apiKeyDisplay">••••••••••••••••••••••••••••••••</div>
-            <button id="showApiKeyBtn" class="btn-copy-sm">👁 Voir</button>
-            <button id="copyApiKeyBtn" class="btn-copy-sm">📋</button>
-            <button id="regenApiKeyBtn" class="btn-copy-sm" title="Régénérer">🔄</button>
-          </div>
-          <table class="api-endpoint-table">
-            <tr><td><span class="method-badge method-post">POST</span></td><td class="api-path">/api/v1/edit</td><td style="color:var(--muted);font-size:.75rem">Soumettre une vidéo</td></tr>
-            <tr><td><span class="method-badge method-get">GET</span></td><td class="api-path">/api/v1/jobs/{id}</td><td style="color:var(--muted);font-size:.75rem">Statut du job</td></tr>
-            <tr><td><span class="method-badge method-get">GET</span></td><td class="api-path">/api/v1/download/{id}</td><td style="color:var(--muted);font-size:.75rem">Télécharger le résultat</td></tr>
-          </table>
-          <p style="font-size:.74rem;color:var(--muted);margin-top:.5rem">Authentification : header <code style="font-size:.74rem">X-API-Key: &lt;votre_clé&gt;</code></p>
-        </div>
-      </div>
-
-      <!-- EDITOR AREA -->
-      <div id="editorArea" class="app-section active">
-
-      <!-- ONBOARDING PROGRESS (Feature 8) -->
-      <div class="onboarding-card" id="onboardingCard" style="display:none">
-        <div class="onboarding-card-title">🚀 Votre progression</div>
-        <div class="onboarding-steps">
-          <div class="ob-step step-done" id="step-account">
-            <div class="ob-icon">✓</div>
-            <span class="ob-label">Compte créé</span>
-          </div>
-          <div class="ob-step" id="step-first-video">
-            <div class="ob-icon"></div>
-            <span class="ob-label">Première vidéo éditée</span>
-            <span class="ob-unlock">débloque Analytics</span>
-          </div>
-          <div class="ob-step" id="step-brand">
-            <div class="ob-icon"></div>
-            <span class="ob-label">Brand kit configuré</span>
-            <span class="ob-unlock">débloque Templates</span>
-          </div>
-          <div class="ob-step" id="step-5videos">
-            <div class="ob-icon"></div>
-            <span class="ob-label">5 vidéos éditées</span>
-            <span class="ob-unlock">débloque Hook Score</span>
-          </div>
-          <div class="ob-step" id="step-profile">
-            <div class="ob-icon"></div>
-            <span class="ob-label">Profil complet</span>
-            <span class="ob-unlock">débloque IA personnalisée</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- HERO -->
-      <section class="hero">
-        <span class="badge">
-          <span class="badge-dot"></span>
-          Claude · Whisper · FFmpeg
-        </span>
-        <h1>Montage IA<br><span class="gradient">comme un professionnel.</span></h1>
-        <p class="tagline">Déposez votre vidéo brute. Obtenez un montage haute-rétention en quelques minutes.</p>
-      </section>
-
-      <!-- LOGIN -->
-      <section id="login" class="card hidden">
-        <h2>Accès requis</h2>
-        <p class="muted">Cette instance est protégée par mot de passe.</p>
-        <form id="loginForm">
-          <label class="field">
-            <span>Mot de passe</span>
-            <input id="loginPwd" type="password" autocomplete="current-password" required
-              style="padding:.65rem .85rem;border-radius:8px;background:rgba(255,255,255,.03);border:1px solid var(--border);color:var(--text);font-family:var(--font);font-size:.875rem;width:100%;transition:border-color .15s" />
-          </label>
-          <button type="submit" class="btn btn-primary" style="padding:.65rem 1.5rem">Déverrouiller</button>
-          <p id="loginErr" class="err"></p>
-        </form>
-      </section>
-
-      <!-- TOOL -->
-      <section id="tool" class="card tool">
-        <div class="tool-head">
-          <h2>Éditer votre vidéo</h2>
-          <p>Déposez votre fichier brut — l'IA fait le reste.</p>
-        </div>
-        <form id="form">
-          <!-- Defaults -->
-          <input type="hidden" name="caption_style" value="impact" />
-          <input type="hidden" name="theme" value="high-energy" />
-          <input type="hidden" name="caption_color" value="white" />
-          <input type="hidden" name="caption_position" value="center" />
-          <input type="hidden" name="caption_font" value="Poppins Bold" />
-          <input type="hidden" name="brand_color" value="#FF7751" />
-
-          <div class="drop" id="drop" role="button" tabindex="0" aria-label="Cliquez ou déposez votre vidéo ici">
-            <svg class="drop-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 16V4M6 10l6-6 6 6"/>
-              <path d="M4 20h16"/>
-            </svg>
-            <span id="dropLabel">Cliquez ou déposez votre vidéo ici</span>
-            <span class="drop-hint">mp4 · mov · webm · jusqu'à 20 Go</span>
-            <input id="video" name="video" type="file" accept="video/*" />
-          </div>
-
-          <div class="field">
-            <span>Format</span>
-            <div class="seg" role="tablist">
-              <input type="radio" name="format_hint" id="fmt-auto" value="auto" checked />
-              <label for="fmt-auto">Auto</label>
-              <input type="radio" name="format_hint" id="fmt-short" value="short" />
-              <label for="fmt-short">Court · Reel</label>
-              <input type="radio" name="format_hint" id="fmt-long" value="long" />
-              <label for="fmt-long">Long · YouTube</label>
-            </div>
-          </div>
-
-          <!-- Instructions (collapsible) -->
-          <div class="brief-toggle" id="instrToggle" role="button" tabindex="0" aria-expanded="false">
-            <span>Instructions <em style="font-weight:400;color:var(--muted);text-transform:none">(optionnel)</em></span>
-            <span class="arrow" id="instrArrow">↓</span>
-          </div>
-          <div class="brief-body" id="instrBody">
-            <div class="field" style="padding-top:.75rem">
-              <textarea
-                name="instructions"
-                rows="3"
-                placeholder="ex. Le hook doit commencer par le moment clé. Tout couper après 3 minutes."
-              ></textarea>
-            </div>
-          </div>
-
-          <!-- Notification email -->
-          <div class="field" style="margin-top:1rem">
-            <span>Email pour recevoir les notifications</span>
-            <input type="email" name="notification_email" id="notifEmail" placeholder="votre@email.com" />
-          </div>
-
-          <button type="submit" class="btn-submit" id="submit">
-            <span class="btn-label">Éditer ma vidéo</span>
-            <span class="btn-shimmer" aria-hidden="true"></span>
-          </button>
-        </form>
-      </section>
-
-      <!-- STATUS -->
-      <section class="card status hidden" id="statusCard">
-        <div class="row">
-          <div>
-            <strong id="statusLabel">En attente</strong>
-            <p id="statusMsg" class="muted"></p>
-          </div>
-          <span class="step-pip" id="statusPip">…</span>
-        </div>
-        <div class="bar"><div id="barFill"></div></div>
-        <div id="retryBlock" class="hidden" style="margin-top:1rem">
-          <p class="muted" style="margin-bottom:.5rem">Votre vidéo est toujours sur le serveur — pas besoin de re-uploader.</p>
-          <button id="retryBtn" class="btn btn-primary">Relancer le job</button>
+        <div class="dash-empty" id="videoLibraryEmpty">
+          <p style="font-size:.875rem;color:var(--text-secondary)">Aucune vidéo éditée pour l'instant.<br>Déposez votre première vidéo dans l'éditeur.</p>
         </div>
       </section>
 
-      <!-- PREVIEW (ready_for_review) -->
-      <section class="card hidden" id="previewCard">
-        <div class="preview-header">
-          <h2>Vérifier le plan de montage</h2>
-          <div class="preview-actions">
-            <button id="replanBtn" class="btn-replan">Re-planifier</button>
-            <button id="renderBtn" class="btn-render">Rendre la vidéo →</button>
+      <!-- ── ANALYTICS ──────────────────────────────────────────── -->
+      <section id="analyticsSection" class="app-section">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;padding-top:1.5rem">
+          <h2 style="font-size:1.1rem;font-weight:700">Analytics</h2>
+          <div style="display:flex;align-items:center;gap:.75rem">
+            <span id="analyticsUpdated" style="font-size:.72rem;color:var(--text-secondary)"></span>
+            <button class="action-btn" id="collectBtn">Rafraichir</button>
           </div>
         </div>
 
-        <div id="hookRewrite" class="hook-rewrite hidden">
-          <span class="tag-label" style="margin-bottom:.3rem">Hook réécrit</span>
-          <p id="hookText"></p>
+        <div class="analytics-stats-grid">
+          <div class="analytics-stat"><span class="big" id="aVideos">0</span><span class="sub">Vidéos éditées</span></div>
+          <div class="analytics-stat"><span class="big" id="aRetention">—</span><span class="sub">Rétention moyenne</span></div>
+          <div class="analytics-stat"><span class="big" id="aTimeSaved">0h</span><span class="sub">Temps économisé</span></div>
+          <div class="analytics-stat"><span class="big" id="aViews">0</span><span class="sub">Vues estimées</span></div>
         </div>
 
-        <div class="preview-stats">
-          <div class="preview-stat-card">
-            <span class="val" id="prevOrigDur">—</span>
-            <span class="lbl">Original</span>
-          </div>
-          <div class="preview-stat-card">
-            <span class="val" id="prevEditDur">—</span>
-            <span class="lbl">Après montage</span>
-          </div>
-          <div class="preview-stat-card">
-            <span class="val" id="prevSegments">—</span>
-            <span class="lbl">Segments gardés</span>
-          </div>
+        <div class="retention-chart-wrap">
+          <div class="retention-chart-title">Courbe de rétention moyenne</div>
+          <svg class="retention-svg" viewBox="0 0 400 80" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="retFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#FF7751" stop-opacity=".18"/>
+                <stop offset="100%" stop-color="#FF7751" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <path id="retentionFill" fill="url(#retFill)" d=""/>
+            <path id="retentionLine" fill="none" stroke="#FF7751" stroke-width="2" stroke-linecap="round" d=""/>
+            <circle id="retDrop1" r="4" fill="#FF7751" opacity="0"/>
+          </svg>
         </div>
 
-        <div style="display:flex;gap:.75rem;margin-bottom:1rem;font-size:.8rem;color:var(--muted)">
-          <span id="prevContentType"></span>
-          <span id="prevSpeakers"></span>
-          <span id="prevGraphics"></span>
-        </div>
+        <span class="analytics-section-title">Performance par vidéo</span>
+        <div class="perf-chart" id="perfChart" style="margin-bottom:1.5rem"></div>
 
-        <div class="preview-timeline" id="previewTimeline"></div>
-
-        <!-- Retention prediction (Feature 5) -->
-        <div id="retentionPrediction" class="ret-pred-wrap" style="display:none">
-          <span class="ret-pred-label">Rétention estimée</span>
-          <div class="ret-pred-bar-wrap">
-            <div class="ret-pred-bar-fill" id="retPredBar" style="width:0%"></div>
-          </div>
-          <span class="ret-pred-pct" id="retPredPct">—</span>
-        </div>
-
-        <!-- Split Test (Feature 13) -->
-        <div id="splitComparePanel" style="display:none">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
-            <span style="font-size:.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Test A/B — Comparaison</span>
-            <span id="splitWinnerLabel" style="font-size:.78rem;font-weight:700;color:#22c55e"></span>
-          </div>
-          <div class="split-compare" id="splitCompare"></div>
-        </div>
-        <div style="display:flex;gap:.5rem;margin-top:.5rem">
-          <button id="versionBBtn" class="btn-replan" style="flex:1">⚡ Générer Version B</button>
-        </div>
-
-        <details style="margin-top:.5rem">
-          <summary>Plan JSON brut</summary>
-          <pre id="previewJson"></pre>
-        </details>
+        <span class="analytics-section-title">Historique des vidéos</span>
+        <table class="video-table" id="videoTable" style="display:none">
+          <thead><tr>
+            <th>Titre</th>
+            <th>Format</th>
+            <th>Date</th>
+            <th>Score</th>
+            <th>Actions</th>
+          </tr></thead>
+          <tbody id="videoTableBody"></tbody>
+        </table>
+        <div class="analytics-empty" id="videoTableEmpty">Aucune donnée — éditez votre première vidéo.</div>
       </section>
 
-      <!-- RESULT -->
-      <section class="card result hidden" id="resultCard">
-        <div class="row" style="margin-bottom:.75rem">
-          <h2>Montage prêt ✓</h2>
-        </div>
-        <!-- Multi-format download (Feature 2) -->
-        <div class="download-buttons-grid">
-          <a id="downloadTiktok" class="btn-download-fmt" download>
-            <span class="fmt-icon">📱</span>
-            <span class="fmt-name">TikTok / Reels</span>
-            <span class="fmt-sub">1080×1920</span>
-          </a>
-          <a id="downloadYoutube" class="btn-download-fmt" download>
-            <span class="fmt-icon">▶️</span>
-            <span class="fmt-name">YouTube</span>
-            <span class="fmt-sub">1920×1080</span>
-          </a>
-          <a id="downloadThumb" class="btn-download-fmt fmt-outline" download>
-            <span class="fmt-icon">🖼</span>
-            <span class="fmt-name">Miniature</span>
-            <span class="fmt-sub">1080×1080</span>
-          </a>
-        </div>
-        <video id="player" controls playsinline></video>
-        <div class="packaging">
-          <div>
-            <span class="tag-label">Titre suggéré</span>
-            <p id="pkgTitle"></p>
-          </div>
-          <div>
-            <span class="tag-label">Mot miniature</span>
-            <p id="pkgThumb" class="thumb-word"></p>
-          </div>
-          <div>
-            <span class="tag-label">Caption de fin</span>
-            <p id="pkgEnd"></p>
-          </div>
-        </div>
-        <div id="ctrBlock" class="ctr-block hidden">
-          <span class="tag-label">5 titres A/B à tester</span>
-          <div id="ctrTitles"></div>
-        </div>
-        <!-- Caption Editor (Feature 14) -->
-        <div class="caption-editor" id="captionEditorWrap" style="display:none">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.55rem">
-            <span style="font-size:.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">✏ Éditeur de captions</span>
-            <button id="reburnBtn" class="btn-render" style="font-size:.72rem;padding:.35rem .75rem">Re-brûler les captions</button>
-          </div>
-          <div class="caption-list" id="captionList"></div>
-          <p id="reburnMsg" style="font-size:.75rem;color:var(--salmon);margin-top:.4rem;display:none">Captions mises à jour ✓</p>
-        </div>
-
-        <!-- Feature 17: Auto-Chapters -->
-        <div class="chapters-section" id="chaptersSection" style="display:none">
-          <h4 style="margin:0 0 .4rem;font-size:.85rem">📑 Chapitres YouTube</h4>
-          <pre class="chapters-pre" id="chaptersOutput"></pre>
-          <button class="btn-copy-sm" id="copyChaptersBtn">📋 Copier les chapitres</button>
-        </div>
-
-        <!-- Feature 18: Description Generator -->
-        <div class="desc-gen-section">
-          <h4 style="margin:0 0 .5rem;font-size:.85rem">✍️ Descriptions plateformes</h4>
-          <button class="desc-gen-btn" id="descGenBtn"><span id="descGenBtnLabel">✨ Générer les descriptions</span></button>
-          <div id="descGenOutput" style="display:none">
-            <div class="desc-tabs">
-              <button class="desc-tab active" data-plat="youtube">YouTube</button>
-              <button class="desc-tab" data-plat="tiktok">TikTok</button>
-              <button class="desc-tab" data-plat="instagram">Instagram</button>
-              <button class="desc-tab" data-plat="linkedin">LinkedIn</button>
-            </div>
-            <div class="desc-platform active" id="desc-youtube"><div class="desc-output" id="desc-youtube-text"></div><button class="btn-copy-sm" data-copy="desc-youtube-text">📋 Copier</button></div>
-            <div class="desc-platform" id="desc-tiktok"><div class="desc-output" id="desc-tiktok-text"></div><button class="btn-copy-sm" data-copy="desc-tiktok-text">📋 Copier</button></div>
-            <div class="desc-platform" id="desc-instagram"><div class="desc-output" id="desc-instagram-text"></div><button class="btn-copy-sm" data-copy="desc-instagram-text">📋 Copier</button></div>
-            <div class="desc-platform" id="desc-linkedin"><div class="desc-output" id="desc-linkedin-text"></div><button class="btn-copy-sm" data-copy="desc-linkedin-text">📋 Copier</button></div>
-          </div>
-        </div>
-
-        <details>
-          <summary>Plan de montage (JSON brut)</summary>
-          <pre id="planJson"></pre>
-        </details>
-
-        <!-- Publish section -->
-        <div class="publish-section" id="publishSection">
-          <h3>Publier</h3>
-          <div class="platform-grid" id="platformGrid">
-            <button type="button" class="platform-btn" data-platform="youtube">
-              <span class="platform-dot" id="dot-youtube"></span> YouTube
-            </button>
-            <button type="button" class="platform-btn" data-platform="tiktok">
-              <span class="platform-dot" id="dot-tiktok"></span> TikTok
-            </button>
-            <button type="button" class="platform-btn" data-platform="instagram">
-              <span class="platform-dot" id="dot-instagram"></span> Instagram
-            </button>
-            <button type="button" class="platform-btn" data-platform="linkedin">
-              <span class="platform-dot" id="dot-linkedin"></span> LinkedIn
-            </button>
-          </div>
-          <div id="publishMetaPreview" style="display:none;margin-bottom:1rem">
-            <div class="field"><span>Titre / Caption</span>
-              <input type="text" id="publishTitle" placeholder="Généré automatiquement…" />
-            </div>
-          </div>
-          <div style="display:flex;gap:.6rem;align-items:center">
-            <button type="button" id="publishNowBtn" class="btn-render" style="flex:1" disabled>
-              Publier sur les plateformes sélectionnées →
-            </button>
-          </div>
-          <p id="publishStatus" style="font-size:.8rem;color:var(--muted);margin-top:.5rem"></p>
-        </div>
-      </section>
-
-      </div><!-- end editorArea -->
-
-      <!-- OUTILS SECTION -->
-      <div id="outilsSection" class="app-section">
-        <section class="hero" style="padding:2.5rem 0 1.5rem;text-align:center">
-          <h1 style="font-size:1.6rem;margin-bottom:.4rem">🛠 Outils</h1>
-          <p class="tagline">Hooks, templates et analyse de créateurs.</p>
-        </section>
-
-        <!-- HOOK GENERATOR -->
-        <section class="card" id="hookGenCard">
-          <div class="tool-head" style="margin-bottom:.85rem">
-            <h2>🎣 Générer un hook</h2>
-            <p>Décrivez votre sujet — l'IA génère 5 hooks haute-rétention scorés.</p>
-          </div>
-          <div class="field">
-            <span>Sujet de votre vidéo</span>
-            <input type="text" id="hookGenTopic" placeholder="ex. J'ai perdu 20kg sans salle de sport" />
-          </div>
-          <button type="button" id="hookGenBtn" class="btn-submit" style="margin-top:0;padding:.7rem">
-            <span id="hookGenBtnLabel">✨ Générer 5 hooks</span>
-            <span class="btn-shimmer" aria-hidden="true"></span>
-          </button>
-          <div id="hookGenResults" class="hook-options" style="display:none"></div>
-        </section>
-
-        <!-- TEMPLATE SYSTEM -->
-        <section class="card" id="templateSystemCard">
-          <div class="tool-head" style="margin-bottom:.85rem">
-            <h2>📐 Templates éprouvés</h2>
-            <p>5 structures de contenu haute-rétention. Appliquez en un clic.</p>
-          </div>
-          <div class="tpl-grid" id="tplGrid">
-            <!-- Populated by JS -->
-          </div>
-        </section>
-
-        <!-- COMPETITOR ANALYSIS -->
-        <section class="card" id="competitorCard">
-          <div class="tool-head" style="margin-bottom:.85rem">
-            <h2>🔍 Analyser un créateur</h2>
-            <p>Entrez un URL TikTok/YouTube — l'IA décrypte sa structure et vous explique comment répliquer.</p>
-          </div>
-          <div class="field">
-            <span>URL de la vidéo</span>
-            <input type="url" id="compUrl" placeholder="https://www.tiktok.com/@creator/video/..." />
-          </div>
-          <button type="button" id="compAnalyzeBtn" class="btn-submit" style="padding:.7rem;margin-top:0">
-            <span id="compBtnLabel">🔍 Analyser la structure</span>
-            <span class="btn-shimmer" aria-hidden="true"></span>
-          </button>
-          <div id="compResult" class="comp-result" style="display:none"></div>
-        </section>
-      </div><!-- end outilsSection -->
-
-      <!-- ANALYTICS SECTION -->
-      <div id="analyticsSection" class="app-section">
-        <section class="card">
-
-          <!-- Header -->
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem">
-            <div>
-              <h2 style="font-size:1.05rem;font-weight:700;margin-bottom:.15rem">Analytique</h2>
-              <p style="font-size:.75rem;color:var(--muted)" id="analyticsUpdated">Dernière mise à jour : aujourd'hui</p>
-            </div>
-            <button type="button" id="collectBtn" class="btn btn-ghost" style="font-size:.8rem">↻ Rafraîchir</button>
-          </div>
-
-          <!-- 4 Stats cards -->
-          <div class="analytics-stats-grid">
-            <div class="analytics-stat">
-              <span class="big" id="aVideos">0</span>
-              <span class="sub">Vidéos éditées</span>
-            </div>
-            <div class="analytics-stat">
-              <span class="big" id="aTimeSaved">0h</span>
-              <span class="sub">Temps économisé</span>
-            </div>
-            <div class="analytics-stat">
-              <span class="big" id="aRetention">—</span>
-              <span class="sub">Score rétention moyen</span>
-            </div>
-            <div class="analytics-stat">
-              <span class="big" id="aViews">0</span>
-              <span class="sub">Vues potentielles</span>
-            </div>
-          </div>
-
-          <!-- Retention curve SVG -->
-          <div class="retention-chart-wrap">
-            <p class="retention-chart-title">Courbe de rétention estimée</p>
-            <svg class="retention-svg" viewBox="0 0 400 80" preserveAspectRatio="none" id="retentionSvg">
-              <defs>
-                <linearGradient id="retGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#FF7751" stop-opacity=".25"/>
-                  <stop offset="100%" stop-color="#FF7751" stop-opacity="0"/>
-                </linearGradient>
-              </defs>
-              <!-- Demo curve path, updated by JS when data available -->
-              <path id="retentionFill" fill="url(#retGrad)" d=""/>
-              <path id="retentionLine" fill="none" stroke="#FF7751" stroke-width="2" stroke-linecap="round" d=""/>
-              <!-- Drop annotation -->
-              <circle id="retDrop1" cx="0" cy="0" r="3" fill="#ff5c7a" opacity="0"/>
-            </svg>
-            <div style="display:flex;justify-content:space-between;font-size:.65rem;color:var(--muted);margin-top:.25rem">
-              <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
-            </div>
-          </div>
-
-          <!-- Recent videos table -->
-          <p class="analytics-section-title">Vidéos récentes</p>
-          <div style="overflow-x:auto;margin-bottom:1.5rem" id="videoTableWrap">
-            <div class="analytics-empty" id="videoTableEmpty">
-              <span class="analytics-empty-icon">🎬</span>
-              Aucune vidéo éditée pour l'instant.<br>
-              <button class="btn btn-ghost" style="margin-top:.75rem;font-size:.8rem" onclick="document.querySelector('[data-target=editorArea]').click()">Éditer ma première vidéo →</button>
-            </div>
-            <table class="video-table" id="videoTable" style="display:none">
-              <thead>
-                <tr>
-                  <th>Titre</th>
-                  <th>Format</th>
-                  <th>Date</th>
-                  <th>Rétention</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody id="videoTableBody"></tbody>
-            </table>
-          </div>
-
-          <!-- Performance chart -->
-          <p class="analytics-section-title">Performance — Score rétention par vidéo</p>
-          <div class="perf-chart" id="perfChart" style="margin-bottom:1.5rem">
-            <p style="font-size:.8rem;color:var(--muted)">Aucune donnée pour l'instant.</p>
-          </div>
-
-          <!-- Insights -->
-          <p class="analytics-section-title">Insights IA</p>
-          <div class="insight-cards">
-            <div class="insight-card">
-              <span class="insight-icon">🎯</span>
-              <div>
-                <h4>Votre hook le plus performant</h4>
-                <p id="insightHook">Commencez par le résultat concret, pas par l'introduction. Les hooks qui démarrent avec "Voici comment…" ont 40% plus de rétention.</p>
-              </div>
-            </div>
-            <div class="insight-card">
-              <span class="insight-icon">📊</span>
-              <div>
-                <h4>Format qui convertit le mieux</h4>
-                <p id="insightFormat">Les vidéos de 60–90s génèrent en moyenne 3× plus d'engagement sur Reels et TikTok que les formats longs.</p>
-              </div>
-            </div>
-            <div class="insight-card">
-              <span class="insight-icon">⏰</span>
-              <div>
-                <h4>Meilleur moment pour poster</h4>
-                <p id="insightTiming">Publiez entre 18h–20h (heure locale) du mardi au jeudi pour maximiser la portée organique sur YouTube et Instagram.</p>
-              </div>
-            </div>
-          </div>
-
-        </section>
-      </div><!-- end analyticsSection -->
-
-      <!-- PROFILE SECTION -->
-      <div id="profileSection" class="app-section">
-        <section class="card">
+      <!-- ── PROFILE ─────────────────────────────────────────────── -->
+      <section id="profileSection" class="app-section">
+        <div style="padding-top:1.5rem">
           <div class="profile-avatar-row">
             <div class="profile-avatar" id="profileAvatar">?</div>
             <div class="profile-info">
@@ -1832,88 +1087,260 @@
               <div class="profile-brand" id="profileBrandName">—</div>
               <div class="profile-badges" id="profileBadges"></div>
             </div>
-            <button id="editProfileBtn" class="btn btn-ghost" style="font-size:.8rem;align-self:flex-start">✏ Éditer</button>
           </div>
 
-          <!-- ICP -->
+          <div class="profile-section-card">
+            <h4>Plateformes</h4>
+            <div class="platform-badges" id="profilePlatforms"></div>
+          </div>
+
           <div class="profile-section-card">
             <h4>Client idéal (ICP)</h4>
-            <textarea id="profileIcp" rows="2" placeholder="Décrivez votre client idéal en 1-2 phrases…" style="min-height:60px;font-size:.82rem"></textarea>
+            <textarea id="profileIcp" rows="3" placeholder="Décrivez votre audience cible…"></textarea>
           </div>
 
-          <!-- Content pillars -->
           <div class="profile-section-card">
             <h4>Piliers de contenu</h4>
             <div class="profile-pillars">
-              <div class="profile-pillar">
-                <span class="pillar-num">1</span>
-                <input type="text" class="pillar-input" id="pillar1" placeholder="ex. Mindset &amp; performance" />
-              </div>
-              <div class="profile-pillar">
-                <span class="pillar-num">2</span>
-                <input type="text" class="pillar-input" id="pillar2" placeholder="ex. Business &amp; revenus" />
-              </div>
-              <div class="profile-pillar">
-                <span class="pillar-num">3</span>
-                <input type="text" class="pillar-input" id="pillar3" placeholder="ex. Liberté de vie" />
-              </div>
+              <div class="profile-pillar"><div class="pillar-num">1</div><input class="pillar-input" id="pillar1" type="text" placeholder="Ex : Business" /></div>
+              <div class="profile-pillar"><div class="pillar-num">2</div><input class="pillar-input" id="pillar2" type="text" placeholder="Ex : Mindset" /></div>
+              <div class="profile-pillar"><div class="pillar-num">3</div><input class="pillar-input" id="pillar3" type="text" placeholder="Ex : Lifestyle" /></div>
             </div>
           </div>
 
-          <!-- Platforms -->
-          <div class="profile-section-card">
-            <h4>Plateformes</h4>
-            <div class="platform-badges" id="profilePlatforms">
-              <span class="platform-badge" style="color:var(--muted)">Aucune sélectionnée</span>
-            </div>
+          <div style="display:flex;gap:.75rem;align-items:center;margin-top:.5rem">
+            <button class="btn-submit" id="saveProfileBtn" style="height:44px;width:auto;padding:0 1.5rem;font-size:.875rem">Enregistrer</button>
+            <button class="action-btn" id="editProfileBtn">Modifier le profil complet</button>
           </div>
+          <p id="profileSaveMsg" class="save-msg">Profil enregistré.</p>
+        </div>
+      </section>
 
-          <button id="saveProfileBtn" class="btn btn-primary" style="width:100%;margin-top:.25rem;padding:.7rem">Sauvegarder le profil</button>
-          <p id="profileSaveMsg" style="font-size:.8rem;color:var(--salmon);margin-top:.5rem;display:none">Profil sauvegardé ✓</p>
-        </section>
-      </div><!-- end profileSection -->
-
-      <!-- Feature 25: Learning Center -->
-      <div id="learnSection" class="app-section">
-        <section class="card">
-          <h2>📚 Centre d'apprentissage</h2>
+      <!-- ── LEARN SECTION (hidden from nav, kept for JS) ──────── -->
+      <section id="learnSection" class="app-section">
+        <div class="card">
+          <span class="section-label">Apprendre</span>
           <div class="learn-progress-wrap">
-            <div class="learn-progress-bar"><div class="learn-progress-fill" id="learnProgressFill" style="width:0%"></div></div>
-            <span id="learnProgressLabel" style="font-size:.8rem;color:var(--muted);white-space:nowrap">0 / 6 leçons</span>
+            <div class="learn-progress-bar"><div class="learn-progress-fill" style="width:0%"></div></div>
           </div>
           <div class="learn-tabs">
-            <button class="learn-tab active" data-learn="lessons">📹 Leçons</button>
-            <button class="learn-tab" data-learn="quiz">🧠 Quiz</button>
-            <button class="learn-tab" data-learn="certificate">🏆 Certificat</button>
+            <button class="learn-tab active">Modules</button>
+            <button class="learn-tab">Quiz</button>
+            <button class="learn-tab">Certificat</button>
           </div>
-          <div class="learn-subview active" id="learn-lessons">
-            <div id="lessonList"></div>
-          </div>
-          <div class="learn-subview" id="learn-quiz">
-            <div id="quizContainer"><p style="color:var(--muted);font-size:.85rem">Regardez une leçon pour débloquer le quiz correspondant.</p></div>
-          </div>
-          <div class="learn-subview" id="learn-certificate">
-            <div class="cert-card" id="certCard">
-              <div style="font-size:2.5rem;margin-bottom:.5rem">🏆</div>
-              <h3 style="margin:0 0 .25rem;font-size:1.1rem">Certificat de complétion</h3>
-              <p style="font-size:.82rem;color:var(--muted)">Complétez les 6 leçons et leurs quiz pour obtenir votre certificat.</p>
-              <div id="certContent" style="display:none">
-                <div class="retention-badge">LeanRetention Academy</div>
-                <p style="font-size:.9rem;margin:.5rem 0">Félicitations ! Vous avez maîtrisé la création de contenu haute-rétention.</p>
-                <button class="cert-download" id="certDownloadBtn">⬇ Télécharger le certificat PDF</button>
-              </div>
+          <div class="learn-subview active" id="lessonsView"></div>
+          <div class="learn-subview" id="quizView"></div>
+          <div class="learn-subview" id="certView"></div>
+        </div>
+      </section>
+
+      <!-- ── OUTILS SECTION (hidden from nav, kept for JS) ─────── -->
+      <section id="outilsSection" class="app-section">
+        <div class="card" style="margin-top:1.5rem">
+          <span class="section-label">Outils IA</span>
+
+          <!-- Hook generator -->
+          <div id="hookGenCard" style="margin-bottom:1.25rem">
+            <span class="section-label">Générateur de hooks</span>
+            <div style="display:flex;gap:.5rem">
+              <input type="text" id="hookGenTopic" placeholder="Sujet de votre vidéo…" style="flex:1" />
+              <button class="btn-primary" id="hookGenBtn" type="button"><span id="hookGenBtnLabel">Générer 5 hooks</span></button>
             </div>
+            <div id="hookGenResults" class="hook-options" style="display:none"></div>
           </div>
-        </section>
+
+          <!-- Competitor analysis -->
+          <div id="compAnalysis" style="border-top:1px solid var(--border);padding-top:1rem">
+            <span class="section-label">Analyse concurrente</span>
+            <div style="display:flex;gap:.5rem">
+              <input type="text" id="compUrl" placeholder="URL de la vidéo à analyser" style="flex:1" />
+              <button class="btn-primary" id="compAnalyzeBtn" type="button"><span id="compBtnLabel">Analyser</span></button>
+            </div>
+            <div id="compResult" class="comp-result" style="display:none"></div>
+          </div>
+
+          <!-- Template grid -->
+          <div style="border-top:1px solid var(--border);padding-top:1rem;margin-top:1rem">
+            <span class="section-label">Templates de montage</span>
+            <div class="tpl-grid" id="tplGrid"></div>
+          </div>
+        </div>
+      </section>
+
+    </main><!-- /main -->
+
+    <!-- ── BRAND PANEL (slide-out) ────────────────────────────── -->
+    <div class="brand-panel" id="brandPanel">
+      <div class="brand-panel-head">
+        <h3>Identité de marque</h3>
+        <button class="brand-close" id="brandClose">×</button>
       </div>
 
-    </main>
+      <div class="field">
+        <span class="section-label">Nom de marque</span>
+        <input type="text" id="brandName" placeholder="Votre marque" />
+      </div>
 
-    <footer class="foot">
-      <span>Propulsé par Claude · Whisper · FFmpeg</span>
-      <a href="/">← Retour à l'accueil</a>
-    </footer>
+      <div class="brand-section">
+        <h4>Couleurs</h4>
+        <div class="color-row">
+          <div class="color-swatch"><label>Principale</label><input type="color" id="brandPrimary" value="#FF7751" /></div>
+          <div class="color-swatch"><label>Secondaire</label><input type="color" id="brandSecondary" value="#FFFFFF" /></div>
+          <div class="color-swatch"><label>Fond</label><input type="color" id="brandBg" value="#0A0A0A" /></div>
+        </div>
+        <div class="brand-preview" id="brandPreview">Aperçu de votre marque</div>
+      </div>
 
-    <script src="/static/app.js"></script>
+      <div class="brand-section">
+        <h4>Typographie</h4>
+        <div class="font-selector" id="brandFontSelector">
+          <button type="button" class="font-option active" data-font="Poppins" style="font-family:'Poppins'">Poppins</button>
+          <button type="button" class="font-option" data-font="Inter" style="font-family:'Inter'">Inter</button>
+          <button type="button" class="font-option" data-font="Montserrat" style="font-family:'Montserrat'">Montserrat</button>
+          <button type="button" class="font-option" data-font="Bebas" style="font-family:'Bebas Neue'">Bebas Neue</button>
+          <button type="button" class="font-option" data-font="DM Sans" style="font-family:'DM Sans'">DM Sans</button>
+        </div>
+      </div>
+
+      <div class="brand-section">
+        <h4>Style de montage</h4>
+        <div class="style-grid" id="brandStyleSelector">
+          <button type="button" class="style-option active" data-style="energetic">Énergique</button>
+          <button type="button" class="style-option" data-style="calm">Calme</button>
+          <button type="button" class="style-option" data-style="storytelling">Storytelling</button>
+          <button type="button" class="style-option" data-style="educational">Éducatif</button>
+        </div>
+      </div>
+
+      <div class="brand-section">
+        <h4>Texte watermark</h4>
+        <input type="text" id="brandWatermark" placeholder="@votrenom" />
+      </div>
+
+      <div class="brand-section">
+        <h4>Lower third</h4>
+        <div style="display:flex;flex-direction:column;gap:.5rem">
+          <input type="text" id="brandLtName" placeholder="Votre nom" />
+          <input type="text" id="brandLtTitle" placeholder="Votre titre" />
+        </div>
+      </div>
+
+      <div class="brand-section">
+        <h4>Logo</h4>
+        <input type="file" id="brandLogo" accept="image/*" />
+        <div id="brandLogoPreview" style="display:none;margin-top:.5rem"><img id="brandLogoImg" alt="Logo" style="max-width:80px;border-radius:8px" /></div>
+      </div>
+
+      <div class="brand-section">
+        <h4>Intro / Outro</h4>
+        <div style="display:flex;flex-direction:column;gap:.5rem">
+          <input type="file" id="brandIntro" accept="video/*" />
+          <input type="file" id="brandOutro" accept="video/*" />
+        </div>
+      </div>
+
+      <button class="btn-submit" id="saveBrandBtn" style="margin-top:1rem;height:44px">Enregistrer</button>
+      <p id="brandSaveMsg" class="save-msg" style="margin-top:.5rem">Marque enregistrée.</p>
+    </div>
+
+    <!-- ── COACH PANEL (slide-out) ─────────────────────────────── -->
+    <div class="coach-panel" id="coachPanel">
+      <div class="coach-panel-head">
+        <h3>Coach IA</h3>
+        <button id="coachClose" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:1.25rem">×</button>
+      </div>
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-msg ai">Bonjour ! Je suis votre coach vidéo IA. Comment puis-je vous aider à améliorer votre contenu ?</div>
+      </div>
+      <div class="chat-quick-pills">
+        <button class="chat-quick" data-q="Comment améliorer mon hook ?">Hook</button>
+        <button class="chat-quick" data-q="Quels formats marchent le mieux ?">Formats</button>
+        <button class="chat-quick" data-q="Comment augmenter ma rétention ?">Rétention</button>
+      </div>
+      <div class="chat-input-row">
+        <input class="chat-input" id="chatInput" placeholder="Posez votre question…" />
+        <button class="chat-send" id="chatSend">→</button>
+      </div>
+    </div>
+
+    <!-- ── HIDDEN ELEMENTS (kept for JS no-ops) ───────────────── -->
+    <!-- These elements are referenced by app.js but not visible in the new UI.
+         They must exist so getElementById() calls don't crash. -->
+    <div style="display:none" aria-hidden="true">
+      <!-- Streak -->
+      <span id="streakCount"></span>
+      <div id="streakBarFill"></div>
+      <span id="streakMilestone"></span>
+      <!-- Weekly goal -->
+      <span id="weeklyGoalDisplay"></span>
+      <div id="weeklyGoalBar"></div>
+      <!-- Achievements -->
+      <div id="achievementsGrid">
+        <div id="ach-first" class="achievement locked"><span class="achievement-icon">🏆</span><div><div class="achievement-name">Première vidéo</div></div></div>
+        <div id="ach-streak7" class="achievement locked"><span class="achievement-icon">🔥</span><div><div class="achievement-name">7 jours de suite</div></div></div>
+        <div id="ach-10videos" class="achievement locked"><span class="achievement-icon">📹</span><div><div class="achievement-name">10 vidéos</div></div></div>
+        <div id="ach-active" class="achievement locked"><span class="achievement-icon">⚡</span><div><div class="achievement-name">Actif cette semaine</div></div></div>
+      </div>
+      <!-- Calendar -->
+      <div id="calGrid">
+        <div class="cal-day-hd">L</div><div class="cal-day-hd">M</div><div class="cal-day-hd">M</div>
+        <div class="cal-day-hd">J</div><div class="cal-day-hd">V</div><div class="cal-day-hd">S</div><div class="cal-day-hd">D</div>
+      </div>
+      <span id="calMonthLabel"></span>
+      <button id="calPrev"></button>
+      <button id="calNext"></button>
+      <!-- Referral -->
+      <div id="referralCard">
+        <div class="referral-link-row">
+          <input class="referral-link-input" id="referralLinkInput" readonly />
+          <button class="btn-copy" id="copyReferralBtn">Copier</button>
+        </div>
+        <span id="referralCount"></span>
+        <span id="referralEarned"></span>
+      </div>
+      <!-- Performance tracker -->
+      <div id="perfVideoList"></div>
+      <span id="perfAccuracy"></span>
+      <span id="perfAccuracyPct"></span>
+      <!-- Team -->
+      <div id="teamMemberList"></div>
+      <div id="teamCommentList"></div>
+      <!-- White label -->
+      <div id="wlPreview"></div>
+      <!-- API -->
+      <span id="apiKeyDisplay"></span>
+      <!-- Notification bell (functional) -->
+      <button id="notifBellBtn"><span id="notifDot" class="notif-dot"></span></button>
+      <!-- Brand btn (accessible from nav if needed) -->
+      <button id="brandBtn" style="display:none"></button>
+      <!-- Coach btn -->
+      <button id="coachBtn" style="display:none"></button>
+    </div>
+
+    <script src="app.js" defer></script>
+
+    <script>
+      // ── Advanced options toggle ───────────────────────────────
+      (function() {
+        const toggle = document.getElementById("advToggle");
+        const body   = document.getElementById("advBody");
+        if (!toggle || !body) return;
+        function setOpen(open) {
+          body.classList.toggle("open", open);
+          const arrow = toggle.querySelector(".arrow");
+          if (arrow) arrow.style.transform = open ? "rotate(180deg)" : "";
+        }
+        toggle.addEventListener("click", () => setOpen(!body.classList.contains("open")));
+        toggle.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(!body.classList.contains("open")); } });
+      })();
+
+      // ── Notification bell ─────────────────────────────────────
+      document.getElementById("notifBellBtn")?.addEventListener("click", () => {
+        document.getElementById("notifPanel")?.classList.toggle("open");
+      });
+      document.getElementById("notifClose")?.addEventListener("click", () => {
+        document.getElementById("notifPanel")?.classList.remove("open");
+      });
+    </script>
   </body>
 </html>

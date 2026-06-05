@@ -1,22 +1,22 @@
 const $ = (id) => document.getElementById(id);
 
-// ── Theme management ──────────────────────────────────────────────────────────
+// ── Theme management (light is default; dark applied via [data-theme="dark"]) ──
 (function initTheme() {
   const saved = localStorage.getItem("theme");
-  if (saved === "light") document.documentElement.setAttribute("data-theme", "light");
+  if (saved === "dark") document.documentElement.setAttribute("data-theme", "dark");
   const btn = document.getElementById("themeToggle");
-  if (btn) btn.textContent = saved === "light" ? "☀️" : "🌙";
+  if (btn) btn.textContent = saved === "dark" ? "Clair" : "Sombre";
 })();
 document.getElementById("themeToggle")?.addEventListener("click", () => {
-  const isLight = document.documentElement.getAttribute("data-theme") === "light";
-  if (isLight) {
+  const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+  if (isDark) {
     document.documentElement.removeAttribute("data-theme");
-    localStorage.setItem("theme", "dark");
-    document.getElementById("themeToggle").textContent = "🌙";
-  } else {
-    document.documentElement.setAttribute("data-theme", "light");
     localStorage.setItem("theme", "light");
-    document.getElementById("themeToggle").textContent = "☀️";
+    document.getElementById("themeToggle").textContent = "Sombre";
+  } else {
+    document.documentElement.setAttribute("data-theme", "dark");
+    localStorage.setItem("theme", "dark");
+    document.getElementById("themeToggle").textContent = "Clair";
   }
 });
 
@@ -74,12 +74,17 @@ $("dashEditBtn")?.addEventListener("click", () => switchSection("editorArea"));
     if (!raw) { switchSection("editorArea"); return; }
     const p = JSON.parse(raw);
 
-    // Show "Bienvenue {name}" greeting in nav
+    // Update nav avatar with initials
+    const navAvatar = $("navAvatar");
+    if (navAvatar) {
+      const initials = (p.name || p.brandName || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+      navAvatar.textContent = initials;
+    }
     const greetingEl = $("navGreeting");
     if (greetingEl) {
       const name = p.name || p.brandName || "";
       if (name) {
-        greetingEl.textContent = `Bienvenue ${name} 👋`;
+        greetingEl.textContent = `Bienvenue, ${name}`;
         greetingEl.style.display = "";
       }
     }
@@ -113,6 +118,12 @@ function updateDashboardStats() {
     if ($("dashVideos")) $("dashVideos").textContent = count;
     if ($("dashTimeSaved")) $("dashTimeSaved").textContent = (count * 4) + "h";
     if ($("dashViews")) $("dashViews").textContent = count > 0 ? (count * 10000).toLocaleString("fr-FR") : "—";
+    const scores = videos.map(v => v.retention_score).filter(s => typeof s === "number");
+    if ($("dashScoreMoyen")) {
+      $("dashScoreMoyen").textContent = scores.length > 0
+        ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) + "%"
+        : "—";
+    }
   } catch {}
 }
 
@@ -212,13 +223,16 @@ function loadVideoLibrary() {
       const dateStr = v.date ? new Date(v.date).toLocaleDateString("fr-FR") : "—";
       const title = v.title || `Vidéo #${i + 1}`;
       const scoreColor = score >= 85 ? "#22c55e" : score >= 70 ? "var(--salmon)" : "#ff5c7a";
+      const thumbHtml = v.thumbnail
+        ? `<img src="${v.thumbnail}" alt="${title}" />`
+        : `<div class="video-lib-thumb-placeholder"><svg class="video-lib-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"/></svg></div>`;
       return `<div class="video-lib-card" title="${title}">
         <div class="video-lib-thumb">
-          🎬
+          ${thumbHtml}
           <span class="video-lib-retention" style="color:${scoreColor}">${score}%</span>
           <div class="video-lib-overlay">
-            ${v.jobId ? `<a href="/api/download/${v.jobId}" class="action-btn" download style="color:var(--text)">⬇ Télécharger</a>` : ""}
-            <button class="action-btn" onclick="switchSection('editorArea')" style="color:var(--text)">✏ Reediter</button>
+            ${v.jobId ? `<a href="/api/download/${v.jobId}" class="action-btn" download>Télécharger</a>` : ""}
+            <button class="action-btn" onclick="switchSection('editorArea')">Reediter</button>
           </div>
         </div>
         <div class="video-lib-info">
@@ -270,16 +284,16 @@ async function loadAnalytics() {
       tableEl.style.display = "table";
       tbody.innerHTML = videos.map((v, i) => {
         const score = v.retention_score;
-        const scoreHtml = score != null ? `<span class="retention-badge">${score}%</span>` : `<span class="status-badge status-done">Prêt ✓</span>`;
+        const scoreHtml = score != null ? `<span class="retention-badge">${score}%</span>` : `<span class="status-badge status-done">Pret</span>`;
         return `<tr>
           <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${v.title || '—'}">${v.title || `Vidéo #${i + 1}`}</td>
           <td>${v.format || "Auto"}</td>
           <td>${v.date ? new Date(v.date).toLocaleDateString("fr-FR") : "—"}</td>
           <td>${scoreHtml}</td>
           <td>
-            ${v.jobId ? `<a href="/api/download/${v.jobId}" class="action-btn" download>⬇</a>` : ""}
-            <button class="action-btn" onclick="switchSection('editorArea')">✏ Reediter</button>
-            <button class="action-btn" onclick="deleteVideo('${v.jobId || i}')" style="color:#ff5c7a">✕</button>
+            ${v.jobId ? `<a href="/api/download/${v.jobId}" class="action-btn" download>Télécharger</a>` : ""}
+            <button class="action-btn" onclick="switchSection('editorArea')">Reediter</button>
+            <button class="action-btn" onclick="deleteVideo('${v.jobId || i}')" style="color:#e53e3e">Supprimer</button>
           </td>
         </tr>`;
       }).join("");
@@ -394,7 +408,7 @@ function loadProfileSection() {
     // Role/type badge
     const badgesEl = $("profileBadges");
     if (badgesEl) {
-      const roleLabel = { coach:"🎯 Coach", entrepreneur:"💼 Entrepreneur", educator:"📚 Éducateur", creator:"🎬 Créateur" };
+      const roleLabel = { coach:"Coach", entrepreneur:"Entrepreneur", educator:"Educateur", creator:"Createur" };
       const badges = [];
       if (p.role) badges.push(roleLabel[p.role] || p.role);
       if (p.editingStyle) badges.push(p.editingStyle);
@@ -1011,8 +1025,31 @@ async function showResult(jobId, result) {
     } catch {}
   }, 600);
 
-  if (player) player.src = `/api/download/${jobId}`;
-  if (downloadLink) downloadLink.href = `/api/download/${jobId}`;
+  const downloadUrl = `/api/download/${jobId}`;
+  if (player) player.src = downloadUrl;
+  if (downloadLink) downloadLink.href = downloadUrl;
+
+  // Capture video thumbnail for library
+  try {
+    const thumbVideo = document.createElement("video");
+    thumbVideo.src = downloadUrl;
+    thumbVideo.crossOrigin = "anonymous";
+    thumbVideo.currentTime = 1;
+    thumbVideo.addEventListener("loadeddata", () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = 160; canvas.height = 90;
+        canvas.getContext("2d").drawImage(thumbVideo, 0, 0, 160, 90);
+        const thumbnail = canvas.toDataURL("image/jpeg", 0.7);
+        const videos = JSON.parse(localStorage.getItem("edited_videos") || "[]");
+        if (videos.length && videos[0].jobId === jobId) {
+          videos[0].thumbnail = thumbnail;
+          localStorage.setItem("edited_videos", JSON.stringify(videos.slice(0, 50)));
+        }
+      } catch {}
+    });
+    thumbVideo.load();
+  } catch {}
 
   // Show hook_rewrite as suggested title metadata (not a video caption).
   const suggestedTitleEl = $("suggestedTitleResult");
