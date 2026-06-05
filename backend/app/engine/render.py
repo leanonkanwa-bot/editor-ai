@@ -42,6 +42,10 @@ LONG_PAD_S     = 0.20   # 200ms — cinematic breathing room
 AUDIO_FADE_S   = 0.05   # 50ms — anti-pop fade at every segment boundary
 AUDIO_HANDLE_S = 0.08   # 80ms audio handle kept before/after each cut edge
 
+# Multi-camera zoom cycle: each consecutive segment uses a different starting
+# zoom level, giving a subtle "camera cut" feel without any special effects.
+_ZOOM_CYCLE = [1.0, 1.08, 1.04, 1.12]
+
 
 def _run(cmd: list[str]) -> None:
     proc = subprocess.run(cmd, capture_output=True, text=True)
@@ -334,8 +338,14 @@ def _cut_segment(
     target_w: int,
     target_h: int,
     fps: int,
+    zoom: float = 1.0,
 ) -> None:
-    """Per-segment extract with audio handles + fades baked in."""
+    """Per-segment extract with audio handles + fades baked in.
+
+    zoom > 1.0 scales the frame up then center-crops to target dimensions,
+    giving each segment a different "focal length" for a multi-camera feel.
+    An 80ms video micro-fade at in/out makes cuts feel deliberate, not harsh.
+    """
     # FIX 1: 80ms audio handle prevents mid-syllable cuts at segment boundaries.
     actual_start = max(0.0, start - AUDIO_HANDLE_S)
     actual_end   = end + AUDIO_HANDLE_S
@@ -345,10 +355,18 @@ def _cut_segment(
         f"afade=t=in:st=0:d={AUDIO_FADE_S},"
         f"afade=t=out:st={fade_out_start:.3f}:d={AUDIO_FADE_S}"
     )
+    # Zoom: scale up by `zoom` factor, then center-crop back to exact target.
+    # At zoom=1.0 this collapses to a normal scale+crop.
+    scaled_w = int(target_w * zoom)
+    scaled_h = int(target_h * zoom)
+    vf_fade_out = max(0.0, duration - 0.08)
     vf = (
-        f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase"
-        f":flags=fast_bilinear,"
-        f"crop={target_w}:{target_h},fps={fps}"
+        f"scale={scaled_w}:{scaled_h}:force_original_aspect_ratio=increase"
+        f":flags=lanczos,"
+        f"crop={target_w}:{target_h},"
+        f"fade=t=in:st=0:d=0.08,"
+        f"fade=t=out:st={vf_fade_out:.3f}:d=0.08,"
+        f"fps={fps}"
     )
     # CRF 0 = lossless H.264. Every subsequent pass (zoompan, overlays, caption
     # burn) re-encodes from this; any quality loss here compounds through all
@@ -409,7 +427,7 @@ def _concat_audio_xfade(parts: list[Path], dst: Path) -> None:
     for i in range(1, n):
         out_label = f"[xf{i}]" if i < n - 1 else "[aout]"
         filter_parts.append(
-            f"{prev}[{i}:a]acrossfade=d=0.05:c1=exp:c2=exp{out_label}"
+            f"{prev}[{i}:a]acrossfade=d=0.04:c1=exp:c2=exp{out_label}"
         )
         prev = out_label
 
@@ -1002,7 +1020,8 @@ def _fetch_broll_clip(
         vf = (
             f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
             f"crop={target_w}:{target_h},fps={fps},"
-            f"trim=duration={duration:.2f},setpts=PTS-STARTPTS"
+            f"trim=duration={duration:.2f},setpts=PTS-STARTPTS,"
+            f"eq=contrast=1.1:saturation=1.05"
         )
         _run([
             FFMPEG_PATH, "-y", "-loglevel", "error",
@@ -1140,10 +1159,11 @@ def render(
             continue
 
         part = work_dir / f"part_{i:04d}.mp4"
+        seg_zoom = _ZOOM_CYCLE[i % len(_ZOOM_CYCLE)]
         if use_proxy:
             _cut_proxy_segment(cut_src, s, e, part)
         else:
-            _cut_segment(cut_src, s, e, part, target_w, target_h, fps)
+            _cut_segment(cut_src, s, e, part, target_w, target_h, fps, zoom=seg_zoom)
         parts.append(part)
 
         # PROBLEM 1 FIX: use the actual cut boundaries (with audio handles) as
@@ -1167,15 +1187,18 @@ def render(
             for w in tseg.get("words", []):
                 ws = float(w["start"])
                 we = float(w["end"])
-                if ws >= s and we <= e:  # only content words (not handle region)
-                    # Use segment.start (s), not actual_s, so the remapped timestamp
-                    # represents when the word was spoken relative to the edit timeline
-                    # start. WHISPER_TIMESTAMP_CORRECTION in captions.py applies the
-                    # remaining per-word shift to align captions with actual lip movement.
+                # Strict plan-boundary whitelist: only include words whose
+                # original timestamp starts within [s_raw, e_raw). Using the
+                # plan's stated boundaries (not snapped/padded/extended) ensures
+                # that words from removed or reordered segments NEVER appear in
+                # the edit timeline.  The remapping formula still uses the
+                # snapped `s` so captions align with the actual lip position in
+                # the cut video.
+                if s_raw <= ws < e_raw:
                     remapped_words.append(WordTiming(
                         text=w["text"].strip(),
                         start=seg_offset + (ws - s),
-                        end=seg_offset + (we - s),
+                        end=seg_offset + (min(we, e) - s),
                     ))
 
         for sil in (plan.silences or []):
@@ -1218,8 +1241,8 @@ def render(
     # confuses the viewer. Clamp the agent's suggestion into that window;
     # if the agent gave us 0s/0.1s of duration the clamp pulls it up to
     # the readable floor.
-    BROLL_MIN_S = 2.0
-    BROLL_MAX_S = 3.5
+    BROLL_MIN_S = 1.5
+    BROLL_MAX_S = 3.0
     remapped_broll: list[tuple[float, float]] = []
     broll_queries: list[str] = []   # parallel to remapped_broll — Pexels search terms
     for br in plan.broll_suggestions:
@@ -1523,34 +1546,26 @@ def render(
     _tmp_dir = Path(_tempfile.gettempdir())
     _base_path = _tmp_dir / f"base_{output_path.stem}.mp4"
 
-    # UPGRADE 2 — DYNAMIC ZOOM EXPRESSION from the full zoom plan.
-    # Cap at 30 entries to keep expression length manageable.
-    _zoom_for_expr = remapped_zoom[:30] if len(remapped_zoom) > 30 else remapped_zoom
-    if _zoom_for_expr:
-        _z_expr, _xy_expr = _build_zoom_expression(
-            _zoom_for_expr, total_duration, fps, face_cx_pct, face_cy_pct
-        )
-        _zx_str, _zy_str = _xy_expr.split(";")
-        _z_safe = _escape_for_vf(_z_expr)
-        _zx_safe = _escape_for_vf(_zx_str)
-        _zy_safe = _escape_for_vf(_zy_str)
-        _zoom_str = (
-            f"zoompan=z='{_z_safe}'"
-            f":x='{_zx_safe}'"
-            f":y='{_zy_safe}'"
-            f":d=1:s={target_w}x{target_h}:fps={fps}"
-            # PROBLEM 2 FIX: reset PTS after zoompan to prevent audio/video drift.
-            f",setpts=N/FRAME_RATE/TB"
-        )
-    else:
-        _zoom_str = (
-            f"zoompan=z=1.08"
-            f":x=iw/2-(iw/zoom/2)"
-            f":y=ih/2-(ih/zoom/2)"
-            f":d=1:s={target_w}x{target_h}:fps={fps}"
-            f",setpts=N/FRAME_RATE/TB"
-        )
-    _vf_p1 = [p for p in [color_grade, scale_filter, _zoom_str] if p]
+    # Zoom is baked per-segment in _cut_segment() via _ZOOM_CYCLE.
+    # Pass 1 uses a simple fps lock + PTS reset — no additional zoompan needed.
+    _zoom_str = f"fps={fps},setpts=N/FRAME_RATE/TB"
+
+    # Cinematic immersion layer (applied only to main speaker footage here;
+    # b-roll overlays come in later passes and are unaffected):
+    #   1. Film grain — subtle analog texture (strength 4, temporal+uniform)
+    #   2. Camera shake — sub-pixel crop oscillation (±2px at 0.3/0.4 Hz)
+    #      scaled back to target dimensions so the output is unchanged in size
+    #   3. Vignette — forward vignette darkens edges, focusing the eye
+    _shake_w = target_w - 8
+    _shake_h = target_h - 8
+    _immersion = (
+        f"noise=alls=4:allf=t+u,"
+        f"crop={_shake_w}:{_shake_h}"
+        f":x=4+sin(2*PI*t*0.3)*2:y=4+cos(2*PI*t*0.4)*2,"
+        f"scale={target_w}:{target_h},"
+        f"vignette=angle=PI/4:mode=forward:eval=init:dither=1"
+    )
+    _vf_p1 = [p for p in [color_grade, scale_filter, _zoom_str, _immersion] if p]
     _cmd_p1: list[str] = [
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-i", str(concat_path),
@@ -1618,9 +1633,19 @@ def render(
             _log.info("broll %d skipped (%s): query=%r", _bi, _reason, br_q)
             continue
         _next_br_path = _tmp_dir / f"br{_bi}_{output_path.stem}.mp4"
+        # Slide-in from right edge (0→x=0 over _slide s), hold, slide-out to left.
+        _slide = max(0.1, min(0.25, br_dur * 0.15))
+        _x_expr = (
+            f"'if(lte(t,{br_s+_slide:.3f})"
+            f",W*(1-(t-{br_s:.3f})/{_slide:.3f})"
+            f",if(gte(t,{br_e-_slide:.3f})"
+            f",-W*(t-{br_e-_slide:.3f})/{_slide:.3f}"
+            f",0))'"
+        )
         _fc_br = (
             f"[1:v]setpts=PTS-STARTPTS+{br_s:.3f}/TB[bv];"
-            f"[0:v][bv]overlay=x=0:y=0:enable='between(t,{br_s:.3f},{br_e:.3f})'[vout]"
+            f"[0:v][bv]overlay=x={_x_expr}:y=0"
+            f":enable='between(t,{br_s:.3f},{br_e:.3f})'[vout]"
         )
         _log.info("broll overlay %d: query=%r at=%.2fs–%.2fs", _bi, br_q, br_s, br_e)
         _run([
@@ -1680,14 +1705,16 @@ def render(
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-i", str(_nocap_path),
         "-vf", f"subtitles={_ass_str}",
-        # PROBLEM 3 FIX: final quality encode — CRF 16 + 20M cap for high
-        # fidelity output. This is the ONLY lossy encode in the pipeline.
+        # Final quality encode — CRF 16 + 20M cap. Only lossy encode in pipeline.
         "-c:v", "libx264", "-preset", "medium", "-crf", str(output_crf),
         "-b:v", "20M",
         "-threads", "4",
         "-x264-params", "rc-lookahead=48:bframes=3",
         "-pix_fmt", "yuv420p",
-        "-c:a", "copy",
+        # loudnorm: target -14 LUFS integrated, -1 dBTP true peak, LRA 7.
+        # Ensures consistent perceived loudness across all devices and platforms.
+        "-af", "loudnorm=I=-14:TP=-1:LRA=7",
+        "-c:a", "aac", "-b:a", "192k",
         "-movflags", "+faststart",
         str(output_path),
     ])

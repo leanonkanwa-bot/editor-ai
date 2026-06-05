@@ -40,7 +40,7 @@ ALLOWED_COLORS = {
 }
 
 ALLOWED_POSITIONS = {"center", "bottom", "side-left", "side-right"}
-ALLOWED_STYLES    = {"impact", "kinetic"}
+ALLOWED_STYLES    = {"impact", "kinetic", "popup"}
 
 # Reference font sizes at 1080p — scaled proportionally to PlayResY in _ass_header().
 # Normal captions: 58px · Emphasis captions: 72px (per professional caption spec).
@@ -143,16 +143,16 @@ def _ass_header(
     # Always bottom-center (alignment=2) — never covers the face.
     # MarginV is measured from the bottom edge of the frame.
     alignment = 2
-    margin_v  = 150 if short_form else 80
+    margin_v  = round(play_res_y * 0.18)  # 346px for 9:16, 194px for 16:9
 
     # Both styles use the same positioning; style only affects grouping / animations.
     default_line = (
         f"Style: Default,{font_name},{cap_size},{primary},{primary},"
-        f"&H00000000,&H40000000,1,0,0,0,100,100,0,0,1,0,1,{alignment},60,60,{margin_v},1"
+        f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,0,1,{alignment},60,60,{margin_v},1"
     )
     emphasis_line = (
         f"Style: Emphasis,{font_name},{cap_size_emph},{EMPHASIS_COLOR_ASS},{EMPHASIS_COLOR_ASS},"
-        f"&H00000000,&H40000000,1,0,0,0,100,100,0,0,1,0,1,{alignment},60,60,{margin_v},1"
+        f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,0,1,{alignment},60,60,{margin_v},1"
     )
 
     return (
@@ -256,7 +256,7 @@ def build_ass(
 
     # Kinetic: 1 word per group so each pops independently on its exact timestamp.
     # Impact: 2–3 words per group separated by natural breath pauses.
-    if style == "kinetic":
+    if style in ("kinetic", "popup"):
         groups = _group_words(word_list, max_words=1)
     else:
         groups = _group_words(word_list)
@@ -265,14 +265,17 @@ def build_ass(
     cap_size_emph = round(CAP_SIZE_REF_EMPH * play_res_y / 1080)
 
     # Entry animation tags — prepended to every Dialogue line text.
-    # Kinetic: scale 80%→100% + opacity 0%→100% over 200ms (~6 frames at 30fps).
-    # Impact:  subtle scale 97%→100% + fade over 400ms (12 frames).
-    if style == "kinetic":
-        _anim = r"{\fad(200,80)\fscx80\fscy80\t(0,200,\fscx100\fscy100)}"
+    # kinetic/popup: overshoot bounce — scale 0→112%→100% in 300ms, no pre-fade.
+    #   Emphasis words overshoot further: 0→120%→100% in 350ms.
+    # impact: subtle scale 97%→100% + fade over 400ms.
+    if style in ("kinetic", "popup"):
+        _anim = r"{\fad(0,80)\fscx0\fscy0\t(0,180,\fscx112\fscy112)\t(180,300,\fscx100\fscy100)}"
+        _anim_emph = r"{\fad(0,80)\fscx0\fscy0\t(0,200,\fscx120\fscy120)\t(200,350,\fscx100\fscy100)}"
     else:
         _anim = r"{\fad(400,300)\fscx97\fscy97\t(0,400,\fscx100\fscy100)}"
+        _anim_emph = _anim
 
-    for group in groups:
+    for gi, group in enumerate(groups):
         # Skip groups entirely inside b-roll windows
         mid = (group[0].start + group[-1].end) / 2
         if _in_window(mid, broll_list):
@@ -302,7 +305,7 @@ def build_ass(
             if cat and cat in CATEGORY_COLOR_ASS:
                 # Category color — enlarged to emphasis size for visual pop.
                 cat_ass = CATEGORY_COLOR_ASS[cat]
-                label = w.upper() if style == "kinetic" else (w.capitalize() if i == 0 else w.lower())
+                label = w.upper() if style in ("kinetic", "popup") else (w.capitalize() if i == 0 else w.lower())
                 display_parts.append(
                     f"{{\\c{cat_ass}\\fs{cap_size_emph}}}{label}{{\\r}}"
                 )
@@ -314,18 +317,50 @@ def build_ass(
                 display_parts.append(
                     f"{{\\c{EMPHASIS_COLOR_ASS}\\fs{cap_size_emph}}}{w.title()}{{\\r}}"
                 )
-            elif style == "kinetic":
-                # Kinetic normal words: ALL CAPS for impact at the center.
+            elif style in ("kinetic", "popup"):
+                # Kinetic/popup normal words: ALL CAPS for impact at the center.
                 display_parts.append(w.upper())
             elif i == 0:
                 display_parts.append(w.capitalize())
             else:
                 display_parts.append(w.lower())
-        display = _anim + " ".join(display_parts)
+
+        # Pick animation: emphasis words get the bigger overshoot.
+        word_anim = _anim_emph if (style in ("kinetic", "popup") and has_emphasis) else _anim
+        display = word_anim + " ".join(display_parts)
 
         # Apply Whisper correction + any explicit delay.
-        start = max(0.0, group[0].start + WHISPER_TIMESTAMP_CORRECTION + CAPTION_DELAY_S)
-        end   = group[-1].end + WHISPER_TIMESTAMP_CORRECTION
+        start    = max(0.0, group[0].start + WHISPER_TIMESTAMP_CORRECTION + CAPTION_DELAY_S)
+        end_base = group[-1].end + WHISPER_TIMESTAMP_CORRECTION
+
+        # kinetic/popup dim effect: extend line to next word start, then dim.
+        # The word pops in full brightness, then fades to ~56% opacity + slight
+        # shrink as it waits for the next caption — eyes naturally drift to the
+        # next word rather than re-reading this one.
+        if style in ("kinetic", "popup"):
+            # Find the next non-b-roll group for look-ahead.
+            next_start: float | None = None
+            for ngi in range(gi + 1, len(groups)):
+                ng = groups[ngi]
+                ng_mid = (ng[0].start + ng[-1].end) / 2
+                if not _in_window(ng_mid, broll_list):
+                    next_start = ng[0].start + WHISPER_TIMESTAMP_CORRECTION
+                    break
+
+            if next_start is not None and next_start > end_base + 0.02:
+                # spoken_ms: milliseconds from line start until word finishes.
+                spoken_ms = max(50, round((end_base - start) * 1000))
+                dim_tag = (
+                    rf"{{\t({spoken_ms},{spoken_ms + 80},"
+                    r"\alpha&H71&\fscx97\fscy97)}}"
+                )
+                display = word_anim + " ".join(display_parts) + dim_tag
+                end = next_start
+            else:
+                end = end_base
+        else:
+            end = end_base
+
         lines.append(
             f"Dialogue: 0,{_ts(start)},{_ts(end)},Default,,0,0,0,,{display}"
         )
