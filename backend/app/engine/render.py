@@ -42,9 +42,6 @@ LONG_PAD_S     = 0.20   # 200ms — cinematic breathing room
 AUDIO_FADE_S   = 0.05   # 50ms — anti-pop fade at every segment boundary
 AUDIO_HANDLE_S = 0.08   # 80ms audio handle kept before/after each cut edge
 
-# Multi-camera zoom cycle: each consecutive segment uses a different starting
-# zoom level, giving a subtle "camera cut" feel without any special effects.
-_ZOOM_CYCLE = [1.0, 1.08, 1.04, 1.12]
 
 
 def _run(cmd: list[str]) -> None:
@@ -156,6 +153,7 @@ def _create_proxy(
         "-threads", "1",                    # global: limit decoder threads
         "-i", str(src),
         "-vf", vf,
+        "-vsync", "cfr",
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
         "-x264-params", (
             "rc-lookahead=0:bframes=0:ref=1:no-mbtree=1:"
@@ -338,53 +336,30 @@ def _cut_segment(
     target_w: int,
     target_h: int,
     fps: int,
-    zoom: float = 1.0,
 ) -> None:
-    """Per-segment extract with audio handles + fades baked in.
-
-    zoom > 1.0 scales the frame up then center-crops to target dimensions,
-    giving each segment a different "focal length" for a multi-camera feel.
-    An 80ms video micro-fade at in/out makes cuts feel deliberate, not harsh.
-    """
-    # FIX 1: 80ms audio handle prevents mid-syllable cuts at segment boundaries.
+    """Per-segment extract with 80ms audio handles. Stream-copy audio to prevent
+    acrossfade drift and preserve exact A/V sync through the concat stage."""
     actual_start = max(0.0, start - AUDIO_HANDLE_S)
     actual_end   = end + AUDIO_HANDLE_S
     duration     = max(0.1, actual_end - actual_start)
-    fade_out_start = max(0.0, duration - AUDIO_FADE_S)
-    af = (
-        f"afade=t=in:st=0:d={AUDIO_FADE_S},"
-        f"afade=t=out:st={fade_out_start:.3f}:d={AUDIO_FADE_S}"
-    )
-    # Zoom: scale up by `zoom` factor, then center-crop back to exact target.
-    # At zoom=1.0 this collapses to a normal scale+crop.
-    scaled_w = int(target_w * zoom)
-    scaled_h = int(target_h * zoom)
-    vf_fade_out = max(0.0, duration - 0.08)
     vf = (
-        f"scale={scaled_w}:{scaled_h}:force_original_aspect_ratio=increase"
+        f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase"
         f":flags=lanczos,"
         f"crop={target_w}:{target_h},"
-        f"fade=t=in:st=0:d=0.08,"
-        f"fade=t=out:st={vf_fade_out:.3f}:d=0.08,"
         f"fps={fps}"
     )
-    # CRF 0 = lossless H.264. Every subsequent pass (zoompan, overlays, caption
-    # burn) re-encodes from this; any quality loss here compounds through all
-    # later passes. The ONLY lossy encode is the final caption-burn pass (CRF 16).
-    # No +faststart: moov-atom rewrite buffers the entire mdat, doubling peak
-    # RSS on large videos → SIGKILL on small dynos.
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
-        "-threads", "1",        # global: limits decoder threads too, not just encoder
+        "-threads", "1",
         "-ss", f"{actual_start:.3f}", "-i", str(src),
         "-t", f"{duration:.3f}",
         "-vf", vf,
-        "-af", af,
+        "-vsync", "cfr",
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
         "-x264-params", "rc-lookahead=0:bframes=0:ref=1:no-mbtree=1:sync-lookahead=0",
         "-threads", "1",
         "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
+        "-c:a", "copy",
         str(dst),
     ])
 
@@ -906,16 +881,8 @@ def _build_pass1_filter_complex(
 
 
 def _color_grade_filter(content_type: str) -> str:
-    """Return an FFmpeg video filter string for the given content type.
-    Applied FIRST in the filter chain so all subsequent overlays inherit the grade.
-    """
-    profiles: dict[str, str] = {
-        "coaching":   "eq=contrast=1.2:brightness=0.05:saturation=1.15,colorbalance=rs=0.03:gs=0.01:bs=-0.02",
-        "education":  "eq=brightness=0.05:contrast=1.1,unsharp=5:5:1.0:5:5:0.0",
-        "motivation": "eq=contrast=1.2:gamma=0.95,colorbalance=rs=0.08:gs=0.03",
-        "story":      "eq=saturation=0.9:contrast=1.05,colorbalance=rs=0.03",
-    }
-    return profiles.get(content_type.lower(), "eq=contrast=1.1:saturation=1.05")
+    """Disabled — returns empty string so no color/grade filter is applied."""
+    return ""
 
 
 def _fetch_broll_clip(
@@ -1020,8 +987,7 @@ def _fetch_broll_clip(
         vf = (
             f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
             f"crop={target_w}:{target_h},fps={fps},"
-            f"trim=duration={duration:.2f},setpts=PTS-STARTPTS,"
-            f"eq=contrast=1.1:saturation=1.05"
+            f"trim=duration={duration:.2f},setpts=PTS-STARTPTS"
         )
         _run([
             FFMPEG_PATH, "-y", "-loglevel", "error",
@@ -1136,6 +1102,7 @@ def render(
 
     parts: list[Path] = []
     cum = 0.0
+    cap_offset = 0.0  # caption timeline: advances by plan-boundary duration only
     remapped_zoom: list[dict[str, Any]] = []
     remapped_words: list[WordTiming] = []
     remapped_silences: list[dict[str, Any]] = []
@@ -1159,11 +1126,10 @@ def render(
             continue
 
         part = work_dir / f"part_{i:04d}.mp4"
-        seg_zoom = _ZOOM_CYCLE[i % len(_ZOOM_CYCLE)]
         if use_proxy:
             _cut_proxy_segment(cut_src, s, e, part)
         else:
-            _cut_segment(cut_src, s, e, part, target_w, target_h, fps, zoom=seg_zoom)
+            _cut_segment(cut_src, s, e, part, target_w, target_h, fps)
         parts.append(part)
 
         # PROBLEM 1 FIX: use the actual cut boundaries (with audio handles) as
@@ -1197,8 +1163,8 @@ def render(
                 if s_raw <= ws < e_raw:
                     remapped_words.append(WordTiming(
                         text=w["text"].strip(),
-                        start=seg_offset + (ws - s),
-                        end=seg_offset + (min(we, e) - s),
+                        start=cap_offset + (ws - s_raw),
+                        end=cap_offset + (min(we, e_raw) - s_raw),
                     ))
 
         for sil in (plan.silences or []):
@@ -1227,13 +1193,33 @@ def render(
 
         if parts:  # not the first segment — record this cut point
             cut_timestamps.append(cum)
-        cum += (actual_e - actual_s)  # advance by the actual part file duration
+        cum += (actual_e - actual_s)      # video timeline: includes audio handles
+        cap_offset += (e_raw - s_raw)     # caption timeline: plan boundaries only
 
     if not parts:
         raise RuntimeError("No keep_segments produced any clip.")
 
     concat_path = work_dir / "concat.mp4"
-    _concat_audio_xfade(parts, concat_path)  # FIX 2: 50ms audio crossfade at every cut
+    _concat(parts, concat_path)
+
+    # FIX 5 — Verify concat duration matches expected plan-boundary sum.
+    import logging as _logging_early
+    _log_early = _logging_early.getLogger(__name__)
+    _v_dur_actual = _probe_duration(concat_path)
+    _v_dur_expected = sum(
+        max(0.0, float(seg["end"]) - float(seg["start"]))
+        for seg in keep
+        if float(seg["end"]) > float(seg["start"])
+    )
+    _log_early.info(
+        "concat duration check: actual=%.3fs  expected=%.3fs  delta=%.3fs",
+        _v_dur_actual, _v_dur_expected, _v_dur_actual - _v_dur_expected,
+    )
+    if abs(_v_dur_actual - _v_dur_expected) > 0.5:
+        _log_early.warning(
+            "concat duration mismatch %.3fs > 0.5s — possible AV sync issue",
+            abs(_v_dur_actual - _v_dur_expected),
+        )
 
     # Remap b-roll windows to the cut timeline so captions pause there.
     # BUG FIX — B-ROLL TIMING:
@@ -1546,26 +1532,19 @@ def render(
     _tmp_dir = Path(_tempfile.gettempdir())
     _base_path = _tmp_dir / f"base_{output_path.stem}.mp4"
 
-    # Zoom is baked per-segment in _cut_segment() via _ZOOM_CYCLE.
-    # Pass 1 uses a simple fps lock + PTS reset — no additional zoompan needed.
-    _zoom_str = f"fps={fps},setpts=N/FRAME_RATE/TB"
-
-    # Cinematic immersion layer (applied only to main speaker footage here;
-    # b-roll overlays come in later passes and are unaffected):
-    #   1. Film grain — subtle analog texture (strength 4, temporal+uniform)
-    #   2. Camera shake — sub-pixel crop oscillation (±2px at 0.3/0.4 Hz)
-    #      scaled back to target dimensions so the output is unchanged in size
-    #   3. Vignette — forward vignette darkens edges, focusing the eye
-    _shake_w = target_w - 8
-    _shake_h = target_h - 8
-    _immersion = (
-        f"noise=alls=4:allf=t+u,"
-        f"crop={_shake_w}:{_shake_h}"
-        f":x=4+sin(2*PI*t*0.3)*2:y=4+cos(2*PI*t*0.4)*2,"
-        f"scale={target_w}:{target_h},"
-        f"vignette=angle=PI/4:mode=forward:eval=init:dither=1"
+    # Static 4% zoom: scale to 104% then center-crop back to target — gives a
+    # subtle "punched in" look without per-frame zoompan PTS drift.
+    _sz_w = round(target_w * 1.04)
+    _sz_h = round(target_h * 1.04)
+    _sz_x = (_sz_w - target_w) // 2
+    _sz_y = (_sz_h - target_h) // 2
+    _zoom_str = (
+        f"scale={_sz_w}:{_sz_h}:flags=lanczos,"
+        f"crop={target_w}:{target_h}:{_sz_x}:{_sz_y},"
+        f"fps={fps},setpts=N/FRAME_RATE/TB"
     )
-    _vf_p1 = [p for p in [color_grade, scale_filter, _zoom_str, _immersion] if p]
+
+    _vf_p1 = [p for p in [color_grade, scale_filter, _zoom_str] if p]
     _cmd_p1: list[str] = [
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-i", str(concat_path),
@@ -1654,6 +1633,7 @@ def render(
             "-i", str(br_clip),
             "-filter_complex", _fc_br,
             "-map", "[vout]", "-map", "0:a",
+            "-vsync", "cfr",
             "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
             "-threads", "4",
             "-pix_fmt", "yuv420p",
@@ -1683,6 +1663,7 @@ def render(
             "-i", str(_clip_path),
             "-filter_complex", _fc_ov,
             "-map", "[out]", "-map", "0:a",
+            "-vsync", "cfr",
             "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
             "-threads", "4",
             "-x264-params", "rc-lookahead=0:bframes=0",
@@ -1705,6 +1686,7 @@ def render(
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-i", str(_nocap_path),
         "-vf", f"subtitles={_ass_str}",
+        "-vsync", "cfr",
         # Final quality encode — CRF 16 + 20M cap. Only lossy encode in pipeline.
         "-c:v", "libx264", "-preset", "medium", "-crf", str(output_crf),
         "-b:v", "20M",
