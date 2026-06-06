@@ -277,24 +277,27 @@ def _build_long_form_ass(
     video_h: int = 1080,
     brand_color: str = "#FF7751",
 ) -> Path:
-    """Build a long-form (16:9) strategic captions ASS file from planner moments.
+    """Build a long-form (16:9) selective strategic captions ASS file.
+
+    Jordan Belfort philosophy: only caption KEY MOMENTS. Long sections between
+    captions are intentional — let the speaker breathe.
 
     Styles:
-      Hook     — Anton 90px, white, center-screen, \\fad(150,150)
-      Concept  — Montserrat Bold 72px, white + brand emphasis, lower-third, \\fad(100,100)
-      Stat     — Montserrat Bold 110px, gold #FFD480, center, \\fad(80,80) + scale pop
-      ListItem — Montserrat Bold 62px, white, center-left, \\fad(80,50)
+      Hook        — Playfair Display Bold 88px, white, center-screen, \\fad(150,150)
+      Concept     — Montserrat Bold 62px, white + brand emphasis, lower-third
+      Stat        — Montserrat Bold 96px, brand color, center, scale pop
+      StatContext — Montserrat Bold 48px, white, center, subtle
     """
-    brand_ass = _hex_to_ass_bgr(brand_color)
-    gold_ass  = "&H0080D4FF"  # #FFD480 warm gold (BGR)
+    brand_ass  = _hex_to_ass_bgr(brand_color)   # &H00BBGGRR
 
-    hook_sz    = round(90  * video_h / 1080)
-    concept_sz = round(72  * video_h / 1080)
-    stat_sz    = round(110 * video_h / 1080)
-    list_sz    = round(62  * video_h / 1080)
+    scale = video_h / 1080.0
+    hook_sz        = round(88 * scale)
+    concept_sz     = round(62 * scale)
+    stat_sz        = round(96 * scale)
+    stat_ctx_sz    = round(48 * scale)
 
-    concept_mv = round(80 * video_h / 1080)   # lower-third bottom margin
-    list_ml    = round(80 * video_w / 1920)   # left margin for list items
+    concept_mv     = round(video_h * 0.12)  # lower-third bottom margin
+    stat_ctx_mv    = round(video_h * 0.12)  # below-center margin for context
 
     header = (
         "[Script Info]\n"
@@ -307,26 +310,32 @@ def _build_long_form_ass(
         "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
         "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
         "Alignment, MarginL, MarginR, MarginV, Encoding\n"
-        f"Style: Hook,Anton,{hook_sz},&H00FFFFFF,&H00FFFFFF,"
-        f"&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,2,0,5,60,60,60,1\n"
+        # Hook: Playfair Display Bold, white, center (Alignment=5), 3px black outline
+        f"Style: Hook,Playfair Display Bold,{hook_sz},&H00FFFFFF,&H00FFFFFF,"
+        f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,0,5,40,40,0,1\n"
+        # Concept: Montserrat Bold, white, lower-third (Alignment=2), 2px outline
         f"Style: Concept,Montserrat Bold,{concept_sz},&H00FFFFFF,&H00FFFFFF,"
-        f"&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,2,0,2,60,60,{concept_mv},1\n"
-        f"Style: Stat,Montserrat Bold,{stat_sz},{gold_ass},{gold_ass},"
-        f"&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,0,0,5,60,60,60,1\n"
-        f"Style: ListItem,Montserrat Bold,{list_sz},&H00FFFFFF,&H00FFFFFF,"
-        f"&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,2,0,4,{list_ml},60,60,1\n"
+        f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,2,0,2,40,40,{concept_mv},1\n"
+        # Stat: Montserrat Bold, brand color, center (Alignment=5), 3px outline
+        f"Style: Stat,Montserrat Bold,{stat_sz},{brand_ass},{brand_ass},"
+        f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,0,5,40,40,0,1\n"
+        # StatContext: Montserrat Bold, white, center (Alignment=5), subtle 1px outline
+        f"Style: StatContext,Montserrat Bold,{stat_ctx_sz},&H00FFFFFF,&H00FFFFFF,"
+        f"&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,1,0,5,40,40,{stat_ctx_mv},1\n"
         "\n[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, "
         "Effect, Text\n"
     )
 
     _style_map: dict[str, tuple[str, str]] = {
-        "hook":      ("Hook",     r"{\fad(150,150)}"),
-        "concept":   ("Concept",  r"{\fad(100,100)}"),
-        "stat":      ("Stat",     r"{\fad(80,80)\t(\fscx90\fscy90,\fscx100\fscy100)}"),
-        "list_item": ("ListItem", r"{\fad(80,50)}"),
-        "quote":     ("Concept",  r"{\fad(100,100)}"),
-        "marker":    ("Concept",  r"{\fad(80,80)}"),
+        "hook":         ("Hook",        r"{\fad(150,150)}"),
+        "concept":      ("Concept",     r"{\fad(120,120)}"),
+        "stat":         ("Stat",        r"{\fad(80,80)\fscx90\fscy90\t(0,200,\fscx100\fscy100)}"),
+        "stat_context": ("StatContext", r"{\fad(80,80)}"),
+        "list":         ("Concept",     r"{\fad(100,100)\move(0,20,0,0)}"),
+        "list_item":    ("Concept",     r"{\fad(100,100)\move(0,20,0,0)}"),
+        "quote":        ("Concept",     r"{\fad(120,120)}"),
+        "marker":       ("Concept",     r"{\fad(80,80)}"),
     }
 
     lines = [header]
@@ -340,11 +349,12 @@ def _build_long_form_ass(
         if not text:
             continue
 
-        ass_style, anim = _style_map.get(style, ("Concept", r"{\fad(100,100)}"))
+        ass_style, anim = _style_map.get(style, ("Concept", r"{\fad(120,120)}"))
         display = apply_emphasis(text, emph, brand_ass) if emph else text
         lines.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},{ass_style},,0,0,0,,{anim}{display}")
 
     output_path.write_text("\n".join(lines), encoding="utf-8")
+    print(f"[CAPTIONS LONG] Written {len(lines) - 1} selective caption moments")
     return output_path
 
 
