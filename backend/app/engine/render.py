@@ -337,28 +337,34 @@ def _cut_segment(
     target_h: int,
     fps: int,
 ) -> None:
-    """Per-segment extract with 80ms audio handles. Stream-copy audio to prevent
-    acrossfade drift and preserve exact A/V sync through the concat stage.
+    """Per-segment extract with 80ms audio handles.
 
-    BUG 2 FIX — AV SYNC: -avoid_negative_ts make_zero + -fflags +genpts fix
-    timestamp discontinuities that accumulate across cuts and cause drift between
-    the audio, video, and caption tracks in the concatenated output.
+    SYNC: -ss BEFORE -i (fast seek, frame-accurate). Duration via -t, not end
+    time. Audio re-encoded with -async 1 so its timestamps are normalized to
+    the same zero-based clock as the video — stream-copy would preserve the
+    source audio timestamps which may be offset from the video PTS.
     """
     actual_start = max(0.0, start - AUDIO_HANDLE_S)
     actual_end   = end + AUDIO_HANDLE_S
     duration     = max(0.1, actual_end - actual_start)
+    fade_out_st  = max(0.0, duration - AUDIO_FADE_S)
     vf = (
         f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase"
         f":flags=lanczos,"
         f"crop={target_w}:{target_h},"
         f"fps={fps}"
     )
+    af = (
+        f"afade=t=in:st=0:d={AUDIO_FADE_S},"
+        f"afade=t=out:st={fade_out_st:.3f}:d={AUDIO_FADE_S}"
+    )
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-threads", "1",
         "-fflags", "+genpts",               # regenerate PTS — prevents drift
-        "-ss", f"{actual_start:.6f}", "-i", str(src),
-        "-t", f"{duration:.6f}",
+        "-ss", f"{actual_start:.6f}",       # -ss BEFORE -i = fast seek
+        "-i", str(src),
+        "-t", f"{duration:.6f}",            # duration, not end time
         "-avoid_negative_ts", "make_zero",  # zero-base all timestamps
         "-vf", vf,
         "-vsync", "cfr",
@@ -366,7 +372,9 @@ def _cut_segment(
         "-x264-params", "rc-lookahead=0:bframes=0:ref=1:no-mbtree=1:sync-lookahead=0",
         "-threads", "1",
         "-pix_fmt", "yuv420p",
-        "-c:a", "copy",
+        "-af", af,
+        "-async", "1",                      # normalize audio timestamps to video clock
+        "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
         str(dst),
     ])
 
@@ -376,6 +384,7 @@ def _concat(parts: list[Path], dst: Path) -> None:
     list_path.write_text("\n".join(f"file '{p.as_posix()}'" for p in parts))
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
+        "-fflags", "+genpts",               # normalize PTS at segment boundaries
         "-f", "concat", "-safe", "0", "-i", str(list_path),
         "-c", "copy",
         str(dst),
@@ -767,6 +776,64 @@ def _find_system_font() -> str | None:
     return None
 
 
+_VALID_ZOOM_LEVELS = frozenset({100, 130, 150, 170})
+
+
+def _zoom_filter_for_level(zoom_level: int, target_w: int, target_h: int) -> str | None:
+    """Return an FFmpeg vf string for a jump zoom at the given level.
+
+    Returns None for level 100 (full frame, no crop needed).
+    For 130/150/170: scales up then center-crops back to target dimensions.
+    Uses lanczos for quality — these are still-frame crops, not animations.
+    """
+    if zoom_level <= 100:
+        return None
+    factor = zoom_level / 100.0
+    scaled_w = round(target_w * factor)
+    scaled_h = round(target_h * factor)
+    crop_x = (scaled_w - target_w) // 2
+    crop_y = (scaled_h - target_h) // 2
+    return (
+        f"scale={scaled_w}:{scaled_h}:flags=lanczos,"
+        f"crop={target_w}:{target_h}:{crop_x}:{crop_y}"
+    )
+
+
+def _apply_segment_zoom(
+    src: Path,
+    dst: Path,
+    zoom_level: int,
+    target_w: int,
+    target_h: int,
+    fps: int,
+) -> None:
+    """Bake a jump-zoom into a segment clip via instant scale+crop.
+
+    No animation — the whole segment is at a constant zoom level.
+    Produces an output at target_w × target_h regardless of input zoom.
+    """
+    zoom_f = _zoom_filter_for_level(zoom_level, target_w, target_h)
+    vf = (
+        f"{zoom_f},fps={fps},setpts=N/FRAME_RATE/TB"
+        if zoom_f
+        else f"fps={fps},setpts=N/FRAME_RATE/TB"
+    )
+    _run([
+        FFMPEG_PATH, "-y", "-loglevel", "error",
+        "-fflags", "+genpts",               # regenerate PTS — prevents drift
+        "-i", str(src),
+        "-vf", vf,
+        "-vsync", "cfr",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
+        "-threads", "1",
+        "-x264-params", "rc-lookahead=0:bframes=0:ref=1:no-mbtree=1",
+        "-pix_fmt", "yuv420p",
+        "-async", "1",                      # normalize audio timestamps to video clock
+        "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
+        str(dst),
+    ])
+
+
 def _render_hyperframe_png(
     color_str: str,
     dst: Path,
@@ -864,16 +931,10 @@ def _build_pass1_filter_complex(
     """
     fc: list[str] = []
 
-    # ── Video: grade + optional scale + constant zoompan ─────────────────
+    # ── Video: grade + optional scale ─────────────────────────────────────
     grade_parts: list[str] = [color_grade]
     if scale_filter:
         grade_parts.append(scale_filter)
-    grade_parts.append(
-        f"zoompan=z=1.08"
-        f":x=iw/2-(iw/zoom/2)"
-        f":y=ih/2-(ih/zoom/2)"
-        f":d=1:s={target_w}x{target_h}:fps={fps}"
-    )
     fc.append(f"[0:v]{','.join(grade_parts)}[vzoom]")
 
     # ── Timed clip overlays (hyperframes + motion graphics) ───────────────
@@ -1181,8 +1242,18 @@ def render(
             _cut_proxy_segment(cut_src, s, e, part)
         else:
             _cut_segment(cut_src, s, e, part, target_w, target_h, fps)
-        print(f"[CUT] Segment {i}: {s:.3f}s → {e:.3f}s (duration: {e-s:.3f}s)  part={part.name}")
-        parts.append(part)
+
+        # Jordan Belfort jump zoom — apply per-segment at the level the planner chose.
+        zoom_level = int(seg.get("zoom_level", 130))
+        if zoom_level not in _VALID_ZOOM_LEVELS:
+            zoom_level = min(_VALID_ZOOM_LEVELS, key=lambda z: abs(z - zoom_level))
+        zoomed_part = work_dir / f"part_z_{i:04d}.mp4"
+        _apply_segment_zoom(part, zoomed_part, zoom_level, target_w, target_h, fps)
+        print(
+            f"[CUT] Segment {i}: {s:.3f}s → {e:.3f}s (duration: {e-s:.3f}s)"
+            f"  role={seg.get('role', '?')}  zoom={zoom_level}%  part={zoomed_part.name}"
+        )
+        parts.append(zoomed_part)
 
         # PROBLEM 1 FIX: use the actual cut boundaries (with audio handles) as
         # the reference for all timeline remapping so captions, zooms, and
@@ -1652,17 +1723,9 @@ def render(
     _tmp_dir = Path(_tempfile.gettempdir())
     _base_path = _tmp_dir / f"base_{output_path.stem}.mp4"
 
-    # Static 4% zoom: scale to 104% then center-crop back to target — gives a
-    # subtle "punched in" look without per-frame zoompan PTS drift.
-    _sz_w = round(target_w * 1.04)
-    _sz_h = round(target_h * 1.04)
-    _sz_x = (_sz_w - target_w) // 2
-    _sz_y = (_sz_h - target_h) // 2
-    _zoom_str = (
-        f"scale={_sz_w}:{_sz_h}:flags=lanczos,"
-        f"crop={target_w}:{target_h}:{_sz_x}:{_sz_y},"
-        f"fps={fps},setpts=N/FRAME_RATE/TB"
-    )
+    # Jump zoom is baked in per-segment (see _apply_segment_zoom above).
+    # Pass 1 only needs fps normalization and PTS reset.
+    _zoom_str = f"fps={fps},setpts=N/FRAME_RATE/TB"
 
     # Cover stream chat / subscriber UI in top-right corner — short-form only.
     # In long-form (16:9) the crop is different and the UI position varies.
@@ -1707,6 +1770,7 @@ def render(
         len(ok_graphics), len(remapped_silences),
     )
     _run(_cmd_p1)
+    _probe_av(_base_path)
 
     # ── B-roll overlay passes (full-screen Pexels stock video) ───────────
     # For each remapped b-roll window: fetch a stock clip from Pexels,
@@ -1766,15 +1830,17 @@ def render(
             "-filter_complex", _fc_br,
             "-map", "[vout]", "-map", "0:a",
             "-vsync", "cfr",
+            "-async", "1",                  # normalize audio timestamps to video clock
             "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
             "-threads", "4",
             "-pix_fmt", "yuv420p",
-            "-c:a", "copy",
+            "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
             str(_next_br_path),
         ])
         if _next_br_path.exists():
             _overlay_intermediates.append(_current_path)
             _current_path = _next_br_path
+            _probe_av(_current_path)
 
     print(f"[BROLL] Downloaded {_broll_clips_downloaded} clip(s) successfully")
 
@@ -1798,15 +1864,17 @@ def render(
             "-filter_complex", _fc_ov,
             "-map", "[out]", "-map", "0:a",
             "-vsync", "cfr",
+            "-async", "1",                  # normalize audio timestamps to video clock
             "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
             "-threads", "4",
             "-x264-params", "rc-lookahead=0:bframes=0",
             "-pix_fmt", "yuv420p",
-            "-c:a", "copy",
+            "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
             str(_next_path),
         ])
         _overlay_intermediates.append(_current_path)
         _current_path = _next_path
+        _probe_av(_current_path)
 
     _nocap_path = _current_path
 
@@ -1821,6 +1889,7 @@ def render(
         "-i", str(_nocap_path),
         "-vf", f"subtitles={_ass_str}",
         "-vsync", "cfr",
+        "-async", "1",                      # normalize audio timestamps to video clock
         # Final quality encode — CRF 16 + 20M cap. Only lossy encode in pipeline.
         "-c:v", "libx264", "-preset", "medium", "-crf", str(output_crf),
         "-b:v", "20M",
@@ -1835,6 +1904,7 @@ def render(
         str(output_path),
     ])
     print(f"[FINAL] Output: {output_path}")
+    _probe_av(output_path)
     _probe_streams(output_path)
     _nocap_path.unlink(missing_ok=True)
     for _p in _overlay_intermediates:

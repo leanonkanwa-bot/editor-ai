@@ -27,6 +27,8 @@ RUN mkdir -p /usr/local/share/fonts/leanlead && \
          -o /usr/local/share/fonts/leanlead/Anton-Regular.ttf 2>/dev/null || true && \
     curl -fsSL "https://github.com/google/fonts/raw/main/ofl/dmsans/static/DMSans-Bold.ttf" \
          -o /usr/local/share/fonts/leanlead/DMSans-Bold.ttf 2>/dev/null || true && \
+    curl -fsSL "https://github.com/google/fonts/raw/main/ofl/playfairdisplay/static/PlayfairDisplay-Bold.ttf" \
+         -o /usr/local/share/fonts/leanlead/PlayfairDisplay-Bold.ttf 2>/dev/null || true && \
     fc-cache -f -v 2>/dev/null || true
 
 # Custom fonts (Quicksand, SF Compact Bold, etc.) — drop TTF/OTF files into fonts/ before building.

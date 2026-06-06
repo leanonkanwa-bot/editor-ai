@@ -28,7 +28,7 @@ ALLOWED_FONTS = {
     "Roboto Bold", "Bebas Neue", "DM Sans Bold", "DM Sans",
     "Space Grotesk Bold", "DejaVu Sans Bold", "SF Compact Bold",
     "Quicksand Bold", "Quicksand SemiBold", "Quicksand Medium",
-    "Anton",
+    "Anton", "Playfair Display Bold",
 }
 
 ALLOWED_COLORS = {
@@ -122,6 +122,21 @@ def _hex_to_ass_bgr(hex6: str) -> str:
         hex6 = "FFFFFF"
     r, g, b = hex6[0:2], hex6[2:4], hex6[4:6]
     return f"&H00{b}{g}{r}"
+
+
+def hex_to_ass_bgr(hex_color: str) -> str:
+    """Convert #RRGGBB to ASS BGR string (without &H00 prefix).
+
+    Example: "#FF7751" → "5177FF"
+    Full ASS tag: "&H005177FF&"
+    """
+    hex_color = hex_color.lstrip("#")
+    if len(hex_color) != 6:
+        hex_color = "FFFFFF"
+    r = hex_color[0:2]
+    g = hex_color[2:4]
+    b = hex_color[4:6]
+    return f"{b}{g}{r}".upper()
 
 
 def _ass_header(
@@ -360,26 +375,31 @@ def build_ass(
             video_w=video_w, video_h=video_h, brand_color=brand_color,
         )
 
-    font = _FONT_MAP.get(caption_font, caption_font)
-    if font not in ALLOWED_FONTS:
-        font = "Montserrat Bold"
-
     play_res_x = video_w
     play_res_y = video_h
 
-    # Sizes scaled proportionally from 1920px reference
+    # Jordan Belfort two-level typography:
+    # BOTTOM (Keyword): serif font, large, brand color — the current phrase
+    # TOP    (Context): sans font, small, white       — the previous phrase
+    keyword_font = "Playfair Display Bold"
+    context_font = "Montserrat Bold"
+
+    # Font sizes scaled from 1920px reference (PlayResY == video_h, so these
+    # are already in the correct coordinate space).
     keyword_sz = round(88 * play_res_y / 1920)
-    context_sz = round(52 * play_res_y / 1920)
+    context_sz = round(48 * play_res_y / 1920)
 
     # Colors
     keyword_color = _hex_to_ass_bgr(brand_color) if brand_color else EMPHASIS_COLOR_ASS
-    context_color = "&H00FFFFFF"   # white
-    outline_color = "&H00000000"   # black
-    back_color    = "&H00000000"   # transparent
+    context_color = "&H00FFFFFF"  # white
+    outline_color = "&H00000000"  # black
+    back_color    = "&H00000000"  # transparent
 
-    # Margins from bottom edge
-    keyword_mv = round(play_res_y * 0.10)   # 192px at 1920
-    context_mv = round(play_res_y * 0.22)   # 422px at 1920
+    # Margins from bottom edge.
+    # keyword_mv: 8% from bottom.
+    # context_mv: sits directly above keyword — keyword margin + keyword height + 20px gap.
+    keyword_mv = int(play_res_y * 0.08)
+    context_mv = keyword_mv + keyword_sz + 20
 
     header = (
         "[Script Info]\n"
@@ -392,28 +412,30 @@ def build_ass(
         "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
         "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
         "Alignment, MarginL, MarginR, MarginV, Encoding\n"
-        # Keyword: current phrase — brand color, 88px, 3px black outline, no shadow
-        f"Style: Keyword,{font},{keyword_sz},{keyword_color},{keyword_color},"
+        # Keyword: current phrase — serif, brand color, 88px, 3px black outline
+        f"Style: Keyword,{keyword_font},{keyword_sz},{keyword_color},{keyword_color},"
         f"{outline_color},{back_color},1,0,0,0,100,100,0,0,1,3,0,2,60,60,{keyword_mv},1\n"
-        # Context: previous phrase — white, 52px, 2px black outline, no shadow
-        f"Style: Context,{font},{context_sz},{context_color},{context_color},"
+        # Context: previous phrase — sans, white, 48px, 2px black outline
+        f"Style: Context,{context_font},{context_sz},{context_color},{context_color},"
         f"{outline_color},{back_color},1,0,0,0,100,100,0,0,1,2,0,2,60,60,{context_mv},1\n"
         "\n[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, "
         "Effect, Text\n"
     )
 
-    # Phrase grouping: 3-4 words, split on pauses ≥ 300ms
+    # Step 1 — Group words into phrase units of up to 4 words, split on pauses ≥ 0.25s
     word_list = [w for w in words if _strip_punct(w.text)]
-    groups = _group_words(word_list, max_words=4, gap_s=0.3)
+    groups = _group_words(word_list, max_words=4, gap_s=0.25)
 
-    # Keyword animation: 80ms fade-in + subtle 95%→100% scale pop-in
-    _kw_anim = r"{\fad(80,0)\t(\fscx95\fscy95,\fscx100\fscy100)}"
+    # Animation tags per spec
+    _kw_anim  = r"{\fad(80,0)\t(\fscx97\fscy97,\fscx100\fscy100)}"
+    _ctx_anim = r"{\fad(80,0)}"
 
     lines = [header]
     prev_text = ""
 
     for gi, group in enumerate(groups):
+        # Step 2 — Build clean phrase text
         clean = [_strip_punct(w.text) for w in group]
         clean = [w for w in clean if w]
         if not clean:
@@ -425,7 +447,7 @@ def build_ass(
         if video_duration is not None and start > video_duration:
             break
 
-        # Hold until next phrase to avoid subtitle gaps
+        # Find next phrase start for gap-filling
         next_start: float | None = None
         for ngi in range(gi + 1, len(groups)):
             ng = groups[ngi]
@@ -434,27 +456,30 @@ def build_ass(
                 next_start = ng[0].start + WHISPER_TIMESTAMP_CORRECTION
                 break
 
-        end = (
-            next_start
-            if (next_start is not None and next_start > end_base + 0.05)
-            else end_base + 0.1
-        )
+        # Step 3 — Hold until next phrase; NEVER overlap (cap at next_start - 0.01)
+        if next_start is not None:
+            end = next_start - 0.01
+        else:
+            end = end_base + 0.1
 
         if video_duration is not None and end > video_duration:
             end = video_duration
 
+        # Capitalize first word only
         phrase_text = " ".join(
             w.capitalize() if i == 0 else w.lower()
             for i, w in enumerate(clean)
         )
 
-        # Keyword line (bottom) — current phrase with animation
-        kw_text = _kw_anim + phrase_text
-        lines.append(f"Dialogue: 1,{_ts(start)},{_ts(end)},Keyword,,0,0,0,,{kw_text}")
-
-        # Context line (above keyword) — previous phrase, plain text
-        if prev_text:
-            lines.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},Context,,0,0,0,,{prev_text}")
+        # Both events get IDENTICAL timestamps — they are always paired
+        # Keyword (bottom, Layer 1): current phrase, animated serif
+        lines.append(
+            f"Dialogue: 1,{_ts(start)},{_ts(end)},Keyword,,0,0,0,,{_kw_anim}{phrase_text}"
+        )
+        # Context (top, Layer 0): previous phrase (empty string for phrase[0])
+        lines.append(
+            f"Dialogue: 0,{_ts(start)},{_ts(end)},Context,,0,0,0,,{_ctx_anim}{prev_text}"
+        )
 
         prev_text = phrase_text
 
