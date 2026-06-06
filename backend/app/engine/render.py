@@ -334,11 +334,11 @@ def _cut_segment(
 ) -> None:
     """Per-segment extract.
 
-    SYNC: -ss BEFORE -i (fast seek, frame-accurate). Duration via -t (not end
-    time). No audio handles — exact [start, end] cut so the caption remap
-    formula cum+(ws-s) stays on the same clock as the video timeline.
-    -c:a copy preserves original audio timestamps; _apply_segment_zoom()
-    re-encodes with -async 1 immediately after to normalize them.
+    SYNC: -ss BEFORE -i (fast seek, frame-accurate). Duration via -t.
+    Audio is AAC-re-encoded (not stream-copied) so the trim is exact.
+    With -c:a copy + fast seek, FFmpeg copies from the nearest audio keyframe
+    which starts BEFORE the -ss point, making audio longer than video.
+    aresample=async=1 + -async 1 guarantee audio duration == video duration.
     """
     duration = max(0.1, end - start)
     vf = (
@@ -349,19 +349,18 @@ def _cut_segment(
     )
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
-        "-threads", "1",
-        "-fflags", "+genpts",               # regenerate PTS — prevents drift
-        "-ss", f"{start:.6f}",              # -ss BEFORE -i = fast seek
+        "-fflags", "+genpts",
+        "-ss", f"{start:.6f}",
         "-i", str(src),
-        "-t", f"{duration:.6f}",            # exact duration, not end time
-        "-avoid_negative_ts", "make_zero",  # zero-base all timestamps
+        "-t", f"{duration:.6f}",
+        "-avoid_negative_ts", "make_zero",
         "-vf", vf,
         "-vsync", "cfr",
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
-        "-x264-params", "rc-lookahead=0:bframes=0:ref=1:no-mbtree=1:sync-lookahead=0",
-        "-threads", "1",
         "-pix_fmt", "yuv420p",
-        "-c:a", "copy",                     # copy audio — normalized by _apply_segment_zoom
+        "-c:a", "aac", "-b:a", "192k",
+        "-af", "aresample=async=1:min_hard_comp=0.100000:first_pts=0",
+        "-async", "1",
         str(dst),
     ])
 
