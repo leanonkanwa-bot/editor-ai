@@ -1035,7 +1035,7 @@ def _fetch_broll_clip(
         r = _requests.get(
             "https://api.pexels.com/videos/search",
             headers={"Authorization": key},
-            params={"query": query, "per_page": 5, "orientation": orientation},
+            params={"query": query, "per_page": 10, "orientation": orientation},
             timeout=15,
         )
         print(f"[BROLL] API status: {r.status_code}")
@@ -1068,29 +1068,26 @@ def _fetch_broll_clip(
             print(f"[BROLL] No HD/UHD files for query {query!r} — skipping (SD only)")
             return False
 
-        best = None
-        # 1. Portrait UHD 1080×1920
-        for f in preferred_files:
-            if f.get("width") == 1080 and f.get("height") == 1920 and f.get("quality") == "uhd":
-                best = f
-                break
-        # 2. Portrait HD 1080×1920
-        if not best:
-            for f in preferred_files:
-                if f.get("width") == 1080 and f.get("height") == 1920:
-                    best = f
-                    break
-        # 3. Any portrait HD (height > width)
-        if not best:
-            for f in preferred_files:
-                w = f.get("width", 0) or 0
-                h = f.get("height", 0) or 0
-                if h > w:
-                    best = f
-                    break
-        # 4. Any HD/UHD
-        if not best:
-            best = preferred_files[0]
+        # Portrait-first selection: pick largest portrait by pixel area.
+        # Only fall back to landscape if absolutely no portrait file exists.
+        portrait_files = [
+            f for f in preferred_files
+            if (f.get("height") or 0) > (f.get("width") or 0)
+        ]
+        if portrait_files:
+            best = sorted(
+                portrait_files,
+                key=lambda f: (f.get("width") or 0) * (f.get("height") or 0),
+                reverse=True,
+            )[0]
+            print(f"[BROLL] Portrait file selected ({len(portrait_files)} portrait candidate(s))")
+        else:
+            best = sorted(
+                preferred_files,
+                key=lambda f: (f.get("width") or 0) * (f.get("height") or 0),
+                reverse=True,
+            )[0]
+            print(f"[BROLL] No portrait files — using best available orientation")
 
         if not best or not best.get("link"):
             print("[BROLL] No suitable HD/UHD file found in video_files")
