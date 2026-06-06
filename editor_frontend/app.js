@@ -45,37 +45,6 @@ function switchSection(targetId) {
   if (targetId === "learnSection") renderLessons();
 }
 
-// Nav tab clicks — DOMContentLoaded guarantees all buttons exist in the DOM.
-// Without this guard, querySelectorAll can run before the nav HTML is parsed.
-document.addEventListener("DOMContentLoaded", () => {
-  const navTabs = document.querySelectorAll(".nav-tab[data-target]");
-  navTabs.forEach(tab => {
-    tab.addEventListener("click", () => {
-      // Remove active from all tabs, add to clicked tab
-      navTabs.forEach(t => t.classList.remove("active"));
-      tab.classList.add("active");
-      // Show only the matching section
-      ["editorArea", "dashboardSection", "analyticsSection", "profileSection",
-       "learnSection", "outilsSection"].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.classList.toggle("active", id === tab.dataset.target);
-      });
-      // Side-effects per section
-      const t = tab.dataset.target;
-      if (t === "analyticsSection") loadAnalytics();
-      if (t === "dashboardSection") {
-        updateDashboardStats(); loadVideoLibrary(); updateStreak();
-        updateAchievements(); initReferral(); loadPerfTracker(); loadTeam(); loadApiKey();
-      }
-      if (t === "profileSection") loadProfileSection();
-      if (t === "editorArea") updateOnboardingProgress();
-      if (t === "learnSection") renderLessons();
-    });
-  });
-  // Default: Éditeur tab is active on page load
-  const defaultTab = document.querySelector('.nav-tab[data-target="editorArea"]');
-  if (defaultTab) defaultTab.classList.add("active");
-});
 
 // Dashboard → Editor button
 $("dashEditBtn")?.addEventListener("click", () => switchSection("editorArea"));
@@ -821,53 +790,9 @@ function _dropZoneAcceptFile(file) {
   drop?.classList.add("has-file");
 }
 
-if (drop) {
-  // Click: open file picker.
-  // videoInput is a child of drop, so its synthetic click bubbles back up.
-  // We guard with e.target to break the re-entry loop.
-  drop.addEventListener("click", (e) => {
-    if (e.target === videoInput) return;
-    if (videoInput) videoInput.click();
-  });
-
-  drop.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); videoInput?.click(); }
-  });
-
-  // dragover: BOTH preventDefault (allows drop) AND stopPropagation (required by spec)
-  drop.addEventListener("dragenter", (e) => { e.preventDefault(); e.stopPropagation(); drop.classList.add("dragover"); });
-  drop.addEventListener("dragover",  (e) => { e.preventDefault(); e.stopPropagation(); drop.classList.add("dragover"); });
-  drop.addEventListener("dragleave", (e) => { e.preventDefault(); e.stopPropagation(); drop.classList.remove("dragover"); });
-  drop.addEventListener("drop", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    drop.classList.remove("dragover");
-    const file = e.dataTransfer?.files?.[0];
-    if (file) _dropZoneAcceptFile(file);
-  });
-}
 
 // Guard: editor-only listeners
 if (videoInput && form && submitBtn) {
-
-videoInput.addEventListener("change", () => {
-  const f = videoInput.files?.[0];
-  if (!f) return;
-  const ext = f.name.split(".").pop().toLowerCase();
-  if (!VALID_EXTS.includes(ext)) {
-    // Clear the invalid selection and show inline error — no alert()
-    videoInput.value = "";
-    _dropZoneError(`Format non supporté (.${ext}) — acceptés : MP4, MOV, MKV`);
-    drop?.classList.remove("has-file");
-    return;
-  }
-  const mb = (f.size / (1024 * 1024)).toFixed(1);
-  if (dropLabel) {
-    dropLabel.textContent = `${f.name} — ${mb} MB`;
-    dropLabel.style.color = "";
-  }
-  drop?.classList.add("has-file");
-});
 
 form.addEventListener("submit", (e) => {
   e.preventDefault();
@@ -2659,4 +2584,91 @@ $("certDownloadBtn")?.addEventListener("click", () => {
   </div></body></html>`);
   win.document.close();
   setTimeout(() => win.print(), 500);
+});
+
+// ── GUARANTEED: Tab navigation + drop zone (single authoritative block) ──────
+document.addEventListener("DOMContentLoaded", function() {
+
+  // TABS ─────────────────────────────────────────────────────────────────────
+  var allTabs = document.querySelectorAll(".nav-tab[data-target]");
+  allTabs.forEach(function(tab) {
+    tab.addEventListener("click", function() {
+      var target = tab.getAttribute("data-target");
+      // Hide all sections
+      document.querySelectorAll(".app-section").forEach(function(s) {
+        s.style.display = "none";
+        s.classList.remove("active");
+      });
+      // Remove active from all tabs
+      allTabs.forEach(function(t) { t.classList.remove("active"); });
+      // Show target section
+      var section = document.getElementById(target);
+      if (section) {
+        section.style.display = "block";
+        section.classList.add("active");
+      }
+      tab.classList.add("active");
+      // Section side-effects
+      if (target === "analyticsSection") loadAnalytics();
+      if (target === "dashboardSection") { updateDashboardStats(); loadVideoLibrary(); updateStreak(); updateAchievements(); initReferral(); loadPerfTracker(); loadTeam(); loadApiKey(); }
+      if (target === "profileSection") loadProfileSection();
+      if (target === "editorArea") updateOnboardingProgress();
+      if (target === "learnSection") renderLessons();
+    });
+  });
+
+  // DROP ZONE ────────────────────────────────────────────────────────────────
+  if (drop) {
+    drop.addEventListener("click", function(e) {
+      if (e.target === videoInput) return;
+      if (videoInput) videoInput.click();
+    });
+    drop.addEventListener("dragover", function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      drop.classList.add("dragover");
+    });
+    drop.addEventListener("dragenter", function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      drop.classList.add("dragover");
+    });
+    drop.addEventListener("dragleave", function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      drop.classList.remove("dragover");
+    });
+    drop.addEventListener("drop", function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      drop.classList.remove("dragover");
+      var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file) _dropZoneAcceptFile(file);
+    });
+    drop.addEventListener("keydown", function(e) {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        if (videoInput) videoInput.click();
+      }
+    });
+  }
+
+  // FILE INPUT CHANGE ────────────────────────────────────────────────────────
+  if (videoInput) {
+    videoInput.addEventListener("change", function() {
+      var f = videoInput.files && videoInput.files[0];
+      if (!f) return;
+      var ext = f.name.split(".").pop().toLowerCase();
+      if (!VALID_EXTS.includes(ext)) {
+        videoInput.value = "";
+        _dropZoneError("Format non supporté (." + ext + ") — acceptés : MP4, MOV, MKV");
+        if (drop) drop.classList.remove("has-file");
+        return;
+      }
+      var mb = (f.size / (1024 * 1024)).toFixed(1);
+      if (dropLabel) { dropLabel.textContent = f.name + " — " + mb + " MB"; dropLabel.style.color = ""; }
+      if (drop) drop.classList.add("has-file");
+    });
+  }
+
 });
