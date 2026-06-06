@@ -781,11 +781,34 @@ Each b-roll suggestion's `at` is the EXACT START of the sentence whose
 content the visual matches. Read the transcript word-by-word and pick
 b-roll moments that align with the spoken concept — not random intervals.
 
+GENDER RULE FOR B-ROLL — mandatory for every search_query:
+  Analyze who is speaking from the transcript context and voice style.
+  If the speaker appears MALE: all search_query values MUST include "man"
+  or "male" unless the content specifically references women.
+  If the speaker appears FEMALE: include "woman" or "female".
+  If gender is unclear: use gender-neutral terms ("person", "athlete", etc.).
+
+  Examples (male speaker):
+    Says "I ran 10 miles"      → search_query: "man running trail"
+    Says "I drove 2 hours"     → search_query: "man driving highway"
+    Says "I woke up at 5AM"    → search_query: "man morning routine alarm"
+    Says "my girlfriend did X" → search_query: "woman smiling happy"
+
+  Examples (female speaker):
+    Says "I worked out"        → search_query: "woman workout gym"
+    Says "I started my business" → search_query: "woman entrepreneur laptop"
+
+  NEVER use bare generic queries — they return random gender stock footage
+  that breaks the speaker-to-viewer first-person connection:
+    Bad:  "running trail"          Good: "man running trail"
+    Bad:  "driving highway"        Good: "man driving car highway"
+    Bad:  "morning routine"        Good: "man morning coffee routine"
+
 Required fields for every b-roll entry:
   `description`   — vivid visual scene description for the stock search
-                    "Two people running on a forest trail at sunrise"
-  `search_query`  — short Pexels search terms (3–5 words, no filler)
-                    "people running forest trail"
+                    "Man running on a forest trail at sunrise"
+  `search_query`  — short Pexels search terms (3–5 words, gender-matched)
+                    "man running forest trail"
   `type`          — one of: action | location | emotion | number | concept
 
 The renderer fetches a free Pexels stock clip using `search_query` and
@@ -911,6 +934,40 @@ The video ends when the viewer has been permanently changed.
 Not informed. Not entertained. Changed.
 """
 
+VISUAL_PACING = """\
+VISUAL PACING — cinematic rhythm by section
+
+FAST SECTIONS (HOOK / AMPLIFY / CONSEQUENCE):
+  Target cut: 1.5–2 s per segment — maximum urgency.
+  No b-roll during hook or amplify — keep the speaker fully present to
+  build trust. Every word must land on the viewer's face.
+  Caption style: kinetic, 1 word per frame. No slow pans.
+  Zoom: tight framing (1.08×+) so the viewer feels the energy.
+
+SLOW SECTIONS (REALIZATION / PRINCIPLE):
+  Target cut: 3–5 s per segment — give the idea room to breathe.
+  Slow push-in (1.0→1.06 over the segment). The viewer leans in.
+  Do NOT cut away mid-sentence during PRINCIPLE — the silence after
+  the last word IS the emphasis. Hold the frame for 0.5–1s.
+  Caption style: kinetic at normal rate — no speed ramp here.
+
+EMOTIONAL PEAK MOMENTS (PAYOFF / EMOTIONAL_END):
+  Hold 1s extra on the final frame — do not cut immediately after the
+  last word. The viewer needs a beat to process.
+  Insert 0.5s near-silence (silence entry in `silences`) before the
+  peak line so the line drops into absolute quiet.
+  Caption holds 0.5s after the last word before the line disappears —
+  extend the Dialogue line end time by 0.5s past the last word end.
+  No b-roll. No graphics. Speaker face only. Maximum zoom held constant.
+
+SECTION TRANSITIONS:
+  Topic change → punch_in zoom (kind: "punch_in") + "whoosh" sfx at the
+  cut point. The snap + audio hit land simultaneously.
+  Chapter start (HISTOIRE, PRINCIPE, PAYOFF) → "riser" sfx 0.5s before.
+  Hard cut only between sections — never dissolve. Dissolves signal
+  weakness; hard cuts signal confidence and momentum.
+"""
+
 
 # ---------------------------------------------------------------------------
 # Output contract — the JSON the agent must emit. Renderer reads this.
@@ -1011,11 +1068,17 @@ Reply with a SINGLE JSON object, no prose, matching this schema:
          cut_before_silence: true if breath pause ≥0.25s precedes
            this segment's first word (always cut at breath boundaries).
          retention_note: one sentence — why this earns the viewer's time.
+         zoom_level: jump-zoom level for this entire segment.
+           100 = wide reset (topic transitions, breathing room)
+           130 = standard (default — story, narrative, context sections)
+           150 = emphasis (key points, stats, emotions, realization)
+           170 = maximum impact (use ONCE only — most powerful line in video)
       */
       "role": "hook"|"problem"|"story"|"principle"|"payoff"|"transition",
       "score": <net score>,
       "cut_before_silence": true|false,
-      "retention_note": "<why this keeps the viewer watching>" }
+      "retention_note": "<why this keeps the viewer watching>",
+      "zoom_level": 100|130|150|170 }
   ],
   "drop_segments": [
     { "start": <s>, "end": <s>,
@@ -1110,6 +1173,18 @@ Rules the JSON must obey:
   - speed_ramps: rate 0.5–2.0; slow_down for PRINCIPE/PAYOFF delivery,
     speed_up for mundane connectives. Never ramp mid-sentence.
   - music_energy: one entry per named beat section.
+  - zoom_level rules (REQUIRED on every keep_segment):
+      Allowed values: 100, 130, 150, 170 only.
+      100  = wide reset — use at topic transitions only (maximum 2 per video).
+      130  = default — story, narrative, context segments.
+      150  = emphasis — key points, stats, emotions, realization beats.
+      170  = maximum — use EXACTLY ONCE on the single most powerful line.
+             Never use 170 more than once per video. Never.
+      Beat-specific defaults:
+        HOOK → 150. AMPLIFY → 150. CONTEXT → 130.
+        TENSION → 150. STORY → 130. REALIZATION → 150. PRINCIPLE → 150.
+        PAYOFF → 170 (the one use of 170). EMOTIONAL_END → 100 (wide reset).
+      Default when in doubt: 130.
   - Be ruthless. Tension > comfort. Specific > generic.
   - Output ONLY JSON. No prose around it.
 """
@@ -1265,9 +1340,32 @@ def system_prompt(
         BROLL_RULES,
         SOUND_DESIGN,
         RETENTION_MECHANICS,
+        VISUAL_PACING,
         CORE_LAW,
         OUTPUT_CONTRACT,
     ])
+
+    _zoom_level_rules = (
+        "ZOOM LEVELS — assign zoom_level to EVERY keep_segment (required field):\n"
+        "  100 = wide reset   — topic transitions only, max 2 per video\n"
+        "  130 = standard     — default; story, narrative, context segments\n"
+        "  150 = emphasis     — key points, stats, emotions, realization beats\n"
+        "  170 = maximum      — EXACTLY ONCE on the most powerful line (usually payoff)\n"
+        "Beat-specific assignments:\n"
+        "  HOOK         → 150 (open strong — tight frame creates urgency)\n"
+        "  AMPLIFY      → 150 (sustain energy from the hook)\n"
+        "  CONTEXT      → 130 (give breathing room, let viewer settle)\n"
+        "  TENSION      → 150 (viewer must feel the discomfort)\n"
+        "  STORY        → 130 (narrative flow, standard frame)\n"
+        "  REALIZATION  → 150 (the turn — pull the viewer in)\n"
+        "  PRINCIPLE    → 150 (key idea deserves emphasis)\n"
+        "  PAYOFF       → 170 (the ONE use of 170 — most powerful moment)\n"
+        "  EMOTIONAL_END→ 100 (wide reset — let the final line land with space)\n"
+        "Global rules:\n"
+        "  Never use 170 more than once. Never.\n"
+        "  ~4 zoom changes per minute. Never hold the same level more than 20–25 seconds.\n"
+        "  Default when uncertain: 130."
+    )
 
     if format_hint == "short":
         blocks.append(
@@ -1281,7 +1379,8 @@ def system_prompt(
             "visual_style_moments: [] — output empty array, no exceptions. "
             "1 cut per 2–3 seconds. Ruthless filler removal. "
             "New curiosity loop every 15–20s. "
-            "9-beat spine: HOOK/AMPLIFY/CONTEXT/TENSION/STORY/REALIZATION/PRINCIPLE/PAYOFF/EMOTIONAL_END."
+            "9-beat spine: HOOK/AMPLIFY/CONTEXT/TENSION/STORY/REALIZATION/PRINCIPLE/PAYOFF/EMOTIONAL_END.\n\n"
+            + _zoom_level_rules
         )
     elif format_hint == "long":
         blocks.append(
@@ -1290,7 +1389,10 @@ def system_prompt(
             "category colors on key words, salmon emphasis. "
             "motion_graphics: [] — output empty array. visual_style_moments: [] — output empty array. "
             "1 cut per 4–6 seconds. Max 2 b-roll. "
-            "New curiosity loop every 15–20s."
+            "New curiosity loop every 15–20s.\n\n"
+            + _zoom_level_rules
         )
+    else:
+        blocks.append(_zoom_level_rules)
 
     return "\n\n".join(blocks)

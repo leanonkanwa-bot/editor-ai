@@ -1231,11 +1231,13 @@ def render(
         cut_src = src
 
     parts: list[Path] = []
+    zoom_segments: list[int] = []
     cum = 0.0  # exact video output timeline — no audio-handle inflation
     remapped_zoom: list[dict[str, Any]] = []
     remapped_words: list[WordTiming] = []
     remapped_silences: list[dict[str, Any]] = []
     remapped_vsm: list[dict[str, Any]] = []
+    remapped_moments: list[dict[str, Any]] = []
     cut_timestamps: list[float] = []  # output-timeline timestamps of cut points
 
     for i, seg in enumerate(keep):
@@ -1266,10 +1268,8 @@ def render(
             zoom_level = min(_VALID_ZOOM_LEVELS, key=lambda z: abs(z - zoom_level))
         zoomed_part = work_dir / f"part_z_{i:04d}.mp4"
         _apply_segment_zoom(part, zoomed_part, zoom_level, target_w, target_h, fps)
-        print(
-            f"[CUT] Segment {i}: {s:.3f}s → {e:.3f}s (duration: {e-s:.3f}s)"
-            f"  role={seg.get('role', '?')}  zoom={zoom_level}%  part={zoomed_part.name}"
-        )
+        print(f"[ZOOM] Segment {i}: beat={seg.get('beat')} zoom={zoom_level}% duration={e-s:.2f}s")
+        zoom_segments.append(i)
         parts.append(zoomed_part)
         _check_av_sync(zoomed_part, f"segment_{i}")  # FIX 5: probe after every cut
 
@@ -1326,6 +1326,19 @@ def render(
                     "duration": vm_dur,
                 })
 
+        for moment in (plan.caption_moments or []):
+            try:
+                m_at  = float(moment.get("start", 0))
+                m_end = float(moment.get("end", m_at + 3.0))
+            except (TypeError, ValueError):
+                continue
+            if s_raw <= m_at < e_raw:
+                remapped_moments.append({
+                    **moment,
+                    "start": seg_offset + (m_at - s),
+                    "end":   min(seg_offset + (m_end - s), seg_offset + (e - s)),
+                })
+
         if parts:  # record cut point in output timeline
             cut_timestamps.append(cum)
         cum += (e - s)  # exact segment duration — no audio-handle inflation
@@ -1333,6 +1346,7 @@ def render(
     if not parts:
         raise RuntimeError("No keep_segments produced any clip.")
 
+    print(f"[ZOOM] Total segments with zoom: {len(zoom_segments)}")
     concat_path = work_dir / "concat.mp4"
     _concat(parts, concat_path)
     print(f"[AUDIO] Concat complete: {concat_path}")
@@ -1483,6 +1497,12 @@ def render(
                 remapped_silences = [
                     {**sil, "at": _remap_time(float(sil.get("at", 0)), kept_intervals)}
                     for sil in remapped_silences
+                ]
+                remapped_moments = [
+                    {**m,
+                     "start": _remap_time(float(m.get("start", 0)), kept_intervals),
+                     "end":   _remap_time(float(m.get("end", 0)),   kept_intervals)}
+                    for m in remapped_moments
                 ]
                 cut_timestamps = [
                     _remap_time(ct, kept_intervals) for ct in cut_timestamps
@@ -1662,7 +1682,7 @@ def render(
         caption_style_map=caption_style_map,
         video_duration=total_duration,
         mode="long" if not short_form else "short",
-        caption_moments=plan.caption_moments if not short_form else None,
+        caption_moments=remapped_moments if not short_form else None,
     )
     print(f"[CAPTIONS] ASS file written: {ass_path}")
     print(f"[CAPTIONS] ASS file size: {ass_path.stat().st_size} bytes")
