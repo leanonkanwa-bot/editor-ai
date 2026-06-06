@@ -1669,6 +1669,12 @@ def render(
 
     ass_path = work_dir / "captions.ass"
     print(f"[FONT] User requested: {caption_font}")
+    # For long-form: prefer selective caption_moments; fall back to word-by-word
+    # short-form captions if the planner produced none (better than zero captions).
+    _long = not short_form
+    _use_moments = _long and bool(remapped_moments)
+    if _long and not remapped_moments:
+        print("[CAPTIONS] Long-form has no caption_moments — falling back to short-form word-by-word")
     build_ass(
         remapped_words,
         ass_path,
@@ -1678,8 +1684,8 @@ def render(
         caption_font=caption_font,
         caption_style_map=caption_style_map,
         video_duration=total_duration,
-        mode="long" if not short_form else "short",
-        caption_moments=remapped_moments if not short_form else None,
+        mode="long" if _use_moments else "short",
+        caption_moments=remapped_moments if _use_moments else None,
     )
     print(f"[CAPTIONS] ASS file written: {ass_path}")
     print(f"[CAPTIONS] ASS file size: {ass_path.stat().st_size} bytes")

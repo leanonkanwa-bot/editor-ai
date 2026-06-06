@@ -1140,6 +1140,21 @@ Reply with a SINGLE JSON object, no prose, matching this schema:
     "<2nd>", "<3rd>"
   ],
 
+  /* ── caption_moments — REQUIRED for long-form, omit for short-form ────────
+     Minimum 1 caption per keep_segment. Never more than 10 seconds without
+     a caption in long-form. Max 3 captions per segment for very long segments.
+     Every important phrase, key concept, and stat MUST be captioned.
+     start/end must fall within a keep_segment window.
+  */
+  "caption_moments": [
+    { "start": <s>, "end": <s>,
+      "text": "<exact spoken words — verbatim from transcript>",
+      "style": "hook"|"concept"|"stat"|"list_item"|"quote"|"marker",
+      "emphasis_words": ["<word>"] }
+    /* Long-form: REQUIRED. 1 entry per keep_segment minimum.
+       Short-form: omit entirely or use empty array []. */
+  ],
+
   "packaging": {
     "title": "<curiosity-gap title under 8 words>",
     "thumbnail_word": "<ONE WORD, dramatic, emotional>",
@@ -1390,6 +1405,16 @@ def system_prompt(
             "motion_graphics: [] — output empty array. visual_style_moments: [] — output empty array. "
             "1 cut per 4–6 seconds. Max 2 b-roll. "
             "New curiosity loop every 15–20s.\n\n"
+            "CAPTION MOMENTS — REQUIRED for long-form:\n"
+            "  Output AT LEAST 1 caption_moment per keep_segment.\n"
+            "  Every important phrase, concept, stat, and turning point MUST be captioned.\n"
+            "  Never go more than 10 seconds without a caption in long-form.\n"
+            "  Max 3 captions per segment for very long segments (> 30s).\n"
+            "  style choices: hook (first moment), concept (key idea), stat (number/data),\n"
+            "    list_item (series item), quote (verbatim power line), marker (section label).\n"
+            "  emphasis_words: 1–3 words from the text that should pop in brand color.\n"
+            "  start/end: must fall within the corresponding keep_segment window.\n"
+            "  text: exact verbatim spoken words — never invented, never paraphrased.\n\n"
             + _zoom_level_rules
         )
     else:

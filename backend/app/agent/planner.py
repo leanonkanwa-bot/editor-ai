@@ -112,7 +112,36 @@ class EditPlan:
 
     @property
     def caption_moments(self) -> list[dict[str, Any]]:
-        return self.raw.get("caption_moments", [])
+        moments = self.raw.get("caption_moments", [])
+        if moments:
+            return moments
+        # Auto-generate from script_structure for long-form when planner omitted caption_moments.
+        # Takes the first line of each beat section as a concept caption.
+        if self.raw.get("format") == "long":
+            script = self.raw.get("script_structure", [])
+            auto: list[dict[str, Any]] = []
+            for beat in script:
+                lines = beat.get("lines", [])
+                if not lines:
+                    continue
+                try:
+                    start = float(beat.get("start", 0))
+                    end = float(beat.get("end", start + 4.0))
+                except (TypeError, ValueError):
+                    continue
+                text = lines[0]
+                cap_end = min(end, start + 4.0)
+                auto.append({
+                    "start": start,
+                    "end": cap_end,
+                    "text": text,
+                    "style": "concept",
+                    "emphasis_words": [],
+                })
+            if auto:
+                print(f"[CAPTIONS] Auto-generated {len(auto)} caption_moments from script_structure")
+                return auto
+        return moments
 
 
 def _decide_format(duration_s: float, hint: FormatHint) -> str:
