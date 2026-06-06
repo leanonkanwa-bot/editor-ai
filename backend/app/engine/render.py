@@ -1668,6 +1668,7 @@ def render(
     }
 
     ass_path = work_dir / "captions.ass"
+    print(f"[FONT] User requested: {caption_font}")
     build_ass(
         remapped_words,
         ass_path,

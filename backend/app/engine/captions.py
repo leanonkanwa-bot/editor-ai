@@ -136,6 +136,74 @@ def _get_font_path(font_name: str) -> str:
     return fallback
 
 
+def _ensure_font(font_name: str) -> str:
+    """Ensure font is available locally, downloading from Google Fonts if needed.
+
+    Returns the ASS font family name (weight suffixes stripped).
+    Falls back to DejaVu Sans if download fails or font not found.
+    """
+    import urllib.request
+
+    # Check pre-installed fonts first
+    for candidate in (font_name, font_name + " Bold"):
+        path = FONT_MAP.get(candidate)
+        if path and os.path.exists(path):
+            print(f"[FONT] Pre-installed: {font_name}")
+            family = (
+                font_name
+                .replace(" ExtraBold", "")
+                .replace(" SemiBold", "")
+                .replace(" Bold", "")
+                .strip()
+            )
+            return family
+
+    # Try to download from Google Fonts CSS2 API (no API key needed)
+    try:
+        font_query = font_name.replace(" Bold", "").replace(" ", "+").strip()
+        css_url = f"https://fonts.googleapis.com/css2?family={font_query}:wght@700&display=swap"
+        req = urllib.request.Request(css_url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            css = resp.read().decode("utf-8")
+
+        # Extract the first font URL from the CSS
+        urls = re.findall(r"src:\s*url\(([^)]+)\)", css)
+        font_url = None
+        for u in urls:
+            u = u.strip("'\"")
+            if ".ttf" in u or ".woff2" in u:
+                font_url = u
+                break
+        if not font_url and urls:
+            font_url = urls[0].strip("'\"")
+
+        if font_url:
+            safe_name = re.sub(r"[^a-zA-Z0-9_-]", "_", font_name)
+            ext = ".woff2" if ".woff2" in font_url else ".ttf"
+            dst = f"/usr/local/share/fonts/leanlead/{safe_name}{ext}"
+            req2 = urllib.request.Request(font_url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req2, timeout=15) as resp2:
+                data = resp2.read()
+            if len(data) > 1000:
+                with open(dst, "wb") as f:
+                    f.write(data)
+                os.system("fc-cache -f /usr/local/share/fonts/leanlead/ 2>/dev/null")
+                print(f"[FONT] Downloaded: {font_name} ({len(data)} bytes) → {dst}")
+                family = (
+                    font_name
+                    .replace(" ExtraBold", "")
+                    .replace(" SemiBold", "")
+                    .replace(" Bold", "")
+                    .strip()
+                )
+                return family
+    except Exception as exc:
+        print(f"[FONT] Download failed for {font_name}: {exc}")
+
+    print(f"[FONT] Fallback to DejaVu Sans for: {font_name}")
+    return "DejaVu Sans"
+
+
 def _ts(t: float) -> str:
     if t < 0:
         t = 0.0
@@ -431,22 +499,10 @@ def build_ass(
     play_res_x = video_w
     play_res_y = video_h
 
-    # Font resolution: use caption_font if the file is actually on disk,
-    # otherwise fall back to DejaVu Sans (always available on Debian).
-    # ASS uses font family names; strip weight suffixes because bold is declared
-    # via the Bold flag (field 8) in the Style line, not embedded in the name.
-    _req_font = caption_font or "Montserrat Bold"
-    if not os.path.exists(_get_font_path(_req_font)):
-        print(f"[FONT] {_req_font} not installed — using DejaVu Sans")
-        _req_font = "DejaVu Sans"
-    font_family = (
-        _req_font
-        .replace(" ExtraBold", "")
-        .replace(" SemiBold", "")
-        .replace(" Bold", "")
-        .strip()
-    )
-
+    # Font resolution: ensure font is available (pre-installed or downloaded),
+    # then strip weight suffixes — bold is declared via Bold=1 flag in the Style.
+    print(f"[FONT] User requested: {caption_font}")
+    font_family = _ensure_font(caption_font or "Inter Bold")
     keyword_font = font_family
     context_font = font_family
 
