@@ -413,37 +413,58 @@ def build_ass(
     """
     output_path = Path(output_path)
 
-    if mode == "long" and caption_moments:
-        return _build_long_form_ass(
-            caption_moments, output_path,
-            video_w=video_w, video_h=video_h, brand_color=brand_color,
+    # Long-form: selective moments only — NO fallback to word-by-word.
+    if mode == "long":
+        if caption_moments:
+            return _build_long_form_ass(
+                caption_moments, output_path,
+                video_w=video_w, video_h=video_h, brand_color=brand_color,
+            )
+        # No moments → intentional silence; write empty ASS (no captions at all).
+        output_path.write_text(
+            "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\n\n[Events]\n",
+            encoding="utf-8",
         )
+        print("[CAPTIONS LONG] No caption_moments — empty ASS (no captions)")
+        return output_path
 
     play_res_x = video_w
     play_res_y = video_h
 
-    # Jordan Belfort two-level typography:
-    # BOTTOM (Keyword): serif font, large, brand color — the current phrase
-    # TOP    (Context): sans font, small, white       — the previous phrase
-    keyword_font = "Playfair Display Bold"
-    context_font = "Montserrat Bold"
+    # Font resolution: use caption_font if the file is actually on disk,
+    # otherwise fall back to DejaVu Sans (always available on Debian).
+    # ASS uses font family names; strip weight suffixes because bold is declared
+    # via the Bold flag (field 8) in the Style line, not embedded in the name.
+    _req_font = caption_font or "Montserrat Bold"
+    if not os.path.exists(_get_font_path(_req_font)):
+        print(f"[FONT] {_req_font} not installed — using DejaVu Sans")
+        _req_font = "DejaVu Sans"
+    font_family = (
+        _req_font
+        .replace(" ExtraBold", "")
+        .replace(" SemiBold", "")
+        .replace(" Bold", "")
+        .strip()
+    )
 
-    # Font sizes scaled from 1920px reference (PlayResY == video_h, so these
-    # are already in the correct coordinate space).
+    keyword_font = font_family
+    context_font = font_family
+
+    # Font sizes scaled from 1920px reference.
     keyword_sz = round(88 * play_res_y / 1920)
     context_sz = round(48 * play_res_y / 1920)
 
     # Colors
     keyword_color = _hex_to_ass_bgr(brand_color) if brand_color else EMPHASIS_COLOR_ASS
-    context_color = "&H00FFFFFF"  # white
+    context_color = "&H66FFFFFF"  # white at ~60% opacity (ASS alpha 0x66 ≈ 40% transparent)
     outline_color = "&H00000000"  # black
     back_color    = "&H00000000"  # transparent
 
-    # Margins from bottom edge.
-    # keyword_mv: 8% from bottom.
-    # context_mv: sits directly above keyword — keyword margin + keyword height + 20px gap.
-    keyword_mv = int(play_res_y * 0.08)
-    context_mv = keyword_mv + keyword_sz + 20
+    # Margins from bottom edge (Alignment=2 = bottom-center).
+    # keyword_mv: 12% from bottom — bottom 18% of frame.
+    # context_mv: stacked directly above keyword with a 15px gap.
+    keyword_mv = int(play_res_y * 0.12)
+    context_mv = keyword_mv + keyword_sz + 15
 
     header = (
         "[Script Info]\n"
@@ -456,10 +477,10 @@ def build_ass(
         "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
         "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
         "Alignment, MarginL, MarginR, MarginV, Encoding\n"
-        # Keyword: current phrase — serif, brand color, 88px, 3px black outline
+        # Keyword: current phrase — bold, brand color, 88px, 3px outline, bottom
         f"Style: Keyword,{keyword_font},{keyword_sz},{keyword_color},{keyword_color},"
         f"{outline_color},{back_color},1,0,0,0,100,100,0,0,1,3,0,2,60,60,{keyword_mv},1\n"
-        # Context: previous phrase — sans, white, 48px, 2px black outline
+        # Context: previous phrase — same font, 60% white, 48px, 2px outline, above keyword
         f"Style: Context,{context_font},{context_sz},{context_color},{context_color},"
         f"{outline_color},{back_color},1,0,0,0,100,100,0,0,1,2,0,2,60,60,{context_mv},1\n"
         "\n[Events]\n"
