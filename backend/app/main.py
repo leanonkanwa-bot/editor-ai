@@ -1250,4 +1250,4 @@ if editor_dir.exists():
     def app_page():
         return FileResponse(str(editor_dir / "index.html"))
 
-    app.mount("/static", StaticFiles(directory=str(editor_dir)), name="frontend")
+    app.mount("/", StaticFiles(directory=str(editor_dir)), name="frontend")
