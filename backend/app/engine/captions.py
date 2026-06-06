@@ -89,9 +89,9 @@ class WordTiming:
 _FONT_MAP: dict[str, str] = {
     # Fonts installed in Dockerfile pass through unchanged (their face names match).
     # Fonts NOT installed are remapped to the DejaVu fallback.
-    "Poppins Bold":       "DejaVu Sans Bold",
-    "Poppins ExtraBold":  "DejaVu Sans Bold",
-    "Poppins SemiBold":   "DejaVu Sans Bold",
+    "Poppins Bold":       "Montserrat Bold",   # Montserrat is installed; Poppins is not
+    "Poppins ExtraBold":  "Montserrat Bold",
+    "Poppins SemiBold":   "Montserrat Bold",
     "Montserrat Black":   "Montserrat Bold",   # Black weight not installed → Bold
     "Roboto Bold":        "DejaVu Sans Bold",
     "DM Sans Bold":       "DM Sans",           # face registered as "DM Sans"
@@ -252,39 +252,40 @@ def build_ass(
     caption_style_map: dict | None = None,
     video_duration: float | None = None,
 ) -> Path:
-    """Render two-level Jordan Belfort phrase captions to an ASS file.
+    """Render two-level Jordan Belfort captions to an ASS file.
 
-    Two-level system:
-      Layer 1 (Large): current phrase — big, brand color, bounce animation
-      Layer 0 (Small): previous phrase — small, white 70%, gentle fade-in
-    Phrases are 3–4 words grouped on natural breath pauses.
-    caption_style_map: {source_segment_start: "normal"|"emphasis"|"highlight"}
-      Segments with "emphasis" render in ALL CAPS for extra impact.
+    Style 1 — Context (upper line):
+        Previous 3-4 word phrase. White, 52px, 2px black outline, no shadow.
+        MarginV = 22% from bottom (422px at 1920h). Alignment = 2 (bottom-center).
+
+    Style 2 — Keyword (lower line):
+        Current 3-4 word phrase. Brand color, 88px, 3px black outline, no shadow.
+        MarginV = 10% from bottom (192px at 1920h). Alignment = 2 (bottom-center).
+
+    Phrases are grouped into 3-4 words, splitting on natural pauses ≥ 300ms.
     """
     output_path = Path(output_path)
 
-    # Resolve font: UI name → installed font face
     font = _FONT_MAP.get(caption_font, caption_font)
     if font not in ALLOWED_FONTS:
-        font = "DejaVu Sans Bold"
+        font = "Montserrat Bold"
 
     play_res_x = video_w
     play_res_y = video_h
 
-    # Font sizes — calibrated for 9:16 1080×1920 reference, scaled to actual height
-    large_sz = round(80 * play_res_y / 1920)
-    small_sz = round(34 * play_res_y / 1920)
-    # Slightly larger for XL "emphasis" segment phrases
-    xlarge_sz = round(96 * play_res_y / 1920)
+    # Sizes scaled proportionally from 1920px reference
+    keyword_sz = round(88 * play_res_y / 1920)
+    context_sz = round(52 * play_res_y / 1920)
 
     # Colors
-    large_color = _hex_to_ass_bgr(brand_color) if brand_color else EMPHASIS_COLOR_ASS
-    # White at ~70% opacity: ASS alpha 0x4D ≈ 30% transparent
-    small_color = "&H4DFFFFFF"
+    keyword_color = _hex_to_ass_bgr(brand_color) if brand_color else EMPHASIS_COLOR_ASS
+    context_color = "&H00FFFFFF"   # white
+    outline_color = "&H00000000"   # black
+    back_color    = "&H00000000"   # transparent
 
-    # Position from bottom edge (MarginV)
-    large_mv = round(play_res_y * 0.15)
-    small_mv = large_mv + large_sz + round(play_res_y * 0.015)
+    # Margins from bottom edge
+    keyword_mv = round(play_res_y * 0.10)   # 192px at 1920
+    context_mv = round(play_res_y * 0.22)   # 422px at 1920
 
     header = (
         "[Script Info]\n"
@@ -297,48 +298,23 @@ def build_ass(
         "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
         "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
         "Alignment, MarginL, MarginR, MarginV, Encoding\n"
-        # Large: current phrase — bold, brand color, semi-transparent dark pill bg
-        f"Style: Large,{font},{large_sz},{large_color},{large_color},"
-        f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,0,1,2,60,60,{large_mv},1\n"
-        # LargeBrand: emphasis segments — even bigger, same brand color
-        f"Style: LargeBrand,{font},{xlarge_sz},{large_color},{large_color},"
-        f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,0,1,2,60,60,{large_mv},1\n"
-        # Small: previous phrase — lighter weight, white 70%, subtle pill bg
-        f"Style: Small,{font},{small_sz},{small_color},{small_color},"
-        f"&H00000000,&H70000000,0,0,0,0,100,100,0,0,3,5,0,2,60,60,{small_mv},1\n"
+        # Keyword: current phrase — brand color, 88px, 3px black outline, no shadow
+        f"Style: Keyword,{font},{keyword_sz},{keyword_color},{keyword_color},"
+        f"{outline_color},{back_color},1,0,0,0,100,100,0,0,1,3,0,2,60,60,{keyword_mv},1\n"
+        # Context: previous phrase — white, 52px, 2px black outline, no shadow
+        f"Style: Context,{font},{context_sz},{context_color},{context_color},"
+        f"{outline_color},{back_color},1,0,0,0,100,100,0,0,1,2,0,2,60,60,{context_mv},1\n"
         "\n[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, "
         "Effect, Text\n"
     )
 
-    # Phrase grouping: 3–4 words, split on natural breath pauses (≥ 250ms)
+    # Phrase grouping: 3-4 words, split on pauses ≥ 300ms
     word_list = [w for w in words if _strip_punct(w.text)]
-    groups = _group_words(word_list, max_words=4, gap_s=WORD_GROUP_GAP_S)
+    groups = _group_words(word_list, max_words=4, gap_s=0.3)
 
-    # Bounce animation: scale 80%→105%→100% over 300ms (Jordan Belfort pop)
-    _bounce = r"{\fscx80\fscy80\t(0,200,\fscx105\fscy105)\t(200,300,\fscx100\fscy100)}"
-    # Fade-in for previous phrase (already "been said", softer appearance)
-    _fade_in = r"{\fad(120,0)}"
-
-    # Build sorted list of (timestamp, style) pairs from caption_style_map
-    _style_entries: list[tuple[float, str]] = []
-    if caption_style_map:
-        _style_entries = sorted(
-            ((float(k), str(v)) for k, v in caption_style_map.items()),
-            key=lambda x: x[0],
-        )
-
-    def _segment_style_for(t: float) -> str:
-        """Return the caption style name for timestamp t based on caption_style_map."""
-        if not _style_entries:
-            return "normal"
-        style_name = "normal"
-        for seg_start, seg_style in _style_entries:
-            if t >= seg_start:
-                style_name = seg_style
-            else:
-                break
-        return style_name
+    # Keyword animation: 80ms fade-in + subtle 95%→100% scale pop-in
+    _kw_anim = r"{\fad(80,0)\t(\fscx95\fscy95,\fscx100\fscy100)}"
 
     lines = [header]
     prev_text = ""
@@ -349,14 +325,13 @@ def build_ass(
         if not clean:
             continue
 
-        start = max(0.0, group[0].start + WHISPER_TIMESTAMP_CORRECTION + CAPTION_DELAY_S)
+        start = max(0.0, group[0].start + WHISPER_TIMESTAMP_CORRECTION)
         end_base = group[-1].end + WHISPER_TIMESTAMP_CORRECTION
 
-        # Skip phrases that start after the video ends
         if video_duration is not None and start > video_duration:
             break
 
-        # Find next group's start for hold-until-next behaviour
+        # Hold until next phrase to avoid subtitle gaps
         next_start: float | None = None
         for ngi in range(gi + 1, len(groups)):
             ng = groups[ngi]
@@ -368,33 +343,26 @@ def build_ass(
         end = (
             next_start
             if (next_start is not None and next_start > end_base + 0.05)
-            else end_base + 0.4
+            else end_base + 0.1
         )
 
         if video_duration is not None and end > video_duration:
             end = video_duration
 
-        # Determine ASS style from caption_style_map
-        seg_style = _segment_style_for(start)
-        ass_style = "LargeBrand" if seg_style == "emphasis" else "Large"
+        phrase_text = " ".join(
+            w.capitalize() if i == 0 else w.lower()
+            for i, w in enumerate(clean)
+        )
 
-        # Build phrase text: "Capitalize first word, lower rest" for readability.
-        # ALL CAPS for "emphasis" segments (high-energy Jordan Belfort moments).
-        if seg_style == "emphasis":
-            phrase_text = " ".join(w.upper() for w in clean)
-        else:
-            phrase_text = " ".join(w.capitalize() if i == 0 else w.lower() for i, w in enumerate(clean))
+        # Keyword line (bottom) — current phrase with animation
+        kw_text = _kw_anim + phrase_text
+        lines.append(f"Dialogue: 1,{_ts(start)},{_ts(end)},Keyword,,0,0,0,,{kw_text}")
 
-        large_text = _bounce + phrase_text
-        lines.append(f"Dialogue: 1,{_ts(start)},{_ts(end)},{ass_style},,0,0,0,,{large_text}")
-
-        # Previous phrase shown above in small faded text
+        # Context line (above keyword) — previous phrase, plain text
         if prev_text:
-            small_text = _fade_in + prev_text
-            lines.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},Small,,0,0,0,,{small_text}")
+            lines.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},Context,,0,0,0,,{prev_text}")
 
-        # Update prev_text for next iteration (always lowercase for "been said" feel)
-        prev_text = " ".join(w.lower() for w in clean)
+        prev_text = phrase_text
 
     output_path.write_text("\n".join(lines), encoding="utf-8")
     return output_path

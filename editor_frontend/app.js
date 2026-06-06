@@ -2671,4 +2671,60 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   }
 
+  // UPGRADE MODAL ────────────────────────────────────────────────────────────
+  document.querySelectorAll(".btn-upgrade").forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      if (document.getElementById("upgradeModal")) return;
+      var modal = document.createElement("div");
+      modal.id = "upgradeModal";
+      modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9000;display:flex;align-items:center;justify-content:center;padding:1rem";
+      modal.innerHTML = [
+        '<div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;max-width:640px;width:100%;padding:2rem;position:relative;max-height:90vh;overflow-y:auto">',
+          '<button id="upgradeModalClose" style="position:absolute;top:1rem;right:1rem;background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--text-secondary);line-height:1">×</button>',
+          '<h2 style="font-size:1.3rem;font-weight:800;margin-bottom:.25rem;letter-spacing:-.02em">Passer à Pro</h2>',
+          '<p style="font-size:.875rem;color:var(--text-secondary);margin-bottom:1.5rem">Choisissez le plan qui correspond à vos ambitions.</p>',
+          '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem">',
+            // Starter
+            '<div style="border:1px solid var(--border);border-radius:12px;padding:1.25rem;display:flex;flex-direction:column;gap:.5rem">',
+              '<div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-secondary)">Starter</div>',
+              '<div style="font-size:1.8rem;font-weight:800;letter-spacing:-.03em">€29<span style="font-size:.75rem;font-weight:500;color:var(--text-secondary)">/mo</span></div>',
+              '<ul style="list-style:none;font-size:.8rem;color:var(--text-secondary);display:flex;flex-direction:column;gap:.3rem;flex:1;margin-top:.25rem">',
+                '<li>✓ 10 vidéos / mois</li><li>✓ Captions IA</li><li>✓ Export 1080p</li><li>✓ Support email</li>',
+              '</ul>',
+              '<button class="upgrade-plan-btn" style="margin-top:.75rem;width:100%;padding:.55rem;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:var(--font);font-size:.82rem;font-weight:600;cursor:pointer">Choisir ce plan</button>',
+            '</div>',
+            // Pro (highlighted)
+            '<div style="border:2px solid #FF7751;border-radius:12px;padding:1.25rem;display:flex;flex-direction:column;gap:.5rem;position:relative;background:rgba(255,119,81,.04)">',
+              '<div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:#FF7751;color:#fff;font-size:.65rem;font-weight:700;padding:.18rem .65rem;border-radius:99px;white-space:nowrap">POPULAIRE</div>',
+              '<div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#FF7751">Pro</div>',
+              '<div style="font-size:1.8rem;font-weight:800;letter-spacing:-.03em">€79<span style="font-size:.75rem;font-weight:500;color:var(--text-secondary)">/mo</span></div>',
+              '<ul style="list-style:none;font-size:.8rem;color:var(--text-secondary);display:flex;flex-direction:column;gap:.3rem;flex:1;margin-top:.25rem">',
+                '<li>✓ Vidéos illimitées</li><li>✓ Marque personnalisée</li><li>✓ B-roll automatique</li><li>✓ Analytics avancés</li><li>✓ Support prioritaire</li>',
+              '</ul>',
+              '<button class="upgrade-plan-btn" style="margin-top:.75rem;width:100%;padding:.55rem;border-radius:8px;border:none;background:#FF7751;color:#fff;font-family:var(--font);font-size:.82rem;font-weight:600;cursor:pointer">Choisir ce plan</button>',
+            '</div>',
+            // Agency
+            '<div style="border:1px solid var(--border);border-radius:12px;padding:1.25rem;display:flex;flex-direction:column;gap:.5rem">',
+              '<div style="font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-secondary)">Agency</div>',
+              '<div style="font-size:1.8rem;font-weight:800;letter-spacing:-.03em">€149<span style="font-size:.75rem;font-weight:500;color:var(--text-secondary)">/mo</span></div>',
+              '<ul style="list-style:none;font-size:.8rem;color:var(--text-secondary);display:flex;flex-direction:column;gap:.3rem;flex:1;margin-top:.25rem">',
+                '<li>✓ Comptes illimités</li><li>✓ White label</li><li>✓ API accès</li><li>✓ Manager dédié</li><li>✓ SLA garanti</li>',
+              '</ul>',
+              '<button class="upgrade-plan-btn" style="margin-top:.75rem;width:100%;padding:.55rem;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:var(--font);font-size:.82rem;font-weight:600;cursor:pointer">Choisir ce plan</button>',
+            '</div>',
+          '</div>',
+        '</div>'
+      ].join("");
+      document.body.appendChild(modal);
+      document.getElementById("upgradeModalClose").addEventListener("click", function() { modal.remove(); });
+      modal.addEventListener("click", function(e) { if (e.target === modal) modal.remove(); });
+      modal.querySelectorAll(".upgrade-plan-btn").forEach(function(b) {
+        b.addEventListener("click", function() {
+          modal.remove();
+          alert("Paiement à venir — contactez nous à hello@leanretention.com");
+        });
+      });
+    });
+  });
+
 });

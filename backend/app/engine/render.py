@@ -1588,16 +1588,15 @@ def render(
     src_w = concat_info.get("width",  0) or target_w
     src_h = concat_info.get("height", 0) or target_h
 
-    # Skip scaling entirely when the concat is already exactly the target size —
-    # re-scaling a compressed stream (stream capture, h264) introduces blurring.
-    # Apply crop-to-fill only when actual dimensions differ from target.
-    if src_w == target_w and src_h == target_h:
-        scale_filter = None
+    if short_form:
+        # 9:16 vertical: center-crop horizontal source then scale up
+        scale_filter = f"crop=ih*9/16:ih,scale={target_w}:{target_h}"
     else:
-        scale_filter = (
-            f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase,"
-            f"crop={target_w}:{target_h}"
-        )
+        # 16:9 horizontal: straight scale, skip if already correct size
+        if src_w == target_w and src_h == target_h:
+            scale_filter = None
+        else:
+            scale_filter = f"scale={target_w}:{target_h}"
 
     system_font = _find_system_font()
 
@@ -1663,7 +1662,10 @@ def render(
         f"fps={fps},setpts=N/FRAME_RATE/TB"
     )
 
-    _vf_p1 = [p for p in [color_grade, scale_filter, _zoom_str] if p]
+    # Cover stream chat / subscriber UI in top-right corner — short-form only.
+    # In long-form (16:9) the crop is different and the UI position varies.
+    _stream_ui_cover = "drawbox=x=W-300:y=0:w=300:h=200:color=black:t=fill" if short_form else None
+    _vf_p1 = [p for p in [color_grade, scale_filter, _stream_ui_cover, _zoom_str] if p]
     _cmd_p1: list[str] = [
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-i", str(concat_path),
