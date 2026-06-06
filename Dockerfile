@@ -7,18 +7,18 @@ RUN apt-get update && apt-get install -y \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Install fonts via Python urllib — follows redirects reliably on Railway,
+# Install fonts via Python urllib ??? follows redirects reliably on Railway,
 # unlike curl which hits GitHub raw 301s inconsistently in Docker builds.
 # Inter Bold still uses the zip release (confirmed working); all others use
 # Python so each download prints its own OK/FAIL line in the build log.
 RUN mkdir -p /usr/local/share/fonts/leanlead && \
-    # Inter Bold — rsms/inter GitHub releases zip (confirmed working with curl)
+    # Inter Bold ??? rsms/inter GitHub releases zip (confirmed working with curl)
     curl -fsSL "https://github.com/rsms/inter/releases/download/v4.0/Inter-4.0.zip" \
          -o /tmp/inter.zip && \
     unzip -q /tmp/inter.zip -d /tmp/inter && \
     cp /tmp/inter/extras/otf/Inter-Bold.otf /usr/local/share/fonts/leanlead/ && \
     rm -rf /tmp/inter /tmp/inter.zip && \
-    # All other fonts — Python urllib follows redirects, prints per-font status
+    # All other fonts ??? Python urllib follows redirects, prints per-font status
     python3 -c "
 import urllib.request, os, sys
 fonts = {
@@ -50,7 +50,7 @@ print(f'{ok}/{len(fonts)} fonts downloaded')
     echo "=== COUNT ===" && \
     fc-list | grep -i "leanlead" | wc -l
 
-# Custom fonts (Quicksand, SF Compact Bold, etc.) — drop TTF/OTF files into fonts/ before building.
+# Custom fonts (Quicksand, SF Compact Bold, etc.) ??? drop TTF/OTF files into fonts/ before building.
 COPY fonts/ /usr/local/share/fonts/leanlead/
 RUN fc-cache -f -v 2>/dev/null || true
 
@@ -66,3 +66,5 @@ COPY frontend/ /app/frontend/
 EXPOSE 8000
 
 CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+
+# cache-bust-20260606223926
