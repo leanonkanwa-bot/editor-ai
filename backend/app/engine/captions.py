@@ -242,6 +242,97 @@ def _group_words(
     return groups
 
 
+def apply_emphasis(text: str, emphasis_words: list[str], brand_color_ass: str) -> str:
+    """Wrap emphasis_words in ASS inline color override tags.
+
+    Uses word-boundary matching (case-insensitive). The {\r} tag resets
+    back to the style default after each emphasized word.
+    """
+    for word in emphasis_words:
+        pat = re.compile(r'(?<!\w)' + re.escape(word) + r'(?!\w)', re.IGNORECASE)
+        repl = "{\\c" + brand_color_ass + "}" + word + "{\\r}"
+        text = pat.sub(repl, text)
+    return text
+
+
+def _build_long_form_ass(
+    moments: list[dict],
+    output_path: Path,
+    video_w: int = 1920,
+    video_h: int = 1080,
+    brand_color: str = "#FF7751",
+) -> Path:
+    """Build a long-form (16:9) strategic captions ASS file from planner moments.
+
+    Styles:
+      Hook     — Anton 90px, white, center-screen, \\fad(150,150)
+      Concept  — Montserrat Bold 72px, white + brand emphasis, lower-third, \\fad(100,100)
+      Stat     — Montserrat Bold 110px, gold #FFD480, center, \\fad(80,80) + scale pop
+      ListItem — Montserrat Bold 62px, white, center-left, \\fad(80,50)
+    """
+    brand_ass = _hex_to_ass_bgr(brand_color)
+    gold_ass  = "&H0080D4FF"  # #FFD480 warm gold (BGR)
+
+    hook_sz    = round(90  * video_h / 1080)
+    concept_sz = round(72  * video_h / 1080)
+    stat_sz    = round(110 * video_h / 1080)
+    list_sz    = round(62  * video_h / 1080)
+
+    concept_mv = round(80 * video_h / 1080)   # lower-third bottom margin
+    list_ml    = round(80 * video_w / 1920)   # left margin for list items
+
+    header = (
+        "[Script Info]\n"
+        "ScriptType: v4.00+\n"
+        f"PlayResX: {video_w}\n"
+        f"PlayResY: {video_h}\n"
+        "ScaledBorderAndShadow: yes\n\n"
+        "[V4+ Styles]\n"
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
+        "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
+        "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+        "Alignment, MarginL, MarginR, MarginV, Encoding\n"
+        f"Style: Hook,Anton,{hook_sz},&H00FFFFFF,&H00FFFFFF,"
+        f"&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,2,0,5,60,60,60,1\n"
+        f"Style: Concept,Montserrat Bold,{concept_sz},&H00FFFFFF,&H00FFFFFF,"
+        f"&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,2,0,2,60,60,{concept_mv},1\n"
+        f"Style: Stat,Montserrat Bold,{stat_sz},{gold_ass},{gold_ass},"
+        f"&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,0,0,5,60,60,60,1\n"
+        f"Style: ListItem,Montserrat Bold,{list_sz},&H00FFFFFF,&H00FFFFFF,"
+        f"&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,2,0,4,{list_ml},60,60,1\n"
+        "\n[Events]\n"
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, "
+        "Effect, Text\n"
+    )
+
+    _style_map: dict[str, tuple[str, str]] = {
+        "hook":      ("Hook",     r"{\fad(150,150)}"),
+        "concept":   ("Concept",  r"{\fad(100,100)}"),
+        "stat":      ("Stat",     r"{\fad(80,80)\t(\fscx90\fscy90,\fscx100\fscy100)}"),
+        "list_item": ("ListItem", r"{\fad(80,50)}"),
+        "quote":     ("Concept",  r"{\fad(100,100)}"),
+        "marker":    ("Concept",  r"{\fad(80,80)}"),
+    }
+
+    lines = [header]
+    for moment in moments:
+        start = float(moment.get("start", 0))
+        end   = float(moment.get("end",   start + 3.0))
+        text  = str(moment.get("text",   "")).strip()
+        style = str(moment.get("style",  "concept"))
+        emph  = moment.get("emphasis_words") or []
+
+        if not text:
+            continue
+
+        ass_style, anim = _style_map.get(style, ("Concept", r"{\fad(100,100)}"))
+        display = apply_emphasis(text, emph, brand_ass) if emph else text
+        lines.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},{ass_style},,0,0,0,,{anim}{display}")
+
+    output_path.write_text("\n".join(lines), encoding="utf-8")
+    return output_path
+
+
 def build_ass(
     words: list,
     output_path,
@@ -251,20 +342,23 @@ def build_ass(
     caption_font: str = "Inter Bold",
     caption_style_map: dict | None = None,
     video_duration: float | None = None,
+    mode: str = "short",
+    caption_moments: list[dict] | None = None,
 ) -> Path:
-    """Render two-level Jordan Belfort captions to an ASS file.
+    """Render captions to an ASS subtitle file.
 
-    Style 1 — Context (upper line):
-        Previous 3-4 word phrase. White, 52px, 2px black outline, no shadow.
-        MarginV = 22% from bottom (422px at 1920h). Alignment = 2 (bottom-center).
-
-    Style 2 — Keyword (lower line):
-        Current 3-4 word phrase. Brand color, 88px, 3px black outline, no shadow.
-        MarginV = 10% from bottom (192px at 1920h). Alignment = 2 (bottom-center).
-
-    Phrases are grouped into 3-4 words, splitting on natural pauses ≥ 300ms.
+    Short-form (mode='short'): two-level Jordan Belfort style — Keyword + Context.
+    Long-form  (mode='long'):  strategic moments only, 4 styles — Hook/Concept/Stat/ListItem.
+                               Requires caption_moments list from the planner.
+                               Falls back to short-form if caption_moments is empty.
     """
     output_path = Path(output_path)
+
+    if mode == "long" and caption_moments:
+        return _build_long_form_ass(
+            caption_moments, output_path,
+            video_w=video_w, video_h=video_h, brand_color=brand_color,
+        )
 
     font = _FONT_MAP.get(caption_font, caption_font)
     if font not in ALLOWED_FONTS:

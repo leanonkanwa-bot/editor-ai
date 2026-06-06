@@ -101,6 +101,10 @@ class EditPlan:
     def word_categories(self) -> dict[str, str]:
         return self.raw.get("word_categories", {})
 
+    @property
+    def caption_moments(self) -> list[dict[str, Any]]:
+        return self.raw.get("caption_moments", [])
+
 
 def _decide_format(duration_s: float, hint: FormatHint) -> str:
     if hint in ("short", "long"):
@@ -374,7 +378,29 @@ def plan_edit(
                     "  - hook (highest score, serves the unified intention)\n"
                     "  - caption_emphasis_words (only words that serve the intention)\n"
                     "  - broll (only when it ADDS to the intention, not decorates)\n"
-                    "  - hyperframes (only at moments of maximum emotional impact)\n\n"
+                    "  - hyperframes (only at moments of maximum emotional impact)\n"
+                    + (
+                    "  - caption_moments (LONG-FORM ONLY — selective strategic captions):\n"
+                    "      Select 8–15 moments from the kept segments. NOT every sentence.\n"
+                    "      Only moments that change the viewer's belief, emotion, or understanding.\n"
+                    "      Each moment: {\n"
+                    '        "start": N.N,           // timestamp in output timeline\n'
+                    '        "end":   N.N,           // 2–5s window\n'
+                    '        "text":  "...",         // exact spoken words or key phrase\n'
+                    '        "style": "hook|concept|stat|list_item|quote|marker",\n'
+                    '        "emphasis_words": ["word1"]  // 1–3 words to highlight\n'
+                    "      }\n"
+                    "      STYLE RULES:\n"
+                    '        hook      — opening moment, center-screen, ≤8 words\n'
+                    '        concept   — key idea being introduced, lower-third\n'
+                    '        stat      — number / metric / specific claim, center large\n'
+                    '        list_item — one item from a series (3 max), left-aligned\n'
+                    '        quote     — speaker\'s most powerful verbatim line\n'
+                    '        marker    — section transition ("Step 1:", "The truth:")\n'
+                    "      emphasis_words must appear verbatim in the text field.\n"
+                    "      start/end timestamps must fall within a keep_segment.\n\n"
+                    if fmt == "long" else ""
+                    ) +
                     "PHASE 5 — SELF-EVALUATION (before finalizing output)\n"
                     "Run this checklist and output PASS/FAIL for each:\n"
                     "  □ IMAGINATION CHECK: Does this edit achieve the emotion stated in Phase 0?\n"

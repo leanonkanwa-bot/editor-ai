@@ -1563,6 +1563,8 @@ def render(
         caption_font=caption_font,
         caption_style_map=caption_style_map,
         video_duration=total_duration,
+        mode="long" if not short_form else "short",
+        caption_moments=plan.caption_moments if not short_form else None,
     )
     print(f"[CAPTIONS] ASS file written: {ass_path}")
     print(f"[CAPTIONS] ASS file size: {ass_path.stat().st_size} bytes")
