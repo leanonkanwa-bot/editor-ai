@@ -16,6 +16,7 @@ Caption system — professional short-form edutainment standard:
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -100,6 +101,39 @@ _FONT_MAP: dict[str, str] = {
     # Installed fonts — no remapping needed (listed in ALLOWED_FONTS):
     # Inter Bold, Montserrat Bold, Bebas Neue, Anton, Quicksand Bold/SemiBold/Medium
 }
+
+# Absolute path map — used by _get_font_path() for drawtext/fontfile lookups
+# and for diagnostics. Separate from _FONT_MAP (which remaps ASS font names).
+FONT_MAP: dict[str, str] = {
+    "Inter Bold":            "/usr/local/share/fonts/leanlead/Inter-Bold.otf",
+    "Inter":                 "/usr/local/share/fonts/leanlead/Inter-Bold.otf",
+    "Montserrat Bold":       "/usr/local/share/fonts/leanlead/Montserrat-Bold.ttf",
+    "Montserrat":            "/usr/local/share/fonts/leanlead/Montserrat-Bold.ttf",
+    "Poppins Bold":          "/usr/local/share/fonts/leanlead/Poppins-Bold.ttf",
+    "Poppins":               "/usr/local/share/fonts/leanlead/Poppins-Bold.ttf",
+    "Bebas Neue":            "/usr/local/share/fonts/leanlead/BebasNeue-Regular.ttf",
+    "Anton":                 "/usr/local/share/fonts/leanlead/Anton-Regular.ttf",
+    "DM Sans":               "/usr/local/share/fonts/leanlead/DMSans-Bold.ttf",
+    "DM Sans Bold":          "/usr/local/share/fonts/leanlead/DMSans-Bold.ttf",
+    "Playfair Display Bold": "/usr/local/share/fonts/leanlead/PlayfairDisplay-Bold.ttf",
+    "default":               "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+}
+
+
+def _get_font_path(font_name: str) -> str:
+    """Return the absolute path for a font, logging resolution for diagnostics.
+
+    Tries the exact name, then '<name> Bold', then falls back to DejaVu.
+    Used for ffmpeg drawtext fontfile= and other path-based font lookups.
+    """
+    for candidate in (font_name, font_name + " Bold"):
+        path = FONT_MAP.get(candidate)
+        if path and os.path.exists(path):
+            print(f"[FONT] Using: {font_name} → {path}")
+            return path
+    fallback = FONT_MAP["default"]
+    print(f"[FONT] NOT FOUND: {font_name} → falling back to {fallback}")
+    return fallback
 
 
 def _ts(t: float) -> str:
