@@ -162,6 +162,7 @@ def _create_proxy(
         "-threads", "1",
         "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
+        "-async", "1",                      # normalize audio timestamps
         str(dst),
     ])
 
@@ -176,24 +177,18 @@ def _cut_proxy_segment(
 
     Stream-copy means zero decode memory — we just copy the H.264 bitstream
     bytes. Cuts snap to the nearest keyframe (≤ 2 s error), which the final
-    zoompan re-encode corrects. Audio is re-encoded to apply the 30 ms fades.
+    re-encode corrects. Audio is re-encoded to apply normalization.
     """
-    # FIX 1: 80ms audio handle prevents mid-syllable cuts; trim back with fade.
-    actual_start = max(0.0, start - AUDIO_HANDLE_S)
-    actual_end   = end + AUDIO_HANDLE_S
-    duration     = max(0.1, actual_end - actual_start)
-    fade_out_start = max(0.0, duration - AUDIO_FADE_S)
-    af = (
-        f"afade=t=in:st=0:d={AUDIO_FADE_S},"
-        f"afade=t=out:st={fade_out_start:.3f}:d={AUDIO_FADE_S}"
-    )
+    duration = max(0.1, end - start)
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-threads", "1",
-        "-ss", f"{actual_start:.3f}", "-i", str(proxy),
-        "-t", f"{duration:.3f}",
-        "-af", af,
+        "-fflags", "+genpts",               # regenerate PTS
+        "-ss", f"{start:.6f}", "-i", str(proxy),
+        "-t", f"{duration:.6f}",
+        "-avoid_negative_ts", "make_zero",
         "-c:v", "copy",                     # zero decode/encode memory
+        "-async", "1",
         "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
         str(dst),
     ])
@@ -337,34 +332,28 @@ def _cut_segment(
     target_h: int,
     fps: int,
 ) -> None:
-    """Per-segment extract with 80ms audio handles.
+    """Per-segment extract.
 
-    SYNC: -ss BEFORE -i (fast seek, frame-accurate). Duration via -t, not end
-    time. Audio re-encoded with -async 1 so its timestamps are normalized to
-    the same zero-based clock as the video — stream-copy would preserve the
-    source audio timestamps which may be offset from the video PTS.
+    SYNC: -ss BEFORE -i (fast seek, frame-accurate). Duration via -t (not end
+    time). No audio handles — exact [start, end] cut so the caption remap
+    formula cum+(ws-s) stays on the same clock as the video timeline.
+    -c:a copy preserves original audio timestamps; _apply_segment_zoom()
+    re-encodes with -async 1 immediately after to normalize them.
     """
-    actual_start = max(0.0, start - AUDIO_HANDLE_S)
-    actual_end   = end + AUDIO_HANDLE_S
-    duration     = max(0.1, actual_end - actual_start)
-    fade_out_st  = max(0.0, duration - AUDIO_FADE_S)
+    duration = max(0.1, end - start)
     vf = (
         f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase"
         f":flags=lanczos,"
         f"crop={target_w}:{target_h},"
         f"fps={fps}"
     )
-    af = (
-        f"afade=t=in:st=0:d={AUDIO_FADE_S},"
-        f"afade=t=out:st={fade_out_st:.3f}:d={AUDIO_FADE_S}"
-    )
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-threads", "1",
         "-fflags", "+genpts",               # regenerate PTS — prevents drift
-        "-ss", f"{actual_start:.6f}",       # -ss BEFORE -i = fast seek
+        "-ss", f"{start:.6f}",              # -ss BEFORE -i = fast seek
         "-i", str(src),
-        "-t", f"{duration:.6f}",            # duration, not end time
+        "-t", f"{duration:.6f}",            # exact duration, not end time
         "-avoid_negative_ts", "make_zero",  # zero-base all timestamps
         "-vf", vf,
         "-vsync", "cfr",
@@ -372,9 +361,7 @@ def _cut_segment(
         "-x264-params", "rc-lookahead=0:bframes=0:ref=1:no-mbtree=1:sync-lookahead=0",
         "-threads", "1",
         "-pix_fmt", "yuv420p",
-        "-af", af,
-        "-async", "1",                      # normalize audio timestamps to video clock
-        "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
+        "-c:a", "copy",                     # copy audio — normalized by _apply_segment_zoom
         str(dst),
     ])
 
@@ -387,6 +374,8 @@ def _concat(parts: list[Path], dst: Path) -> None:
         "-fflags", "+genpts",               # normalize PTS at segment boundaries
         "-f", "concat", "-safe", "0", "-i", str(list_path),
         "-c", "copy",
+        "-vsync", "cfr",
+        "-async", "1",
         str(dst),
     ])
     list_path.unlink(missing_ok=True)
@@ -427,6 +416,35 @@ def _probe_av(path: Path) -> tuple[float, float]:
     except Exception as _e:
         print(f"[AV PROBE] probe failed for {path.name}: {_e}")
         return 0.0, 0.0
+
+
+def _check_av_sync(path: Path, label: str) -> bool:
+    """Probe A/V duration balance after every ffmpeg pass. Returns True when OK."""
+    import json as _json
+    r = subprocess.run(
+        [FFPROBE_PATH, "-v", "quiet", "-print_format", "json",
+         "-show_streams", str(path)],
+        capture_output=True, text=True, timeout=20,
+    )
+    try:
+        data = _json.loads(r.stdout) if r.stdout.strip() else {}
+        v = next(
+            (float(s["duration"]) for s in data.get("streams", [])
+             if s.get("codec_type") == "video" and "duration" in s),
+            0.0,
+        )
+        a = next(
+            (float(s["duration"]) for s in data.get("streams", [])
+             if s.get("codec_type") == "audio" and "duration" in s),
+            0.0,
+        )
+        diff = abs(v - a)
+        status = "⚠️ MISMATCH" if diff > 0.1 else "OK"
+        print(f"[AV SYNC] {label}: video={v:.3f}s  audio={a:.3f}s  diff={diff:.3f}s  {status}")
+        return diff < 0.1
+    except Exception as _e:
+        print(f"[AV SYNC] {label}: probe failed — {_e}")
+        return False
 
 
 def _concat_audio_xfade(parts: list[Path], dst: Path) -> None:
@@ -1213,8 +1231,7 @@ def render(
         cut_src = src
 
     parts: list[Path] = []
-    cum = 0.0
-    cap_offset = 0.0  # caption timeline: advances by plan-boundary duration only
+    cum = 0.0  # exact video output timeline — no audio-handle inflation
     remapped_zoom: list[dict[str, Any]] = []
     remapped_words: list[WordTiming] = []
     remapped_silences: list[dict[str, Any]] = []
@@ -1254,13 +1271,12 @@ def render(
             f"  role={seg.get('role', '?')}  zoom={zoom_level}%  part={zoomed_part.name}"
         )
         parts.append(zoomed_part)
+        _check_av_sync(zoomed_part, f"segment_{i}")  # FIX 5: probe after every cut
 
-        # PROBLEM 1 FIX: use the actual cut boundaries (with audio handles) as
-        # the reference for all timeline remapping so captions, zooms, and
-        # silences are placed at the correct positions in the concatenated video.
-        actual_s = max(0.0, s - AUDIO_HANDLE_S)
-        actual_e = e + AUDIO_HANDLE_S
-        seg_offset = cum  # concat-timeline start of this segment
+        # All timeline remapping uses cum (exact video output clock) and s (snapped
+        # cut start). No audio handles — _cut_segment() cuts exactly [s, e], so
+        # cum + (ws - s) places captions on the identical clock as the video frames.
+        seg_offset = cum
 
         for zp in plan.zoom_plan:
             zs = float(zp.get("start", 0))
@@ -1268,26 +1284,22 @@ def render(
             if zs >= s and ze <= e:
                 remapped_zoom.append({
                     **zp,
-                    "start": seg_offset + (zs - actual_s),
-                    "end": seg_offset + (ze - actual_s),
+                    "start": seg_offset + (zs - s),
+                    "end": seg_offset + (ze - s),
                 })
 
         for tseg in transcript.get("segments", []):
             for w in tseg.get("words", []):
                 ws = float(w["start"])
                 we = float(w["end"])
-                # Strict plan-boundary whitelist: only include words whose
-                # original timestamp starts within [s_raw, e_raw). Using the
-                # plan's stated boundaries (not snapped/padded/extended) ensures
-                # that words from removed or reordered segments NEVER appear in
-                # the edit timeline.  The remapping formula still uses the
-                # snapped `s` so captions align with the actual lip position in
-                # the cut video.
+                # Strict plan-boundary whitelist: only words whose source timestamp
+                # falls inside [s_raw, e_raw). Caption time = seg_offset + (ws - s)
+                # which is the identical formula to how video frames are positioned.
                 if s_raw <= ws < e_raw:
                     remapped_words.append(WordTiming(
                         text=w["text"].strip(),
-                        start=cap_offset + (ws - s_raw),
-                        end=cap_offset + (min(we, e_raw) - s_raw),
+                        start=seg_offset + (ws - s),
+                        end=seg_offset + (min(we, e_raw) - s),
                     ))
 
         for sil in (plan.silences or []):
@@ -1298,7 +1310,7 @@ def render(
             if s <= sil_at <= e:
                 remapped_silences.append({
                     **sil,
-                    "at": seg_offset + (sil_at - actual_s),
+                    "at": seg_offset + (sil_at - s),
                 })
 
         for vm in (plan.visual_style_moments or []):
@@ -1310,14 +1322,13 @@ def render(
             if s <= vm_at <= e:
                 remapped_vsm.append({
                     **vm,
-                    "at": seg_offset + (vm_at - actual_s),
+                    "at": seg_offset + (vm_at - s),
                     "duration": vm_dur,
                 })
 
-        if parts:  # not the first segment — record this cut point
+        if parts:  # record cut point in output timeline
             cut_timestamps.append(cum)
-        cum += (actual_e - actual_s)      # video timeline: includes audio handles
-        cap_offset += (e_raw - s_raw)     # caption timeline: plan boundaries only
+        cum += (e - s)  # exact segment duration — no audio-handle inflation
 
     if not parts:
         raise RuntimeError("No keep_segments produced any clip.")
@@ -1599,20 +1610,36 @@ def render(
     # any sync anomalies so mismatches are visible in server logs.
     remapped_words = _verify_caption_sync(remapped_words, total_duration)
 
-    print(f"[CAPTIONS] Total remapped words: {len(remapped_words)}")
-    print(f"[CAPTIONS] Total edited duration (cap_offset): {cap_offset:.3f}s")
-    print(f"[CAPTIONS] Actual video duration (total_duration): {total_duration:.3f}s")
+    # FIX 4 — Caption sync verification
+    print(f"[SYNC CHECK] Video duration: {total_duration:.3f}s")
     if remapped_words:
-        print(f"[CAPTIONS] First word: '{remapped_words[0].text}' at {remapped_words[0].start:.3f}s")
-        print(f"[CAPTIONS] Last word: '{remapped_words[-1].text}' at {remapped_words[-1].start:.3f}s")
+        print(
+            f"[SYNC CHECK] Caption range: "
+            f"{remapped_words[0].start:.3f}s → {remapped_words[-1].end:.3f}s"
+        )
+        print(
+            f"[SYNC CHECK] First 5 words: "
+            f"{[(w.text, round(w.start, 2)) for w in remapped_words[:5]]}"
+        )
         _words_after = [w for w in remapped_words if w.start > total_duration]
-        print(f"[CAPTIONS] Words after video duration (should be 0): {len(_words_after)}")
+        if _words_after:
+            print(
+                f"[SYNC CHECK] WARNING: {len(_words_after)} word(s) start after "
+                f"video duration — dropping them"
+            )
+        if remapped_words[-1].end > total_duration + 0.5:
+            print(
+                f"[SYNC CHECK] ERROR: last caption end "
+                f"{remapped_words[-1].end:.3f}s > video {total_duration:.3f}s + 0.5s"
+            )
     else:
-        print("[CAPTIONS] WARNING: no remapped words — captions will be empty!")
+        print("[SYNC CHECK] WARNING: no remapped words — captions will be empty!")
 
     _log.info(
-        "caption sync: %d remapped words; first 3: %s",
+        "caption sync: %d words; range=%.3f–%.3fs; first3=%s",
         len(remapped_words),
+        remapped_words[0].start if remapped_words else 0.0,
+        remapped_words[-1].end  if remapped_words else 0.0,
         [(w.text, round(w.start, 3), round(w.end, 3)) for w in remapped_words[:3]],
     )
 
