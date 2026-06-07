@@ -1593,6 +1593,7 @@ def render(
         video_duration=total_duration,
         mode="long" if _use_moments else "short",
         caption_moments=remapped_moments if _use_moments else None,
+        caption_style=caption_style,
     )
     print(f"[CAPTIONS] ASS file written: {ass_path}")
     print(f"[CAPTIONS] ASS file size: {ass_path.stat().st_size} bytes")

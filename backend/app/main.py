@@ -267,7 +267,7 @@ async def submit_edit(
     caption_font: str = Form("Poppins Bold"),
     caption_color: str = Form("white"),
     caption_position: Literal["center", "bottom", "side-left", "side-right"] = Form("center"),
-    caption_style: Literal["impact", "kinetic"] = Form("impact"),
+    caption_style: str = Form("impact"),
     brand_color: str = Form(""),
     theme: str = Form("dark-pro"),
     # Content brief fields (Feature 6)

@@ -530,6 +530,7 @@ def build_ass(
     video_duration: float | None = None,
     mode: str = "short",
     caption_moments: list[dict] | None = None,
+    caption_style: str = "impact",
 ) -> Path:
     """Render captions to an ASS subtitle file.
 
@@ -603,19 +604,85 @@ def build_ass(
         "Effect, Text\n"
     )
 
-    # Step 1 — Group words into phrase units of up to 4 words, split on pauses ≥ 0.25s
     word_list = [w for w in words if _strip_punct(w.text)]
-    groups = _group_words(word_list, max_words=4, gap_s=0.25)
 
-    # Animation tags per spec
+    # ── Caption style dispatch ───────────────────────────────────────────────
     _kw_anim  = r"{\fad(80,0)\t(\fscx97\fscy97,\fscx100\fscy100)}"
     _ctx_anim = r"{\fad(80,0)}"
 
+    if caption_style in ("impact", "kinetic"):
+        # One word at a time — very punchy
+        groups = _group_words(word_list, max_words=1, gap_s=0.05)
+        _word_anim = (
+            r"{\fad(60,0)\t(\fscx95\fscy95,\fscx105\fscy105)\t(\fscx105\fscy105,\fscx100\fscy100)}"
+            if caption_style == "kinetic"
+            else r"{\fad(50,0)\t(\fscx95\fscy95,\fscx100\fscy100)}"
+        )
+        lines = [header]
+        for gi, group in enumerate(groups):
+            clean = [_strip_punct(w.text) for w in group]
+            clean = [w for w in clean if w]
+            if not clean:
+                continue
+            start = max(0.0, group[0].start + WHISPER_TIMESTAMP_CORRECTION)
+            end_base = group[-1].end + WHISPER_TIMESTAMP_CORRECTION
+            if video_duration is not None and start > video_duration:
+                break
+            next_start = None
+            for ngi in range(gi + 1, len(groups)):
+                ng = groups[ngi]
+                nc = [_strip_punct(w.text) for w in ng]
+                if any(nc):
+                    next_start = ng[0].start + WHISPER_TIMESTAMP_CORRECTION
+                    break
+            end = (next_start - 0.01) if next_start is not None else (end_base + 0.08)
+            if video_duration is not None and end > video_duration:
+                end = video_duration
+            word_text = clean[0].upper()
+            lines.append(f"Dialogue: 1,{_ts(start)},{_ts(end)},Keyword,,0,0,0,,{_word_anim}{word_text}")
+        output_path.write_text("\n".join(lines), encoding="utf-8")
+        return output_path
+
+    if caption_style == "karaoke":
+        # Phrase groups with per-word progressive highlight using ASS karaoke tags
+        groups = _group_words(word_list, max_words=6, gap_s=0.35)
+        lines = [header]
+        for gi, group in enumerate(groups):
+            clean_words = [(w, _strip_punct(w.text)) for w in group if _strip_punct(w.text)]
+            if not clean_words:
+                continue
+            start = max(0.0, clean_words[0][0].start + WHISPER_TIMESTAMP_CORRECTION)
+            end_base = clean_words[-1][0].end + WHISPER_TIMESTAMP_CORRECTION
+            if video_duration is not None and start > video_duration:
+                break
+            next_start = None
+            for ngi in range(gi + 1, len(groups)):
+                ng = groups[ngi]
+                nc = [_strip_punct(w.text) for w in ng]
+                if any(nc):
+                    next_start = ng[0].start + WHISPER_TIMESTAMP_CORRECTION
+                    break
+            end = (next_start - 0.01) if next_start is not None else (end_base + 0.15)
+            if video_duration is not None and end > video_duration:
+                end = video_duration
+            # Build karaoke text: {\k<centiseconds>}word for each word
+            kara_parts = []
+            for wi, (w_obj, w_text) in enumerate(clean_words):
+                w_start = max(0.0, w_obj.start + WHISPER_TIMESTAMP_CORRECTION)
+                w_end = w_obj.end + WHISPER_TIMESTAMP_CORRECTION
+                dur_cs = max(1, round((w_end - w_start) * 100))
+                kara_parts.append(f"{{\\k{dur_cs}}}{w_text.capitalize() if wi == 0 else w_text.lower()}")
+            kara_text = r"{\fad(80,0)}" + "".join(kara_parts)
+            lines.append(f"Dialogue: 1,{_ts(start)},{_ts(end)},Keyword,,0,0,0,,{kara_text}")
+        output_path.write_text("\n".join(lines), encoding="utf-8")
+        return output_path
+
+    # ── Default: twolevel (Jordan Belfort — Keyword + Context) ──────────────
+    groups = _group_words(word_list, max_words=4, gap_s=0.25)
     lines = [header]
     prev_text = ""
 
     for gi, group in enumerate(groups):
-        # Step 2 — Build clean phrase text
         clean = [_strip_punct(w.text) for w in group]
         clean = [w for w in clean if w]
         if not clean:
@@ -627,7 +694,6 @@ def build_ass(
         if video_duration is not None and start > video_duration:
             break
 
-        # Find next phrase start for gap-filling
         next_start: float | None = None
         for ngi in range(gi + 1, len(groups)):
             ng = groups[ngi]
@@ -636,31 +702,17 @@ def build_ass(
                 next_start = ng[0].start + WHISPER_TIMESTAMP_CORRECTION
                 break
 
-        # Step 3 — Hold until next phrase; NEVER overlap (cap at next_start - 0.01)
-        if next_start is not None:
-            end = next_start - 0.01
-        else:
-            end = end_base + 0.1
-
+        end = (next_start - 0.01) if next_start is not None else (end_base + 0.1)
         if video_duration is not None and end > video_duration:
             end = video_duration
 
-        # Capitalize first word only
         phrase_text = " ".join(
             w.capitalize() if i == 0 else w.lower()
             for i, w in enumerate(clean)
         )
 
-        # Both events get IDENTICAL timestamps — they are always paired
-        # Keyword (bottom, Layer 1): current phrase, animated serif
-        lines.append(
-            f"Dialogue: 1,{_ts(start)},{_ts(end)},Keyword,,0,0,0,,{_kw_anim}{phrase_text}"
-        )
-        # Context (top, Layer 0): previous phrase (empty string for phrase[0])
-        lines.append(
-            f"Dialogue: 0,{_ts(start)},{_ts(end)},Context,,0,0,0,,{_ctx_anim}{prev_text}"
-        )
-
+        lines.append(f"Dialogue: 1,{_ts(start)},{_ts(end)},Keyword,,0,0,0,,{_kw_anim}{phrase_text}")
+        lines.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},Context,,0,0,0,,{_ctx_anim}{prev_text}")
         prev_text = phrase_text
 
     output_path.write_text("\n".join(lines), encoding="utf-8")

@@ -81,8 +81,10 @@
         color: var(--text-secondary); padding: 0 1rem; height: 56px;
         transition: color .15s, border-color .15s; white-space: nowrap;
       }
-      .nav-tab:hover { color: var(--text); }
-      .nav-tab.active { color: var(--salmon); border-bottom-color: var(--salmon); }
+      .nav-tab:hover { color: var(--text); background: rgba(0,0,0,.05); border-radius: 6px; }
+      [data-theme="dark"] .nav-tab:hover { background: rgba(255,255,255,.06); color: #e5e7eb; }
+      .nav-tab.active { color: var(--text); background: var(--surface); border-bottom-color: transparent; border-radius: 6px; }
+      [data-theme="dark"] .nav-tab.active { background: #1a1a1a; color: #fff; }
 
       .nav-right { display: flex; align-items: center; gap: .75rem; }
       .btn-upgrade {
@@ -339,24 +341,25 @@
       .dash-welcome { font-size: 1.05rem; font-weight: 600; margin-bottom: 1.25rem; color: var(--text); }
       .dash-welcome span { color: var(--salmon); }
       .dash-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: .65rem; margin-bottom: 1.25rem; }
-      .dash-stat { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.1rem; }
-      .dash-stat .big { font-size: 1.6rem; font-weight: 700; letter-spacing: -.03em; color: var(--text); display: block; line-height: 1.1; }
-      .dash-stat .lbl { font-size: .72rem; color: var(--text-secondary); margin-top: .25rem; display: block; }
+      .dash-stat { background: var(--surface); border: none; border-radius: var(--radius); padding: 1rem 1.1rem; }
+      [data-theme="dark"] .dash-stat { background: #111111; }
+      .dash-stat .big { font-size: 1.75rem; font-weight: 700; letter-spacing: -.03em; color: var(--text); display: block; line-height: 1.1; }
+      .dash-stat .lbl { font-size: .68rem; color: var(--text-secondary); margin-top: .3rem; display: block; text-transform: uppercase; letter-spacing: .06em; }
       .dash-edit-btn { width: 100%; height: 44px; border-radius: 8px; border: none; background: var(--salmon); color: #fff; font-family: var(--font); font-size: .875rem; font-weight: 600; cursor: pointer; margin-bottom: 1.25rem; transition: opacity .15s; }
       .dash-edit-btn:hover { opacity: .9; }
       .dash-empty { text-align: center; padding: 2rem 1rem; border: 1.5px dashed var(--border); border-radius: var(--radius); color: var(--text-secondary); font-size: .875rem; }
 
       /* Video library */
       .video-library-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-bottom: 1.25rem; }
-      .video-lib-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: border-color .2s; cursor: pointer; }
-      .video-lib-card:hover { border-color: rgba(0,0,0,.15); }
-      [data-theme="dark"] .video-lib-card:hover { border-color: rgba(255,255,255,.15); }
-      .video-lib-thumb { width: 100%; aspect-ratio: 16/9; background: #2A2A2A; display: flex; align-items: center; justify-content: center; position: relative; }
-      .video-lib-thumb img { width: 100%; height: 100%; object-fit: cover; }
+      .video-lib-card { background: #1a1a1a; border: none; border-radius: var(--radius); overflow: hidden; transition: transform .2s, box-shadow .2s; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+      .video-lib-card:hover { transform: scale(1.02); box-shadow: 0 6px 20px rgba(0,0,0,.28); }
+      .video-lib-thumb { width: 100%; aspect-ratio: 9/16; background: #111; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+      .video-lib-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
       .video-lib-thumb-placeholder { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
-      .video-lib-play { width: 32px; height: 32px; color: rgba(255,255,255,.7); }
-      .video-lib-retention { position: absolute; top: .4rem; right: .4rem; background: rgba(0,0,0,.75); border-radius: 5px; padding: .12rem .38rem; font-size: .68rem; font-weight: 700; color: #fff; }
-      .video-lib-overlay { position: absolute; inset: 0; background: rgba(0,0,0,.65); display: flex; align-items: center; justify-content: center; gap: .5rem; opacity: 0; transition: opacity .2s; }
+      .video-lib-play { width: 32px; height: 32px; color: rgba(255,255,255,.5); }
+      .video-lib-retention { position: absolute; top: .5rem; right: .5rem; border-radius: 6px; padding: .18rem .48rem; font-size: .7rem; font-weight: 700; color: #fff; }
+      .video-lib-title-overlay { position: absolute; bottom: 0; left: 0; right: 0; padding: .6rem .65rem .55rem; background: linear-gradient(to top, rgba(0,0,0,.85) 0%, transparent 100%); color: #fff; font-size: .78rem; font-weight: 600; line-height: 1.3; }
+      .video-lib-overlay { position: absolute; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; gap: .5rem; opacity: 0; transition: opacity .2s; }
       .video-lib-card:hover .video-lib-overlay { opacity: 1; }
       .video-lib-info { padding: .65rem .75rem; }
       .video-lib-title { font-size: .8rem; font-weight: 600; margin-bottom: .12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -823,6 +826,56 @@
                 </div>
               </div>
 
+              <!-- B-roll -->
+              <div class="field" style="margin-top:.75rem">
+                <span class="section-label">B-roll</span>
+                <div class="seg">
+                  <input type="radio" name="broll_enabled" id="broll-on" value="true" checked />
+                  <label for="broll-on">Activé</label>
+                  <input type="radio" name="broll_enabled" id="broll-off" value="false" />
+                  <label for="broll-off">Désactivé</label>
+                </div>
+              </div>
+
+              <!-- Zoom level -->
+              <div class="field">
+                <span class="section-label">Niveau de zoom</span>
+                <div class="seg">
+                  <input type="radio" name="zoom_max_level" id="zoom-subtle" value="102" checked />
+                  <label for="zoom-subtle">Subtil</label>
+                  <input type="radio" name="zoom_max_level" id="zoom-standard" value="130" />
+                  <label for="zoom-standard">Standard</label>
+                  <input type="radio" name="zoom_max_level" id="zoom-dramatic" value="150" />
+                  <label for="zoom-dramatic">Dramatique</label>
+                </div>
+              </div>
+
+              <!-- Silence removal -->
+              <div class="field">
+                <span class="section-label">Suppression des silences</span>
+                <div class="seg">
+                  <input type="radio" name="silence_removal" id="sil-aggressive" value="aggressive" />
+                  <label for="sil-aggressive">Agressive</label>
+                  <input type="radio" name="silence_removal" id="sil-normal" value="normal" checked />
+                  <label for="sil-normal">Normale</label>
+                  <input type="radio" name="silence_removal" id="sil-conservative" value="conservative" />
+                  <label for="sil-conservative">Conservative</label>
+                </div>
+              </div>
+
+              <!-- Caption position -->
+              <div class="field">
+                <span class="section-label">Position des captions</span>
+                <div class="seg">
+                  <input type="radio" name="caption_position_hint" id="cap-bottom" value="bottom" checked />
+                  <label for="cap-bottom">Bas</label>
+                  <input type="radio" name="caption_position_hint" id="cap-center" value="center" />
+                  <label for="cap-center">Centre</label>
+                  <input type="radio" name="caption_position_hint" id="cap-auto" value="auto" />
+                  <label for="cap-auto">Auto</label>
+                </div>
+              </div>
+
               <!-- Notification email -->
               <div class="field">
                 <span class="section-label">Notification par email (optionnel)</span>
@@ -890,10 +943,6 @@
 
             <button class="action-btn" id="versionBBtn" style="margin-top:.75rem">Générer Version B</button>
 
-            <details style="margin-top:1rem">
-              <summary>Voir le JSON brut</summary>
-              <pre id="previewJson"></pre>
-            </details>
           </div>
 
           <!-- ── RESULT ──────────────────────────────────────────── -->
@@ -1015,7 +1064,7 @@
           </div>
           <div class="dash-stat">
             <span class="big" id="dashViews">—</span>
-            <span class="lbl">Vues estimées</span>
+            <span class="lbl">Ce mois</span>
           </div>
         </div>
 
@@ -1024,6 +1073,16 @@
         <span class="section-label">Bibliothèque de vidéos</span>
         <div class="video-library-grid" id="videoLibraryGrid" style="display:none"></div>
         <div class="dash-empty" id="videoLibraryEmpty">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-bottom:.75rem;opacity:.35">
+            <rect x="2" y="8" width="36" height="24" rx="3" stroke="currentColor" stroke-width="2"/>
+            <rect x="2" y="11" width="5" height="4" rx="1" fill="currentColor"/>
+            <rect x="2" y="18" width="5" height="4" rx="1" fill="currentColor"/>
+            <rect x="2" y="25" width="5" height="4" rx="1" fill="currentColor"/>
+            <rect x="33" y="11" width="5" height="4" rx="1" fill="currentColor"/>
+            <rect x="33" y="18" width="5" height="4" rx="1" fill="currentColor"/>
+            <rect x="33" y="25" width="5" height="4" rx="1" fill="currentColor"/>
+            <path d="M16 15.5l9 4.5-9 4.5v-9z" fill="currentColor"/>
+          </svg>
           <p style="font-size:.875rem;color:var(--text-secondary)">Aucune vidéo éditée pour l'instant.<br>Déposez votre première vidéo dans l'éditeur.</p>
         </div>
       </section>
