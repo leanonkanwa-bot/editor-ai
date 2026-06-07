@@ -9,7 +9,7 @@ Pipeline (production-correct order):
   3. Per-segment extract with 30ms audio fades baked in (Hard Rule 6, prevents
      audible pops at every cut).
   4. Lossless `-c copy` concat of segments (no double-encode).
-  5. Single re-encode pass: scale/crop → zoompan → burn ASS subtitles LAST
+  5. Single re-encode pass: scale/crop → burn ASS subtitles LAST
      (Hard Rule 7, never under overlays).
 
 Borrows the per-segment-extract / lossless-concat / 30ms-afade pattern from
@@ -154,14 +154,14 @@ def _create_proxy(
         "-i", str(src),
         "-vf", vf,
         "-vsync", "cfr",
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
         "-x264-params", (
             "rc-lookahead=0:bframes=0:ref=1:no-mbtree=1:"
             f"keyint=60:keyint_min=60"      # keyframe every 2 s
         ),
         "-threads", "1",
         "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
+        "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
         "-async", "1",                      # normalize audio timestamps
         str(dst),
     ])
@@ -417,34 +417,6 @@ def _probe_av(path: Path) -> tuple[float, float]:
         return 0.0, 0.0
 
 
-def _check_av_sync(path: Path, label: str) -> bool:
-    """Probe A/V duration balance after every ffmpeg pass. Returns True when OK."""
-    import json as _json
-    r = subprocess.run(
-        [FFPROBE_PATH, "-v", "quiet", "-print_format", "json",
-         "-show_streams", str(path)],
-        capture_output=True, text=True, timeout=20,
-    )
-    try:
-        data = _json.loads(r.stdout) if r.stdout.strip() else {}
-        v = next(
-            (float(s["duration"]) for s in data.get("streams", [])
-             if s.get("codec_type") == "video" and "duration" in s),
-            0.0,
-        )
-        a = next(
-            (float(s["duration"]) for s in data.get("streams", [])
-             if s.get("codec_type") == "audio" and "duration" in s),
-            0.0,
-        )
-        diff = abs(v - a)
-        status = "⚠️ MISMATCH" if diff > 0.1 else "OK"
-        print(f"[AV SYNC] {label}: video={v:.3f}s  audio={a:.3f}s  diff={diff:.3f}s  {status}")
-        return diff < 0.1
-    except Exception as _e:
-        print(f"[AV SYNC] {label}: probe failed — {_e}")
-        return False
-
 
 def _concat_audio_xfade(parts: list[Path], dst: Path) -> None:
     """Concatenate segments with 50ms exponential audio crossfade at every cut.
@@ -618,92 +590,6 @@ def _escape_for_vf(expr: str) -> str:
     return expr.replace(",", "\\,")
 
 
-def _build_zoom_expression(
-    zoom_plan: list[dict[str, Any]],
-    total_duration: float,
-    fps: int = 30,
-    face_cx_pct: float = 50.0,
-    face_cy_pct: float = 50.0,
-) -> tuple[str, str]:
-    """
-    Convert the zoom plan into zoompan z/x/y expressions evaluated per output
-    frame. zoompan uses 'on' = output frame number. We translate timestamps to
-    frame ranges and build a chained if(...) expression.
-
-    BUG FIX — ZOOM SHAKE:
-    Linear interpolation between keyframes causes a velocity discontinuity at
-    every segment boundary, which the eye reads as a tiny jolt — repeated, it
-    feels like shake. Use smoothstep easing s = t*t*(3-2*t), which has zero
-    derivative at the endpoints. The zoom passes through every keyframe at
-    the same value but with smooth velocity, so transitions feel butter.
-
-    When face_cx_pct/face_cy_pct are not exactly 50, anchors the zoom to the
-    detected face center instead of the geometric frame center.
-    """
-    if face_cx_pct != 50.0 or face_cy_pct != 50.0:
-        fx = f"max(0,min(iw-(iw/zoom),iw*{face_cx_pct/100:.4f}-(iw/zoom/2)))"
-        fy = f"max(0,min(ih-(ih/zoom),ih*{face_cy_pct/100:.4f}-(ih/zoom/2)))"
-    else:
-        fx = "iw/2-(iw/zoom/2)"
-        fy = "ih/2-(ih/zoom/2)"
-
-    if not zoom_plan:
-        return "1", f"{fx};{fy}"
-
-    sorted_plan = sorted(zoom_plan, key=lambda p: float(p.get("start", 0)))
-
-    # Fill gaps between zoom segments with hold-at-last-value entries so z
-    # never snaps back to the default "1" during silent/non-zoom moments —
-    # that snap is what the eye reads as shake.
-    filled: list[dict] = []
-    for i, step in enumerate(sorted_plan):
-        filled.append(step)
-        curr_e = float(step.get("end", float(step.get("start", 0)) + 1))
-        z_end_val = float(step.get("to", step.get("from", 1.0)))
-        if i < len(sorted_plan) - 1:
-            next_s = float(sorted_plan[i + 1].get("start", 0))
-            if next_s > curr_e + 0.02:
-                filled.append({"start": curr_e, "end": next_s,
-                                "from": z_end_val, "to": z_end_val, "kind": "hold"})
-    # After the last zoom: hold its final value until the video ends.
-    last = sorted_plan[-1]
-    last_e = float(last.get("end", float(last.get("start", 0)) + 1))
-    last_to = float(last.get("to", last.get("from", 1.0)))
-    if total_duration > last_e + 0.02:
-        filled.append({"start": last_e, "end": total_duration,
-                        "from": last_to, "to": last_to, "kind": "hold"})
-
-    z_expr = "1"
-    for step in reversed(filled):
-        s = float(step.get("start", 0))
-        e = float(step.get("end", s + 1))
-        z_from = float(step.get("from", 1.0))
-        z_to = float(step.get("to", z_from))
-        f0 = int(s * fps)
-        f1 = max(f0 + 1, int(e * fps))
-        seg_dur = max(1, f1 - f0)
-        kind = (step.get("kind") or "drift").lower()
-
-        # Linear progress in [0,1].
-        t = f"min(1,max(0,(on-{f0})/{seg_dur}))"
-
-        if kind == "punch_in":
-            # Smooth punch — smoothstep easing, no hard velocity jump.
-            ease = f"({t})*({t})*(3-2*({t}))"
-            seg_expr = f"({z_from}+({z_to}-{z_from})*({ease}))"
-        else:
-            # Smoothstep easing: s = t*t*(3-2*t). Zero derivative at both ends
-            # → no velocity discontinuity at segment boundaries → no shake.
-            ease = f"({t})*({t})*(3-2*({t}))"
-            seg_expr = f"({z_from}+({z_to}-{z_from})*({ease}))"
-
-        # gte*lte instead of between() — FFmpeg 7.x parses between()'s commas
-        # as filter-chain separators. gte/lte are 2-arg functions (one comma each).
-        z_expr = f"if(gte(on,{f0})*lte(on,{f1}),{seg_expr},{z_expr})"
-
-    return z_expr, f"{fx};{fy}"
-
-
 def _hex_to_rgb_at(hex6: str) -> str:
     """Return an ffmpeg color string like 'white@1.0' or '0xRRGGBB@1.0'."""
     h = (hex6 or "").lstrip("#").upper()
@@ -824,69 +710,33 @@ def _apply_segment_zoom(
     target_h: int,
     fps: int,
 ) -> None:
-    """Bake a jump-zoom + slow cinematic push-in into a segment clip.
+    """Bake the jump-zoom level into a segment clip (single pass, no AV drift).
 
-    Pass 1 (jump zoom): scale+crop bakes the planner's zoom level as a
-    constant frame size — this IS the Jordan Belfort jump cut feel.
-
-    Pass 2 (push-in): zoompan slow-pushes from z=1.0 → 1.04 (+4%) over
-    the segment, creating the cinematic "camera slowly moving in" sensation
-    within each cut. The cap prevents over-zoom on long segments.
+    Scale+crop bakes the planner's zoom level (100/130/150/170%) as a constant
+    frame size — the Jordan Belfort jump-cut feel. One pass only: zoompan was
+    removed because it changes video duration/framerate and causes AV sync
+    mismatch (video shorter than audio, r_frame_rate becomes fractional).
     """
     zoom_f = _zoom_filter_for_level(zoom_level, target_w, target_h)
-    vf_p1 = (
+    vf = (
         f"{zoom_f},fps={fps},setpts=N/FRAME_RATE/TB"
         if zoom_f
         else f"fps={fps},setpts=N/FRAME_RATE/TB"
     )
-
-    # Pass 1 — jump zoom (scale+crop) → temp file
-    _tmp_jz = dst.with_suffix(".tmp_jz.mp4")
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-fflags", "+genpts",
         "-i", str(src),
-        "-vf", vf_p1,
+        "-vf", vf,
         "-vsync", "cfr",
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
         "-threads", "1",
         "-x264-params", "rc-lookahead=0:bframes=0:ref=1:no-mbtree=1",
         "-pix_fmt", "yuv420p",
         "-async", "1",
-        "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
-        str(_tmp_jz),
-    ])
-
-    # Pass 2 — slow push-in via zoompan: z starts at 1.0, creeps +0.0005/frame,
-    # capped at 1.04.  At 30fps: 80 frames ≈ 2.67s to reach the cap, so every
-    # segment longer than ~2.7s gets the full 4% push; shorter ones get a
-    # proportionally smaller push (still visible and felt).
-    _push_cap = 1.04
-    _zoompan_vf = (
-        f"zoompan=z='min(zoom+0.0005,{_push_cap:.4f})'"
-        f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
-        f":d=1:s={target_w}x{target_h}:fps={fps}"
-        f",setpts=N/FRAME_RATE/TB"
-    )
-    _run([
-        FFMPEG_PATH, "-y", "-loglevel", "error",
-        "-i", str(_tmp_jz),
-        "-vf", _zoompan_vf,
-        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
-        "-threads", "1",
-        "-x264-params", "rc-lookahead=0:bframes=0:ref=1:no-mbtree=1",
-        "-pix_fmt", "yuv420p",
-        "-vsync", "cfr",
         "-c:a", "copy",
-        "-async", "1",
         str(dst),
     ])
-
-    # Remove the intermediate jump-zoom file.
-    try:
-        _tmp_jz.unlink()
-    except Exception:
-        pass
 
 
 def _render_hyperframe_png(
@@ -1155,7 +1005,7 @@ def _fetch_broll_clip(
                 f"setpts=PTS-STARTPTS"
             ),
             "-vsync", "cfr",
-            "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+            "-c:v", "libx264", "-crf", "0", "-preset", "ultrafast",
             "-threads", "2", "-pix_fmt", "yuv420p",
             "-an",
             str(dst),
@@ -1235,6 +1085,25 @@ def _verify_caption_sync(
     return valid
 
 
+def _health_check(src: Path) -> None:
+    """Verify render preconditions before any ffmpeg work begins."""
+    import os as _os
+    if not src.exists():
+        raise RuntimeError(f"Source file not found: {src}")
+    if not _os.access(src, _os.R_OK):
+        raise RuntimeError(f"Source file not readable: {src}")
+    try:
+        subprocess.run(
+            [FFMPEG_PATH, "-version"],
+            capture_output=True, check=True, timeout=10,
+        )
+    except Exception as _e:
+        raise RuntimeError(f"ffmpeg not available: {_e}") from _e
+    size_mb = src.stat().st_size / (1024 * 1024)
+    est_min = max(1, int(size_mb / 100))
+    print(f"[HEALTH] src={src.name}  size={size_mb:.1f}MB  est_render_time=~{est_min}min")
+
+
 def render(
     src: Path,
     transcript: dict[str, Any],
@@ -1253,6 +1122,7 @@ def render(
     content_type: str = "coaching",
 ) -> dict[str, Any]:
     work_dir.mkdir(parents=True, exist_ok=True)
+    _health_check(src)
 
     short_form = plan.format == "short"
     fps = 30
@@ -1349,7 +1219,6 @@ def render(
         print(f"[ZOOM] Segment {i}: beat={seg.get('beat')} zoom={zoom_level}% duration={e-s:.2f}s")
         zoom_segments.append(i)
         parts.append(zoomed_part)
-        _check_av_sync(zoomed_part, f"segment_{i}")  # FIX 5: probe after every cut
 
         # All timeline remapping uses cum (exact video output clock) and s (snapped
         # cut start). No audio handles — _cut_segment() cuts exactly [s, e], so
@@ -1434,48 +1303,6 @@ def render(
     _audio_expected = sum(float(s["end"]) - float(s["start"]) for s in keep
                          if float(s["end"]) > float(s["start"]))
     print(f"[AUDIO] Expected duration (plan boundaries): {_audio_expected:.3f}s")
-
-    # Probe both audio and video streams on concat output
-    import subprocess as _sp, json as _js
-    def _probe_streams(path: Path) -> None:
-        try:
-            _r = _sp.run(
-                [FFPROBE_PATH, "-v", "quiet", "-print_format", "json",
-                 "-show_streams", str(path)],
-                capture_output=True, text=True, timeout=15,
-            )
-            _data = _js.loads(_r.stdout) if _r.stdout.strip() else {}
-            for _st in _data.get("streams", []):
-                print(
-                    f"[PROBE] {path.name}  codec_type={_st.get('codec_type')} "
-                    f"codec={_st.get('codec_name')}  duration={_st.get('duration','?')}s  "
-                    f"size={_st.get('width','')}"
-                    + (f"x{_st.get('height','')}" if _st.get('codec_type') == 'video' else "")
-                    + f"  r_frame_rate={_st.get('r_frame_rate','')}"
-                )
-        except Exception as _pe:
-            print(f"[PROBE] {path.name} probe failed: {_pe}")
-
-    _probe_streams(concat_path)
-
-    # FIX 5 — Verify concat duration matches expected plan-boundary sum.
-    import logging as _logging_early
-    _log_early = _logging_early.getLogger(__name__)
-    _v_dur_actual = _probe_duration(concat_path)
-    _v_dur_expected = sum(
-        max(0.0, float(seg["end"]) - float(seg["start"]))
-        for seg in keep
-        if float(seg["end"]) > float(seg["start"])
-    )
-    _log_early.info(
-        "concat duration check: actual=%.3fs  expected=%.3fs  delta=%.3fs",
-        _v_dur_actual, _v_dur_expected, _v_dur_actual - _v_dur_expected,
-    )
-    if abs(_v_dur_actual - _v_dur_expected) > 0.5:
-        _log_early.warning(
-            "concat duration mismatch %.3fs > 0.5s — possible AV sync issue",
-            abs(_v_dur_actual - _v_dur_expected),
-        )
 
     # Remap b-roll windows to the cut timeline so captions pause there.
     # BUG FIX — B-ROLL TIMING:
@@ -1622,93 +1449,6 @@ def render(
     ]
 
     total_duration = _probe_duration(concat_path)
-
-    # SMOOTH PUSH-IN per segment: cinematic slow zoom 1.0→1.06 over the full
-    # duration of each segment. Replaces the jarring multi-camera zoom-cut cycle.
-    _seg_boundaries = [0.0] + cut_timestamps + [total_duration]
-    for _si in range(len(_seg_boundaries) - 1):
-        _seg_s = _seg_boundaries[_si]
-        _seg_e = _seg_boundaries[_si + 1]
-        if _seg_e - _seg_s < 0.5:
-            continue
-        remapped_zoom.append({
-            "start": _seg_s,
-            "end": _seg_e,
-            "from": 1.0,
-            "to": 1.06,
-            "kind": "drift",
-        })
-
-    # UPGRADE 2 — AUTO-PUNCH at hyperframe timestamps for felt impact.
-    _covered_times = {float(zp.get("start", 0)) for zp in remapped_zoom}
-    for hf in remapped_hyperframes:
-        hf_at = float(hf.get("at", 0))
-        if hf_at < 0.5 or hf_at > total_duration - 0.5:
-            continue
-        if not any(
-            abs(float(zp.get("start", 0)) - hf_at) < 0.5
-            for zp in remapped_zoom
-        ):
-            remapped_zoom.append({
-                "start": hf_at,
-                "end": hf_at + 0.05,
-                "from": 1.08,
-                "to": 1.15,
-                "kind": "punch_in",
-            })
-            remapped_zoom.append({
-                "start": hf_at + 0.05,
-                "end": hf_at + 1.2,
-                "from": 1.15,
-                "to": 1.08,
-                "kind": "drift",
-            })
-
-    # TECHNIQUE 4 — 15% DIGITAL PUNCH-IN EVERY 3 SECONDS.
-    # Insert full 1.08→1.15 punch at every 3s interval across the entire video.
-    # Skip positions already covered by another zoom event (±1.2s window).
-    _punch_t = 3.0
-    while _punch_t < total_duration - 0.5:
-        if not any(abs(float(zp.get("start", 0)) - _punch_t) < 1.2 for zp in remapped_zoom):
-            remapped_zoom.append({
-                "start": _punch_t,
-                "end": _punch_t + 0.15,
-                "from": 1.08, "to": 1.15, "kind": "punch_in",
-            })
-            remapped_zoom.append({
-                "start": _punch_t + 0.15,
-                "end": _punch_t + 1.65,
-                "from": 1.15, "to": 1.08, "kind": "drift",
-            })
-        _punch_t += 3.0
-
-    # VISUAL RHYTHM — 1.8s rule: fill any gap > 1.8s with no visual event.
-    # Rebuild the event list after all punches above have been added.
-    _all_event_times = sorted(
-        [0.0]
-        + [float(zp.get("start", 0)) for zp in remapped_zoom]
-        + [float(hf.get("at", 0)) for hf in remapped_hyperframes]
-        + [total_duration]
-    )
-    for _ei in range(len(_all_event_times) - 1):
-        _gap_s = _all_event_times[_ei]
-        _gap_e = _all_event_times[_ei + 1]
-        if _gap_e - _gap_s > 1.8:
-            _mid = (_gap_s + _gap_e) / 2
-            if 0.5 < _mid < total_duration - 0.5:
-                remapped_zoom.append({
-                    "start": _mid,
-                    "end": _mid + 0.15,
-                    "from": 1.08, "to": 1.12, "kind": "punch_in",
-                })
-                remapped_zoom.append({
-                    "start": _mid + 0.15,
-                    "end": _mid + 0.5,
-                    "from": 1.12, "to": 1.08, "kind": "drift",
-                })
-
-    # Sort the final zoom plan chronologically.
-    remapped_zoom.sort(key=lambda z: float(z.get("start", 0)))
 
     import logging as _logging
     import shutil as _shutil
@@ -1873,7 +1613,7 @@ def render(
         except Exception as _e:
             _log.warning("graphic clip failed (%s): %s", rg.kind, _e)
 
-    # ── Pass 1: grade + scale + zoompan + audio duck → base ───────────────
+    # ── Pass 1: grade + scale + audio duck → base ────────────────────────
     # Overlays are applied sequentially below (one ffmpeg call per clip).
     # This is more reliable than one giant filter_complex: memory is bounded
     # by two inputs per call regardless of how many graphics exist.
@@ -1894,6 +1634,7 @@ def render(
         "-vf", ",".join(_vf_p1),
         "-map", "0:v",
     ]
+    _p1_audio_filter = False
     if remapped_silences:
         _vol_nodes: list[str] = []
         for _sil in remapped_silences:
@@ -1907,27 +1648,29 @@ def render(
             )
         if _vol_nodes:
             _cmd_p1 += ["-af", ",".join(_vol_nodes)]
+            _p1_audio_filter = True
     _cmd_p1 += ["-map", "0:a"]
     _cmd_p1 += [
         "-frames:v", str(total_frames),
-        # PROBLEM 2 FIX: -vsync cfr + -async 1 lock audio/video to same clock.
         "-vsync", "cfr",
         "-async", "1",
-        # PROBLEM 3 FIX: lossless intermediate — only ONE lossy encode happens
-        # in the final caption-burn pass. CRF 0 = lossless H.264.
+        # Lossless intermediate video — only one lossy encode in the final pass.
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
         "-threads", "4",
         "-x264-params", "rc-lookahead=0:bframes=0",
         "-pix_fmt", "yuv420p",
-        "-c:a", "aac", "-b:a", "192k",
-        str(_base_path),
     ]
+    # Re-encode audio only when a volume-duck filter is active; otherwise copy.
+    if _p1_audio_filter:
+        _cmd_p1 += ["-c:a", "aac", "-b:a", "192k"]
+    else:
+        _cmd_p1 += ["-c:a", "copy"]
+    _cmd_p1 += [str(_base_path)]
     _log.info(
-        "render pass1: grade+scale+zoompan  graphics=%d  silences=%d",
+        "render pass1: scale+fps+audio_duck  graphics=%d  silences=%d",
         len(ok_graphics), len(remapped_silences),
     )
     _run(_cmd_p1)
-    _probe_av(_base_path)
 
     # ── B-roll overlay passes (full-screen Pexels stock video) ───────────
     # For each remapped b-roll window: fetch a stock clip from Pexels,
@@ -1991,13 +1734,12 @@ def render(
             "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
             "-threads", "4",
             "-pix_fmt", "yuv420p",
-            "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
+            "-c:a", "copy",
             str(_next_br_path),
         ])
         if _next_br_path.exists():
             _overlay_intermediates.append(_current_path)
             _current_path = _next_br_path
-            _probe_av(_current_path)
 
     print(f"[BROLL] Downloaded {_broll_clips_downloaded} clip(s) successfully")
 
@@ -2026,12 +1768,11 @@ def render(
             "-threads", "4",
             "-x264-params", "rc-lookahead=0:bframes=0",
             "-pix_fmt", "yuv420p",
-            "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
+            "-c:a", "copy",
             str(_next_path),
         ])
         _overlay_intermediates.append(_current_path)
         _current_path = _next_path
-        _probe_av(_current_path)
 
     _nocap_path = _current_path
 
@@ -2041,28 +1782,37 @@ def render(
     _ass_tmp = _tmp_dir / f"captions_{ass_path.parent.name}.ass"
     _shutil.copy2(ass_path, _ass_tmp)
     _ass_str = str(_ass_tmp).replace("\\", "/").replace(":", "\\:")
+    # Per-format output bitrate targets — prevent quality floor drops on
+    # complex scenes while keeping file size reasonable.
+    if is_4k:
+        _out_bv, _out_maxrate, _out_bufsize = "20M", "30M", "60M"
+    elif short_form:
+        _out_bv, _out_maxrate, _out_bufsize = "8M", "12M", "24M"
+    else:
+        _out_bv, _out_maxrate, _out_bufsize = "6M", "10M", "20M"
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-i", str(_nocap_path),
         "-vf", f"subtitles={_ass_str}",
         "-vsync", "cfr",
         "-async", "1",                      # normalize audio timestamps to video clock
-        # Final quality encode — CRF 16 + 20M cap. Only lossy encode in pipeline.
-        "-c:v", "libx264", "-preset", "medium", "-crf", str(output_crf),
-        "-b:v", "20M",
+        # Final quality encode — CRF 16, preset slow, per-format bitrate floor.
+        # Only lossy encode in the entire pipeline.
+        "-c:v", "libx264", "-preset", "slow", "-crf", str(output_crf),
+        "-b:v", _out_bv,
+        "-maxrate", _out_maxrate,
+        "-bufsize", _out_bufsize,
         "-threads", "4",
         "-x264-params", "rc-lookahead=48:bframes=3",
         "-pix_fmt", "yuv420p",
         # loudnorm: target -14 LUFS integrated, -1 dBTP true peak, LRA 7.
         # Ensures consistent perceived loudness across all devices and platforms.
         "-af", "loudnorm=I=-14:TP=-1:LRA=7",
-        "-c:a", "aac", "-b:a", "192k",
+        "-c:a", "aac", "-b:a", "192k", "-ar", "44100",
         "-movflags", "+faststart",
         str(output_path),
     ])
     print(f"[FINAL] Output: {output_path}")
-    _probe_av(output_path)
-    _probe_streams(output_path)
     _nocap_path.unlink(missing_ok=True)
     for _p in _overlay_intermediates:
         _p.unlink(missing_ok=True)
