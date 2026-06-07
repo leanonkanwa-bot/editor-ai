@@ -1136,6 +1136,31 @@ def _fetch_broll_clip(
         return False
 
 
+def _fix_segment_overlaps(segments: list[dict]) -> list[dict]:
+    """Resolve overlapping keep_segments before cutting to prevent word repetition.
+
+    When segment N ends after segment N+1 starts, the overlapping audio plays
+    twice — once at the tail of seg N and again at the head of seg N+1.
+    This pass moves each segment's start to just after the previous end.
+    """
+    if not segments:
+        return segments
+    fixed = [dict(segments[0])]
+    for seg in segments[1:]:
+        prev = fixed[-1]
+        s = float(seg["start"])
+        e = float(seg["end"])
+        prev_e = float(prev["end"])
+        if s < prev_e:
+            print(f"[OVERLAP] Fixing: seg starts at {s:.3f}s but prev ends at {prev_e:.3f}s — moving start to {prev_e + 0.02:.3f}s")
+            s = prev_e + 0.02  # 20ms gap between segments
+        if s >= e:
+            print(f"[OVERLAP] Skipping empty segment after fix: [{s:.3f}, {e:.3f}]")
+            continue
+        fixed.append({**seg, "start": s, "end": e})
+    return fixed
+
+
 def _verify_caption_sync(
     words: list["WordTiming"],
     edited_duration: float,
@@ -1212,6 +1237,8 @@ def render(
     keep = plan.keep_segments or [
         {"start": 0.0, "end": float(transcript.get("duration", 0.0))}
     ]
+    # Resolve any raw planner overlaps before cutting — prevents word repetition.
+    keep = _fix_segment_overlaps(keep)
     words = _flat_words(transcript)
     src_duration = float(transcript.get("duration", 0.0)) or _probe_duration(src)
 
@@ -1235,20 +1262,37 @@ def render(
     remapped_vsm: list[dict[str, Any]] = []
     remapped_moments: list[dict[str, Any]] = []
     cut_timestamps: list[float] = []  # output-timeline timestamps of cut points
+    _prev_processed_e: float = -1.0   # track actual cut end to detect post-snap overlaps
 
     for i, seg in enumerate(keep):
         s_raw = float(seg["start"])
         e_raw = float(seg["end"])
         if e_raw <= s_raw:
             continue
+
+        # Overlap check against raw plan values (after _fix_segment_overlaps)
+        if i > 0:
+            prev_e_raw = float(keep[i - 1]["end"])
+            if s_raw < prev_e_raw:
+                print(f"[OVERLAP WARNING] Segment {i} raw start {s_raw:.3f}s before prev raw end {prev_e_raw:.3f}s")
+
         # Hard Rule 1 — snap to word boundaries
         s = _snap_to_word_boundary(s_raw, words, edge="start")
         e = _snap_to_word_boundary(e_raw, words, edge="end")
-        # Semantic completeness: extend end if snapped edge is a dangling conjunction
+        # Semantic completeness: extend end if snapped edge is a dangling conjunction.
+        # Cap extension at next segment's raw start to prevent encroaching on it.
         e = _extend_for_semantic_completeness(e, transcript, src_duration)
+        if i + 1 < len(keep):
+            _next_s_raw = float(keep[i + 1]["start"])
+            e = min(e, max(s + 0.15, _next_s_raw - 0.05))
         # Hard Rule 2 — pad cut edges
         s = max(0.0, s - pad)
         e = min(src_duration, e + pad) if src_duration > 0 else e + pad
+        # Post-snap overlap guard: if padding still pushes into previous segment's
+        # territory (possible when two segments are close together), move start forward.
+        if _prev_processed_e >= 0 and s < _prev_processed_e:
+            print(f"[OVERLAP WARNING] Segment {i} processed start {s:.3f}s < prev processed end {_prev_processed_e:.3f}s — adjusting")
+            s = _prev_processed_e + 0.02
         if e - s < 0.15:
             continue
 
@@ -1338,6 +1382,7 @@ def render(
         if parts:  # record cut point in output timeline
             cut_timestamps.append(cum)
         cum += (e - s)  # exact segment duration — no audio-handle inflation
+        _prev_processed_e = e  # update for next iteration's overlap guard
 
     if not parts:
         raise RuntimeError("No keep_segments produced any clip.")
