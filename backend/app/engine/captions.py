@@ -550,7 +550,9 @@ def _build_priestley_ass(
     scale = video_h / 1080.0
     font_size  = max(24, int(42  * scale))
     title_size = max(48, int(130 * scale))
-    margin_v   = int(video_h * 0.18)
+    # Alignment=2 = bottom-center; MarginV = distance from bottom edge.
+    # 12% keeps text at ~82% from top — correct Priestley lower-third position.
+    margin_v   = int(video_h * 0.12)
     margin_lr  = int(150 * scale)
 
     def _p_hex_to_ass(hex_color: str, alpha: int = 0) -> str:
@@ -577,9 +579,11 @@ def _build_priestley_ass(
         "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
         "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
         "Alignment, MarginL, MarginR, MarginV, Encoding\n"
-        # Dialogue: white text, 70% black box, BorderStyle=3 (opaque box)
+        # Dialogue: white text, 70% black box, BorderStyle=4 (opaque box on full line)
+        # BorderStyle=4 applies the background to the entire subtitle block rather
+        # than per-word, giving a unified pill shape behind all 4 words at once.
         f"Style: Dialogue,Inter,{font_size},{white_ass},{gold_ass},"
-        f"&H00000000,{black70_ass},-1,0,0,0,100,100,0,0,3,1,0,"
+        f"&H00000000,{black70_ass},-1,0,0,0,100,100,0,0,4,0,0,"
         f"2,{margin_lr},{margin_lr},{margin_v},1\n"
         # TitleCard: cream text, burgundy box, center (Alignment=5)
         f"Style: TitleCard,Inter,{title_size},{cream_ass},{gold_ass},"
@@ -609,10 +613,43 @@ def _build_priestley_ass(
 
     # ── Dialogue captions — karaoke highlight with gold active word ──────────
     PHRASE_SIZE = 4
+    MAX_LINE_CHARS = 42  # split phrase into two lines when wider than this
+
     valid_words = [
         w for w in words
         if _strip_punct(w.text) and (video_duration is None or w.start < video_duration)
     ]
+
+    def _build_kara_parts(phrase: list, first_word_index: int) -> list[str]:
+        """Return ['{\\kf<cs>}word', ...] for each word in phrase."""
+        parts = []
+        for wi, word in enumerate(phrase):
+            dur_cs = max(1, round((word.end - word.start) * 100))
+            word_text = _strip_punct(word.text)
+            if not word_text:
+                continue
+            display = word_text.capitalize() if (wi + first_word_index) == 0 else word_text.lower()
+            parts.append(f"{{\\kf{dur_cs}}}{display}")
+        return parts
+
+    def _split_phrase(phrase_words: list, max_chars: int = MAX_LINE_CHARS):
+        """Split phrase_words into (line1, line2) when joined text > max_chars.
+        Returns (phrase_words, None) when short enough for one line.
+        """
+        joined = " ".join(_strip_punct(w.text) for w in phrase_words)
+        if len(joined) <= max_chars:
+            return phrase_words, None
+        line1: list = []
+        line2: list = []
+        char_count = 0
+        for word in phrase_words:
+            w = _strip_punct(word.text)
+            if char_count + len(w) + (1 if line1 else 0) <= max_chars or not line1:
+                line1.append(word)
+                char_count += len(w) + (1 if char_count else 0)
+            else:
+                line2.append(word)
+        return line1, (line2 if line2 else None)
 
     i = 0
     while i < len(valid_words):
@@ -643,21 +680,31 @@ def _build_priestley_ass(
             i += PHRASE_SIZE
             continue
 
-        # Build karaoke text: {\kf<cs>}word  (kf = fill from left)
-        kara_parts = []
-        for wi, word in enumerate(phrase_words):
-            dur_cs = max(1, round((word.end - word.start) * 100))
-            word_text = _strip_punct(word.text)
-            if not word_text:
-                continue
-            display = word_text.capitalize() if wi == 0 else word_text.lower()
-            kara_parts.append(f"{{\\kf{dur_cs}}}{display}")
+        # Build karaoke text: {\kf<cs>}word  (kf = fill from left).
+        # Words joined with " " so ASS renders spaces between words correctly.
+        # Without the join, words fuse: "{\kf30}word1{\kf25}word2" → "word1word2".
+        line1_words, line2_words = _split_phrase(phrase_words)
+        kara_parts1 = _build_kara_parts(line1_words, 0)
 
-        if kara_parts:
-            kara_line = "".join(kara_parts)
+        if kara_parts1:
+            kara_line1 = " ".join(kara_parts1)
             lines.append(
-                f"Dialogue: 0,{_ts(p_start)},{_ts(p_end)},Dialogue,,0,0,0,,{kara_line}"
+                f"Dialogue: 0,{_ts(p_start)},{_ts(p_end)},Dialogue,,0,0,0,,{kara_line1}"
             )
+
+        if line2_words:
+            # Line 2 needs a silent lead-in to stay in sync: {\k<cs>} skips the
+            # time consumed by line 1's words before line 2 starts highlighting.
+            line1_total_cs = sum(
+                max(1, round((w.end - w.start) * 100)) for w in line1_words
+            )
+            kara_parts2 = _build_kara_parts(line2_words, len(line1_words))
+            if kara_parts2:
+                lead_in = f"{{\\k{line1_total_cs}}} "
+                kara_line2 = lead_in + " ".join(kara_parts2)
+                lines.append(
+                    f"Dialogue: 0,{_ts(p_start)},{_ts(p_end)},Dialogue,,0,0,0,,{kara_line2}"
+                )
 
         i += PHRASE_SIZE
 
