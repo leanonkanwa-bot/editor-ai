@@ -345,6 +345,7 @@ def _cut_segment(
         f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase"
         f":flags=lanczos,"
         f"crop={target_w}:{target_h},"
+        f"setsar=1:1,"
         f"fps={fps}"
     )
     _run([
@@ -736,9 +737,9 @@ def _concat_with_zoom(
     if n == 1:
         zoom_f = _zoom_filter_for_level(zoom_levels[0], target_w, target_h)
         vf = (
-            f"{zoom_f},fps={fps},setpts=N/FRAME_RATE/TB"
+            f"{zoom_f},setsar=1:1,fps={fps},setpts=N/FRAME_RATE/TB"
             if zoom_f
-            else f"fps={fps},setpts=N/FRAME_RATE/TB"
+            else f"setsar=1:1,fps={fps},setpts=N/FRAME_RATE/TB"
         )
         _run([
             FFMPEG_PATH, "-y", "-loglevel", "error",
@@ -761,10 +762,13 @@ def _concat_with_zoom(
     fc_parts: list[str] = []
     for i, zoom_level in enumerate(zoom_levels):
         zoom_f = _zoom_filter_for_level(zoom_level, target_w, target_h)
+        # setsar=1:1 normalizes Sample Aspect Ratio before concat.
+        # Without it, source videos with non-standard SAR (e.g. 1936:1935 from
+        # stream captures) cause "SAR mismatch" errors in the concat filter.
         vf_chain = (
-            f"{zoom_f},fps={fps},setpts=N/FRAME_RATE/TB"
+            f"{zoom_f},setsar=1:1,fps={fps},setpts=N/FRAME_RATE/TB"
             if zoom_f
-            else f"fps={fps},setpts=N/FRAME_RATE/TB"
+            else f"setsar=1:1,fps={fps},setpts=N/FRAME_RATE/TB"
         )
         fc_parts.append(f"[{i}:v]{vf_chain}[v{i}]")
 
