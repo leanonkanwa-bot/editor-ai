@@ -1141,17 +1141,33 @@ Reply with a SINGLE JSON object, no prose, matching this schema:
   ],
 
   /* ── caption_moments — REQUIRED for long-form, omit for short-form ────────
-     Minimum 1 caption per keep_segment. Never more than 10 seconds without
-     a caption in long-form. Max 3 captions per segment for very long segments.
-     Every important phrase, key concept, and stat MUST be captioned.
+     Philosophy: LESS IS MORE. Target 1 caption per 8-12 seconds.
+     Caption ONLY these 7 semantic triggers:
+       1. HOOK: bold claim / value promise in first 90s → style="hook"
+       2. NEW CONCEPT: first time a term is introduced → style="concept"
+       3. LIST ITEM: each item in an enumeration (0.4s apart) → style="list_item"
+       4. NUMBER/STAT: any specific figure ("$500k", "3 steps", "10 years") → style="stat"
+       5. MANTRA: short punchy memorable phrase ("Every sale is the same") → style="mantra"
+       6. STRUCTURAL MARKER: "Step One", "Phase 2", "Finally…" → style="marker"
+       7. QUESTION: rhetorical question creating tension → style="concept"
+     NEVER caption: transitions, fillers, storytelling, normal narrative.
+     style → visual treatment:
+       hook      → Playfair Display 88px white center-screen, slow fade
+       concept   → Montserrat 68px white+brand emphasis, lower-third, slide up
+       stat      → Montserrat 96px brand color center-screen, scale pop
+       list_item → Montserrat 62px white left-side, slide from left
+       mantra    → Playfair Display 78px brand color center, cinematic fade
+       quote     → same as mantra
+       marker    → Montserrat lower-third, fast fade
+     emphasis_words: 1-2 most impactful words — appear in brand color at 110% size.
      start/end must fall within a keep_segment window.
   */
   "caption_moments": [
     { "start": <s>, "end": <s>,
       "text": "<exact spoken words — verbatim from transcript>",
-      "style": "hook"|"concept"|"stat"|"list_item"|"quote"|"marker",
+      "style": "hook"|"concept"|"stat"|"list_item"|"mantra"|"quote"|"marker",
       "emphasis_words": ["<word>"] }
-    /* Long-form: REQUIRED. 1 entry per keep_segment minimum.
+    /* Long-form: REQUIRED. Target 1 per 8-12s. Max 3 per segment.
        Short-form: omit entirely or use empty array []. */
   ],
 
@@ -1400,21 +1416,24 @@ def system_prompt(
     elif format_hint == "long":
         blocks.append(
             "TARGET FORMAT: long — lower-amplitude zoom (100–110%), "
-            "re-hook every 30–60s, kinetic word-by-word captions, "
-            "category colors on key words, salmon emphasis. "
+            "re-hook every 30–60s, selective strategic captions on key moments only. "
             "motion_graphics: [] — output empty array. visual_style_moments: [] — output empty array. "
             "1 cut per 4–6 seconds. Max 2 b-roll. "
             "New curiosity loop every 15–20s.\n\n"
-            "CAPTION MOMENTS — REQUIRED for long-form:\n"
-            "  Output AT LEAST 1 caption_moment per keep_segment.\n"
-            "  Every important phrase, concept, stat, and turning point MUST be captioned.\n"
-            "  Never go more than 10 seconds without a caption in long-form.\n"
-            "  Max 3 captions per segment for very long segments (> 30s).\n"
-            "  style choices: hook (first moment), concept (key idea), stat (number/data),\n"
-            "    list_item (series item), quote (verbatim power line), marker (section label).\n"
-            "  emphasis_words: 1–3 words from the text that should pop in brand color.\n"
-            "  start/end: must fall within the corresponding keep_segment window.\n"
-            "  text: exact verbatim spoken words — never invented, never paraphrased.\n\n"
+            "CAPTION MOMENTS — REQUIRED for long-form. Philosophy: LESS IS MORE.\n"
+            "  Target: 1 caption per 8–12 seconds. NEVER caption every sentence.\n"
+            "  Caption ONLY these 7 semantic triggers:\n"
+            "    1. HOOK (first 90s): bold claim, value promise, scroll-stopper → style='hook'\n"
+            "    2. NEW CONCEPT: first time a term is introduced → style='concept'\n"
+            "    3. LIST ITEM: each item in an enumeration, 0.4s apart → style='list_item'\n"
+            "    4. NUMBER/STAT: any specific figure ('$500k', '3 steps') → style='stat'\n"
+            "    5. MANTRA: short punchy memorable phrase → style='mantra'\n"
+            "    6. STRUCTURAL MARKER: 'Step One', 'Phase 2', 'Finally…' → style='marker'\n"
+            "    7. QUESTION: rhetorical question that creates tension → style='concept'\n"
+            "  NEVER caption: transitions, fillers, storytelling, normal narrative.\n"
+            "  emphasis_words: 1–2 most impactful words — brand color + 110% size.\n"
+            "  text: exact verbatim spoken words — never invented, never paraphrased.\n"
+            "  start/end: must fall within the corresponding keep_segment window.\n\n"
             + _zoom_level_rules
         )
     else:

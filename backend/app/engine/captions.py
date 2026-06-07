@@ -359,15 +359,22 @@ def _group_words(
     return groups
 
 
-def apply_emphasis(text: str, emphasis_words: list[str], brand_color_ass: str) -> str:
+def apply_emphasis(
+    text: str,
+    emphasis_words: list[str],
+    brand_color_ass: str,
+    with_scale: bool = False,
+) -> str:
     """Wrap emphasis_words in ASS inline color override tags.
 
-    Uses word-boundary matching (case-insensitive). The {\r} tag resets
+    Uses word-boundary matching (case-insensitive). The {\\r} tag resets
     back to the style default after each emphasized word.
+    with_scale=True adds \\fscx110\\fscy110 — makes the word 10% larger.
     """
     for word in emphasis_words:
         pat = re.compile(r'(?<!\w)' + re.escape(word) + r'(?!\w)', re.IGNORECASE)
-        repl = "{\\c" + brand_color_ass + "}" + word + "{\\r}"
+        scale_tag = "\\fscx110\\fscy110" if with_scale else ""
+        repl = "{\\c" + brand_color_ass + scale_tag + "}" + word + "{\\r}"
         text = pat.sub(repl, text)
     return text
 
@@ -390,16 +397,38 @@ def _build_long_form_ass(
       Stat        — Montserrat Bold 96px, brand color, center, scale pop
       StatContext — Montserrat Bold 48px, white, center, subtle
     """
-    brand_ass  = _hex_to_ass_bgr(brand_color)   # &H00BBGGRR
+    brand_ass = _hex_to_ass_bgr(brand_color)
 
     scale = video_h / 1080.0
-    hook_sz        = round(88 * scale)
-    concept_sz     = round(62 * scale)
-    stat_sz        = round(96 * scale)
-    stat_ctx_sz    = round(48 * scale)
+    hook_sz     = round(88 * scale)
+    concept_sz  = round(68 * scale)   # 68px per professional spec
+    stat_sz     = round(96 * scale)
+    stat_ctx_sz = round(48 * scale)
+    mantra_sz   = round(78 * scale)
+    list_sz     = round(62 * scale)
 
-    concept_mv     = round(video_h * 0.12)  # lower-third bottom margin
-    stat_ctx_mv    = round(video_h * 0.12)  # below-center margin for context
+    concept_mv  = round(video_h * 0.12)  # lower-third bottom margin
+    stat_ctx_mv = round(video_h * 0.12)
+
+    # Concept slide-up: move from 15px below lower-third anchor to natural position
+    _cx        = video_w // 2
+    _cy_end    = video_h - concept_mv
+    _cy_start  = _cy_end + 15
+    _concept_anim = (
+        "{\\fad(150,100)"
+        f"\\move({_cx},{_cy_start},{_cx},{_cy_end},0,200)"
+        "}"
+    )
+
+    # List slide-in: move from 20px left of natural left-margin anchor
+    _lx_end   = 80 + list_sz // 2
+    _lx_start = _lx_end - 20
+    _ly       = video_h // 2
+    _list_anim = (
+        "{\\fad(100,50)"
+        f"\\move({_lx_start},{_ly},{_lx_end},{_ly},0,200)"
+        "}"
+    )
 
     header = (
         "[Script Info]\n"
@@ -412,32 +441,39 @@ def _build_long_form_ass(
         "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
         "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
         "Alignment, MarginL, MarginR, MarginV, Encoding\n"
-        # Hook: Playfair Display Bold, white, center (Alignment=5), 3px black outline
+        # Hook: Playfair Display Bold, white, center-screen (Alignment=5), 3px outline
         f"Style: Hook,Playfair Display Bold,{hook_sz},&H00FFFFFF,&H00FFFFFF,"
         f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,0,5,40,40,0,1\n"
         # Concept: Montserrat Bold, white, lower-third (Alignment=2), 2px outline
         f"Style: Concept,Montserrat Bold,{concept_sz},&H00FFFFFF,&H00FFFFFF,"
         f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,2,0,2,40,40,{concept_mv},1\n"
-        # Stat: Montserrat Bold, brand color, center (Alignment=5), 3px outline
+        # Stat: Montserrat Bold, brand color, center-screen (Alignment=5), 3px outline
         f"Style: Stat,Montserrat Bold,{stat_sz},{brand_ass},{brand_ass},"
         f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,0,5,40,40,0,1\n"
-        # StatContext: Montserrat Bold, white, center (Alignment=5), subtle 1px outline
+        # StatContext: Montserrat Bold, white, center (Alignment=5), 1px outline
         f"Style: StatContext,Montserrat Bold,{stat_ctx_sz},&H00FFFFFF,&H00FFFFFF,"
         f"&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,1,0,5,40,40,{stat_ctx_mv},1\n"
+        # Mantra/Quote: Playfair Display Bold, brand color, center-screen (Alignment=5), 2px outline
+        f"Style: Mantra,Playfair Display Bold,{mantra_sz},{brand_ass},{brand_ass},"
+        f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,2,0,5,40,40,0,1\n"
+        # List: Montserrat Bold, white, middle-left (Alignment=4), MarginL=80, 2px outline
+        f"Style: List,Montserrat Bold,{list_sz},&H00FFFFFF,&H00FFFFFF,"
+        f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,2,0,4,80,40,0,1\n"
         "\n[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, "
         "Effect, Text\n"
     )
 
     _style_map: dict[str, tuple[str, str]] = {
-        "hook":         ("Hook",        r"{\fad(150,150)}"),
-        "concept":      ("Concept",     r"{\fad(120,120)}"),
+        "hook":         ("Hook",        "{\\fad(200,150)}"),
+        "concept":      ("Concept",     _concept_anim),
         "stat":         ("Stat",        r"{\fad(80,80)\fscx90\fscy90\t(0,200,\fscx100\fscy100)}"),
         "stat_context": ("StatContext", r"{\fad(80,80)}"),
-        "list":         ("Concept",     r"{\fad(100,100)\move(0,20,0,0)}"),
-        "list_item":    ("Concept",     r"{\fad(100,100)\move(0,20,0,0)}"),
-        "quote":        ("Concept",     r"{\fad(120,120)}"),
-        "marker":       ("Concept",     r"{\fad(80,80)}"),
+        "list":         ("List",        _list_anim),
+        "list_item":    ("List",        _list_anim),
+        "quote":        ("Mantra",      r"{\fad(300,200)}"),
+        "mantra":       ("Mantra",      r"{\fad(300,200)}"),
+        "marker":       ("Concept",     "{\\fad(80,80)}"),
     }
 
     lines = [header]
@@ -451,8 +487,10 @@ def _build_long_form_ass(
         if not text:
             continue
 
-        ass_style, anim = _style_map.get(style, ("Concept", r"{\fad(120,120)}"))
-        display = apply_emphasis(text, emph, brand_ass) if emph else text
+        ass_style, anim = _style_map.get(style, ("Concept", "{\\fad(120,120)}"))
+        # Hook and concept: emphasis words get 10% size boost + brand color
+        scale_emph = ass_style in {"Hook", "Concept"}
+        display = apply_emphasis(text, emph, brand_ass, with_scale=scale_emph) if emph else text
         lines.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},{ass_style},,0,0,0,,{anim}{display}")
 
     output_path.write_text("\n".join(lines), encoding="utf-8")

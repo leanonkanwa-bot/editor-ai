@@ -72,6 +72,9 @@ def run_job(
     template_id: str = "",
     # Coach Profile IA (Feature 3)
     coach_profile: dict | None = None,
+    # Absorbed from stored params (re-detected internally — ignored here)
+    content_type: str = "",
+    **kwargs,
 ) -> None:
     """Phase 1: transcription, analysis, planning → status: ready_for_review."""
     try:

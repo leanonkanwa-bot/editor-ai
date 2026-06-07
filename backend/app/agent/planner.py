@@ -418,25 +418,35 @@ def plan_edit(
                     "  - broll (only when it ADDS to the intention, not decorates)\n"
                     "  - hyperframes (only at moments of maximum emotional impact)\n"
                     + (
-                    "  - caption_moments (LONG-FORM ONLY — selective strategic captions):\n"
-                    "      Select 8–15 moments from the kept segments. NOT every sentence.\n"
-                    "      Only moments that change the viewer's belief, emotion, or understanding.\n"
+                    "  - caption_moments (LONG-FORM ONLY — LESS IS MORE):\n"
+                    "      Target: 1 caption per 8–12 seconds. NEVER caption every sentence.\n"
+                    "      Caption ONLY these 7 semantic triggers:\n"
+                    "        1. HOOK (first 90s): bold claim, value promise, scroll-stopper → style='hook'\n"
+                    "        2. NEW CONCEPT: first time a term is introduced → style='concept'\n"
+                    "        3. LIST ITEM: each item in an enumeration, 0.4s apart → style='list_item'\n"
+                    "        4. NUMBER/STAT: any specific figure ('$500k', '3 steps') → style='stat'\n"
+                    "        5. MANTRA: short punchy memorable phrase → style='mantra'\n"
+                    "        6. STRUCTURAL MARKER: 'Step One', 'Phase 2', 'Finally…' → style='marker'\n"
+                    "        7. QUESTION: rhetorical question that creates tension → style='concept'\n"
+                    "      NEVER caption: transitions, fillers, storytelling, normal narrative.\n"
                     "      Each moment: {\n"
                     '        "start": N.N,           // timestamp in output timeline\n'
                     '        "end":   N.N,           // 2–5s window\n'
-                    '        "text":  "...",         // exact spoken words or key phrase\n'
-                    '        "style": "hook|concept|stat|list_item|quote|marker",\n'
-                    '        "emphasis_words": ["word1"]  // 1–3 words to highlight\n'
+                    '        "text":  "...",         // exact verbatim spoken words — never invented\n'
+                    '        "style": "hook|concept|stat|list_item|mantra|quote|marker",\n'
+                    '        "emphasis_words": ["word1", "word2"]  // 1–2 most impactful words\n'
                     "      }\n"
-                    "      STYLE RULES:\n"
-                    '        hook      — opening moment, center-screen, ≤8 words\n'
-                    '        concept   — key idea being introduced, lower-third\n'
-                    '        stat      — number / metric / specific claim, center large\n'
-                    '        list_item — one item from a series (3 max), left-aligned\n'
-                    '        quote     — speaker\'s most powerful verbatim line\n'
-                    '        marker    — section transition ("Step 1:", "The truth:")\n'
-                    "      emphasis_words must appear verbatim in the text field.\n"
-                    "      start/end timestamps must fall within a keep_segment.\n\n"
+                    "      VISUAL TREATMENT:\n"
+                    '        hook      — Playfair Display 88px white center-screen, slow fade\n'
+                    '        concept   — Montserrat 68px white+brand emphasis, lower-third, slide up\n'
+                    '        stat      — Montserrat 96px brand color center-screen, scale pop\n'
+                    '        list_item — Montserrat 62px white left-side, slide from left\n'
+                    '        mantra    — Playfair Display 78px brand color center, cinematic fade\n'
+                    '        quote     — same as mantra\n'
+                    '        marker    — Montserrat lower-third, fast fade\n'
+                    "      emphasis_words: 1–2 words verbatim in text — brand color + 110% size.\n"
+                    "      text: exact verbatim spoken words — never invented, never paraphrased.\n"
+                    "      start/end: must fall within the corresponding keep_segment window.\n\n"
                     if fmt == "long" else ""
                     ) +
                     "PHASE 5 — SELF-EVALUATION (before finalizing output)\n"
