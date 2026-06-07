@@ -1218,6 +1218,11 @@ Rules the JSON must obey:
   - All times in seconds, decimals allowed.
   - Scale values are decimals (1.00 = 100%, 1.30 = 130%).
   - keep_segments order IS the playback order.
+  - CRITICAL: keep_segments MUST be in chronological order by start time.
+    Each segment's start MUST be strictly after the previous segment's end.
+    Never output segments that overlap in time. Overlapping segments cause
+    words to repeat and the renderer will discard the overlapping portion,
+    silently losing content. Sort by start time before outputting.
   - keep_segments edges MUST fall on breath pauses (≥0.25s gap between words).
     NEVER start or end a segment mid-sentence. Every segment starts at a
     sentence boundary (word after pause ≥0.25s) and ends at a sentence

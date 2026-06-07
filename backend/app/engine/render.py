@@ -1027,23 +1027,39 @@ def _fetch_broll_clip(
 def _fix_segment_overlaps(segments: list[dict]) -> list[dict]:
     """Resolve overlapping keep_segments before cutting to prevent word repetition.
 
-    When segment N ends after segment N+1 starts, the overlapping audio plays
-    twice — once at the tail of seg N and again at the head of seg N+1.
-    This pass moves each segment's start to just after the previous end.
+    Sorts by start time first (planner may output out-of-order segments when
+    reordering for emotional impact). Then for any segment whose start falls
+    inside the previous segment's window, adjusts its start to just after the
+    previous end, salvaging whatever tail remains. Segments with no salvageable
+    content (end <= adjusted start) are dropped and logged.
     """
     if not segments:
         return segments
-    fixed = [dict(segments[0])]
-    for seg in segments[1:]:
+    # Sort chronologically — planner sometimes reorders for emotional impact
+    # but emits timestamps from the source transcript, causing apparent overlap.
+    sorted_segs = sorted(segments, key=lambda s: float(s.get("start", 0)))
+    fixed = [dict(sorted_segs[0])]
+    for seg in sorted_segs[1:]:
         prev = fixed[-1]
         s = float(seg["start"])
         e = float(seg["end"])
         prev_e = float(prev["end"])
         if s < prev_e:
-            print(f"[OVERLAP] Fixing: seg starts at {s:.3f}s but prev ends at {prev_e:.3f}s — moving start to {prev_e + 0.02:.3f}s")
-            s = prev_e + 0.02  # 20ms gap between segments
+            new_s = prev_e + 0.02  # 20ms gap between segments
+            if new_s < e:
+                print(
+                    f"[OVERLAP] Salvaged: seg [{s:.3f}, {e:.3f}] overlaps prev end "
+                    f"{prev_e:.3f}s — trimmed start to {new_s:.3f}s "
+                    f"(kept {e - new_s:.3f}s)"
+                )
+                s = new_s
+            else:
+                print(
+                    f"[OVERLAP] Dropped: seg [{s:.3f}, {e:.3f}] completely subsumed "
+                    f"by prev end {prev_e:.3f}s — no salvageable content"
+                )
+                continue
         if s >= e:
-            print(f"[OVERLAP] Skipping empty segment after fix: [{s:.3f}, {e:.3f}]")
             continue
         fixed.append({**seg, "start": s, "end": e})
     return fixed
@@ -1415,11 +1431,12 @@ def render(
                 ]
 
     # Enforce minimum gap between b-roll clips to prevent over-cutting.
-    # Short-form: 8s minimum between clips. Long-form: 15s minimum.
+    # Short-form: 8s fixed. Long-form: adaptive — 20% of total duration, min 8s.
+    # A 40s video gets 8s gap; a 5min video gets 60s gap. Prevents all b-roll
+    # from being rejected on short long-form edits.
     # Also drop any b-roll in the first 3s (hook must show the speaker's face).
     _MIN_BROLL_GAP_SHORT = 8.0
-    _MIN_BROLL_GAP_LONG  = 15.0
-    _min_broll_gap = _MIN_BROLL_GAP_SHORT if short_form else _MIN_BROLL_GAP_LONG
+    _min_broll_gap = _MIN_BROLL_GAP_SHORT if short_form else max(8.0, total_duration * 0.20)
     _filtered_broll: list[tuple[float, float]] = []
     _filtered_queries: list[str] = []
     _last_broll_end = 0.0
