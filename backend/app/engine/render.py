@@ -1173,6 +1173,12 @@ def render(
     work_dir.mkdir(parents=True, exist_ok=True)
     _health_check(src)
 
+    try:
+        from app.engine.font_manager import preload_style_fonts
+        preload_style_fonts(editing_style)
+    except Exception as _fe:
+        print(f"[FONT] preload_style_fonts failed (non-fatal): {_fe}")
+
     short_form = plan.format == "short"
     fps = 30
     pad = SHORT_PAD_S if short_form else LONG_PAD_S

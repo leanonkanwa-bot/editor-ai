@@ -22,6 +22,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
+try:
+    from app.engine.font_manager import get_font_path as _fm_get_path, get_font_family as _fm_get_family
+    _FONT_MANAGER_AVAILABLE = True
+except ImportError:
+    _FONT_MANAGER_AVAILABLE = False
+
 
 ALLOWED_FONTS = {
     "Poppins Bold", "Poppins ExtraBold", "Poppins SemiBold",
@@ -533,6 +539,12 @@ def _build_priestley_ass(
     Title cards: dark burgundy box, cream/gold text, scale animation.
     """
     output_path = Path(output_path)
+
+    # Ensure Inter is available before building ASS referencing it
+    if _FONT_MANAGER_AVAILABLE:
+        _fm_get_path("Inter", 700)
+        _fm_get_path("Inter", 900)
+
     scale = video_w / 1920.0
     font_size  = max(24, int(42  * scale))
     title_size = max(48, int(130 * scale))
@@ -700,10 +712,15 @@ def build_ass(
     play_res_x = video_w
     play_res_y = video_h
 
-    # Font resolution: ensure font is available (pre-installed or downloaded),
-    # then strip weight suffixes — bold is declared via Bold=1 flag in the Style.
-    print(f"[FONT] User requested: {caption_font}")
-    font_family = _ensure_font(caption_font or "Inter Bold")
+    # Font resolution: use font_manager (download from Google Fonts on demand)
+    # with fallback to the legacy _ensure_font() if font_manager is unavailable.
+    _requested_font = caption_font or "Inter Bold"
+    print(f"[FONT] User requested: {_requested_font}")
+    if _FONT_MANAGER_AVAILABLE:
+        _fm_get_path(_requested_font)          # ensure downloaded + fc-cache
+        font_family = _fm_get_family(_requested_font)
+    else:
+        font_family = _ensure_font(_requested_font)
     keyword_font = font_family
     context_font = font_family
 
