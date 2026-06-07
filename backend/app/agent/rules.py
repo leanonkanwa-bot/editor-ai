@@ -754,11 +754,40 @@ PLACEMENT RULES
 """
 
 BROLL_RULES = """\
-B-ROLL — maximum 2 clips, ever.
+B-ROLL GOLDEN RULE — concrete visuals only, never for decoration.
 
-Less is more. B-roll breaks the speaker-to-viewer connection. Use it
-only when the visual DRAMATICALLY reinforces the spoken idea — never
-for variety or decoration.
+B-roll ONLY when the speaker mentions a CONCRETE VISUAL concept:
+  - Physical actions: running, driving, waking up, working out
+  - Locations: home, office, gym, road, city
+  - Objects: money, phone, computer, food
+  - Numbers/Stats: show relevant visual (stacks of money for $1M, running track for 10 miles)
+
+NEVER use b-roll for:
+  - Abstract concepts: love, faith, success, believe, think
+  - Emotional moments: when speaker is vulnerable or shares personal pain
+  - Questions: rhetorical questions need the speaker's face
+  - The hook (first 3 seconds): always show the speaker
+  - Transitions between topics
+
+B-ROLL TIMING RULES:
+  - Cut IN on the exact word being illustrated (anchor_word timestamp)
+  - Cut OUT after 2–3.5s (short-form) or 2–4s (long-form)
+  - Return to speaker face immediately after
+  - Never stack two b-rolls back to back — minimum 8s of speaker face between b-rolls
+
+B-ROLL FREQUENCY:
+  SHORT-FORM (< 90s):
+    - Maximum 1 b-roll every 8 seconds
+    - Duration: 2.0s to 3.5s per clip
+    - Maximum 8 b-roll clips for a 60s video (target: 2–4)
+    - NEVER during emotional moments (realization, payoff, emotional_end beats)
+    - NEVER during the first 3 seconds (hook must show the speaker's face)
+  LONG-FORM (> 3 min):
+    - Maximum 1 b-roll every 15 seconds
+    - Duration: 2.0s to 4.0s per clip
+    - Maximum 1 b-roll per keep_segment
+    - NEVER during vulnerable/personal moments
+    - NEVER during REALIZATION or PAYOFF beats
 
 Placement (must match the spoken context precisely):
   Each b-roll MUST specify:
@@ -815,7 +844,7 @@ The renderer fetches a free Pexels stock clip using `search_query` and
 overlays it full-screen (speaker audio continues underneath). If no
 PEXELS_API_KEY is configured the b-roll is silently skipped.
 
-DURATION: minimum 2.5s, maximum 3.5s. Hard cuts in, hard cuts out.
+DURATION: minimum 2.0s, maximum 4.0s. Hard cuts in, hard cuts out.
 The renderer will clamp anything outside that range.
 
 No transitions. No fades. No dissolves. Captions are paused during
@@ -1166,9 +1195,16 @@ Reply with a SINGLE JSON object, no prose, matching this schema:
     { "start": <s>, "end": <s>,
       "text": "<exact spoken words — verbatim from transcript>",
       "style": "hook"|"concept"|"stat"|"list_item"|"mantra"|"quote"|"marker",
-      "emphasis_words": ["<word>"] }
+      "emphasis_words": ["<word>", "<word>"],
+      "position": "center_bottom"|"center"|"bottom_left"|"bottom_right"|"bottom_center" }
     /* Long-form: REQUIRED. Target 1 per 8-12s. Max 3 per segment.
-       Short-form: omit entirely or use empty array []. */
+       Short-form: omit entirely or use empty array [].
+       position mapping:
+         hook/mantra  → "center_bottom"  (Alignment=2, centered at bottom)
+         stat/number  → "center"         (Alignment=5, center-screen)
+         concept/marker → "bottom_center" (Alignment=2, centered at bottom)
+         list_item landscape → "bottom_left" (Alignment=1, left-anchored)
+         list_item portrait  → "bottom_center" (Alignment=2) */
   ],
 
   "packaging": {
@@ -1404,13 +1440,18 @@ def system_prompt(
             "kinetic word-by-word captions at frame center (y=45%), "
             "category colors on time/action/emotion words, "
             "salmon emphasis on hook/key words, "
-            "max 2 b-roll (2.5–3.5s each, include description+search_query+type), "
+            "max 2 b-roll (2.0–3.5s each, include description+search_query+type), "
             "max 2 hyperframe color flashes (0.08s each). "
             "motion_graphics: [] — output empty array, no exceptions. "
             "visual_style_moments: [] — output empty array, no exceptions. "
             "1 cut per 2–3 seconds. Ruthless filler removal. "
             "New curiosity loop every 15–20s. "
             "9-beat spine: HOOK/AMPLIFY/CONTEXT/TENSION/STORY/REALIZATION/PRINCIPLE/PAYOFF/EMOTIONAL_END.\n\n"
+            "B-ROLL FREQUENCY (short-form): maximum 1 b-roll every 8 seconds. "
+            "For a 60s video = max 6 b-rolls (target 2–4). "
+            "Only suggest b-roll for CONCRETE visual words (physical actions, locations, objects, numbers). "
+            "NEVER suggest b-roll during beats: realization, payoff, emotional_end, hook. "
+            "NEVER during the first 3 seconds. Minimum 8s of speaker face between any two b-rolls.\n\n"
             + _zoom_level_rules
         )
     elif format_hint == "long":
@@ -1418,8 +1459,13 @@ def system_prompt(
             "TARGET FORMAT: long — lower-amplitude zoom (100–110%), "
             "re-hook every 30–60s, selective strategic captions on key moments only. "
             "motion_graphics: [] — output empty array. visual_style_moments: [] — output empty array. "
-            "1 cut per 4–6 seconds. Max 2 b-roll. "
+            "1 cut per 4–6 seconds. Max 2 b-roll per 30s of edit. "
             "New curiosity loop every 15–20s.\n\n"
+            "B-ROLL FREQUENCY (long-form): maximum 1 b-roll every 15 seconds. "
+            "Maximum 1 b-roll per keep_segment. "
+            "Only suggest b-roll for CONCRETE visual words. "
+            "NEVER during vulnerable/personal moments. "
+            "NEVER during REALIZATION or PAYOFF beats.\n\n"
             "CAPTION MOMENTS — REQUIRED for long-form. Philosophy: LESS IS MORE.\n"
             "  Target: 1 caption per 8–12 seconds. NEVER caption every sentence.\n"
             "  Caption ONLY these 7 semantic triggers:\n"
@@ -1434,6 +1480,25 @@ def system_prompt(
             "  emphasis_words: 1–2 most impactful words — brand color + 110% size.\n"
             "  text: exact verbatim spoken words — never invented, never paraphrased.\n"
             "  start/end: must fall within the corresponding keep_segment window.\n\n"
+            "HOOK CAPTIONING RULE (long-form):\n"
+            "  Caption EVERY phrase in the first 15 seconds of edited output — maximum visual\n"
+            "  engagement during the hook phase. Use style='hook' for the opening line,\n"
+            "  style='concept' for subsequent lines in the first 15s.\n"
+            "  After 15 seconds: revert to selective captioning (7 triggers only).\n\n"
+            "POWER WORD DETECTION — emphasis_words selection:\n"
+            "  Always emphasize (pick 1–2 per caption_moment):\n"
+            "    - Numbers and statistics: '10 miles', '$500k', '3 steps', '48 hours'\n"
+            "    - Superlatives: 'never', 'always', 'impossible', 'everyone', 'no one'\n"
+            "    - Core concept nouns: the main subject of the sentence\n"
+            "    - Contradiction pivots: 'but', 'except', 'however' — only when introducing a twist\n"
+            "    - Climax action verbs: 'ran', 'failed', 'realized', 'changed', 'quit', 'built'\n"
+            "  NEVER emphasize: 'the', 'a', 'and', 'I', 'you', 'was', 'is', 'it', common connectors.\n\n"
+            "POSITION FIELD — add to every caption_moment:\n"
+            "  hook/mantra: position='center_bottom' (Alignment=2, centered at bottom)\n"
+            "  stat/number: position='center' (Alignment=5, center-screen for maximum impact)\n"
+            "  concept/marker: position='bottom_center' (Alignment=2, centered at bottom)\n"
+            "  list_item (landscape): position='bottom_left' (Alignment=1, left-anchored)\n"
+            "  list_item (portrait): position='bottom_center' (Alignment=2)\n\n"
             + _zoom_level_rules
         )
     else:

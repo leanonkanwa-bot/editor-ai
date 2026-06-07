@@ -444,21 +444,24 @@ def _build_long_form_ass(
         "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
         "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
         "Alignment, MarginL, MarginR, MarginV, Encoding\n"
-        # Hook: Playfair Display Bold, white, center-screen (Alignment=5), 3px outline
+        # Hook: Playfair Display Bold, white, bottom-center (Alignment=2), 3px outline
+        # Alignment=2 keeps hook below the face — safe on all talking-head videos.
         f"Style: Hook,Playfair Display Bold,{hook_sz},&H00FFFFFF,&H00FFFFFF,"
-        f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,0,5,40,40,0,1\n"
+        f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,0,2,40,40,{concept_mv},1\n"
         # Concept: Montserrat Bold, white, lower-third (Alignment=2), 2px outline
         f"Style: Concept,Montserrat Bold,{concept_sz},&H00FFFFFF,&H00FFFFFF,"
         f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,2,0,2,40,40,{concept_mv},1\n"
         # Stat: Montserrat Bold, brand color, center-screen (Alignment=5), 3px outline
+        # Stats/numbers remain center-screen for maximum visual impact.
         f"Style: Stat,Montserrat Bold,{stat_sz},{brand_ass},{brand_ass},"
         f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,3,0,5,40,40,0,1\n"
         # StatContext: Montserrat Bold, white, center (Alignment=5), 1px outline
         f"Style: StatContext,Montserrat Bold,{stat_ctx_sz},&H00FFFFFF,&H00FFFFFF,"
         f"&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,1,0,5,40,40,{stat_ctx_mv},1\n"
-        # Mantra/Quote: Playfair Display Bold, brand color, center-screen (Alignment=5), 2px outline
+        # Mantra/Quote: Playfair Display Bold, brand color, bottom-center (Alignment=2), 2px outline
+        # Alignment=2 keeps mantra/quote below the face — safe on all talking-head videos.
         f"Style: Mantra,Playfair Display Bold,{mantra_sz},{brand_ass},{brand_ass},"
-        f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,2,0,5,40,40,0,1\n"
+        f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,2,0,2,40,40,{concept_mv},1\n"
         # List: Montserrat Bold, white, middle-left (Alignment=4), MarginL=80, 2px outline
         f"Style: List,Montserrat Bold,{list_sz},&H00FFFFFF,&H00FFFFFF,"
         f"&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,2,0,4,80,40,0,1\n"
@@ -491,10 +494,25 @@ def _build_long_form_ass(
             continue
 
         ass_style, anim = _style_map.get(style, ("Concept", "{\\fad(120,120)}"))
+
+        # Per-moment position override (FIX 4 — dynamic positioning).
+        # The planner can set a "position" field to override the style's default alignment.
+        # ASS {\an} tag uses numpad layout: 1=bottom-left, 2=bottom-center, 3=bottom-right,
+        # 4=mid-left, 5=center, 6=mid-right, 7=top-left, 8=top-center, 9=top-right.
+        _pos_tag_map = {
+            "center_bottom": "{\\an2}",
+            "bottom_center": "{\\an2}",
+            "center":        "{\\an5}",
+            "bottom_left":   "{\\an1}",
+            "bottom_right":  "{\\an3}",
+        }
+        _pos = str(moment.get("position", ""))
+        _pos_tag = _pos_tag_map.get(_pos, "")
+
         # Hook and concept: emphasis words get 10% size boost + brand color
         scale_emph = ass_style in {"Hook", "Concept"}
         display = apply_emphasis(text, emph, brand_ass, with_scale=scale_emph) if emph else text
-        lines.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},{ass_style},,0,0,0,,{anim}{display}")
+        lines.append(f"Dialogue: 0,{_ts(start)},{_ts(end)},{ass_style},,0,0,0,,{_pos_tag}{anim}{display}")
 
     output_path.write_text("\n".join(lines), encoding="utf-8")
     print(f"[CAPTIONS LONG] Written {len(lines) - 1} selective caption moments")
@@ -558,9 +576,9 @@ def build_ass(
     back_color    = "&H00000000"  # transparent
 
     # Margins from bottom edge (Alignment=2 = bottom-center).
-    # keyword_mv: 12% from bottom — bottom 18% of frame.
-    # context_mv: stacked directly above keyword with a 15px gap.
-    keyword_mv = int(play_res_y * 0.12)
+    # 10% from bottom keeps captions in the universal safe zone below the face
+    # on any talking-head video (portrait or landscape).
+    keyword_mv = int(play_res_y * 0.10)
     context_mv = keyword_mv + keyword_sz + 15
 
     header = (

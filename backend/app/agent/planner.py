@@ -129,15 +129,37 @@ class EditPlan:
                     end = float(beat.get("end", start + 4.0))
                 except (TypeError, ValueError):
                     continue
-                text = lines[0]
-                cap_end = min(end, start + 4.0)
-                auto.append({
-                    "start": start,
-                    "end": cap_end,
-                    "text": text,
-                    "style": "concept",
-                    "emphasis_words": [],
-                })
+                if start < 15.0:
+                    # Hook phase: caption every line for maximum visual engagement
+                    beat_dur = max(1.0, end - start)
+                    n = len(lines)
+                    dur_per = beat_dur / n
+                    for li, ln in enumerate(lines):
+                        if not str(ln).strip():
+                            continue
+                        cap_s = start + li * dur_per
+                        cap_e = min(cap_s + min(dur_per - 0.05, 4.0), end)
+                        if cap_e <= cap_s:
+                            cap_e = cap_s + 2.0
+                        auto.append({
+                            "start": round(cap_s, 3),
+                            "end": round(cap_e, 3),
+                            "text": str(ln).strip(),
+                            "style": "hook" if li == 0 and start < 5.0 else "concept",
+                            "emphasis_words": [],
+                            "position": "center_bottom",
+                        })
+                else:
+                    text = lines[0]
+                    cap_end = min(end, start + 4.0)
+                    auto.append({
+                        "start": start,
+                        "end": cap_end,
+                        "text": text,
+                        "style": "concept",
+                        "emphasis_words": [],
+                        "position": "bottom_center",
+                    })
             if auto:
                 print(f"[CAPTIONS] Auto-generated {len(auto)} caption_moments from script_structure")
                 return auto
@@ -415,7 +437,11 @@ def plan_edit(
                     "  - keep_segments (scored, ordered by narrative function)\n"
                     "  - hook (highest score, serves the unified intention)\n"
                     "  - caption_emphasis_words (only words that serve the intention)\n"
-                    "  - broll (only when it ADDS to the intention, not decorates)\n"
+                    "  - broll (CONCRETE visuals only — physical actions, locations, objects, numbers):\n"
+                    "      Short-form: max 1 b-roll every 8s. 60s video = max 6 b-rolls.\n"
+                    "      Long-form: max 1 b-roll every 15s. Max 1 per keep_segment.\n"
+                    "      NEVER during beats: realization, payoff, emotional_end, hook.\n"
+                    "      NEVER during first 3s. Min 8s speaker face between b-rolls.\n"
                     "  - hyperframes (only at moments of maximum emotional impact)\n"
                     + (
                     "  - caption_moments (LONG-FORM ONLY — LESS IS MORE):\n"

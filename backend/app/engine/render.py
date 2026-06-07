@@ -824,31 +824,69 @@ def _apply_segment_zoom(
     target_h: int,
     fps: int,
 ) -> None:
-    """Bake a jump-zoom into a segment clip via instant scale+crop.
+    """Bake a jump-zoom + slow cinematic push-in into a segment clip.
 
-    No animation — the whole segment is at a constant zoom level.
-    Produces an output at target_w × target_h regardless of input zoom.
+    Pass 1 (jump zoom): scale+crop bakes the planner's zoom level as a
+    constant frame size — this IS the Jordan Belfort jump cut feel.
+
+    Pass 2 (push-in): zoompan slow-pushes from z=1.0 → 1.04 (+4%) over
+    the segment, creating the cinematic "camera slowly moving in" sensation
+    within each cut. The cap prevents over-zoom on long segments.
     """
     zoom_f = _zoom_filter_for_level(zoom_level, target_w, target_h)
-    vf = (
+    vf_p1 = (
         f"{zoom_f},fps={fps},setpts=N/FRAME_RATE/TB"
         if zoom_f
         else f"fps={fps},setpts=N/FRAME_RATE/TB"
     )
+
+    # Pass 1 — jump zoom (scale+crop) → temp file
+    _tmp_jz = dst.with_suffix(".tmp_jz.mp4")
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
-        "-fflags", "+genpts",               # regenerate PTS — prevents drift
+        "-fflags", "+genpts",
         "-i", str(src),
-        "-vf", vf,
+        "-vf", vf_p1,
         "-vsync", "cfr",
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
         "-threads", "1",
         "-x264-params", "rc-lookahead=0:bframes=0:ref=1:no-mbtree=1",
         "-pix_fmt", "yuv420p",
-        "-async", "1",                      # normalize audio timestamps to video clock
+        "-async", "1",
         "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
+        str(_tmp_jz),
+    ])
+
+    # Pass 2 — slow push-in via zoompan: z starts at 1.0, creeps +0.0005/frame,
+    # capped at 1.04.  At 30fps: 80 frames ≈ 2.67s to reach the cap, so every
+    # segment longer than ~2.7s gets the full 4% push; shorter ones get a
+    # proportionally smaller push (still visible and felt).
+    _push_cap = 1.04
+    _zoompan_vf = (
+        f"zoompan=z='min(zoom+0.0005,{_push_cap:.4f})'"
+        f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+        f":d=1:s={target_w}x{target_h}:fps={fps}"
+        f",setpts=N/FRAME_RATE/TB"
+    )
+    _run([
+        FFMPEG_PATH, "-y", "-loglevel", "error",
+        "-i", str(_tmp_jz),
+        "-vf", _zoompan_vf,
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
+        "-threads", "1",
+        "-x264-params", "rc-lookahead=0:bframes=0:ref=1:no-mbtree=1",
+        "-pix_fmt", "yuv420p",
+        "-vsync", "cfr",
+        "-c:a", "copy",
+        "-async", "1",
         str(dst),
     ])
+
+    # Remove the intermediate jump-zoom file.
+    try:
+        _tmp_jz.unlink()
+    except Exception:
+        pass
 
 
 def _render_hyperframe_png(
@@ -1548,6 +1586,30 @@ def render(
                 cut_timestamps = [
                     _remap_time(ct, kept_intervals) for ct in cut_timestamps
                 ]
+
+    # Enforce minimum gap between b-roll clips to prevent over-cutting.
+    # Short-form: 8s minimum between clips. Long-form: 15s minimum.
+    # Also drop any b-roll in the first 3s (hook must show the speaker's face).
+    _MIN_BROLL_GAP_SHORT = 8.0
+    _MIN_BROLL_GAP_LONG  = 15.0
+    _min_broll_gap = _MIN_BROLL_GAP_SHORT if short_form else _MIN_BROLL_GAP_LONG
+    _filtered_broll: list[tuple[float, float]] = []
+    _filtered_queries: list[str] = []
+    _last_broll_end = 0.0
+    for (br_s, br_e), br_q in zip(remapped_broll, broll_queries):
+        if br_s < 3.0:
+            print(f"[BROLL] Rejected (hook zone): at={br_s:.2f}s query={br_q!r}")
+            continue
+        gap = br_s - _last_broll_end
+        if gap >= _min_broll_gap:
+            _filtered_broll.append((br_s, br_e))
+            _filtered_queries.append(br_q)
+            _last_broll_end = br_e
+            print(f"[BROLL] Accepted: at={br_s:.2f}s gap={gap:.2f}s query={br_q!r}")
+        else:
+            print(f"[BROLL] Rejected (too close): at={br_s:.2f}s gap={gap:.2f}s < {_min_broll_gap}s query={br_q!r}")
+    remapped_broll = _filtered_broll
+    broll_queries  = _filtered_queries
 
     # Cap hyperframes to max 2 — simple color flashes only at peak moments.
     remapped_hyperframes = remapped_hyperframes[:2]
