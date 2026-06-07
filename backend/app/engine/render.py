@@ -1336,6 +1336,36 @@ def render(
                          if float(s["end"]) > float(s["start"]))
     print(f"[AUDIO] Expected duration (plan boundaries): {_audio_expected:.3f}s")
 
+    # BUG 3 FIX — DURATION MISMATCH: warn if concat is longer than plan.
+    _concat_actual = _probe_duration(concat_path)
+    _concat_delta = _concat_actual - _audio_expected
+    if abs(_concat_delta) > 1.0:
+        print(
+            f"[DURATION WARNING] concat.mp4={_concat_actual:.3f}s "
+            f"planned={_audio_expected:.3f}s delta={_concat_delta:+.3f}s — "
+            f"caption timestamps will be scaled to match actual duration"
+        )
+    # BUG 4 FIX — CAPTIONS SYNC: scale caption timestamps to actual video duration.
+    # If concat is 2s longer than planned, caption timestamps (which are based on
+    # plan boundaries) will arrive early. Scale all word timings proportionally.
+    if _audio_expected > 0 and abs(_concat_delta) > 0.1:
+        _scale = _concat_actual / _audio_expected
+        print(f"[CAPTIONS] Scaling timestamps by {_scale:.4f}× to match actual duration")
+        remapped_words = [
+            WordTiming(text=w.text, start=w.start * _scale, end=w.end * _scale)
+            for w in remapped_words
+        ]
+        remapped_moments = [
+            {**m, "start": float(m.get("start", 0)) * _scale,
+             "end": float(m.get("end", 0)) * _scale}
+            for m in remapped_moments
+        ]
+        remapped_silences = [
+            {**sil, "at": float(sil.get("at", 0)) * _scale}
+            for sil in remapped_silences
+        ]
+        cut_timestamps = [ct * _scale for ct in cut_timestamps]
+
     # Remap b-roll windows to the cut timeline so captions pause there.
     # BUG FIX — B-ROLL TIMING:
     # Hard rule: 2.5s ≤ b-roll ≤ 4s. Anything shorter is a flash that just
@@ -1475,15 +1505,10 @@ def render(
     remapped_broll = _filtered_broll
     broll_queries  = _filtered_queries
 
-    # Cap hyperframes to max 2 — simple color flashes only at peak moments.
-    remapped_hyperframes = remapped_hyperframes[:2]
-    # BUG 1 FIX — SALMON SCREEN: remove any hyperframe that starts before 2.0s.
-    # A hyperframe at t=0 renders as a solid color screen covering the entire
-    # opening of the video. The minimum safe offset is 2.0s so the viewer
-    # always sees the speaker's face first.
-    remapped_hyperframes = [
-        hf for hf in remapped_hyperframes if float(hf.get("at", 0)) >= 2.0
-    ]
+    # FIX 1 — SALMON SCREEN: disable hyperframes completely.
+    # Color-flash MKV overlays render as a solid salmon/colored screen at any
+    # timestamp — disable until the overlay pipeline is validated.
+    remapped_hyperframes = []
 
     import logging as _logging
     import shutil as _shutil
@@ -1825,11 +1850,16 @@ def render(
         _out_bv, _out_maxrate, _out_bufsize = "8M", "12M", "24M"
     else:
         _out_bv, _out_maxrate, _out_bufsize = "6M", "10M", "20M"
-    # Slow progressive zoom: accumulates at 0.0003/frame, capped at 1.04×.
-    # At 30fps reaches the cap in ~4.4s then holds. Imperceptible individually
-    # but gives a cinematic "settling" feel. d=1 means one output frame per
-    # input frame, preserving duration. setpts=N/FRAME_RATE/TB fixes PTS drift.
-    _zoompan = (
+    # FIX 2 — ZOOMPAN FREEZE: split into two separate passes.
+    # Combining subtitles+zoompan in the same -vf causes libass to duplicate
+    # frames, stretching a 46s video to 48s. Running them in separate ffmpeg
+    # invocations avoids the conflict entirely.
+
+    # Pass 3: slow progressive zoom only — lossless intermediate.
+    # d=1: one output frame per input frame (no duration change).
+    # setpts=N/FRAME_RATE/TB: resets PTS to prevent drift accumulation.
+    _zoomed_path = _tmp_dir / "zoomed_base.mp4"
+    _zoompan_filter = (
         f"zoompan=z='min(zoom+0.0003,1.04)'"
         f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
         f":d=1:s={target_w}x{target_h}:fps={fps}"
@@ -1838,11 +1868,25 @@ def render(
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-i", str(_nocap_path),
-        "-vf", f"subtitles={_ass_str},{_zoompan}",
+        "-vf", _zoompan_filter,
         "-vsync", "cfr",
-        "-async", "1",                      # normalize audio timestamps to video clock
-        # Final quality encode — CRF 16, preset slow, per-format bitrate floor.
-        # Only lossy encode in the entire pipeline.
+        "-async", "1",
+        "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
+        "-threads", "4",
+        "-x264-params", "rc-lookahead=0:bframes=0",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "copy",
+        str(_zoomed_path),
+    ])
+    print(f"[ZOOM PASS] Zoompan complete: {_zoomed_path}")
+
+    # Pass 4: burn captions only — final quality encode.
+    _run([
+        FFMPEG_PATH, "-y", "-loglevel", "error",
+        "-i", str(_zoomed_path),
+        "-vf", f"subtitles={_ass_str}",
+        "-vsync", "cfr",
+        "-async", "1",
         "-c:v", "libx264", "-preset", "slow", "-crf", str(output_crf),
         "-b:v", _out_bv,
         "-maxrate", _out_maxrate,
@@ -1850,8 +1894,6 @@ def render(
         "-threads", "4",
         "-x264-params", "rc-lookahead=48:bframes=3",
         "-pix_fmt", "yuv420p",
-        # loudnorm: target -14 LUFS integrated, -1 dBTP true peak, LRA 7.
-        # Ensures consistent perceived loudness across all devices and platforms.
         "-af", "loudnorm=I=-14:TP=-1:LRA=7",
         "-c:a", "aac", "-b:a", "192k", "-ar", "44100",
         "-movflags", "+faststart",
@@ -1859,6 +1901,7 @@ def render(
     ])
     print(f"[FINAL] Output: {output_path}")
     _nocap_path.unlink(missing_ok=True)
+    _zoomed_path.unlink(missing_ok=True)
     for _p in _overlay_intermediates:
         _p.unlink(missing_ok=True)
 

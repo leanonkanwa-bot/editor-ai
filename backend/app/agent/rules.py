@@ -1232,6 +1232,7 @@ Rules the JSON must obey:
   - Segments with net score ≤ 0 must always be cut — no exceptions.
   - Hook must be the highest-scoring segment in keep_segments.
   - script_structure beats: HOOK · AMPLIFY · CONTEXT · TENSION · STORY · REALIZATION · PRINCIPLE · PAYOFF · EMOTIONAL_END
+  - CRITICAL beat assignment: The FIRST keep_segment MUST have beat="hook". The LAST keep_segment MUST have beat="payoff" or beat="emotional_end". Every segment MUST have a beat field — never omit it or default it to "story".
   - script_structure lines: verbatim transcript words only, never invented.
   - silences: only before PRINCIPLE and PAYOFF, 0.3–0.5s max.
   - titres_ctr: 5 titles, each deliverable from the video content.
