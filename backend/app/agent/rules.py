@@ -963,6 +963,55 @@ The video ends when the viewer has been permanently changed.
 Not informed. Not entertained. Changed.
 """
 
+NARRATIVE_COHERENCE = """\
+NARRATIVE COHERENCE — NEVER CUT THESE
+
+Some segments score LOW individually but are ESSENTIAL for the video to make
+narrative sense. A high-scoring punchline with no visible setup creates
+confusion, not curiosity. Always evaluate segment dependencies BEFORE cutting.
+
+RULE 1 — SETUP SEGMENTS (never keep a punchline without its setup):
+  If any KEPT segment contains these signals, its setup MUST also be kept:
+    "I'm joking" / "just kidding" / "plot twist" / "but here's the thing"
+    "turns out" / "here's what happened" / "but then" / "the twist is"
+    "you felt that" / "see how you felt" / "notice what happened"
+    Any REACTION to something that hasn't been shown yet
+  → Find the segment that caused the reaction and keep it.
+  → A punchline without a setup is NOT a hook — it is confusion.
+
+RULE 2 — CONTEXT SEGMENTS (never drop the introduction):
+  If a kept segment addresses someone by name (Owen, Arda, Sarah, etc.)
+  or says 'you' to a specific person visible on screen — the segment that
+  INTRODUCES that person or scene MUST also be kept.
+  → A viewer who was never introduced to "Owen" doesn't know who that is.
+  → Low-scoring introduction segments are REQUIRED context, not filler.
+
+RULE 3 — QUESTION-ANSWER PAIRS (never split a Q&A):
+  If a kept segment is clearly an ANSWER to a question:
+    "A basketball player." / "Three years." / "No." / "Because of you."
+  → The QUESTION that prompted it MUST also be kept.
+  → Answers without questions are incoherent. Keep both — they are ONE unit.
+
+RULE 4 — THE COHERENCE GATE (run after all segments are selected):
+  Read the kept segments in order as if you've NEVER seen the full video.
+  A complete stranger would ask:
+    a) WHO is speaking and who are they speaking to?
+    b) WHAT is happening — what is the situation or event?
+    c) WHY does this REACTION or PUNCHLINE make sense right now?
+    d) Does every reaction have a VISIBLE CAUSE earlier in the kept segments?
+    e) Does every 'I'm joking' have the ORIGINAL JOKE visible before it?
+  If ANY answer is NO → add back the minimum context segment that fixes it.
+  One 5-second context segment is better than a confusing 60-second video.
+
+RULE 5 — MINIMUM CONTEXT (first 10 seconds of the edit):
+  The first 10 seconds MUST establish WHO, WHAT, and WHY.
+  NEVER start mid-story without context.
+  If the highest-scoring hook segment assumes prior setup — PREPEND the
+  shortest available segment that makes it immediately understandable.
+  The viewer's first question must be answered within the first 5 seconds:
+  "Who is this person and why should I keep watching?"
+"""
+
 VISUAL_PACING = """\
 VISUAL PACING — cinematic rhythm by section
 
@@ -1402,6 +1451,7 @@ def system_prompt(
     blocks.extend([
         CONTENT_DETECTION,
         TRANSCRIPT_INTEGRITY,
+        NARRATIVE_COHERENCE,
         SCRIPT_RHYTHM,
         NARRATIVE_STRUCTURE,
         CUT_PHILOSOPHY,
