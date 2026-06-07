@@ -367,15 +367,18 @@ def apply_emphasis(
 ) -> str:
     """Wrap emphasis_words in ASS inline color override tags.
 
-    Uses word-boundary matching (case-insensitive). The {\\r} tag resets
-    back to the style default after each emphasized word.
+    Uses str.replace() to avoid re.sub() interpreting \\c and \\r as
+    regex escape sequences in the replacement string.
     with_scale=True adds \\fscx110\\fscy110 — makes the word 10% larger.
     """
-    for word in emphasis_words:
-        pat = re.compile(r'(?<!\w)' + re.escape(word) + r'(?!\w)', re.IGNORECASE)
-        scale_tag = "\\fscx110\\fscy110" if with_scale else ""
-        repl = "{\\c" + brand_color_ass + scale_tag + "}" + word + "{\\r}"
-        text = pat.sub(repl, text)
+    for word in (emphasis_words or []):
+        if not word:
+            continue
+        if with_scale:
+            replacement = "{\\c" + brand_color_ass + "\\fscx110\\fscy110}" + word + "{\\r}"
+        else:
+            replacement = "{\\c" + brand_color_ass + "}" + word + "{\\r}"
+        text = text.replace(word, replacement)
     return text
 
 
