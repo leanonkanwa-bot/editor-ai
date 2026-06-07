@@ -1057,26 +1057,27 @@ def _fetch_broll_clip(
 
 
 def _fix_segment_overlaps(segments: list[dict]) -> list[dict]:
-    """Sort segments by start time then resolve any remaining overlaps.
+    """Remove duplicate source ranges and empty segments.
 
-    Planner may emit segments out of chronological order when reordering for
-    emotional impact. Sort first so overlap detection is reliable, then adjust
-    any start that falls inside the previous segment's window.
+    Preserves the planner's intended edit order — do NOT sort by start time.
+    The order of the array IS the playback order; sorting would destroy
+    any reordering the planner did for psychological impact.
     """
     if not segments:
         return segments
-    segments = sorted(segments, key=lambda s: float(s["start"]))
-    fixed = [segments[0]]
-    for seg in segments[1:]:
-        prev = fixed[-1]
+    seen_ranges: set[tuple[float, float]] = set()
+    fixed = []
+    for seg in segments:
         s = float(seg["start"])
         e = float(seg["end"])
-        prev_e = float(prev["end"])
-        if s < prev_e:
-            s = prev_e + 0.02
         if s >= e:
-            print(f"[OVERLAP] Skipping: {s:.3f}s→{e:.3f}s (empty after fix)")
+            print(f"[SKIP] Empty segment {s:.3f}s→{e:.3f}s")
             continue
+        range_key = (round(s, 1), round(e, 1))
+        if range_key in seen_ranges:
+            print(f"[DEDUP] Skipping duplicate segment {s:.1f}s-{e:.1f}s")
+            continue
+        seen_ranges.add(range_key)
         fixed.append({**seg, "start": s, "end": e})
     return fixed
 
@@ -1211,11 +1212,12 @@ def render(
         if e_raw <= s_raw:
             continue
 
-        # Overlap check against raw plan values (after _fix_segment_overlaps)
+        # Duplicate source-range check (reordered segments intentionally have non-monotonic start times)
         if i > 0:
+            prev_s_raw = float(keep[i - 1]["start"])
             prev_e_raw = float(keep[i - 1]["end"])
-            if s_raw < prev_e_raw:
-                print(f"[OVERLAP WARNING] Segment {i} raw start {s_raw:.3f}s before prev raw end {prev_e_raw:.3f}s")
+            if abs(s_raw - prev_s_raw) < 0.1 and abs(e_raw - prev_e_raw) < 0.1:
+                print(f"[OVERLAP WARNING] Segment {i} is nearly identical to previous ({s_raw:.3f}s-{e_raw:.3f}s)")
 
         # Hard Rule 1 — snap to word boundaries
         s = _snap_to_word_boundary(s_raw, words, edge="start")

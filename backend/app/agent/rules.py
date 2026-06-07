@@ -1012,6 +1012,65 @@ RULE 5 — MINIMUM CONTEXT (first 10 seconds of the edit):
   "Who is this person and why should I keep watching?"
 """
 
+SEGMENT_REORDERING = """\
+SEGMENT REORDERING — MANDATORY FOR MAXIMUM RETENTION
+
+The keep_segments array determines PLAYBACK ORDER, not source order.
+You MUST reorder segments for psychological impact — do NOT output them
+in source chronological order. Source order = amateur edit. Edit order = pro.
+
+REORDERING ALGORITHM — run in this exact sequence:
+
+STEP 1 — FIND THE HOOK (the most powerful moment in the ENTIRE video):
+  Score every sentence. The single highest-scoring segment becomes segment[0].
+  It does NOT matter if this segment is at minute 5 of a 6-minute video.
+  The hook MUST be first. No exceptions. No setup before it. Ever.
+  Example: transcript has 300s of content. Best line at 240s → keep_segments[0].start = 240.
+
+STEP 2 — FIND WHAT MAKES THE HOOK UNDERSTANDABLE:
+  Read the hook as a stranger. What MINIMUM context is needed to follow it?
+  Place that context segment at position 1 or 2 — EVEN IF it appears before
+  the hook in the source. Timestamps are SOURCE positions; array order is EDIT order.
+  Example: hook = "You ain't gonna make it." → context needed = "What's your dream?"
+           → keep_segments[1] = the question segment (even if at source t=5s).
+
+STEP 3 — BUILD TENSION PROGRESSIVELY:
+  Each subsequent segment must either:
+    a) Add NEW information the viewer doesn't yet have, OR
+    b) RAISE THE STAKES (make it worse before it gets better), OR
+    c) Open a new curiosity loop.
+  Never two consecutive segments at the same emotional flatline.
+  Interleave tension-builders from any timestamp in the source — order by FEELING, not chronology.
+
+STEP 4 — DELAY THE PAYOFF TO THE FINAL 20%:
+  The segment that ANSWERS the hook question goes LAST (or near-last).
+  If the source has the payoff at minute 2 of a 10-minute video,
+  move it to the FINAL 20% of the output edit.
+  Insert story/principle segments between setup and payoff to enforce the delay.
+
+STEP 5 — CLOSE ALL LOOPS IN THE FINAL SEGMENT:
+  The last kept segment must answer every question opened in the first 3 seconds.
+  The viewer who made it to the end must feel: "That was worth it."
+
+CONCRETE EXAMPLE:
+  Source order: [intro@0s, context@10s, HOOK@25s, story@35s, payoff@50s]
+  Optimal edit:  [HOOK@25s, context@10s, story@35s, intro@0s, payoff@50s]
+  Explanation: hook first → context to explain → story raises stakes →
+               intro reused as tension bridge → payoff closes the loop.
+
+JSON REMINDER:
+  keep_segments timestamps (start/end) = SOURCE video positions.
+  The ARRAY ORDER = the EDIT sequence.
+  [{"start":25,"end":30}, {"start":10,"end":15}] means:
+    Play source 25–30s FIRST, then play source 10–15s SECOND.
+  This is how reordering works — timestamps never change, order does.
+
+WHAT MAKES THIS DIFFERENT FROM A CHRONOLOGICAL EDIT:
+  Bad editor: selects good segments, outputs them in source order.
+  Good editor: finds the BEST moment, builds the video AROUND that moment,
+               uses timestamps as raw material — not as a constraint.
+"""
+
 VISUAL_PACING = """\
 VISUAL PACING — cinematic rhythm by section
 
@@ -1266,12 +1325,12 @@ Reply with a SINGLE JSON object, no prose, matching this schema:
 Rules the JSON must obey:
   - All times in seconds, decimals allowed.
   - Scale values are decimals (1.00 = 100%, 1.30 = 130%).
-  - keep_segments order IS the playback order.
-  - CRITICAL: keep_segments MUST be in chronological order by start time.
-    Each segment's start MUST be strictly after the previous segment's end.
-    Never output segments that overlap in time. Overlapping segments cause
-    words to repeat and the renderer will discard the overlapping portion,
-    silently losing content. Sort by start time before outputting.
+  - keep_segments order IS the playback order (edit order, NOT source order).
+  - CRITICAL: keep_segments are in EDIT ORDER, not source chronological order.
+    Reorder them for maximum psychological impact (see SEGMENT REORDERING).
+    The timestamps (start/end) refer to SOURCE video positions — never change them.
+    The ARRAY ORDER determines what plays first, second, third.
+    Only constraint: no two entries may have the same (start, end) range (no duplicates).
   - keep_segments edges MUST fall on breath pauses (≥0.25s gap between words).
     NEVER start or end a segment mid-sentence. Every segment starts at a
     sentence boundary (word after pause ≥0.25s) and ends at a sentence
@@ -1451,6 +1510,7 @@ def system_prompt(
     blocks.extend([
         CONTENT_DETECTION,
         TRANSCRIPT_INTEGRITY,
+        SEGMENT_REORDERING,
         NARRATIVE_COHERENCE,
         SCRIPT_RHYTHM,
         NARRATIVE_STRUCTURE,
