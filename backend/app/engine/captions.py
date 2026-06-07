@@ -545,10 +545,11 @@ def _build_priestley_ass(
         _fm_get_path("Inter", 700)
         _fm_get_path("Inter", 900)
 
-    scale = video_w / 1920.0
+    # Scale by height so portrait (1080×1920) gets scale=1.777 → font_size=74px
+    # instead of the wrong width-based scale=0.5625 → 24px.
+    scale = video_h / 1080.0
     font_size  = max(24, int(42  * scale))
     title_size = max(48, int(130 * scale))
-    title_sub_size = max(20, int(52 * scale))
     margin_v   = int(video_h * 0.18)
     margin_lr  = int(150 * scale)
 

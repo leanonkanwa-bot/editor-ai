@@ -583,10 +583,12 @@ def _build_preview(
             continue
         edit_segments.append({
             "order":   i + 1,
-            "role":    seg.get("reason", ""),
+            "role":    seg.get("role", ""),
+            "score":   seg.get("score", 0),
+            "retention_note": seg.get("retention_note", ""),
             "original_time": f"{s:.1f}s–{e:.1f}s",
             "edit_dur": f"{e - s:.1f}s",
-            "note":    seg.get("note", ""),
+            "note":    seg.get("reason", ""),
         })
 
     return {

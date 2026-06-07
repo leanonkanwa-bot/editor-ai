@@ -1314,7 +1314,7 @@ def render(
                 sil_at = float(sil.get("at", 0))
             except (TypeError, ValueError):
                 continue
-            if s <= sil_at <= e:
+            if s_raw <= sil_at <= e_raw:
                 remapped_silences.append({
                     **sil,
                     "at": seg_offset + (sil_at - s),
