@@ -681,6 +681,21 @@ def _find_system_font() -> str | None:
 
 _VALID_ZOOM_LEVELS = frozenset({100, 130, 150, 170})
 
+PRIESTLEY_ZOOM: dict[str, int] = {
+    "hook":           130,
+    "amplify":        125,
+    "context":        100,
+    "tension":        125,
+    "tension_stack":  130,
+    "story":          112,
+    "realization":    125,
+    "principle":      115,
+    "payoff":         130,
+    "emotional_end":  112,
+    "default":        112,
+}
+MAX_ZOOM_PRIESTLEY = 130
+
 
 def _zoom_filter_for_level(zoom_level: int, target_w: int, target_h: int) -> str | None:
     """Return an FFmpeg vf string for a jump zoom at the given level.
@@ -1153,6 +1168,7 @@ def render(
     subject_position: dict | None = None,
     graphic_specs: list | None = None,
     content_type: str = "coaching",
+    editing_style: str = "viral",
 ) -> dict[str, Any]:
     work_dir.mkdir(parents=True, exist_ok=True)
     _health_check(src)
@@ -1245,9 +1261,13 @@ def render(
         else:
             _cut_segment(cut_src, s, e, part, target_w, target_h, fps)
 
-        # Jordan Belfort jump zoom — zoom baked into concat pass via _concat_with_zoom.
+        # Jump zoom — Priestley style uses beat-mapped levels; viral uses planner levels.
         zoom_level = int(seg.get("zoom_level", 130))
-        if zoom_level not in _VALID_ZOOM_LEVELS:
+        if editing_style == "priestley":
+            _beat = (seg.get("beat") or "default").lower()
+            zoom_level = PRIESTLEY_ZOOM.get(_beat, PRIESTLEY_ZOOM["default"])
+            zoom_level = min(zoom_level, MAX_ZOOM_PRIESTLEY)
+        elif zoom_level not in _VALID_ZOOM_LEVELS:
             zoom_level = min(_VALID_ZOOM_LEVELS, key=lambda z: abs(z - zoom_level))
         print(f"[ZOOM] Segment {i}: beat={seg.get('beat')} zoom={zoom_level}% duration={e-s:.2f}s")
         zoom_segments.append(i)

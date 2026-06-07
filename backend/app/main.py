@@ -268,6 +268,7 @@ async def submit_edit(
     caption_color: str = Form("white"),
     caption_position: Literal["center", "bottom", "side-left", "side-right"] = Form("center"),
     caption_style: str = Form("impact"),
+    editing_style: str = Form("viral"),
     brand_color: str = Form(""),
     theme: str = Form("dark-pro"),
     # Content brief fields (Feature 6)
@@ -323,6 +324,7 @@ async def submit_edit(
         caption_color=caption_color,
         caption_position=caption_position,
         caption_style=caption_style,
+        editing_style=editing_style,
         brand_color=brand_color or None,
         aesthetic=theme,
         target_audience=target_audience,

@@ -879,6 +879,12 @@ async function chunkedUpload(file) {
       fd.set("caption_font", _fontMap[_cp.font] || _cp.font);
   } catch (_e) {}
 
+  // Enforce editing_style + matching caption_style
+  fd.set("editing_style", selectedEditingStyle);
+  if (selectedEditingStyle === "priestley") {
+    fd.set("caption_style", "priestley");
+  }
+
   const editRes = await apiFetch("/api/edit", { method: "POST", body: fd });
   if (editRes.status === 401) { loginCard?.classList.remove("hidden"); appCard?.classList.add("hidden"); statusCard?.classList.add("hidden"); submitBtn.disabled = false; submitBtn.querySelector(".btn-label").textContent = "Éditer ma vidéo"; submitBtn.classList.remove("loading"); return; }
   if (!editRes.ok) throw new Error(`Edit start failed: ${editRes.status} ${await editRes.text()}`);
@@ -924,6 +930,10 @@ function directUpload(file) {
     if (_cp.font && (!_xfd.get("caption_font") || _xfd.get("caption_font") === "Poppins Bold"))
       _xfd.set("caption_font", _fm[_cp.font] || _cp.font);
   } catch (_e) {}
+  _xfd.set("editing_style", selectedEditingStyle);
+  if (selectedEditingStyle === "priestley") {
+    _xfd.set("caption_style", "priestley");
+  }
   xhr.send(_xfd);
 }
 
@@ -1338,6 +1348,43 @@ $("replanBtn")?.addEventListener("click", async () => {
       }
     }
   } catch {}
+})();
+
+// ── Editing style selector ────────────────────────────────────────────────────
+let selectedEditingStyle = localStorage.getItem("editing_style") || "viral";
+
+(function initStyleCards() {
+  const styleInput = document.querySelector('input[name="editing_style"]');
+  if (styleInput) styleInput.value = selectedEditingStyle;
+
+  document.querySelectorAll("#styleSelector .style-card").forEach(card => {
+    if (card.dataset.style === selectedEditingStyle) {
+      card.classList.add("active");
+    } else {
+      card.classList.remove("active");
+    }
+    card.addEventListener("click", () => {
+      document.querySelectorAll("#styleSelector .style-card").forEach(c => c.classList.remove("active"));
+      card.classList.add("active");
+      selectedEditingStyle = card.dataset.style;
+      localStorage.setItem("editing_style", selectedEditingStyle);
+      if (styleInput) styleInput.value = selectedEditingStyle;
+      // Sync caption_style hidden input when Priestley is selected
+      const captionStyleInput = document.querySelector('input[name="caption_style"]');
+      if (captionStyleInput) {
+        if (selectedEditingStyle === "priestley") {
+          captionStyleInput.value = "priestley";
+          // Remove active from all caption preset buttons
+          document.querySelectorAll("#captionPresetSelector .caption-preset-btn")
+            .forEach(b => b.classList.remove("active"));
+        } else {
+          // Restore to whichever caption preset is active, defaulting to twolevel
+          const activeBtn = document.querySelector("#captionPresetSelector .caption-preset-btn.active");
+          captionStyleInput.value = activeBtn ? (activeBtn.dataset.style || "twolevel") : "twolevel";
+        }
+      }
+    });
+  });
 })();
 
 document.querySelectorAll("#captionPresetSelector .caption-preset-btn").forEach(btn => {

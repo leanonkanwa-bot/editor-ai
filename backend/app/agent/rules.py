@@ -1479,6 +1479,81 @@ STEP 6 — LOOP RHYTHM (every 15–20s):
 Output content_type in the `summary` field of the JSON.
 """
 
+PRIESTLEY_STYLE = """\
+DANIEL PRIESTLEY EDITING STYLE — ACTIVE
+Target audience: entrepreneurs, founders, executives.
+Energy: 7/10 — authoritative, fast, never chaotic.
+
+PACING RULES:
+- Visual change every 1.8–2.5 seconds in the hook section
+- Visual change every 2.5–3.2 seconds in body sections
+- Absolute maximum: 4.5 seconds without visual change
+- Mean shot duration: 2.2 seconds
+
+SILENCE REMOVAL (aggressive):
+- Remove all pauses between words > 100ms
+- Remove all breathing sounds
+- Remove filler words (um, uh, like, you know, basically)
+- After a conceptual milestone: keep pause up to 400ms for rhetorical separation
+- NO dead air between sentences
+
+CUT PLACEMENT:
+- Always cut on the first transient of the stressed syllable
+- Never cut mid-phrase
+- Jump cuts: between strong consecutive statements (35% of cuts)
+- Hard cuts: between speaker and b-roll (65% of cuts)
+- ZERO cross-dissolves — excluded completely
+- Audio must sync within 1 frame (33ms) of video cut
+
+HOOK STRUCTURE (first 45 seconds — MANDATORY):
+[0:00–0:02] PATTERN INTERRUPT:
+  - Most shocking statement in the entire video
+  - Start with the conclusion, not the setup
+  - Large title card over the strongest opening line
+
+[0:02–0:10] PROBLEM IDENTIFICATION:
+  - Address viewer directly ("If you're still doing X…")
+  - Make viewer feel seen and slightly uncomfortable
+
+[0:10–0:25] PROOF BY DATA:
+  - One specific statistic (real or highly plausible)
+  - Reference a credible source
+  - Caption this as a stat title card
+
+[0:25–0:45] THE ALTERNATIVE:
+  - "But the good news is…"
+  - State the promise and solution clearly
+  - Energy shifts from warning to opportunity
+
+CAPTION STYLE — PRIESTLEY:
+- Dialogue: Inter Bold 42px, white text, black pill box at 70% opacity
+- Gold karaoke highlight (#FFDE4D) on the word currently being spoken
+- 2–5 words per caption block, instant appearance, instant clear
+- Title cards: Inter 130px, UPPERCASE, dark burgundy box (#2B080C), cream text
+- Title cards used for: hook statement, key statistics, chapter titles
+
+B-ROLL (professional/business only):
+- Every 4.5–6.0 seconds (40% of video is b-roll)
+- Duration: 1.2–3.8 seconds, 2.1s average
+- Desaturated slightly: saturation 85%
+- Search queries MUST include: professional, business, entrepreneur, office, executive
+- NEVER suggest: fitness, sports, nature, casual, outdoor leisure
+- Full-bleed hard cuts in and out
+
+ZOOM LIMITS:
+- Maximum zoom: 130% (never exceed)
+- Beat-mapped: hook/payoff=130%, tension/amplify/realization=125%, principle=115%,
+  story/emotional_end=112%, context=100%
+
+NEVER DO IN PRIESTLEY STYLE:
+- No emoji in captions
+- No neon colors except gold #FFDE4D for key data
+- No aggressive zoom above 130%
+- No chaotic cuts under 1 second except the opening hook
+- No casual language in title cards
+- No b-roll of fitness, nature, or lifestyle content
+"""
+
 _EDUTAINMENT_BRAND = (
     "edutainment — Kiyosaki / Hormozi / MrBeast short-form standard.\n"
     "  accent: #FF7751 (salmon), dark bg #0A0A0A, white text #FFFFFF.\n"
@@ -1498,8 +1573,11 @@ def system_prompt(
     caption_color: str | None = None,
     caption_position: str | None = None,
     caption_font: str | None = None,
+    editing_style: str = "viral",
 ) -> str:
     blocks = [IDENTITY, CORE_VOICE, SIMPLE_HEAVY, AUDIENCE_CONTEXT]
+    if editing_style == "priestley":
+        blocks.insert(0, PRIESTLEY_STYLE)
 
     effective_brand = brand_color or "#FF7751"
     blocks.append(

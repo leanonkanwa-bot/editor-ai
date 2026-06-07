@@ -62,6 +62,7 @@ def run_job(
     caption_style: str = "impact",
     brand_color: str | None = None,
     aesthetic: str = "dark-pro",
+    editing_style: str = "viral",
     # Content brief fields (Feature 6)
     target_audience: str = "",
     main_message: str = "",
@@ -231,6 +232,7 @@ def run_job(
             caption_font=caption_font,
             subject_position=subject_pos,
             coach_profile=coach_profile,
+            editing_style=editing_style,
         )
 
         # ── Step 7: Hook rewrite (Feature 3) ──────────────────────────────
@@ -347,6 +349,7 @@ def run_job(
                 caption_style=caption_style,
                 brand_color=brand_color,
                 aesthetic=aesthetic,
+                editing_style=editing_style,
                 content_type=detected_content_type,
             ),
         )
@@ -460,6 +463,7 @@ def run_render_phase(job_id: str, src: Path) -> None:
             caption_style=params.get("caption_style", "impact"),
             brand_color=params.get("brand_color"),
             aesthetic=params.get("aesthetic", "dark-pro"),
+            editing_style=params.get("editing_style", "viral"),
             subject_position=subject_pos,
             graphic_specs=graphic_specs,
             content_type=content_type,

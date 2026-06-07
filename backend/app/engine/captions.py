@@ -519,6 +519,140 @@ def _build_long_form_ass(
     return output_path
 
 
+def _build_priestley_ass(
+    words: list,
+    output_path,
+    video_w: int = 1920,
+    video_h: int = 1080,
+    video_duration: float | None = None,
+    caption_moments: list[dict] | None = None,
+) -> Path:
+    """Daniel Priestley style ASS captions.
+
+    Dialogue: white pill-box, gold karaoke highlight, Inter Bold 42px.
+    Title cards: dark burgundy box, cream/gold text, scale animation.
+    """
+    output_path = Path(output_path)
+    scale = video_w / 1920.0
+    font_size  = max(24, int(42  * scale))
+    title_size = max(48, int(130 * scale))
+    title_sub_size = max(20, int(52 * scale))
+    margin_v   = int(video_h * 0.18)
+    margin_lr  = int(150 * scale)
+
+    def _p_hex_to_ass(hex_color: str, alpha: int = 0) -> str:
+        h = hex_color.lstrip("#").upper()
+        if len(h) != 6:
+            h = "FFFFFF"
+        r, g, b = h[0:2], h[2:4], h[4:6]
+        return f"&H{alpha:02X}{b}{g}{r}"
+
+    white_ass    = _p_hex_to_ass("FFFFFF", 0)
+    gold_ass     = _p_hex_to_ass("FFDE4D", 0)
+    black70_ass  = _p_hex_to_ass("000000", 0x4C)   # 70% opacity black box
+    burgundy_ass = _p_hex_to_ass("2B080C", 0)
+    cream_ass    = _p_hex_to_ass("FDFBF7", 0)
+
+    header = (
+        "[Script Info]\n"
+        "ScriptType: v4.00+\n"
+        f"PlayResX: {video_w}\n"
+        f"PlayResY: {video_h}\n"
+        "ScaledBorderAndShadow: yes\n\n"
+        "[V4+ Styles]\n"
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
+        "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
+        "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+        "Alignment, MarginL, MarginR, MarginV, Encoding\n"
+        # Dialogue: white text, 70% black box, BorderStyle=3 (opaque box)
+        f"Style: Dialogue,Inter,{font_size},{white_ass},{gold_ass},"
+        f"&H00000000,{black70_ass},-1,0,0,0,100,100,0,0,3,1,0,"
+        f"2,{margin_lr},{margin_lr},{margin_v},1\n"
+        # TitleCard: cream text, burgundy box, center (Alignment=5)
+        f"Style: TitleCard,Inter,{title_size},{cream_ass},{gold_ass},"
+        f"&H00000000,{burgundy_ass},-1,0,0,0,100,100,0,0,1,0,0,"
+        f"5,60,60,60,1\n"
+        "\n[Events]\n"
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, "
+        "Effect, Text\n"
+    )
+
+    lines = [header]
+
+    # ── Title cards from caption_moments (hook / stat / mantra) ─────────────
+    if caption_moments:
+        for moment in caption_moments:
+            style_type = str(moment.get("style", "concept"))
+            if style_type in ("hook", "stat", "mantra"):
+                text = str(moment.get("text", "")).strip().upper()
+                if not text:
+                    continue
+                start = float(moment.get("start", 0))
+                end   = float(moment.get("end", start + 2.5))
+                anim = r"{\fscx100\fscy100\t(0,1500,\fscx105\fscy105)}"
+                lines.append(
+                    f"Dialogue: 1,{_ts(start)},{_ts(end)},TitleCard,,0,0,0,,{anim}{text}"
+                )
+
+    # ── Dialogue captions — karaoke highlight with gold active word ──────────
+    PHRASE_SIZE = 4
+    valid_words = [
+        w for w in words
+        if _strip_punct(w.text) and (video_duration is None or w.start < video_duration)
+    ]
+
+    i = 0
+    while i < len(valid_words):
+        phrase_words = valid_words[i: i + PHRASE_SIZE]
+        if not phrase_words:
+            break
+
+        p_start = max(0.0, phrase_words[0].start - 0.050)  # 50ms early entry
+        p_end   = phrase_words[-1].end
+
+        # Hard cap at 3 seconds
+        if p_end - p_start > 3.0:
+            p_end = p_start + 3.0
+
+        # Gap: disappear during silence > 250ms
+        next_i = i + PHRASE_SIZE
+        if next_i < len(valid_words):
+            next_word_start = valid_words[next_i].start
+            gap = next_word_start - phrase_words[-1].end
+            if gap > 0.25:
+                pass  # natural gap — keep p_end as is
+            else:
+                p_end = min(p_end, next_word_start - 0.02)
+
+        if video_duration is not None and p_end > video_duration:
+            p_end = video_duration
+        if p_end <= p_start:
+            i += PHRASE_SIZE
+            continue
+
+        # Build karaoke text: {\kf<cs>}word  (kf = fill from left)
+        kara_parts = []
+        for wi, word in enumerate(phrase_words):
+            dur_cs = max(1, round((word.end - word.start) * 100))
+            word_text = _strip_punct(word.text)
+            if not word_text:
+                continue
+            display = word_text.capitalize() if wi == 0 else word_text.lower()
+            kara_parts.append(f"{{\\kf{dur_cs}}}{display}")
+
+        if kara_parts:
+            kara_line = "".join(kara_parts)
+            lines.append(
+                f"Dialogue: 0,{_ts(p_start)},{_ts(p_end)},Dialogue,,0,0,0,,{kara_line}"
+            )
+
+        i += PHRASE_SIZE
+
+    output_path.write_text("\n".join(lines), encoding="utf-8")
+    print(f"[CAPTIONS] Priestley: {len(lines) - 1} lines written")
+    return output_path
+
+
 def build_ass(
     words: list,
     output_path,
@@ -540,6 +674,13 @@ def build_ass(
                                Falls back to short-form if caption_moments is empty.
     """
     output_path = Path(output_path)
+
+    # Priestley style: dedicated renderer — completely separate from other modes.
+    if caption_style == "priestley":
+        return _build_priestley_ass(
+            words, output_path, video_w=video_w, video_h=video_h,
+            video_duration=video_duration, caption_moments=caption_moments,
+        )
 
     # Long-form: selective moments only — NO fallback to word-by-word.
     if mode == "long":

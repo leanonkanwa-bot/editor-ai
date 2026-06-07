@@ -158,6 +158,13 @@
 
       /* ── FORMAT PILLS ────────────────────────────────────────── */
       .format-pills { display: flex; gap: .5rem; margin-bottom: 1rem; }
+      .style-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+      .style-card { border: 2px solid var(--border); border-radius: 10px; padding: 14px 16px; cursor: pointer; transition: all 0.2s; }
+      .style-card:hover { border-color: var(--salmon); }
+      .style-card.active { border-color: var(--salmon); background: rgba(255,119,81,0.06); }
+      .style-name { font-weight: 700; font-size: 14px; color: var(--text); margin-bottom: 3px; }
+      .style-desc { font-size: 12px; color: var(--text-secondary); }
+      .style-meta { font-size: 10px; color: var(--salmon); margin-top: 4px; font-weight: 500; }
       .format-pill  { display: flex; align-items: center; justify-content: center; gap: .4rem; flex: 1; }
       .format-pill input[type="radio"] { display: none; }
       .format-pill label {
@@ -731,6 +738,7 @@
           <form id="form" style="margin-top:1rem">
             <!-- Hidden fields -->
             <input type="hidden" name="caption_style" value="impact" />
+            <input type="hidden" name="editing_style" value="viral" />
             <input type="hidden" name="brand_color" value="#FF7751" />
             <input type="hidden" name="caption_font" value="Poppins Bold" />
             <input type="hidden" name="target_audience" />
@@ -744,6 +752,23 @@
               </svg>
               <div id="dropLabel">Déposer votre vidéo ici</div>
               <div class="drop-hint">MP4, MOV, MKV · Jusqu'à 4 Go</div>
+            </div>
+
+            <!-- Editing style selector -->
+            <div class="field-group" id="styleSelector" style="margin-top:1rem">
+              <span class="section-label">STYLE DE MONTAGE</span>
+              <div class="style-grid">
+                <div class="style-card active" data-style="viral">
+                  <div class="style-name">Viral Short</div>
+                  <div class="style-desc">TikTok · Reels · Max rétention</div>
+                  <div class="style-meta">Cuts: 1.5s · Zoom: 150% · Captions colorées</div>
+                </div>
+                <div class="style-card" data-style="priestley">
+                  <div class="style-name">Daniel Priestley</div>
+                  <div class="style-desc">Expert · Business · Autorité</div>
+                  <div class="style-meta">Cuts: 2.2s · Zoom: 130% · Captions pill noir</div>
+                </div>
+              </div>
             </div>
 
             <!-- Format -->

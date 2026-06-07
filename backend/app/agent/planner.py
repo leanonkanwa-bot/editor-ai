@@ -310,6 +310,7 @@ def plan_edit(
     subject_position: dict[str, float] | None = None,
     aesthetic: str = "high-energy",  # kept for API compat, ignored internally
     coach_profile: dict[str, Any] | None = None,
+    editing_style: str = "viral",
 ) -> EditPlan:
     """
     Ask Claude to produce an edit plan for the given transcript.
@@ -430,6 +431,28 @@ def plan_edit(
                     "AUDIO-ONLY TEST: Read the kept transcript text aloud (no visuals).\n"
                     "If a first-time listener would not understand the core story → revise\n"
                     "keep_segments until the audio version makes complete narrative sense.\n\n"
+                    + (
+                    "PRIESTLEY STYLE ACTIVE — apply Daniel Priestley hook structure:\n"
+                    "  [0:00–0:02] Pattern interrupt — most shocking claim first\n"
+                    "              Start with the conclusion, not the setup\n"
+                    "  [0:02–0:10] Problem identification — address viewer's pain directly\n"
+                    "              ('If you're still doing X, here's what happens...')\n"
+                    "  [0:10–0:25] Proof by data — one specific credible statistic\n"
+                    "              Must be real or highly plausible. Cite a source if possible.\n"
+                    "  [0:25–0:45] The alternative — transition from warning to opportunity\n"
+                    "              ('But the good news is...')\n\n"
+                    "Caption moments for Priestley style:\n"
+                    "  Generate title cards for the hook statement, key statistics, chapter titles.\n"
+                    "  Use style='hook' for the opening statement, style='stat' for numbers.\n"
+                    "  Title card text: SHORT (2–5 words max), UPPERCASE.\n"
+                    "  Example: 'THE TIME IS OVER' / '$200 PER YEAR' / 'REPACKAGE YOUR VALUE'\n\n"
+                    "B-roll suggestions for Priestley style (MANDATORY):\n"
+                    "  search_query MUST include: professional, business, entrepreneur, office, executive\n"
+                    "  NEVER suggest: fitness, sports, nature, outdoor leisure\n"
+                    "  Good: 'entrepreneur laptop office', 'business meeting executive'\n"
+                    "  Bad:  'man running trail', 'nature sunrise'\n\n"
+                    if editing_style == "priestley" else ""
+                    ) +
                     f"USER INSTRUCTIONS:\n{user_instructions or '(none — apply default high-retention edit)'}\n\n"
                     "TRANSCRIPT WITH WORD TIMESTAMPS (JSON):\n"
                     f"{json.dumps(transcript, ensure_ascii=False)}\n\n"
@@ -552,6 +575,7 @@ def plan_edit(
             caption_color=caption_color or "white",
             caption_position=caption_position or "center",
             caption_font=caption_font or "Poppins Bold",
+            editing_style=editing_style,
         ),
         messages=[user_msg],
     )
