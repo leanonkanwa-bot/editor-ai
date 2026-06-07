@@ -702,39 +702,71 @@ def _zoom_filter_for_level(zoom_level: int, target_w: int, target_h: int) -> str
     )
 
 
-def _apply_segment_zoom(
-    src: Path,
+def _concat_with_zoom(
+    parts: list[Path],
+    zoom_levels: list[int],
     dst: Path,
-    zoom_level: int,
     target_w: int,
     target_h: int,
     fps: int,
 ) -> None:
-    """Bake the jump-zoom level into a segment clip (single pass, no AV drift).
+    """Concat segments with per-segment jump zoom in a single ffmpeg pass.
 
-    Scale+crop bakes the planner's zoom level (100/130/150/170%) as a constant
-    frame size — the Jordan Belfort jump-cut feel. One pass only: zoompan was
-    removed because it changes video duration/framerate and causes AV sync
-    mismatch (video shorter than audio, r_frame_rate becomes fractional).
+    Folds the zoom encode into the concat step, eliminating a separate
+    _apply_segment_zoom() pass. Uses filter_complex concat filter so each
+    segment's scale+crop zoom is applied inline before concatenation.
+    Single-segment shortcut avoids the concat filter overhead.
     """
-    zoom_f = _zoom_filter_for_level(zoom_level, target_w, target_h)
-    vf = (
-        f"{zoom_f},fps={fps},setpts=N/FRAME_RATE/TB"
-        if zoom_f
-        else f"fps={fps},setpts=N/FRAME_RATE/TB"
-    )
+    n = len(parts)
+    if n == 1:
+        zoom_f = _zoom_filter_for_level(zoom_levels[0], target_w, target_h)
+        vf = (
+            f"{zoom_f},fps={fps},setpts=N/FRAME_RATE/TB"
+            if zoom_f
+            else f"fps={fps},setpts=N/FRAME_RATE/TB"
+        )
+        _run([
+            FFMPEG_PATH, "-y", "-loglevel", "error",
+            "-fflags", "+genpts", "-i", str(parts[0]),
+            "-vf", vf,
+            "-vsync", "cfr", "-async", "1",
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
+            "-threads", "2",
+            "-x264-params", "rc-lookahead=0:bframes=0:ref=1:no-mbtree=1",
+            "-pix_fmt", "yuv420p",
+            "-c:a", "copy",
+            str(dst),
+        ])
+        return
+
+    inputs: list[str] = []
+    for p in parts:
+        inputs += ["-fflags", "+genpts", "-i", str(p)]
+
+    fc_parts: list[str] = []
+    for i, zoom_level in enumerate(zoom_levels):
+        zoom_f = _zoom_filter_for_level(zoom_level, target_w, target_h)
+        vf_chain = (
+            f"{zoom_f},fps={fps},setpts=N/FRAME_RATE/TB"
+            if zoom_f
+            else f"fps={fps},setpts=N/FRAME_RATE/TB"
+        )
+        fc_parts.append(f"[{i}:v]{vf_chain}[v{i}]")
+
+    concat_inputs = "".join(f"[v{i}][{i}:a]" for i in range(n))
+    fc_parts.append(f"{concat_inputs}concat=n={n}:v=1:a=1[vout][aout]")
+
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
-        "-fflags", "+genpts",
-        "-i", str(src),
-        "-vf", vf,
-        "-vsync", "cfr",
+        *inputs,
+        "-filter_complex", ";".join(fc_parts),
+        "-map", "[vout]", "-map", "[aout]",
+        "-vsync", "cfr", "-async", "1",
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
-        "-threads", "1",
-        "-x264-params", "rc-lookahead=0:bframes=0:ref=1:no-mbtree=1",
+        "-threads", "4",
+        "-x264-params", "rc-lookahead=0:bframes=0",
         "-pix_fmt", "yuv420p",
-        "-async", "1",
-        "-c:a", "copy",
+        "-c:a", "aac", "-b:a", "192k",
         str(dst),
     ])
 
@@ -1025,41 +1057,25 @@ def _fetch_broll_clip(
 
 
 def _fix_segment_overlaps(segments: list[dict]) -> list[dict]:
-    """Resolve overlapping keep_segments before cutting to prevent word repetition.
+    """Sort segments by start time then resolve any remaining overlaps.
 
-    Sorts by start time first (planner may output out-of-order segments when
-    reordering for emotional impact). Then for any segment whose start falls
-    inside the previous segment's window, adjusts its start to just after the
-    previous end, salvaging whatever tail remains. Segments with no salvageable
-    content (end <= adjusted start) are dropped and logged.
+    Planner may emit segments out of chronological order when reordering for
+    emotional impact. Sort first so overlap detection is reliable, then adjust
+    any start that falls inside the previous segment's window.
     """
     if not segments:
         return segments
-    # Sort chronologically — planner sometimes reorders for emotional impact
-    # but emits timestamps from the source transcript, causing apparent overlap.
-    sorted_segs = sorted(segments, key=lambda s: float(s.get("start", 0)))
-    fixed = [dict(sorted_segs[0])]
-    for seg in sorted_segs[1:]:
+    segments = sorted(segments, key=lambda s: float(s["start"]))
+    fixed = [segments[0]]
+    for seg in segments[1:]:
         prev = fixed[-1]
         s = float(seg["start"])
         e = float(seg["end"])
         prev_e = float(prev["end"])
         if s < prev_e:
-            new_s = prev_e + 0.02  # 20ms gap between segments
-            if new_s < e:
-                print(
-                    f"[OVERLAP] Salvaged: seg [{s:.3f}, {e:.3f}] overlaps prev end "
-                    f"{prev_e:.3f}s — trimmed start to {new_s:.3f}s "
-                    f"(kept {e - new_s:.3f}s)"
-                )
-                s = new_s
-            else:
-                print(
-                    f"[OVERLAP] Dropped: seg [{s:.3f}, {e:.3f}] completely subsumed "
-                    f"by prev end {prev_e:.3f}s — no salvageable content"
-                )
-                continue
+            s = prev_e + 0.02
         if s >= e:
+            print(f"[OVERLAP] Skipping: {s:.3f}s→{e:.3f}s (empty after fix)")
             continue
         fixed.append({**seg, "start": s, "end": e})
     return fixed
@@ -1178,6 +1194,7 @@ def render(
         cut_src = src
 
     parts: list[Path] = []
+    zoom_levels: list[int] = []
     zoom_segments: list[int] = []
     cum = 0.0  # exact video output timeline — no audio-handle inflation
     remapped_zoom: list[dict[str, Any]] = []
@@ -1226,15 +1243,14 @@ def render(
         else:
             _cut_segment(cut_src, s, e, part, target_w, target_h, fps)
 
-        # Jordan Belfort jump zoom — apply per-segment at the level the planner chose.
+        # Jordan Belfort jump zoom — zoom baked into concat pass via _concat_with_zoom.
         zoom_level = int(seg.get("zoom_level", 130))
         if zoom_level not in _VALID_ZOOM_LEVELS:
             zoom_level = min(_VALID_ZOOM_LEVELS, key=lambda z: abs(z - zoom_level))
-        zoomed_part = work_dir / f"part_z_{i:04d}.mp4"
-        _apply_segment_zoom(part, zoomed_part, zoom_level, target_w, target_h, fps)
         print(f"[ZOOM] Segment {i}: beat={seg.get('beat')} zoom={zoom_level}% duration={e-s:.2f}s")
         zoom_segments.append(i)
-        parts.append(zoomed_part)
+        zoom_levels.append(zoom_level)
+        parts.append(part)
 
         # All timeline remapping uses cum (exact video output clock) and s (snapped
         # cut start). No audio handles — _cut_segment() cuts exactly [s, e], so
@@ -1312,8 +1328,8 @@ def render(
 
     print(f"[ZOOM] Total segments with zoom: {len(zoom_segments)}")
     concat_path = work_dir / "concat.mp4"
-    _concat(parts, concat_path)
-    print(f"[AUDIO] Concat complete: {concat_path}")
+    _concat_with_zoom(parts, zoom_levels, concat_path, target_w, target_h, fps)
+    print(f"[AUDIO] Concat+zoom complete: {concat_path}")
     # BUG 2 FIX — verify AV sync immediately after concat
     _probe_av(concat_path)
     _audio_expected = sum(float(s["end"]) - float(s["start"]) for s in keep
@@ -1430,6 +1446,10 @@ def render(
                     _remap_time(ct, kept_intervals) for ct in cut_timestamps
                 ]
 
+    # Probe total duration now (after any silence compression that may have
+    # changed concat_path). Used for broll gap calculation and frame count below.
+    total_duration = _probe_duration(concat_path)
+
     # Enforce minimum gap between b-roll clips to prevent over-cutting.
     # Short-form: 8s fixed. Long-form: adaptive — 20% of total duration, min 8s.
     # A 40s video gets 8s gap; a 5min video gets 60s gap. Prevents all b-roll
@@ -1464,8 +1484,6 @@ def render(
     remapped_hyperframes = [
         hf for hf in remapped_hyperframes if float(hf.get("at", 0)) >= 2.0
     ]
-
-    total_duration = _probe_duration(concat_path)
 
     import logging as _logging
     import shutil as _shutil
@@ -1807,10 +1825,20 @@ def render(
         _out_bv, _out_maxrate, _out_bufsize = "8M", "12M", "24M"
     else:
         _out_bv, _out_maxrate, _out_bufsize = "6M", "10M", "20M"
+    # Slow progressive zoom: accumulates at 0.0003/frame, capped at 1.04×.
+    # At 30fps reaches the cap in ~4.4s then holds. Imperceptible individually
+    # but gives a cinematic "settling" feel. d=1 means one output frame per
+    # input frame, preserving duration. setpts=N/FRAME_RATE/TB fixes PTS drift.
+    _zoompan = (
+        f"zoompan=z='min(zoom+0.0003,1.04)'"
+        f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+        f":d=1:s={target_w}x{target_h}:fps={fps}"
+        f",setpts=N/FRAME_RATE/TB"
+    )
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-i", str(_nocap_path),
-        "-vf", f"subtitles={_ass_str}",
+        "-vf", f"subtitles={_ass_str},{_zoompan}",
         "-vsync", "cfr",
         "-async", "1",                      # normalize audio timestamps to video clock
         # Final quality encode — CRF 16, preset slow, per-format bitrate floor.
