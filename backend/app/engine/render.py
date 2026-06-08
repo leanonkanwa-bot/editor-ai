@@ -35,6 +35,15 @@ from app.engine.graphics import (
     render_whiteboard_layout,
     render_slide_layout,
 )
+try:
+    from app.engine.hyperframes_engine import (
+        generate_composition_html as _hf_gen_html,
+        render_composition_to_video as _hf_render,
+    )
+    _HYPERFRAMES_AVAILABLE = True
+except Exception as _hf_err:
+    print(f"[HYPERFRAMES] Import failed (non-fatal): {_hf_err}")
+    _HYPERFRAMES_AVAILABLE = False
 
 
 SHORT_PAD_S    = 0.12   # 120ms — word-safe start/end buffer
@@ -1231,6 +1240,7 @@ def render(
     remapped_silences: list[dict[str, Any]] = []
     remapped_vsm: list[dict[str, Any]] = []
     remapped_moments: list[dict[str, Any]] = []
+    remapped_motion_graphics: list[dict[str, Any]] = []
     cut_timestamps: list[float] = []  # output-timeline timestamps of cut points
 
     for i, seg in enumerate(keep):
@@ -1337,6 +1347,19 @@ def render(
                     **moment,
                     "start": seg_offset + (m_at - s),
                     "end":   min(seg_offset + (m_end - s), seg_offset + (e - s)),
+                })
+
+        for mg in (plan.motion_graphics or []):
+            try:
+                mg_at  = float(mg.get("at", 0))
+                mg_dur = max(0.5, float(mg.get("duration", 2.5)))
+            except (TypeError, ValueError):
+                continue
+            if s_raw <= mg_at < e_raw:
+                remapped_motion_graphics.append({
+                    **mg,
+                    "at":       seg_offset + (mg_at - s),
+                    "duration": mg_dur,
                 })
 
         if parts:  # record cut point in output timeline
@@ -1854,6 +1877,71 @@ def render(
         ])
         _overlay_intermediates.append(_current_path)
         _current_path = _next_path
+
+    # ── Motion graphics overlay passes (Hyperframes HTML-rendered clips) ────
+    # Each motion graphic is rendered to a short MP4 via headless Chromium,
+    # then overlaid on the base video at its remapped output-timeline position.
+    # Skipped silently when Chromium is unavailable — no crash, just no graphic.
+    if _HYPERFRAMES_AVAILABLE and remapped_motion_graphics:
+        _mg_dir = work_dir / "motion_graphics"
+        _mg_dir.mkdir(parents=True, exist_ok=True)
+        print(f"[HYPERFRAMES] Rendering {len(remapped_motion_graphics)} motion graphic(s)…")
+        for _mgi, _mg in enumerate(remapped_motion_graphics):
+            try:
+                _mg_at   = float(_mg.get("at", 0))
+                _mg_dur  = max(0.5, float(_mg.get("duration", 2.5)))
+                _mg_type = str(_mg.get("type", "key_phrase"))
+                _mg_cont = _mg.get("content") or {}
+                _mg_clip = _mg_dir / f"mg_{_mgi:03d}.mp4"
+
+                _mg_html = _hf_gen_html(
+                    graphic_type=_mg_type,
+                    content=_mg_cont,
+                    duration=_mg_dur,
+                    width=target_w,
+                    height=target_h,
+                    brand_color=brand_color or "#FF7751",
+                    font=caption_font.replace(" Bold", "").replace(" Black", "").strip()
+                    if caption_font else "Inter",
+                )
+                _mg_ok = _hf_render(
+                    _mg_html, _mg_clip, _mg_dur, target_w, target_h, fps,
+                    work_dir=_mg_dir,
+                )
+                if not _mg_ok or not _mg_clip.exists():
+                    print(f"[HYPERFRAMES] Graphic {_mgi} skipped (render failed)")
+                    continue
+
+                _next_mg_path = _tmp_dir / f"mg{_mgi}_{output_path.stem}.mp4"
+                _fc_mg = (
+                    f"[1:v]setpts=PTS-STARTPTS+{_mg_at:.3f}/TB[mgv];"
+                    f"[0:v][mgv]overlay=x=0:y=0"
+                    f":enable='between(t,{_mg_at:.3f},{_mg_at + _mg_dur:.3f})'"
+                    f":eof_action=pass[out]"
+                )
+                _run([
+                    FFMPEG_PATH, "-y", "-loglevel", "error",
+                    "-i", str(_current_path),
+                    "-i", str(_mg_clip),
+                    "-filter_complex", _fc_mg,
+                    "-map", "[out]", "-map", "0:a",
+                    "-vsync", "cfr", "-async", "1",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
+                    "-threads", "4",
+                    "-x264-params", "rc-lookahead=0:bframes=0",
+                    "-pix_fmt", "yuv420p",
+                    "-c:a", "copy",
+                    str(_next_mg_path),
+                ])
+                _overlay_intermediates.append(_current_path)
+                _current_path = _next_mg_path
+                print(f"[HYPERFRAMES] Graphic {_mgi} overlaid at t={_mg_at:.2f}s  type={_mg_type}")
+            except Exception as _mge:
+                print(f"[HYPERFRAMES] Graphic {_mgi} exception (non-fatal): {_mge}")
+        print(f"[HYPERFRAMES] Motion graphics pass complete")
+    else:
+        if remapped_motion_graphics:
+            print(f"[HYPERFRAMES] {len(remapped_motion_graphics)} graphic(s) skipped — Hyperframes unavailable")
 
     _nocap_path = _current_path
 

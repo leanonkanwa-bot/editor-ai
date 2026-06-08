@@ -60,7 +60,7 @@ class EditPlan:
 
     @property
     def motion_graphics(self) -> list[dict[str, Any]]:
-        return []  # disabled — clean professional output
+        return self.raw.get("motion_graphics", [])
 
     @property
     def key_lines(self) -> list[str]:
