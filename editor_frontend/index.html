@@ -1,0 +1,1435 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#FFFFFF" />
+    <title>LeanRetention — Éditeur IA</title>
+    <meta name="description" content="Déposez votre vidéo brute. Obtenez un montage pro en quelques minutes." />
+
+    <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23FF7751'/><path d='M11 9l13 7-13 7V9z' fill='%23fff'/></svg>" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@400;500;600;700;800&family=Montserrat:wght@600;700;800&family=DM+Sans:wght@400;500;600&family=Bebas+Neue&display=swap" rel="stylesheet" />
+
+    <style>
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      :root {
+        --salmon:        #FF7751;
+        --salmon-dim:    rgba(255,119,81,.08);
+        --salmon-border: rgba(255,119,81,.25);
+        --bg:            #FFFFFF;
+        --surface:       #FAFAFA;
+        --border:        #F0F0F0;
+        --text:          #1A1A1A;
+        --text-secondary:#666666;
+        --field-bg:      #F8F8F8;
+        --nav-bg:        rgba(255,255,255,.96);
+        --err:           #e53e3e;
+        --radius:        12px;
+        --font:          'Inter', system-ui, sans-serif;
+        --mono:          'Courier New', monospace;
+      }
+
+      [data-theme="dark"] {
+        --bg:            #0D0D0D;
+        --surface:       #161616;
+        --border:        rgba(255,255,255,.08);
+        --text:          #F5F5F6;
+        --text-secondary:rgba(245,245,246,.5);
+        --field-bg:      rgba(255,255,255,.04);
+        --nav-bg:        rgba(13,13,13,.92);
+        --salmon-dim:    rgba(255,119,81,.1);
+        --salmon-border: rgba(255,119,81,.22);
+      }
+
+      html { scroll-behavior: smooth; }
+
+      body {
+        font-family: var(--font);
+        background: var(--bg);
+        color: var(--text);
+        min-height: 100vh;
+        font-size: 14px;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ── NAV ─────────────────────────────────────────────────── */
+      .nav {
+        position: sticky; top: 0; z-index: 100;
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 0 1.5rem;
+        height: 56px;
+        border-bottom: 1px solid var(--border);
+        background: var(--nav-bg);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+      }
+      .logo {
+        text-decoration: none; color: var(--text);
+        font-size: .95rem; font-weight: 700; letter-spacing: -.01em;
+        flex-shrink: 0;
+      }
+      .logo span { color: var(--salmon); }
+
+      .nav-tabs { display: flex; align-items: center; gap: 0; }
+      .nav-tab {
+        background: transparent; border: none; border-bottom: 2px solid transparent;
+        cursor: pointer; font-family: var(--font); font-size: .875rem; font-weight: 500;
+        color: var(--text-secondary); padding: 0 1rem; height: 56px;
+        transition: color .15s, border-color .15s; white-space: nowrap;
+      }
+      .nav-tab:hover { color: var(--text); background: rgba(0,0,0,.05); border-radius: 6px; }
+      [data-theme="dark"] .nav-tab:hover { background: rgba(255,255,255,.06); color: #e5e7eb; }
+      .nav-tab.active { color: var(--text); background: var(--surface); border-bottom-color: transparent; border-radius: 6px; }
+      [data-theme="dark"] .nav-tab.active { background: #1a1a1a; color: #fff; }
+
+      .nav-right { display: flex; align-items: center; gap: .75rem; }
+      .btn-upgrade {
+        padding: .4rem .9rem; border: 1px solid var(--border); border-radius: 8px;
+        background: transparent; color: var(--text); font-family: var(--font);
+        font-size: .8rem; font-weight: 500; cursor: pointer;
+        transition: border-color .15s, color .15s;
+      }
+      .btn-upgrade:hover { border-color: var(--salmon); color: var(--salmon); }
+      .nav-avatar {
+        width: 32px; height: 32px; border-radius: 50%;
+        background: var(--salmon); color: #fff;
+        display: flex; align-items: center; justify-content: center;
+        font-size: .7rem; font-weight: 700; flex-shrink: 0; cursor: pointer;
+        user-select: none;
+      }
+      .btn-theme-toggle {
+        background: transparent; border: 1px solid var(--border); border-radius: 7px;
+        cursor: pointer; padding: .3rem .55rem; font-size: .82rem;
+        color: var(--text-secondary); transition: color .15s, border-color .15s;
+      }
+      .btn-theme-toggle:hover { color: var(--text); }
+
+      /* ── LAYOUT ──────────────────────────────────────────────── */
+      main { max-width: 640px; margin: 0 auto; padding: 0 1.25rem 5rem; }
+
+      /* ── CARDS ───────────────────────────────────────────────── */
+      .card {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+      }
+      .card.hidden { display: none; }
+      .card-surface {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+      }
+
+      .section-label {
+        font-size: .72rem; font-weight: 600; color: var(--text-secondary);
+        text-transform: uppercase; letter-spacing: .06em; margin-bottom: .65rem;
+        display: block;
+      }
+
+      /* ── HERO (editor top) ───────────────────────────────────── */
+      .editor-hero { padding: 2rem 0 1rem; text-align: center; }
+      .editor-hero h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -.02em; margin-bottom: .3rem; }
+      .editor-hero p  { font-size: .875rem; color: var(--text-secondary); }
+
+      /* ── DROP ZONE ───────────────────────────────────────────── */
+      .drop {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: .4rem; height: 280px;
+        border: 1.5px dashed var(--border); border-radius: var(--radius);
+        cursor: pointer; transition: border-color .2s, background .2s;
+        margin-bottom: 1rem; text-align: center; position: relative;
+        background: var(--surface);
+      }
+      .drop:hover, .drop.dragover { border-color: var(--salmon); background: var(--salmon-dim); }
+      .drop.has-file { border-color: var(--salmon); border-style: solid; }
+      .drop input[type="file"] { display: none; }
+      .drop-icon { color: var(--text-secondary); }
+      .drop.has-file .drop-icon { color: var(--salmon); }
+      #dropLabel { font-size: .875rem; font-weight: 500; color: var(--text); }
+      .drop-hint  { font-size: .75rem; color: var(--text-secondary); }
+
+      /* ── FORMAT PILLS ────────────────────────────────────────── */
+      .format-pills { display: flex; gap: .5rem; margin-bottom: 1rem; }
+      .style-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+      .style-card { border: 2px solid var(--border); border-radius: 10px; padding: 14px 16px; cursor: pointer; transition: all 0.2s; }
+      .style-card:hover { border-color: var(--salmon); }
+      .style-card.active { border-color: var(--salmon); background: rgba(255,119,81,0.06); }
+      .style-name { font-weight: 700; font-size: 14px; color: var(--text); margin-bottom: 3px; }
+      .style-desc { font-size: 12px; color: var(--text-secondary); }
+      .style-meta { font-size: 10px; color: var(--salmon); margin-top: 4px; font-weight: 500; }
+      .format-pill  { display: flex; align-items: center; justify-content: center; gap: .4rem; flex: 1; }
+      .format-pill input[type="radio"] { display: none; }
+      .format-pill label {
+        flex: 1; text-align: center; padding: .6rem 1rem;
+        font-size: .8rem; font-weight: 500; cursor: pointer; border-radius: 99px;
+        border: 1px solid var(--border); color: var(--text-secondary);
+        background: var(--surface);
+        transition: background .15s, color .15s, border-color .15s;
+      }
+      .format-pill input:checked + label {
+        background: var(--salmon); color: #fff; border-color: var(--salmon);
+      }
+
+      /* ── FIELDS / INPUTS ─────────────────────────────────────── */
+      .field { margin-bottom: 1rem; }
+      textarea {
+        width: 100%; padding: .75rem 1rem; border-radius: 8px;
+        background: var(--field-bg); border: 1px solid var(--border);
+        color: var(--text); font-family: var(--font); font-size: .875rem;
+        resize: vertical; min-height: 76px;
+        transition: border-color .15s;
+      }
+      textarea:focus { outline: none; border-color: var(--salmon); }
+      textarea::placeholder { color: var(--text-secondary); }
+
+      input[type="text"], input[type="email"], select {
+        width: 100%; padding: .65rem 1rem; border-radius: 8px;
+        background: var(--field-bg); border: 1px solid var(--border);
+        color: var(--text); font-family: var(--font); font-size: .875rem;
+        transition: border-color .15s; appearance: none;
+      }
+      input[type="text"]:focus, input[type="email"]:focus, select:focus {
+        outline: none; border-color: var(--salmon);
+      }
+      input::placeholder { color: var(--text-secondary); }
+      select { cursor: pointer; }
+      input[type="color"] { width: 40px; height: 40px; border: none; border-radius: 8px; cursor: pointer; padding: 2px; background: transparent; }
+
+      /* ── SUBMIT BUTTON ───────────────────────────────────────── */
+      .btn-submit {
+        width: 100%; height: 48px; font-size: .95rem;
+        font-family: var(--font); font-weight: 600;
+        border: none; border-radius: 8px; cursor: pointer;
+        background: var(--salmon); color: #fff;
+        transition: opacity .15s, transform .1s;
+        display: flex; align-items: center; justify-content: center; gap: .5rem;
+        position: relative; overflow: hidden;
+      }
+      .btn-submit:hover { opacity: .9; }
+      .btn-submit:active { transform: scale(.98); }
+      .btn-submit:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+      .btn-shimmer {
+        position: absolute; inset: 0;
+        background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,.15) 50%, transparent 60%);
+        transform: translateX(-100%);
+        animation: shimmer 2.4s infinite;
+      }
+      @keyframes shimmer { to { transform: translateX(200%); } }
+
+      /* ── AUTH ───────────────────────────────────────────────── */
+      #login h2 { font-size: 1.05rem; font-weight: 700; margin-bottom: .25rem; }
+      #login .muted { font-size: .875rem; color: var(--text-secondary); margin-bottom: 1.25rem; }
+      #loginForm { display: flex; flex-direction: column; gap: .75rem; }
+      .err { color: var(--err); font-size: .8rem; }
+      .btn-primary { background: var(--salmon); color: #fff; border: none; border-radius: 8px; padding: .65rem 1.1rem; font-family: var(--font); font-size: .875rem; font-weight: 600; cursor: pointer; transition: opacity .15s; }
+      .btn-primary:hover { opacity: .9; }
+      .btn-primary:disabled { opacity: .45; cursor: not-allowed; }
+
+      /* ── STATUS ─────────────────────────────────────────────── */
+      .status-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: .85rem; }
+      .status-header strong { font-size: .95rem; font-weight: 600; }
+      .status-pip { font-size: .8rem; color: var(--text-secondary); }
+      .status-msg { font-size: .8rem; color: var(--text-secondary); margin-bottom: .65rem; }
+      .bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+      #barFill { height: 100%; border-radius: 2px; width: 0; transition: width .4s ease; background: var(--salmon); }
+
+      /* ── RESULT ─────────────────────────────────────────────── */
+      video { width: 100%; border-radius: 10px; background: #000; margin-bottom: 1rem; display: block; }
+      .download-buttons-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; margin-bottom: 1rem; }
+      .btn-download-fmt {
+        display: flex; flex-direction: column; align-items: center; gap: .2rem;
+        padding: .65rem .4rem; border-radius: 8px; font-family: var(--font);
+        border: 1px solid var(--border); background: transparent;
+        color: var(--text); cursor: pointer; text-decoration: none;
+        font-size: .75rem; font-weight: 500;
+        transition: border-color .15s, color .15s, background .15s;
+      }
+      .btn-download-fmt:hover { border-color: var(--salmon); color: var(--salmon); background: var(--salmon-dim); }
+      .btn-download-fmt.fmt-primary { background: var(--salmon); color: #fff; border-color: var(--salmon); }
+      .btn-download-fmt.fmt-primary:hover { opacity: .9; }
+      .fmt-icon { font-size: 1rem; }
+      .fmt-name { font-size: .75rem; font-weight: 600; text-align: center; }
+      .fmt-sub  { font-size: .62rem; opacity: .7; }
+
+      .suggested-title {
+        font-size: .875rem; font-weight: 500; color: var(--text);
+        padding: .75rem 1rem; border-radius: 8px; background: var(--surface);
+        border: 1px solid var(--border); margin-bottom: 1rem;
+      }
+      .details-toggle {
+        background: transparent; border: none; color: var(--text-secondary);
+        font-size: .8rem; cursor: pointer; font-family: var(--font);
+        padding: .4rem 0; display: block; width: 100%; text-align: center;
+        transition: color .15s;
+      }
+      .details-toggle:hover { color: var(--text); }
+      .details-body { display: none; padding-top: 1rem; border-top: 1px solid var(--border); margin-top: .6rem; }
+      .details-body.open { display: block; }
+      .tag-label { font-size: .68rem; font-weight: 600; color: var(--salmon); letter-spacing: .07em; text-transform: uppercase; display: block; margin-bottom: .3rem; }
+      #ctrTitles { display: flex; flex-direction: column; gap: .4rem; margin-top: .5rem; }
+      .ctr-title { font-size: .875rem; padding: .6rem .85rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; display: flex; gap: .5rem; align-items: flex-start; }
+      .ctr-num { color: var(--salmon); font-weight: 700; flex-shrink: 0; }
+      details { margin-top: 1rem; }
+      summary { cursor: pointer; font-size: .8rem; color: var(--text-secondary); user-select: none; }
+      pre { margin-top: .5rem; font-family: var(--mono); font-size: .7rem; color: var(--text-secondary); overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto; }
+
+      /* ── PREVIEW PANEL ─────────────────────────────────────── */
+      .preview-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
+      .preview-header h2 { font-size: 1.05rem; font-weight: 700; }
+      .preview-actions { display: flex; gap: .6rem; }
+      .btn-replan { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); padding: .45rem 1rem; border-radius: 8px; font-family: var(--font); font-size: .8rem; font-weight: 500; cursor: pointer; transition: color .15s, border-color .15s; }
+      .btn-replan:hover { color: var(--text); border-color: rgba(0,0,0,.2); }
+      .btn-render { background: var(--salmon); color: #fff; padding: .45rem 1.1rem; border-radius: 8px; font-family: var(--font); font-size: .8rem; font-weight: 600; cursor: pointer; border: none; transition: opacity .15s; }
+      .btn-render:hover { opacity: .9; }
+
+      .preview-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; margin-bottom: 1.25rem; }
+      .preview-stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .65rem .85rem; }
+      .preview-stat-card .val { font-size: 1.2rem; font-weight: 700; letter-spacing: -.02em; }
+      .preview-stat-card .lbl { font-size: .68rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; }
+      .preview-timeline { display: flex; flex-direction: column; gap: .35rem; margin-bottom: 1rem; }
+      .tl-row { display: flex; align-items: baseline; gap: .6rem; padding: .45rem .75rem; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); font-size: .8rem; }
+      .tl-num  { color: var(--salmon); font-weight: 700; min-width: 1.4rem; }
+      .tl-role { color: var(--text-secondary); flex: 1; }
+      .tl-time { color: var(--text-secondary); font-size: .7rem; font-family: var(--mono); }
+      .tl-row-hook { border-color: var(--salmon-border); background: var(--salmon-dim); }
+      .tl-crown { font-size: .85rem; flex-shrink: 0; }
+      .tl-row { position: relative; }
+      .score-badge { font-size: .63rem; font-weight: 700; padding: .1rem .38rem; border-radius: 99px; cursor: default; letter-spacing: .03em; flex-shrink: 0; }
+      .hook-rewrite { padding: .75rem 1rem; border-radius: 8px; border-left: 3px solid var(--salmon); background: var(--salmon-dim); margin-bottom: 1rem; font-size: .875rem; font-style: italic; }
+
+      /* Retention prediction */
+      .ret-pred-wrap { display: flex; align-items: center; gap: .75rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .6rem .85rem; margin-bottom: 1rem; }
+      .ret-pred-label { font-size: .68rem; color: var(--text-secondary); white-space: nowrap; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+      .ret-pred-bar-wrap { flex: 1; background: var(--border); border-radius: 99px; height: 6px; overflow: hidden; }
+      .ret-pred-bar-fill { height: 100%; border-radius: 99px; transition: width .9s cubic-bezier(.4,0,.2,1); background: var(--salmon); }
+      .ret-pred-pct { font-size: .95rem; font-weight: 700; min-width: 3rem; text-align: right; letter-spacing: -.02em; }
+
+      /* Split compare */
+      .split-compare { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-top: .85rem; }
+      .split-ver { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: .85rem 1rem; text-align: center; }
+      .split-ver.winner { border-color: #22c55e; background: rgba(34,197,94,.05); }
+      .sv-label { font-size: .63rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-secondary); margin-bottom: .4rem; }
+      .sv-score { font-size: 2rem; font-weight: 800; letter-spacing: -.04em; margin-bottom: .25rem; }
+      .split-ver.winner .sv-score { color: #22c55e; }
+      .sv-verdict { font-size: .7rem; color: var(--text-secondary); line-height: 1.4; }
+      .sv-winner-pill { display: inline-block; font-size: .65rem; font-weight: 700; background: rgba(34,197,94,.12); color: #22c55e; border: 1px solid rgba(34,197,94,.25); border-radius: 99px; padding: .14rem .45rem; margin-top: .3rem; }
+
+      /* Publish section */
+      .publish-section { margin-top: 1.25rem; }
+      .publish-section h3 { font-size: .875rem; font-weight: 600; margin-bottom: .75rem; }
+      .platform-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin-bottom: 1rem; }
+      .platform-btn { display: flex; align-items: center; gap: .5rem; padding: .55rem .85rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); font-size: .8rem; font-weight: 500; cursor: pointer; color: var(--text-secondary); font-family: var(--font); transition: border-color .15s, color .15s; }
+      .platform-btn:hover { border-color: rgba(0,0,0,.15); color: var(--text); }
+      .platform-btn.selected { border-color: var(--salmon); color: var(--text); background: var(--salmon-dim); }
+      .platform-btn.connected::after { content: " ✓"; color: var(--salmon); }
+      .platform-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
+      .platform-dot.connected { background: #22c55e; }
+
+      /* Caption editor */
+      .caption-editor { margin-top: 1.25rem; }
+      .caption-list { max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; }
+      .cap-row { display: flex; gap: .5rem; padding: .38rem .55rem; border-bottom: 1px solid var(--border); transition: background .1s; }
+      .cap-row:last-child { border-bottom: none; }
+      .cap-row:hover { background: var(--surface); }
+      .cap-tc  { font-size: .62rem; color: var(--text-secondary); font-family: var(--mono); flex-shrink: 0; min-width: 62px; margin-top: .2rem; }
+      .cap-txt { flex: 1; font-size: .78rem; border: none; background: transparent; color: var(--text); font-family: var(--font); outline: none; resize: none; padding: 0; min-height: 1em; }
+      .cap-txt:focus { color: var(--salmon); }
+
+      /* ── DASHBOARD ───────────────────────────────────────────── */
+      #dashboardSection { padding-top: 1.5rem; }
+      .dash-welcome { font-size: 1.05rem; font-weight: 600; margin-bottom: 1.25rem; color: var(--text); }
+      .dash-welcome span { color: var(--salmon); }
+      .dash-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: .65rem; margin-bottom: 1.25rem; }
+      .dash-stat { background: var(--surface); border: none; border-radius: var(--radius); padding: 1rem 1.1rem; }
+      [data-theme="dark"] .dash-stat { background: #111111; }
+      .dash-stat .big { font-size: 1.75rem; font-weight: 700; letter-spacing: -.03em; color: var(--text); display: block; line-height: 1.1; }
+      .dash-stat .lbl { font-size: .68rem; color: var(--text-secondary); margin-top: .3rem; display: block; text-transform: uppercase; letter-spacing: .06em; }
+      .dash-edit-btn { width: 100%; height: 44px; border-radius: 8px; border: none; background: var(--salmon); color: #fff; font-family: var(--font); font-size: .875rem; font-weight: 600; cursor: pointer; margin-bottom: 1.25rem; transition: opacity .15s; }
+      .dash-edit-btn:hover { opacity: .9; }
+      .dash-empty { text-align: center; padding: 2rem 1rem; border: 1.5px dashed var(--border); border-radius: var(--radius); color: var(--text-secondary); font-size: .875rem; }
+
+      /* Video library */
+      .video-library-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-bottom: 1.25rem; }
+      .video-lib-card { background: #1a1a1a; border: none; border-radius: var(--radius); overflow: hidden; transition: transform .2s, box-shadow .2s; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+      .video-lib-card:hover { transform: scale(1.02); box-shadow: 0 6px 20px rgba(0,0,0,.28); }
+      .video-lib-thumb { width: 100%; aspect-ratio: 9/16; background: #111; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+      .video-lib-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .video-lib-thumb-placeholder { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+      .video-lib-play { width: 32px; height: 32px; color: rgba(255,255,255,.5); }
+      .video-lib-retention { position: absolute; top: .5rem; right: .5rem; border-radius: 6px; padding: .18rem .48rem; font-size: .7rem; font-weight: 700; color: #fff; }
+      .video-lib-title-overlay { position: absolute; bottom: 0; left: 0; right: 0; padding: .6rem .65rem .55rem; background: linear-gradient(to top, rgba(0,0,0,.85) 0%, transparent 100%); color: #fff; font-size: .78rem; font-weight: 600; line-height: 1.3; }
+      .video-lib-overlay { position: absolute; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; gap: .5rem; opacity: 0; transition: opacity .2s; }
+      .video-lib-card:hover .video-lib-overlay { opacity: 1; }
+      .video-lib-info { padding: .65rem .75rem; }
+      .video-lib-title { font-size: .8rem; font-weight: 600; margin-bottom: .12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .video-lib-meta { font-size: .7rem; color: var(--text-secondary); }
+      .action-btn { background: var(--surface); border: 1px solid var(--border); color: var(--text); font-family: var(--font); font-size: .72rem; padding: .25rem .6rem; border-radius: 6px; cursor: pointer; transition: color .15s, border-color .15s; text-decoration: none; display: inline-block; }
+      .action-btn:hover { border-color: rgba(0,0,0,.2); }
+
+      /* ── ANALYTICS ───────────────────────────────────────────── */
+      #analyticsSection { padding-top: 1.5rem; }
+      .analytics-stats-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: .65rem; margin-bottom: 1.5rem; }
+      .analytics-stat { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.1rem; }
+      .analytics-stat .big { font-size: 1.6rem; font-weight: 700; letter-spacing: -.03em; color: var(--salmon); display: block; line-height: 1.1; margin-bottom: .2rem; }
+      .analytics-stat .sub { font-size: .72rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; }
+      .analytics-section-title { font-size: .72rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .07em; margin-bottom: .75rem; display: block; }
+
+      .retention-chart-wrap { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin-bottom: 1.5rem; }
+      .retention-chart-title { font-size: .72rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .07em; margin-bottom: .75rem; }
+      .retention-svg { width: 100%; height: 80px; }
+
+      .video-table { width: 100%; border-collapse: collapse; font-size: .8rem; }
+      .video-table th { text-align: left; color: var(--text-secondary); font-weight: 500; padding: .5rem .6rem; border-bottom: 1px solid var(--border); font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+      .video-table td { padding: .6rem .6rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+      .video-table tr:last-child td { border-bottom: none; }
+      .status-badge { display: inline-block; padding: .15rem .5rem; border-radius: 99px; font-size: .7rem; font-weight: 600; }
+      .status-done { background: rgba(34,197,94,.12); color: #16a34a; }
+      .status-processing { background: var(--salmon-dim); color: var(--salmon); }
+      .retention-badge { display: inline-block; padding: .15rem .5rem; border-radius: 99px; font-size: .7rem; font-weight: 700; background: var(--salmon-dim); color: var(--salmon); border: 1px solid var(--salmon-border); }
+      .analytics-empty { text-align: center; padding: 2.5rem 1rem; color: var(--text-secondary); font-size: .875rem; }
+
+      .perf-chart { display: flex; flex-direction: column; gap: .5rem; }
+      .chart-row { display: flex; align-items: center; gap: .75rem; font-size: .78rem; }
+      .chart-label { min-width: 100px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .chart-bar-wrap { flex: 1; background: var(--border); border-radius: 99px; height: 6px; overflow: hidden; }
+      .chart-bar-fill { height: 100%; background: var(--salmon); border-radius: 99px; transition: width .6s ease; }
+      .chart-val { min-width: 50px; text-align: right; color: var(--text-secondary); font-size: .72rem; }
+
+      /* ── PROFILE ─────────────────────────────────────────────── */
+      #profileSection { padding-top: 1.5rem; }
+      .profile-avatar-row { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+      .profile-avatar { width: 64px; height: 64px; border-radius: 50%; background: var(--salmon); display: flex; align-items: center; justify-content: center; font-size: 1.3rem; font-weight: 700; color: #fff; flex-shrink: 0; }
+      .profile-info { flex: 1; }
+      .profile-name { font-size: 1.05rem; font-weight: 700; margin-bottom: .15rem; }
+      .profile-brand { font-size: .82rem; color: var(--text-secondary); margin-bottom: .35rem; }
+      .profile-badges { display: flex; gap: .35rem; flex-wrap: wrap; }
+      .profile-badge { font-size: .7rem; font-weight: 500; padding: .2rem .6rem; border-radius: 99px; background: var(--surface); border: 1px solid var(--border); color: var(--text-secondary); }
+      .profile-section-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; margin-bottom: .75rem; }
+      .profile-section-card h4 { font-size: .72rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .07em; margin-bottom: .85rem; }
+      .profile-pillars { display: flex; flex-direction: column; gap: .5rem; }
+      .profile-pillar { display: flex; align-items: center; gap: .6rem; }
+      .pillar-num { width: 20px; height: 20px; border-radius: 50%; background: var(--salmon-dim); border: 1px solid var(--salmon-border); color: var(--salmon); font-size: .65rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+      .pillar-input { flex: 1; padding: .5rem .75rem; border-radius: 8px; background: var(--field-bg); border: 1px solid var(--border); color: var(--text); font-family: var(--font); font-size: .82rem; outline: none; transition: border-color .15s; }
+      .pillar-input:focus { border-color: var(--salmon); }
+      .platform-badges { display: flex; gap: .4rem; flex-wrap: wrap; }
+      .platform-badge { padding: .25rem .65rem; border-radius: 99px; font-size: .72rem; font-weight: 500; background: var(--surface); border: 1px solid var(--border); color: var(--text-secondary); }
+      .save-msg { display: none; color: #16a34a; font-size: .8rem; margin-top: .5rem; }
+
+      /* ── BRAND PANEL (slide-out) ─────────────────────────────── */
+      .brand-panel { position: fixed; top: 0; right: -420px; width: 400px; height: 100vh; background: var(--bg); border-left: 1px solid var(--border); z-index: 200; overflow-y: auto; padding: 1.5rem; transition: right .3s ease; box-shadow: -4px 0 24px rgba(0,0,0,.08); }
+      .brand-panel.open { right: 0; }
+      .brand-panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+      .brand-panel-head h3 { font-size: 1rem; font-weight: 700; }
+      .brand-close { background: none; border: none; color: var(--text-secondary); font-size: 1.2rem; cursor: pointer; padding: .25rem; transition: color .15s; }
+      .brand-close:hover { color: var(--text); }
+      .brand-section { margin-bottom: 1.25rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+      .brand-section h4 { font-size: .72rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .07em; margin-bottom: .75rem; }
+      .color-row { display: flex; gap: .6rem; flex-wrap: wrap; }
+      .color-swatch { display: flex; flex-direction: column; gap: .3rem; align-items: center; }
+      .color-swatch label { font-size: .7rem; color: var(--text-secondary); }
+      .font-selector { display: flex; flex-direction: column; gap: .4rem; }
+      .font-option { padding: .5rem .85rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary); font-size: .9rem; cursor: pointer; transition: border-color .15s, color .15s; text-align: left; }
+      .font-option:hover { border-color: rgba(0,0,0,.15); color: var(--text); }
+      .font-option.active { border-color: var(--salmon); background: var(--salmon-dim); color: var(--text); }
+      .style-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+      .style-option { padding: .6rem .75rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary); font-size: .8rem; font-weight: 600; cursor: pointer; transition: border-color .15s, color .15s; text-align: center; }
+      .style-option:hover { border-color: rgba(0,0,0,.15); color: var(--text); }
+      .style-option.active { border-color: var(--salmon); background: var(--salmon-dim); color: var(--text); }
+      .brand-preview { padding: .75rem 1rem; border-radius: 8px; border-left: 3px solid var(--salmon); margin-top: .75rem; font-size: .82rem; font-weight: 500; }
+
+      /* ── COACH PANEL ─────────────────────────────────────────── */
+      .coach-panel { position: fixed; top: 0; right: -440px; width: 420px; height: 100vh; background: var(--bg); border-left: 1px solid var(--border); z-index: 300; display: flex; flex-direction: column; transition: right .3s cubic-bezier(.4,0,.2,1); box-shadow: -4px 0 24px rgba(0,0,0,.08); }
+      .coach-panel.open { right: 0; }
+      .coach-panel-head { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+      .coach-panel-head h3 { font-size: .9rem; font-weight: 700; }
+      .chat-messages { flex: 1; overflow-y: auto; padding: .85rem 1rem; display: flex; flex-direction: column; gap: .5rem; scroll-behavior: smooth; }
+      .chat-msg { padding: .58rem .82rem; border-radius: 10px; font-size: .8rem; line-height: 1.55; max-width: 92%; }
+      .chat-msg.user { background: var(--salmon-dim); border: 1px solid var(--salmon-border); align-self: flex-end; }
+      .chat-msg.ai   { background: var(--surface); border: 1px solid var(--border); align-self: flex-start; }
+      .chat-msg.loading { color: var(--text-secondary); font-style: italic; }
+      .chat-quick-pills { display: flex; gap: .3rem; flex-wrap: wrap; padding: .5rem 1rem; border-top: 1px solid var(--border); flex-shrink: 0; }
+      .chat-quick { font-size: .67rem; padding: .2rem .55rem; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary); cursor: pointer; font-family: var(--font); transition: color .15s, border-color .15s; white-space: nowrap; }
+      .chat-quick:hover { color: var(--salmon); border-color: var(--salmon-border); }
+      .chat-input-row { display: flex; gap: .4rem; padding: .8rem 1rem; border-top: 1px solid var(--border); flex-shrink: 0; }
+      .chat-input { flex: 1; padding: .55rem .75rem; border-radius: 8px; background: var(--field-bg); border: 1px solid var(--border); color: var(--text); font-family: var(--font); font-size: .8rem; outline: none; }
+      .chat-input:focus { border-color: var(--salmon); }
+      .chat-send { background: var(--salmon); color: #fff; border: none; border-radius: 8px; padding: .55rem .75rem; cursor: pointer; font-size: .95rem; transition: opacity .15s; flex-shrink: 0; }
+      .chat-send:hover { opacity: .85; }
+
+      /* ── CAPTION STYLE PRESETS ───────────────────────────────── */
+      .caption-preset-grid { display: flex; flex-direction: column; gap: .4rem; }
+      .caption-preset-btn { display: flex; align-items: center; gap: .7rem; padding: .55rem .8rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); cursor: pointer; font-family: var(--font); text-align: left; transition: border-color .15s, background .15s; width: 100%; }
+      .caption-preset-btn:hover { border-color: rgba(0,0,0,.15); }
+      .caption-preset-btn.active { border-color: var(--salmon); background: var(--salmon-dim); }
+      .caption-preset-thumb { width: 54px; height: 30px; border-radius: 4px; background: #1A1A1A; display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden; border: 1px solid rgba(0,0,0,.1); }
+      .caption-preset-info .cp-name { font-size: .8rem; font-weight: 700; color: var(--text); }
+      .caption-preset-info .cp-desc { font-size: .67rem; color: var(--text-secondary); margin-top: .1rem; }
+
+      /* ── TEMPLATE SYSTEM ─────────────────────────────────────── */
+      .template-row { display: flex; align-items: center; gap: .6rem; margin-bottom: 1rem; }
+      .template-chips { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .4rem; }
+      .chip { font-size: .72rem; font-weight: 500; padding: .2rem .55rem; border-radius: 99px; border: 1px solid var(--border); color: var(--text-secondary); background: var(--surface); }
+      .chip.accent { border-color: var(--salmon-border); color: var(--salmon); background: var(--salmon-dim); }
+      .tpl-grid { display: flex; flex-direction: column; gap: .4rem; }
+      .tpl-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .65rem .85rem; display: flex; gap: .65rem; align-items: flex-start; transition: border-color .15s; }
+      .tpl-card:hover { border-color: rgba(0,0,0,.15); }
+      .tpl-icon { font-size: 1.05rem; flex-shrink: 0; margin-top: .05rem; }
+      .tpl-body { flex: 1; min-width: 0; }
+      .tpl-name { font-size: .8rem; font-weight: 700; margin-bottom: .1rem; }
+      .tpl-hook { font-size: .71rem; color: var(--salmon); font-style: italic; margin-bottom: .15rem; line-height: 1.35; }
+      .tpl-row { display: flex; gap: .4rem; flex-wrap: wrap; }
+      .tpl-tag  { font-size: .62rem; color: var(--text-secondary); background: var(--surface); border: 1px solid var(--border); padding: .1rem .4rem; border-radius: 99px; }
+      .tpl-score{ font-size: .62rem; color: #16a34a; background: rgba(34,197,94,.08); border: 1px solid rgba(34,197,94,.2); padding: .1rem .4rem; border-radius: 99px; }
+      .tpl-use  { font-size: .68rem; font-weight: 600; background: transparent; border: 1px solid var(--border); color: var(--text-secondary); border-radius: 6px; padding: .2rem .48rem; cursor: pointer; font-family: var(--font); transition: color .15s, border-color .15s; flex-shrink: 0; align-self: center; }
+      .tpl-use:hover { color: var(--salmon); border-color: var(--salmon-border); }
+
+      /* ── HOOK GENERATOR ─────────────────────────────────────── */
+      .hook-options { display: flex; flex-direction: column; gap: .5rem; margin-top: .75rem; }
+      .hook-option { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .75rem .85rem; display: flex; gap: .65rem; align-items: flex-start; transition: border-color .15s; }
+      .hook-option:hover { border-color: rgba(0,0,0,.15); }
+      .hook-score-pill { font-size: .68rem; font-weight: 800; padding: .15rem .4rem; border-radius: 99px; flex-shrink: 0; margin-top: .1rem; }
+      .hook-option-body { flex: 1; min-width: 0; }
+      .hook-option-text { font-size: .82rem; font-weight: 500; margin-bottom: .25rem; line-height: 1.45; font-style: italic; }
+      .hook-option-why { font-size: .7rem; color: var(--text-secondary); line-height: 1.4; }
+      .hook-use-btn { font-size: .7rem; font-weight: 600; background: transparent; border: 1px solid var(--border); color: var(--text-secondary); border-radius: 6px; padding: .2rem .5rem; cursor: pointer; font-family: var(--font); transition: color .15s, border-color .15s; flex-shrink: 0; margin-top: .1rem; white-space: nowrap; }
+      .hook-use-btn:hover { color: var(--text); border-color: rgba(0,0,0,.2); }
+
+      /* ── COMPETITOR ANALYSIS ─────────────────────────────────── */
+      .comp-result { margin-top: .75rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .75rem .9rem; }
+      .comp-result h4 { font-size: .7rem; font-weight: 700; color: var(--salmon); text-transform: uppercase; letter-spacing: .06em; margin-bottom: .55rem; }
+      .comp-row { display: flex; gap: .6rem; font-size: .78rem; margin-bottom: .4rem; }
+      .comp-lbl { color: var(--text-secondary); min-width: 110px; flex-shrink: 0; font-size: .72rem; }
+      .comp-val { color: var(--text); font-weight: 500; line-height: 1.4; }
+      .comp-action { margin-top: .6rem; font-size: .78rem; color: var(--salmon); font-weight: 600; border-top: 1px solid var(--border); padding-top: .5rem; line-height: 1.5; }
+
+      /* ── CALENDAR ────────────────────────────────────────────── */
+      .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: .55rem; }
+      .cal-month { font-size: .85rem; font-weight: 700; }
+      .cal-nav-btn { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); border-radius: 6px; padding: .2rem .58rem; cursor: pointer; font-family: var(--font); font-size: .75rem; transition: color .15s; }
+      .cal-nav-btn:hover { color: var(--text); }
+      .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+      .cal-day-hd { text-align: center; font-size: .58rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; padding-bottom: .3rem; }
+      .cal-day { min-height: 34px; border-radius: 4px; background: var(--surface); border: 1px solid transparent; display: flex; flex-direction: column; align-items: center; padding: .2rem .1rem; cursor: pointer; transition: background .12s, border-color .12s; }
+      .cal-day:hover { background: var(--border); }
+      .cal-today { border-color: var(--salmon-border) !important; background: var(--salmon-dim) !important; }
+      .cal-other { opacity: .3; pointer-events: none; }
+      .cal-day-n { font-size: .65rem; color: var(--text-secondary); font-weight: 500; line-height: 1; margin-bottom: 2px; }
+      .cal-today .cal-day-n { color: var(--salmon); font-weight: 700; }
+      .cal-dots { display: flex; gap: 1px; justify-content: center; flex-wrap: wrap; }
+      .cal-dot { width: 4px; height: 4px; border-radius: 50%; }
+
+      /* ── ONBOARDING ──────────────────────────────────────────── */
+      .onboarding-card { background: var(--salmon-dim); border: 1px solid var(--salmon-border); border-radius: var(--radius); padding: .9rem 1.1rem; margin-bottom: 1rem; }
+      .onboarding-card-title { font-size: .72rem; font-weight: 700; color: var(--salmon); text-transform: uppercase; letter-spacing: .06em; margin-bottom: .6rem; }
+      .onboarding-steps { display: flex; flex-direction: column; gap: .3rem; }
+      .ob-step { display: flex; align-items: center; gap: .55rem; font-size: .79rem; }
+      .ob-icon { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: .65rem; flex-shrink: 0; }
+      .ob-step.step-done .ob-icon { background: var(--salmon); border-color: var(--salmon); color: #fff; }
+      .ob-step.step-active .ob-icon { border-color: var(--salmon); color: var(--salmon); }
+      .ob-label { flex: 1; }
+      .ob-step.step-done .ob-label { color: var(--text-secondary); }
+      .ob-step.step-active .ob-label { font-weight: 600; }
+      .ob-unlock { font-size: .63rem; color: var(--salmon); font-weight: 600; background: var(--salmon-dim); padding: .1rem .38rem; border-radius: 99px; white-space: nowrap; }
+
+      /* ── FEATURES 17-25 ─────────────────────────────────────── */
+      .chapters-section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: .9rem 1rem; margin-bottom: .9rem; }
+      .chapters-pre { font-size: .8rem; line-height: 1.7; white-space: pre-wrap; color: var(--text); margin: .5rem 0 .6rem; }
+      .btn-copy-sm { background: var(--border); color: var(--text); border: none; border-radius: 6px; padding: .32rem .75rem; font-size: .75rem; cursor: pointer; transition: .15s; }
+      .btn-copy-sm:hover { background: var(--salmon); color: #fff; }
+      .desc-gen-section { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: .9rem 1rem; margin-bottom: .9rem; }
+      .desc-gen-btn { width: 100%; background: var(--salmon); color: #fff; border: none; border-radius: 8px; padding: .65rem 1rem; font-size: .85rem; font-weight: 600; cursor: pointer; margin-bottom: .6rem; transition: opacity .2s; }
+      .desc-gen-btn:hover { opacity: .9; }
+      .desc-tabs { display: flex; gap: .4rem; margin-bottom: .6rem; flex-wrap: wrap; }
+      .desc-tab { background: var(--surface); color: var(--text-secondary); border: 1px solid var(--border); border-radius: 6px; padding: .32rem .7rem; font-size: .78rem; cursor: pointer; transition: .15s; }
+      .desc-tab.active { background: var(--salmon); color: #fff; border-color: var(--salmon); }
+      .desc-platform { display: none; }
+      .desc-platform.active { display: block; }
+      .desc-output { font-size: .8rem; line-height: 1.65; color: var(--text); white-space: pre-wrap; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: .6rem .8rem; margin-bottom: .45rem; max-height: 180px; overflow-y: auto; }
+      .perf-video-list { display: flex; flex-direction: column; gap: .4rem; margin-top: .5rem; }
+      .perf-video-row { display: flex; align-items: center; gap: .7rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .5rem .75rem; }
+      .perf-title { flex: 1; font-size: .8rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .perf-pred, .perf-actual { font-size: .75rem; color: var(--text-secondary); }
+      .perf-actual.good { color: #16a34a; }
+      .perf-empty { color: var(--text-secondary); font-size: .8rem; padding: .5rem 0; }
+      .team-member { display: flex; align-items: center; gap: .65rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .45rem .7rem; margin-bottom: .3rem; }
+      .team-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--salmon); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; flex-shrink: 0; }
+      .team-info { flex: 1; }
+      .team-name { font-size: .82rem; font-weight: 600; }
+      .team-email { font-size: .74rem; color: var(--text-secondary); }
+      .team-role { font-size: .72rem; background: var(--border); color: var(--text); padding: .15rem .45rem; border-radius: 4px; }
+      .api-key-row { display: flex; gap: .4rem; align-items: center; margin: .5rem 0; }
+      .api-key-display { flex: 1; background: var(--field-bg); border: 1px solid var(--border); border-radius: 7px; padding: .4rem .65rem; font-family: monospace; font-size: .78rem; color: var(--text); letter-spacing: .04em; }
+      .method-badge { display: inline-block; border-radius: 4px; padding: .1rem .4rem; font-weight: 700; font-size: .7rem; }
+      .method-post { background: rgba(255,119,81,.12); color: var(--salmon); }
+      .method-get  { background: rgba(34,197,94,.1); color: #16a34a; }
+      .referral-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.1rem; margin-bottom: .75rem; }
+      .referral-link-row { display: flex; gap: .4rem; align-items: center; margin: .6rem 0; }
+      .referral-link-input { flex: 1; padding: .42rem .65rem; border-radius: 8px; background: var(--field-bg); border: 1px solid var(--border); color: var(--salmon); font-family: var(--mono); font-size: .7rem; outline: none; cursor: pointer; }
+      .btn-copy { padding: .42rem .75rem; border-radius: 8px; background: var(--salmon-dim); border: 1px solid var(--salmon-border); color: var(--salmon); font-family: var(--font); font-size: .72rem; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background .15s; }
+      .btn-copy:hover { background: rgba(255,119,81,.15); }
+
+      /* Learn */
+      .learn-progress-wrap { display: flex; align-items: center; gap: .75rem; margin: .6rem 0 1rem; }
+      .learn-progress-bar { flex: 1; height: 6px; background: var(--border); border-radius: 99px; overflow: hidden; }
+      .learn-progress-fill { height: 100%; background: var(--salmon); border-radius: 99px; transition: .4s; }
+      .learn-tabs { display: flex; gap: .4rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: .4rem; }
+      .learn-tab { background: none; border: none; color: var(--text-secondary); font-size: .85rem; padding: .35rem .7rem; cursor: pointer; border-radius: 7px; transition: .15s; }
+      .learn-tab.active { background: var(--salmon); color: #fff; }
+      .learn-subview { display: none; }
+      .learn-subview.active { display: block; }
+      .lesson-card { display: flex; gap: .9rem; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: .7rem 1rem; margin-bottom: .6rem; transition: .15s; }
+      .lesson-card:hover { border-color: var(--salmon); }
+      .lesson-thumb { width: 60px; height: 40px; border-radius: 6px; background: var(--border); display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0; }
+      .lesson-info { flex: 1; }
+      .lesson-title { font-size: .85rem; font-weight: 700; }
+      .lesson-meta { font-size: .74rem; color: var(--text-secondary); margin-top: .15rem; }
+      .lesson-pill { display: inline-block; background: var(--border); color: var(--text); font-size: .7rem; padding: .1rem .4rem; border-radius: 4px; margin-right: .3rem; }
+      .lesson-pill.done { background: rgba(34,197,94,.1); color: #16a34a; }
+      .lesson-watch-btn { background: var(--salmon); color: #fff; border: none; border-radius: 7px; padding: .4rem .8rem; font-size: .78rem; cursor: pointer; transition: .15s; white-space: nowrap; }
+      .lesson-watch-btn.done-btn { background: var(--border); color: var(--text-secondary); }
+      .quiz-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem 1.1rem; margin-bottom: .7rem; }
+      .quiz-q { font-size: .88rem; font-weight: 700; margin-bottom: .65rem; }
+      .quiz-opts { display: flex; flex-direction: column; gap: .4rem; }
+      .quiz-opt { background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: .45rem .75rem; font-size: .82rem; cursor: pointer; transition: .15s; }
+      .quiz-opt:hover { border-color: var(--salmon); }
+      .quiz-opt.correct { background: rgba(34,197,94,.08); border-color: #22c55e; color: #16a34a; }
+      .quiz-opt.wrong { background: rgba(229,62,62,.08); border-color: #e53e3e; color: #e53e3e; }
+
+      /* ── CONFETTI ────────────────────────────────────────────── */
+      .confetti-piece { position: fixed; width: 8px; height: 8px; border-radius: 2px; pointer-events: none; z-index: 9999; animation: confetti-fall 2.5s ease-in forwards; }
+      @keyframes confetti-fall { 0% { transform: translateY(-20px) rotate(0deg); opacity: 1; } 100% { transform: translateY(100vh) rotate(720deg); opacity: 0; } }
+
+      /* ── TOOLTIPS ────────────────────────────────────────────── */
+      [data-tooltip] { position: relative; }
+      [data-tooltip]::after { content: attr(data-tooltip); position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: #1A1A1A; border-radius: 6px; padding: .3rem .6rem; font-size: .72rem; color: #fff; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .15s; z-index: 50; }
+      [data-tooltip]:hover::after { opacity: 1; }
+
+      /* ── SECTION VISIBILITY ──────────────────────────────────── */
+      .app-section { display: none; }
+      .app-section.active { display: block; }
+
+      /* ── NOTIFICATIONS (hidden panels) ──────────────────────── */
+      .notif-panel { position: fixed; top: 56px; right: 12px; width: 320px; max-height: 420px; overflow-y: auto; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: 0 8px 32px rgba(0,0,0,.08); z-index: 200; display: none; }
+      .notif-panel.open { display: block; }
+      .notif-panel-head { display: flex; align-items: center; justify-content: space-between; padding: .65rem 1rem; border-bottom: 1px solid var(--border); }
+      .notif-panel-head h4 { margin: 0; font-size: .88rem; }
+      .notif-item { display: flex; gap: .65rem; align-items: flex-start; padding: .6rem 1rem; border-bottom: 1px solid var(--border); }
+      .notif-icon-wrap { font-size: 1.1rem; flex-shrink: 0; margin-top: .1rem; }
+      .notif-body { flex: 1; }
+      .notif-body strong { font-size: .82rem; display: block; }
+      .notif-body p { font-size: .75rem; color: var(--text-secondary); margin: .1rem 0 0; }
+      .notif-time { font-size: .68rem; color: var(--text-secondary); white-space: nowrap; }
+      .notif-empty { padding: 1rem; font-size: .8rem; color: var(--text-secondary); text-align: center; }
+      .notif-clear { width: 100%; background: none; border: none; border-top: 1px solid var(--border); color: var(--text-secondary); font-size: .78rem; padding: .55rem; cursor: pointer; transition: .15s; }
+      .notif-clear:hover { color: var(--salmon); }
+
+      /* ── RESPONSIVE ──────────────────────────────────────────── */
+      @media (max-width: 540px) {
+        .dash-stats { grid-template-columns: 1fr 1fr; }
+        .nav-tab { font-size: .78rem; padding: 0 .6rem; }
+        .preview-stats { grid-template-columns: 1fr 1fr; }
+        .video-library-grid { grid-template-columns: 1fr; }
+        .analytics-stats-grid { grid-template-columns: 1fr; }
+        .btn-upgrade { display: none; }
+      }
+
+      /* ── BRIEF / ADVANCED TOGGLE ─────────────────────────────── */
+      .brief-toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: .55rem 0; font-size: .875rem; font-weight: 500; color: var(--text-secondary); border-top: 1px solid var(--border); margin-top: .75rem; transition: color .15s; user-select: none; }
+      .brief-toggle:hover { color: var(--text); }
+      .brief-toggle .arrow { transition: transform .2s; }
+      .brief-body { display: none; padding-top: .75rem; }
+      .brief-body.open { display: block; }
+
+      /* Seg selector */
+      .seg { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+      .seg input[type="radio"] { display: none; }
+      .seg label { flex: 1; text-align: center; padding: .5rem .75rem; font-size: .8rem; font-weight: 500; cursor: pointer; color: var(--text-secondary); transition: background .15s, color .15s; }
+      .seg label:not(:last-child) { border-right: 1px solid var(--border); }
+      .seg input:checked + label { background: var(--salmon); color: #fff; }
+
+      /* White label / API */
+      .wl-preview { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: .8rem 1rem; margin: .5rem 0; text-align: center; }
+      .wl-logo-box { width: 48px; height: 48px; border-radius: 10px; background: var(--salmon); display: flex; align-items: center; justify-content: center; margin: 0 auto .35rem; }
+      .wl-brand-name { font-size: 1rem; font-weight: 800; }
+      .wl-tagline { font-size: .72rem; color: var(--text-secondary); }
+      .api-endpoint-table { width: 100%; border-collapse: collapse; font-size: .78rem; margin-top: .6rem; }
+      .api-endpoint-table td { padding: .35rem .5rem; border-bottom: 1px solid var(--border); }
+      .api-path { font-family: monospace; font-size: .75rem; }
+      .perf-connect-row { display: flex; gap: .5rem; flex-wrap: wrap; margin: .5rem 0; }
+      .perf-connect-btn { flex: 1; min-width: 120px; background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 7px; padding: .45rem .6rem; font-size: .78rem; cursor: pointer; transition: .15s; }
+      .perf-connect-btn:hover { border-color: var(--salmon); color: var(--salmon); }
+      .perf-accuracy { font-size: .85rem; font-weight: 700; color: var(--salmon); margin: .4rem 0; }
+      .team-comment-item { background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: .45rem .7rem; margin-bottom: .3rem; }
+      .team-comment-author { font-size: .74rem; font-weight: 700; color: var(--salmon); }
+      .team-invite-row { display: flex; gap: .4rem; flex-wrap: wrap; margin: .5rem 0; }
+      #learnSection .card { max-width: 680px; margin: 0 auto; }
+    </style>
+  </head>
+  <body>
+
+    <!-- ── NAV ───────────────────────────────────────────────── -->
+    <nav class="nav">
+      <a class="logo" href="/"><span>Lean</span>Retention</a>
+
+      <div class="nav-tabs" id="navTabs">
+        <button class="nav-tab active" data-target="editorArea">Éditeur</button>
+        <button class="nav-tab" data-target="dashboardSection">Dashboard</button>
+        <button class="nav-tab" data-target="analyticsSection">Analytics</button>
+        <button class="nav-tab" data-target="profileSection">Profil</button>
+      </div>
+
+      <div class="nav-right">
+        <span id="navGreeting" style="font-size:.78rem;color:var(--text-secondary);display:none"></span>
+        <button id="themeToggle" class="btn-theme-toggle">Thème</button>
+        <button class="btn-upgrade">Upgrade</button>
+        <div class="nav-avatar" id="navAvatar" title="Profil">?</div>
+      </div>
+    </nav>
+
+    <!-- Feature 24: Notification Panel (hidden) -->
+    <div class="notif-panel" id="notifPanel">
+      <div class="notif-panel-head">
+        <h4>Notifications</h4>
+        <button id="notifClose" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:1rem">×</button>
+      </div>
+      <div id="notifList"><p class="notif-empty">Aucune notification</p></div>
+      <button class="notif-clear" id="notifClearBtn">Tout effacer</button>
+    </div>
+
+    <main>
+      <!-- ── LOGIN ────────────────────────────────────────────── -->
+      <div id="login" class="card hidden" style="margin-top:2rem">
+        <h2>Connexion requise</h2>
+        <p class="muted" style="margin-bottom:1rem">Entrez votre mot de passe pour accéder à l'éditeur.</p>
+        <form id="loginForm" style="display:flex;flex-direction:column;gap:.75rem">
+          <input id="loginPwd" type="password" placeholder="Mot de passe" />
+          <button type="submit" class="btn-primary">Se connecter</button>
+          <p id="loginErr" class="err"></p>
+        </form>
+        <div id="retryBlock" class="hidden" style="margin-top:.75rem">
+          <button id="retryBtn" class="btn-primary" style="width:100%">Réessayer</button>
+        </div>
+      </div>
+
+      <!-- ── EDITOR ────────────────────────────────────────────── -->
+      <section id="editorArea" class="app-section active">
+        <div id="tool">
+
+          <!-- Onboarding progress -->
+          <div class="onboarding-card" id="onboardingCard" style="margin-top:1.5rem">
+            <div class="onboarding-card-title">Démarrage rapide</div>
+            <div class="onboarding-steps">
+              <div class="ob-step" id="step-account"><div class="ob-icon"></div><span class="ob-label">Créer votre profil coach</span></div>
+              <div class="ob-step" id="step-first-video"><div class="ob-icon"></div><span class="ob-label">Éditer votre 1ère vidéo</span><span class="ob-unlock">Débloque l'analyse</span></div>
+              <div class="ob-step" id="step-brand"><div class="ob-icon"></div><span class="ob-label">Configurer votre identité de marque</span></div>
+              <div class="ob-step" id="step-5videos"><div class="ob-icon"></div><span class="ob-label">Atteindre 5 vidéos éditées</span><span class="ob-unlock">Débloque Analytics</span></div>
+              <div class="ob-step" id="step-profile"><div class="ob-icon"></div><span class="ob-label">Compléter votre profil ICP</span></div>
+            </div>
+          </div>
+
+          <form id="form" style="margin-top:1rem">
+            <!-- Hidden fields -->
+            <input type="hidden" name="caption_style" value="impact" />
+            <input type="hidden" name="editing_style" value="viral" />
+            <input type="hidden" name="brand_color" value="#FF7751" />
+            <input type="hidden" name="caption_font" value="Poppins Bold" />
+            <input type="hidden" name="target_audience" />
+            <input type="hidden" name="main_message" />
+
+            <!-- Drop zone -->
+            <div class="drop" id="drop" role="button" tabindex="0" aria-label="Déposer une vidéo">
+              <input type="file" id="video" name="video" accept="video/*" />
+              <svg class="drop-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              <div id="dropLabel">Déposer votre vidéo ici</div>
+              <div class="drop-hint">MP4, MOV, MKV · Jusqu'à 4 Go</div>
+            </div>
+
+            <!-- Editing style selector -->
+            <div class="field-group" id="styleSelector" style="margin-top:1rem;display:none">
+              <span class="section-label">STYLE DE MONTAGE</span>
+              <div class="style-grid">
+                <div class="style-card active" data-style="viral">
+                  <div class="style-name">Viral Short</div>
+                  <div class="style-desc">TikTok · Reels · Max rétention</div>
+                  <div class="style-meta">Cuts: 1.5s · Zoom: 150% · Captions colorées</div>
+                </div>
+                <div class="style-card" data-style="priestley">
+                  <div class="style-name">Daniel Priestley</div>
+                  <div class="style-desc">Expert · Business · Autorité</div>
+                  <div class="style-meta">Cuts: 2.2s · Zoom: 130% · Captions pill noir</div>
+                </div>
+                <div class="style-card" data-style="momentum">
+                  <div class="style-name">Momentum</div>
+                  <div class="style-desc">Finance · Punchy · Accents lime</div>
+                  <div class="style-meta">Cuts: 1.8s · Zoom: 150% · Captions kinetic lime</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Format -->
+            <div class="format-pills">
+              <div class="format-pill">
+                <input type="radio" name="format_hint" id="fmt-short" value="short" checked />
+                <label for="fmt-short">Court · Reels</label>
+              </div>
+              <div class="format-pill">
+                <input type="radio" name="format_hint" id="fmt-long" value="long" />
+                <label for="fmt-long">Long · YouTube</label>
+              </div>
+            </div>
+
+            <!-- Instructions -->
+            <div class="field">
+              <span class="section-label">Instructions (optionnel)</span>
+              <textarea name="instructions" placeholder="Décrivez le contenu, le public cible, le style de montage souhaité…" rows="2"></textarea>
+            </div>
+
+            <!-- Advanced options (collapsed) -->
+            <div class="brief-toggle" id="advToggle" role="button" tabindex="0">
+              <span>Options avancées</span>
+              <svg class="arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+            <div class="brief-body" id="advBody">
+              <!-- Template selector -->
+              <div class="template-row">
+                <select id="templateSelect" name="template_id" style="flex:1">
+                  <option value="">Template de montage — Auto</option>
+                </select>
+              </div>
+              <div class="template-chips" id="templateChips"></div>
+
+              <!-- Platform -->
+              <div class="field" style="margin-top:.75rem">
+                <span class="section-label">Plateforme cible</span>
+                <div class="seg">
+                  <input type="radio" name="platform_hint" id="plt-reels" value="reels" checked />
+                  <label for="plt-reels">Reels / TikTok</label>
+                  <input type="radio" name="platform_hint" id="plt-yt" value="youtube" />
+                  <label for="plt-yt">YouTube</label>
+                  <input type="radio" name="platform_hint" id="plt-shorts" value="shorts" />
+                  <label for="plt-shorts">Shorts</label>
+                </div>
+              </div>
+
+              <!-- Caption style -->
+              <div class="field">
+                <span class="section-label">Style de captions</span>
+                <div class="caption-preset-grid" id="captionPresetSelector">
+                  <button type="button" class="caption-preset-btn active" data-preset="impact" data-style="impact">
+                    <div class="caption-preset-thumb"><span style="color:#FF7751;font-size:.55rem;font-weight:900;text-transform:uppercase">MOT</span></div>
+                    <div class="caption-preset-info">
+                      <div class="cp-name">Impact</div>
+                      <div class="cp-desc">Un mot à la fois, très dynamique</div>
+                    </div>
+                  </button>
+                  <button type="button" class="caption-preset-btn" data-preset="twolevel" data-style="twolevel">
+                    <div class="caption-preset-thumb"><span style="color:#ccc;font-size:.38rem;font-weight:700;line-height:1.2;text-align:center">PHRASE<br><span style="color:#FF7751">ACCENT</span></span></div>
+                    <div class="caption-preset-info">
+                      <div class="cp-name">Two-Level</div>
+                      <div class="cp-desc">Phrase + mot-clé mis en valeur</div>
+                    </div>
+                  </button>
+                  <button type="button" class="caption-preset-btn" data-preset="kinetic" data-style="kinetic">
+                    <div class="caption-preset-thumb"><span style="color:#60a5fa;font-size:.5rem;font-weight:800">KINETIC</span></div>
+                    <div class="caption-preset-info">
+                      <div class="cp-name">Kinetic</div>
+                      <div class="cp-desc">Animation mot par mot</div>
+                    </div>
+                  </button>
+                  <button type="button" class="caption-preset-btn" data-preset="karaoke" data-style="karaoke">
+                    <div class="caption-preset-thumb"><span style="color:#f472b6;font-size:.5rem;font-weight:700">KARAOKE</span></div>
+                    <div class="caption-preset-info">
+                      <div class="cp-name">Karaoké</div>
+                      <div class="cp-desc">Surlignage progressif</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              <!-- B-roll -->
+              <div class="field" style="margin-top:.75rem">
+                <span class="section-label">B-roll</span>
+                <div class="seg">
+                  <input type="radio" name="broll_enabled" id="broll-on" value="true" checked />
+                  <label for="broll-on">Activé</label>
+                  <input type="radio" name="broll_enabled" id="broll-off" value="false" />
+                  <label for="broll-off">Désactivé</label>
+                </div>
+              </div>
+
+              <!-- Zoom level -->
+              <div class="field">
+                <span class="section-label">Niveau de zoom</span>
+                <div class="seg">
+                  <input type="radio" name="zoom_max_level" id="zoom-subtle" value="102" checked />
+                  <label for="zoom-subtle">Subtil</label>
+                  <input type="radio" name="zoom_max_level" id="zoom-standard" value="130" />
+                  <label for="zoom-standard">Standard</label>
+                  <input type="radio" name="zoom_max_level" id="zoom-dramatic" value="150" />
+                  <label for="zoom-dramatic">Dramatique</label>
+                </div>
+              </div>
+
+              <!-- Silence removal -->
+              <div class="field">
+                <span class="section-label">Suppression des silences</span>
+                <div class="seg">
+                  <input type="radio" name="silence_removal" id="sil-aggressive" value="aggressive" />
+                  <label for="sil-aggressive">Agressive</label>
+                  <input type="radio" name="silence_removal" id="sil-normal" value="normal" checked />
+                  <label for="sil-normal">Normale</label>
+                  <input type="radio" name="silence_removal" id="sil-conservative" value="conservative" />
+                  <label for="sil-conservative">Conservative</label>
+                </div>
+              </div>
+
+              <!-- Caption position -->
+              <div class="field">
+                <span class="section-label">Position des captions</span>
+                <div class="seg">
+                  <input type="radio" name="caption_position" id="cap-bottom" value="bottom" checked />
+                  <label for="cap-bottom">Bas</label>
+                  <input type="radio" name="caption_position" id="cap-center" value="center" />
+                  <label for="cap-center">Centre</label>
+                  <input type="radio" name="caption_position" id="cap-auto" value="auto" />
+                  <label for="cap-auto">Auto</label>
+                </div>
+              </div>
+
+              <!-- Notification email -->
+              <div class="field">
+                <span class="section-label">Notification par email (optionnel)</span>
+                <input type="email" id="notifEmail" name="notification_email" placeholder="you@email.com" />
+              </div>
+            </div>
+
+            <div style="margin-top:1rem">
+              <button type="submit" class="btn-submit" id="submit">
+                <span class="btn-shimmer"></span>
+                <span class="btn-label">Éditer ma vidéo</span>
+              </button>
+            </div>
+          </form>
+
+          <!-- ── STATUS ─────────────────────────────────────────── -->
+          <div class="card hidden" id="statusCard" style="margin-top:1rem">
+            <div class="status-header">
+              <strong id="statusLabel">En attente</strong>
+              <span class="status-pip" id="statusPip">1/5</span>
+            </div>
+            <p class="status-msg" id="statusMsg"></p>
+            <div class="bar"><div id="barFill"></div></div>
+          </div>
+
+          <!-- ── PREVIEW (ready_for_review) ──────────────────────── -->
+          <div class="card hidden" id="previewCard" style="margin-top:1rem">
+            <div class="preview-header">
+              <h2>Plan de montage</h2>
+              <div class="preview-actions">
+                <button class="btn-replan" id="replanBtn">Re-planifier</button>
+                <button class="btn-render" id="renderBtn">Valider et rendre</button>
+              </div>
+            </div>
+
+            <div class="hook-rewrite hidden" id="hookRewrite">
+              <strong style="font-size:.72rem;color:var(--salmon);text-transform:uppercase;letter-spacing:.05em;font-style:normal">Hook suggéré</strong><br>
+              <span id="hookText"></span>
+            </div>
+
+            <div class="preview-stats">
+              <div class="preview-stat-card"><div class="val" id="prevOrigDur">—</div><div class="lbl">Durée originale</div></div>
+              <div class="preview-stat-card"><div class="val" id="prevEditDur">—</div><div class="lbl">Durée éditée</div></div>
+              <div class="preview-stat-card"><div class="val" id="prevSegments">—</div><div class="lbl">Segments</div></div>
+            </div>
+
+            <p id="prevContentType" style="font-size:.78rem;color:var(--text-secondary);margin-bottom:.25rem"></p>
+            <p id="prevSpeakers" style="font-size:.78rem;color:var(--text-secondary);margin-bottom:.25rem"></p>
+            <p id="prevGraphics" style="font-size:.78rem;color:var(--text-secondary);margin-bottom:.75rem"></p>
+
+            <div class="ret-pred-wrap" id="retentionPrediction" style="display:none">
+              <span class="ret-pred-label">Rétention prédite</span>
+              <div class="ret-pred-bar-wrap"><div class="ret-pred-bar-fill" id="retPredBar"></div></div>
+              <span class="ret-pred-pct" id="retPredPct">—</span>
+            </div>
+
+            <div class="preview-timeline" id="previewTimeline"></div>
+
+            <!-- Split compare -->
+            <div id="splitComparePanel" style="display:none">
+              <span class="section-label">Comparaison A/B</span>
+              <p id="splitWinnerLabel" style="font-size:.78rem;color:var(--text-secondary);margin-bottom:.5rem"></p>
+              <div class="split-compare" id="splitCompare"></div>
+            </div>
+
+            <button class="action-btn" id="versionBBtn" style="margin-top:.75rem">Générer Version B</button>
+
+          </div>
+
+          <!-- ── RESULT ──────────────────────────────────────────── -->
+          <div class="card hidden" id="resultCard" style="margin-top:1rem">
+            <video id="player" controls playsinline></video>
+
+            <div class="download-buttons-grid">
+              <a id="downloadLink" href="#" download class="btn-download-fmt fmt-primary">
+                <span class="fmt-name">TikTok / Reels</span>
+                <span class="fmt-sub">9:16</span>
+              </a>
+              <a href="#" download class="btn-download-fmt" id="downloadYt">
+                <span class="fmt-name">YouTube</span>
+                <span class="fmt-sub">16:9</span>
+              </a>
+              <a href="#" download class="btn-download-fmt" id="downloadThumb">
+                <span class="fmt-name">Miniature</span>
+                <span class="fmt-sub">JPG</span>
+              </a>
+            </div>
+
+            <div class="suggested-title" id="suggestedTitleResult" style="display:none"></div>
+
+            <!-- CTR Titles -->
+            <div id="ctrBlock" style="display:none;margin-bottom:1rem">
+              <span class="tag-label">Titres optimisés CTR</span>
+              <div id="ctrTitles"></div>
+            </div>
+
+            <button class="details-toggle" id="detailsToggle">Voir plus</button>
+            <div class="details-body" id="detailsBody">
+
+              <!-- Caption editor -->
+              <div class="caption-editor" id="captionEditorWrap" style="display:none">
+                <span class="section-label">Éditeur de captions</span>
+                <div class="caption-list" id="captionList"></div>
+                <div style="display:flex;gap:.5rem;margin-top:.6rem;align-items:center">
+                  <button class="btn-submit" id="reburnBtn" style="width:auto;padding:.5rem 1rem;height:auto;font-size:.8rem">Re-brûler les captions</button>
+                  <span id="reburnMsg" class="save-msg">Captions mis à jour !</span>
+                </div>
+              </div>
+
+              <!-- Auto-chapters -->
+              <div class="chapters-section" id="chaptersSection" style="display:none;margin-top:.85rem">
+                <span class="section-label">Chapitres YouTube</span>
+                <pre class="chapters-pre" id="chaptersOutput"></pre>
+                <button class="btn-copy-sm" id="copyChaptersBtn">Copier les chapitres</button>
+              </div>
+
+              <!-- Description generator -->
+              <div class="desc-gen-section" style="margin-top:.85rem">
+                <button class="desc-gen-btn" id="descGenBtn" type="button">
+                  <span id="descGenBtnLabel">Générer les descriptions</span>
+                </button>
+                <div id="descGenOutput" style="display:none">
+                  <div class="desc-tabs">
+                    <button class="desc-tab active" data-plat="youtube">YouTube</button>
+                    <button class="desc-tab" data-plat="tiktok">TikTok</button>
+                    <button class="desc-tab" data-plat="instagram">Instagram</button>
+                    <button class="desc-tab" data-plat="linkedin">LinkedIn</button>
+                  </div>
+                  <div id="desc-youtube" class="desc-platform active">
+                    <div class="desc-output" id="desc-youtube-text"></div>
+                    <button class="btn-copy-sm" data-copy="desc-youtube-text">Copier</button>
+                  </div>
+                  <div id="desc-tiktok" class="desc-platform">
+                    <div class="desc-output" id="desc-tiktok-text"></div>
+                    <button class="btn-copy-sm" data-copy="desc-tiktok-text">Copier</button>
+                  </div>
+                  <div id="desc-instagram" class="desc-platform">
+                    <div class="desc-output" id="desc-instagram-text"></div>
+                    <button class="btn-copy-sm" data-copy="desc-instagram-text">Copier</button>
+                  </div>
+                  <div id="desc-linkedin" class="desc-platform">
+                    <div class="desc-output" id="desc-linkedin-text"></div>
+                    <button class="btn-copy-sm" data-copy="desc-linkedin-text">Copier</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Platform descriptions -->
+              <div class="publish-section">
+                <h3>Publier</h3>
+                <div class="platform-grid">
+                  <button class="platform-btn" data-platform="youtube"><span class="platform-dot" id="dot-youtube"></span>YouTube</button>
+                  <button class="platform-btn" data-platform="tiktok"><span class="platform-dot" id="dot-tiktok"></span>TikTok</button>
+                  <button class="platform-btn" data-platform="instagram"><span class="platform-dot" id="dot-instagram"></span>Instagram</button>
+                  <button class="platform-btn" data-platform="linkedin"><span class="platform-dot" id="dot-linkedin"></span>LinkedIn</button>
+                </div>
+                <div id="publishMetaPreview" style="display:none;margin-bottom:.75rem">
+                  <input type="text" id="publishTitle" placeholder="Titre de la publication" />
+                </div>
+                <button class="btn-submit" id="publishNowBtn" disabled style="margin-bottom:.5rem;height:40px;font-size:.82rem">Publier sur les plateformes sélectionnées</button>
+                <p id="publishStatus" style="font-size:.78rem;color:var(--text-secondary)"></p>
+              </div>
+
+            </div><!-- /detailsBody -->
+          </div>
+
+        </div><!-- /tool -->
+      </section>
+
+      <!-- ── DASHBOARD ──────────────────────────────────────────── -->
+      <section id="dashboardSection" class="app-section">
+        <p class="dash-welcome">Bonjour, <span id="dashName">toi</span></p>
+
+        <div class="dash-stats">
+          <div class="dash-stat">
+            <span class="big" id="dashVideos">0</span>
+            <span class="lbl">Vidéos éditées</span>
+          </div>
+          <div class="dash-stat">
+            <span class="big" id="dashScoreMoyen">—</span>
+            <span class="lbl">Score moyen</span>
+          </div>
+          <div class="dash-stat">
+            <span class="big" id="dashTimeSaved">0h</span>
+            <span class="lbl">Temps économisé</span>
+          </div>
+          <div class="dash-stat">
+            <span class="big" id="dashViews">—</span>
+            <span class="lbl">Ce mois</span>
+          </div>
+        </div>
+
+        <button class="dash-edit-btn" id="dashEditBtn">Nouvelle vidéo</button>
+
+        <span class="section-label">Bibliothèque de vidéos</span>
+        <div class="video-library-grid" id="videoLibraryGrid" style="display:none"></div>
+        <div class="dash-empty" id="videoLibraryEmpty">
+          <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-bottom:.75rem;opacity:.35">
+            <rect x="2" y="8" width="36" height="24" rx="3" stroke="currentColor" stroke-width="2"/>
+            <rect x="2" y="11" width="5" height="4" rx="1" fill="currentColor"/>
+            <rect x="2" y="18" width="5" height="4" rx="1" fill="currentColor"/>
+            <rect x="2" y="25" width="5" height="4" rx="1" fill="currentColor"/>
+            <rect x="33" y="11" width="5" height="4" rx="1" fill="currentColor"/>
+            <rect x="33" y="18" width="5" height="4" rx="1" fill="currentColor"/>
+            <rect x="33" y="25" width="5" height="4" rx="1" fill="currentColor"/>
+            <path d="M16 15.5l9 4.5-9 4.5v-9z" fill="currentColor"/>
+          </svg>
+          <p style="font-size:.875rem;color:var(--text-secondary)">Aucune vidéo éditée pour l'instant.<br>Déposez votre première vidéo dans l'éditeur.</p>
+        </div>
+      </section>
+
+      <!-- ── ANALYTICS ──────────────────────────────────────────── -->
+      <section id="analyticsSection" class="app-section">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;padding-top:1.5rem">
+          <h2 style="font-size:1.1rem;font-weight:700">Analytics</h2>
+          <div style="display:flex;align-items:center;gap:.75rem">
+            <span id="analyticsUpdated" style="font-size:.72rem;color:var(--text-secondary)"></span>
+            <button class="action-btn" id="collectBtn">Rafraichir</button>
+          </div>
+        </div>
+
+        <div class="analytics-stats-grid">
+          <div class="analytics-stat"><span class="big" id="aVideos">0</span><span class="sub">Vidéos éditées</span></div>
+          <div class="analytics-stat"><span class="big" id="aRetention">—</span><span class="sub">Rétention moyenne</span></div>
+          <div class="analytics-stat"><span class="big" id="aTimeSaved">0h</span><span class="sub">Temps économisé</span></div>
+          <div class="analytics-stat"><span class="big" id="aViews">0</span><span class="sub">Vues estimées</span></div>
+        </div>
+
+        <div class="retention-chart-wrap">
+          <div class="retention-chart-title">Courbe de rétention moyenne</div>
+          <svg class="retention-svg" viewBox="0 0 400 80" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="retFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#FF7751" stop-opacity=".18"/>
+                <stop offset="100%" stop-color="#FF7751" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <path id="retentionFill" fill="url(#retFill)" d=""/>
+            <path id="retentionLine" fill="none" stroke="#FF7751" stroke-width="2" stroke-linecap="round" d=""/>
+            <circle id="retDrop1" r="4" fill="#FF7751" opacity="0"/>
+          </svg>
+        </div>
+
+        <span class="analytics-section-title">Performance par vidéo</span>
+        <div class="perf-chart" id="perfChart" style="margin-bottom:1.5rem"></div>
+
+        <span class="analytics-section-title">Historique des vidéos</span>
+        <table class="video-table" id="videoTable" style="display:none">
+          <thead><tr>
+            <th>Titre</th>
+            <th>Format</th>
+            <th>Date</th>
+            <th>Score</th>
+            <th>Actions</th>
+          </tr></thead>
+          <tbody id="videoTableBody"></tbody>
+        </table>
+        <div class="analytics-empty" id="videoTableEmpty">Aucune donnée — éditez votre première vidéo.</div>
+      </section>
+
+      <!-- ── PROFILE ─────────────────────────────────────────────── -->
+      <section id="profileSection" class="app-section">
+        <div style="padding-top:1.5rem">
+          <div class="profile-avatar-row">
+            <div class="profile-avatar" id="profileAvatar">?</div>
+            <div class="profile-info">
+              <div class="profile-name" id="profileName">—</div>
+              <div class="profile-brand" id="profileBrandName">—</div>
+              <div class="profile-badges" id="profileBadges"></div>
+            </div>
+          </div>
+
+          <div class="profile-section-card">
+            <h4>Plateformes</h4>
+            <div class="platform-badges" id="profilePlatforms"></div>
+          </div>
+
+          <div class="profile-section-card">
+            <h4>Client idéal (ICP)</h4>
+            <textarea id="profileIcp" rows="3" placeholder="Décrivez votre audience cible…"></textarea>
+          </div>
+
+          <div class="profile-section-card">
+            <h4>Piliers de contenu</h4>
+            <div class="profile-pillars">
+              <div class="profile-pillar"><div class="pillar-num">1</div><input class="pillar-input" id="pillar1" type="text" placeholder="Ex : Business" /></div>
+              <div class="profile-pillar"><div class="pillar-num">2</div><input class="pillar-input" id="pillar2" type="text" placeholder="Ex : Mindset" /></div>
+              <div class="profile-pillar"><div class="pillar-num">3</div><input class="pillar-input" id="pillar3" type="text" placeholder="Ex : Lifestyle" /></div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:.75rem;align-items:center;margin-top:.5rem">
+            <button class="btn-submit" id="saveProfileBtn" style="height:44px;width:auto;padding:0 1.5rem;font-size:.875rem">Enregistrer</button>
+            <button class="action-btn" id="editProfileBtn">Modifier le profil complet</button>
+          </div>
+          <p id="profileSaveMsg" class="save-msg">Profil enregistré.</p>
+        </div>
+      </section>
+
+      <!-- ── LEARN SECTION (hidden from nav, kept for JS) ──────── -->
+      <section id="learnSection" class="app-section">
+        <div class="card">
+          <span class="section-label">Apprendre</span>
+          <div class="learn-progress-wrap">
+            <div class="learn-progress-bar"><div class="learn-progress-fill" style="width:0%"></div></div>
+          </div>
+          <div class="learn-tabs">
+            <button class="learn-tab active">Modules</button>
+            <button class="learn-tab">Quiz</button>
+            <button class="learn-tab">Certificat</button>
+          </div>
+          <div class="learn-subview active" id="lessonsView"></div>
+          <div class="learn-subview" id="quizView"></div>
+          <div class="learn-subview" id="certView"></div>
+        </div>
+      </section>
+
+      <!-- ── OUTILS SECTION (hidden from nav, kept for JS) ─────── -->
+      <section id="outilsSection" class="app-section">
+        <div class="card" style="margin-top:1.5rem">
+          <span class="section-label">Outils IA</span>
+
+          <!-- Hook generator -->
+          <div id="hookGenCard" style="margin-bottom:1.25rem">
+            <span class="section-label">Générateur de hooks</span>
+            <div style="display:flex;gap:.5rem">
+              <input type="text" id="hookGenTopic" placeholder="Sujet de votre vidéo…" style="flex:1" />
+              <button class="btn-primary" id="hookGenBtn" type="button"><span id="hookGenBtnLabel">Générer 5 hooks</span></button>
+            </div>
+            <div id="hookGenResults" class="hook-options" style="display:none"></div>
+          </div>
+
+          <!-- Competitor analysis -->
+          <div id="compAnalysis" style="border-top:1px solid var(--border);padding-top:1rem">
+            <span class="section-label">Analyse concurrente</span>
+            <div style="display:flex;gap:.5rem">
+              <input type="text" id="compUrl" placeholder="URL de la vidéo à analyser" style="flex:1" />
+              <button class="btn-primary" id="compAnalyzeBtn" type="button"><span id="compBtnLabel">Analyser</span></button>
+            </div>
+            <div id="compResult" class="comp-result" style="display:none"></div>
+          </div>
+
+          <!-- Template grid -->
+          <div style="border-top:1px solid var(--border);padding-top:1rem;margin-top:1rem">
+            <span class="section-label">Templates de montage</span>
+            <div class="tpl-grid" id="tplGrid"></div>
+          </div>
+        </div>
+      </section>
+
+    </main><!-- /main -->
+
+    <!-- ── BRAND PANEL (slide-out) ────────────────────────────── -->
+    <div class="brand-panel" id="brandPanel">
+      <div class="brand-panel-head">
+        <h3>Identité de marque</h3>
+        <button class="brand-close" id="brandClose">×</button>
+      </div>
+
+      <div class="field">
+        <span class="section-label">Nom de marque</span>
+        <input type="text" id="brandName" placeholder="Votre marque" />
+      </div>
+
+      <div class="brand-section">
+        <h4>Couleurs</h4>
+        <div class="color-row">
+          <div class="color-swatch"><label>Principale</label><input type="color" id="brandPrimary" value="#FF7751" /></div>
+          <div class="color-swatch"><label>Secondaire</label><input type="color" id="brandSecondary" value="#FFFFFF" /></div>
+          <div class="color-swatch"><label>Fond</label><input type="color" id="brandBg" value="#0A0A0A" /></div>
+        </div>
+        <div class="brand-preview" id="brandPreview">Aperçu de votre marque</div>
+      </div>
+
+      <div class="brand-section">
+        <h4>Typographie</h4>
+        <div class="font-selector" id="brandFontSelector">
+          <button type="button" class="font-option active" data-font="Poppins" style="font-family:'Poppins'">Poppins</button>
+          <button type="button" class="font-option" data-font="Inter" style="font-family:'Inter'">Inter</button>
+          <button type="button" class="font-option" data-font="Montserrat" style="font-family:'Montserrat'">Montserrat</button>
+          <button type="button" class="font-option" data-font="Bebas" style="font-family:'Bebas Neue'">Bebas Neue</button>
+          <button type="button" class="font-option" data-font="DM Sans" style="font-family:'DM Sans'">DM Sans</button>
+        </div>
+      </div>
+
+      <div class="brand-section">
+        <h4>Style de montage</h4>
+        <div class="style-grid" id="brandStyleSelector">
+          <button type="button" class="style-option active" data-style="energetic">Énergique</button>
+          <button type="button" class="style-option" data-style="calm">Calme</button>
+          <button type="button" class="style-option" data-style="storytelling">Storytelling</button>
+          <button type="button" class="style-option" data-style="educational">Éducatif</button>
+        </div>
+      </div>
+
+      <div class="brand-section">
+        <h4>Texte watermark</h4>
+        <input type="text" id="brandWatermark" placeholder="@votrenom" />
+      </div>
+
+      <div class="brand-section">
+        <h4>Lower third</h4>
+        <div style="display:flex;flex-direction:column;gap:.5rem">
+          <input type="text" id="brandLtName" placeholder="Votre nom" />
+          <input type="text" id="brandLtTitle" placeholder="Votre titre" />
+        </div>
+      </div>
+
+      <div class="brand-section">
+        <h4>Logo</h4>
+        <input type="file" id="brandLogo" accept="image/*" />
+        <div id="brandLogoPreview" style="display:none;margin-top:.5rem"><img id="brandLogoImg" alt="Logo" style="max-width:80px;border-radius:8px" /></div>
+      </div>
+
+      <div class="brand-section">
+        <h4>Intro / Outro</h4>
+        <div style="display:flex;flex-direction:column;gap:.5rem">
+          <input type="file" id="brandIntro" accept="video/*" />
+          <input type="file" id="brandOutro" accept="video/*" />
+        </div>
+      </div>
+
+      <button class="btn-submit" id="saveBrandBtn" style="margin-top:1rem;height:44px">Enregistrer</button>
+      <p id="brandSaveMsg" class="save-msg" style="margin-top:.5rem">Marque enregistrée.</p>
+    </div>
+
+    <!-- ── COACH PANEL (slide-out) ─────────────────────────────── -->
+    <div class="coach-panel" id="coachPanel">
+      <div class="coach-panel-head">
+        <h3>Coach IA</h3>
+        <button id="coachClose" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:1.25rem">×</button>
+      </div>
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-msg ai">Bonjour ! Je suis votre coach vidéo IA. Comment puis-je vous aider à améliorer votre contenu ?</div>
+      </div>
+      <div class="chat-quick-pills">
+        <button class="chat-quick" data-q="Comment améliorer mon hook ?">Hook</button>
+        <button class="chat-quick" data-q="Quels formats marchent le mieux ?">Formats</button>
+        <button class="chat-quick" data-q="Comment augmenter ma rétention ?">Rétention</button>
+      </div>
+      <div class="chat-input-row">
+        <input class="chat-input" id="chatInput" placeholder="Posez votre question…" />
+        <button class="chat-send" id="chatSend">→</button>
+      </div>
+    </div>
+
+    <!-- ── HIDDEN ELEMENTS (kept for JS no-ops) ───────────────── -->
+    <!-- These elements are referenced by app.js but not visible in the new UI.
+         They must exist so getElementById() calls don't crash. -->
+    <div style="display:none" aria-hidden="true">
+      <!-- Streak -->
+      <span id="streakCount"></span>
+      <div id="streakBarFill"></div>
+      <span id="streakMilestone"></span>
+      <!-- Weekly goal -->
+      <span id="weeklyGoalDisplay"></span>
+      <div id="weeklyGoalBar"></div>
+      <!-- Achievements -->
+      <div id="achievementsGrid">
+        <div id="ach-first" class="achievement locked"><span class="achievement-icon">🏆</span><div><div class="achievement-name">Première vidéo</div></div></div>
+        <div id="ach-streak7" class="achievement locked"><span class="achievement-icon">🔥</span><div><div class="achievement-name">7 jours de suite</div></div></div>
+        <div id="ach-10videos" class="achievement locked"><span class="achievement-icon">📹</span><div><div class="achievement-name">10 vidéos</div></div></div>
+        <div id="ach-active" class="achievement locked"><span class="achievement-icon">⚡</span><div><div class="achievement-name">Actif cette semaine</div></div></div>
+      </div>
+      <!-- Calendar -->
+      <div id="calGrid">
+        <div class="cal-day-hd">L</div><div class="cal-day-hd">M</div><div class="cal-day-hd">M</div>
+        <div class="cal-day-hd">J</div><div class="cal-day-hd">V</div><div class="cal-day-hd">S</div><div class="cal-day-hd">D</div>
+      </div>
+      <span id="calMonthLabel"></span>
+      <button id="calPrev"></button>
+      <button id="calNext"></button>
+      <!-- Referral -->
+      <div id="referralCard">
+        <div class="referral-link-row">
+          <input class="referral-link-input" id="referralLinkInput" readonly />
+          <button class="btn-copy" id="copyReferralBtn">Copier</button>
+        </div>
+        <span id="referralCount"></span>
+        <span id="referralEarned"></span>
+      </div>
+      <!-- Performance tracker -->
+      <div id="perfVideoList"></div>
+      <span id="perfAccuracy"></span>
+      <span id="perfAccuracyPct"></span>
+      <!-- Team -->
+      <div id="teamMemberList"></div>
+      <div id="teamCommentList"></div>
+      <!-- White label -->
+      <div id="wlPreview"></div>
+      <!-- API -->
+      <span id="apiKeyDisplay"></span>
+      <!-- Notification bell (functional) -->
+      <button id="notifBellBtn"><span id="notifDot" class="notif-dot"></span></button>
+      <!-- Brand btn (accessible from nav if needed) -->
+      <button id="brandBtn" style="display:none"></button>
+      <!-- Coach btn -->
+      <button id="coachBtn" style="display:none"></button>
+    </div>
+
+    <script src="app.js" defer></script>
+
+    <script>
+      // ── Advanced options toggle ───────────────────────────────
+      (function() {
+        const toggle = document.getElementById("advToggle");
+        const body   = document.getElementById("advBody");
+        if (!toggle || !body) return;
+        function setOpen(open) {
+          body.classList.toggle("open", open);
+          const arrow = toggle.querySelector(".arrow");
+          if (arrow) arrow.style.transform = open ? "rotate(180deg)" : "";
+        }
+        toggle.addEventListener("click", () => setOpen(!body.classList.contains("open")));
+        toggle.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(!body.classList.contains("open")); } });
+      })();
+
+      // ── Notification bell ─────────────────────────────────────
+      document.getElementById("notifBellBtn")?.addEventListener("click", () => {
+        document.getElementById("notifPanel")?.classList.toggle("open");
+      });
+      document.getElementById("notifClose")?.addEventListener("click", () => {
+        document.getElementById("notifPanel")?.classList.remove("open");
+      });
+    </script>
+  </body>
+</html>
