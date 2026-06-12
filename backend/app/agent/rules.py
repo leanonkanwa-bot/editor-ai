@@ -1250,10 +1250,24 @@ For each consecutive pair (segment N, segment N+1):
   last_word_of_N    = the last word spoken in segment N (Whisper word timestamps)
   first_word_of_N+1 = the first word spoken in segment N+1
 
-If last_word_of_N == first_word_of_N+1 (case-insensitive, punctuation-stripped):
+If last_word_of_N == first_word_of_N+1 (case-insensitive, punctuation-stripped)
+AND that word is a substantive word (not "i", "a", "the", "to", "and", "so",
+"that", "it", "is", "of", "in", "on", "for", "you", "we", "they", "he",
+"she", "this", "with" — these repeat naturally in fluent speech and are NOT
+transcription artifacts):
   Adjust segment N's end time: move it back to the previous word boundary
   (i.e. drop the duplicated trailing word from segment N).
   Log: "[BOUNDARY FIX] Removed duplicate word '{word}' at segment N/N+1 junction"
+
+TWO-WORD DUPLICATE CHECK (run first — stronger signal than the single-word
+check above, and applies even to common words):
+  last_two_of_N    = the last TWO words spoken in segment N
+  first_two_of_N+1 = the first TWO words spoken in segment N+1
+  If last_two_of_N == first_two_of_N+1 (case-insensitive, punctuation-stripped),
+  e.g. "I wanted" / "I wanted to show support":
+    Adjust segment N's end time: move it back two words (drop both
+    duplicated trailing words from segment N).
+    Log: "[BOUNDARY FIX] Two-word duplicate '{words}' at segment N/N+1 junction"
 
 This check runs AFTER all segments are selected and ordered — it is the
 final pass before the plan is emitted.
@@ -1306,6 +1320,27 @@ RULE 5 — MINIMUM CONTEXT (first 10 seconds of the edit):
   shortest available segment that makes it immediately understandable.
   The viewer's first question must be answered within the first 5 seconds:
   "Who is this person and why should I keep watching?"
+
+RULE 6 — CONTEXT CONTINUITY RULE (every segment, not just the hook):
+  A segment MUST NOT start with a pronoun or reference word that refers to
+  something not established in this segment.
+  Words that REQUIRE prior context: "people", "they", "them", "it", "that",
+  "this", "he", "she", "we", "those", "these".
+  If a segment starts with one of these words → extend the segment START
+  backwards to include the sentence that establishes the reference.
+  Example: a segment starting "...people just hate on me" with no prior
+  setup is confusing — extend the start to include "we talked to his team"
+  (or whatever sentence introduces "people").
+
+RULE 7 — FINAL SEGMENT RULE:
+  The last segment MUST end with a complete sentence.
+  It must end with: a period, exclamation mark, question mark, or a word
+  that naturally concludes a thought.
+  NEVER end the video mid-sentence or mid-word.
+  If the planned end cuts mid-sentence → extend to the next sentence end.
+  Red flags — if the last segment ends with one of these words, it is
+  INVALID and must be extended: "and", "but", "so", "because", "that",
+  "seems", "then", "it", "the", "a", "an".
 """
 
 SEGMENT_REORDERING = """\
