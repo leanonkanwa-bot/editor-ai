@@ -36,6 +36,7 @@ from app.engine.graphics import (
     render_slide_layout,
 )
 from app.engine.hyperframes_engine import (
+    CHROMA_KEY_HEX,
     generate_composition_html,
     render_composition_to_video,
     render_with_hyperframes,
@@ -2054,6 +2055,7 @@ def render(
         _current_path = _next_path
 
     # ── Motion graphics: HyperFrames HTML → MP4, alpha-composited overlay ─
+    print(f"[MG] Rendering {len(remapped_motion_graphics)} motion graphics")
     if remapped_motion_graphics:
         _mg_dir = work_dir / "motion_graphics"
         _mg_dir.mkdir(parents=True, exist_ok=True)
@@ -2063,15 +2065,20 @@ def render(
                 _mg_at   = float(_mg.get("at", 0))
                 _mg_dur  = max(0.5, float(_mg.get("duration", 2.5)))
                 _mg_type = str(_mg.get("type", "lower_third"))
+                _mg_hf_prompt = str(_mg.get("hf_prompt", ""))
+                print(f"[MG] Graphic {_mi}: type={_mg_type} at={_mg_at:.2f}s duration={_mg_dur:.2f}s")
+                if _mg_hf_prompt:
+                    print(f"[MG] hf_prompt: {_mg_hf_prompt[:100]}...")
                 _mg_content = {
                     "text":      _mg.get("text", ""),
                     "subtext":   _mg.get("subtext", ""),
                     "style":     _mg.get("style", "momentum"),
-                    "hf_prompt": _mg.get("hf_prompt", ""),
+                    "hf_prompt": _mg_hf_prompt,
                 }
                 _mg_html = generate_composition_html(
                     _mg_type, _mg_content, _mg_dur, target_w, target_h, _bc,
                 )
+                print(f"[MG] HTML generated: {len(_mg_html)} chars")
                 _mg_html_path = _mg_dir / f"mg{_mi:02d}.html"
                 _mg_html_path.write_text(_mg_html, encoding="utf-8")
                 _mg_clip_path = _mg_dir / f"mg{_mi:02d}.mp4"
@@ -2085,10 +2092,11 @@ def render(
                 if not _rendered or not _mg_clip_path.exists():
                     print(f"[MG] {_mg_type} #{_mi} skipped: render failed")
                     continue
+                print(f"[MG] Video rendered: {_mg_clip_path}")
 
                 _next_path = _tmp_dir / f"mg{_mi}_{output_path.stem}.mp4"
                 _fc_mg = (
-                    f"[1:v]format=yuva420p,setpts=PTS+{_mg_at:.3f}/TB[mg];"
+                    f"[1:v]colorkey=0x{CHROMA_KEY_HEX}:0.15:0.10,format=yuva420p,setpts=PTS+{_mg_at:.3f}/TB[mg];"
                     f"[0:v][mg]overlay=x=0:y=0"
                     f":enable='between(t,{_mg_at:.3f},{_mg_at + _mg_dur:.3f})':format=auto[out]"
                 )
@@ -2108,7 +2116,7 @@ def render(
                 ])
                 _overlay_intermediates.append(_current_path)
                 _current_path = _next_path
-                print(f"[MG] {_mg_type} #{_mi} overlaid at t={_mg_at:.2f}s")
+                print(f"[MG] Overlaid at t={_mg_at:.2f}s")
             except Exception as _mge:
                 print(f"[MG] Graphic #{_mi} skipped: {_mge}")
         _probe_av_durations(_current_path, "after_motion_graphics")

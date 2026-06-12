@@ -11,6 +11,7 @@ advances the Chromium clock so animations settle before the screenshot.
 """
 from __future__ import annotations
 
+import html
 import os
 import re
 import subprocess
@@ -28,25 +29,17 @@ _CHROMIUM_CANDIDATES = [
     "/usr/bin/google-chrome-stable",
 ]
 
+# Pure green page background, forced onto every rendered composition so the
+# render.py overlay pass can `colorkey` it out — gives real per-pixel
+# transparency without requiring an alpha-capable video codec (libx264 has
+# no yuva420p support).
+CHROMA_KEY_HEX = "00FF00"
+
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 def _find(candidates: list[str]) -> str | None:
     return next((p for p in candidates if p and os.path.exists(p)), None)
-
-
-def is_hyperframes_available() -> bool:
-    npx = _find(_NPX_BINS)
-    if not npx:
-        return False
-    try:
-        r = subprocess.run(
-            [npx, "hyperframes", "--version"],
-            capture_output=True, timeout=10,
-        )
-        return r.returncode == 0
-    except Exception:
-        return False
 
 
 def render_with_hyperframes(html_path: Path, output_path: Path, width: int, height: int, fps: int) -> bool:
@@ -823,6 +816,15 @@ gsap.timeline()
 # ── Rendering ─────────────────────────────────────────────────────────────────
 
 
+def _chroma_keyed_html(html_content: str) -> str:
+    """Force the page background to the chroma-key color (overrides `background:transparent`)."""
+    return html_content.replace(
+        "<style>",
+        f"<style>html,body{{background:#{CHROMA_KEY_HEX} !important;}}",
+        1,
+    )
+
+
 def render_composition_to_video(
     html_content: str,
     output_path: Path,
@@ -832,12 +834,16 @@ def render_composition_to_video(
     fps: int = 30,
     work_dir: Path | None = None,
 ) -> bool:
-    """Render an HTML composition to a silent MP4 clip.
+    """Render an HTML composition to a chroma-keyed MP4 clip.
 
     Priority order:
-      1. HyperFrames CLI  (npx hyperframes render)
-      2. Chromium single-screenshot → FFmpeg video
-      3. Transparent fallback clip
+      1. Chromium single-screenshot → FFmpeg video (settled animation state)
+      2. FFmpeg drawtext fallback (no browser required)
+
+    The HyperFrames CLI path is intentionally skipped here — `npx hyperframes`
+    needs Node + a display and reliably fails on headless hosts (Railway).
+    Both remaining paths render against CHROMA_KEY_HEX so render.py's overlay
+    pass can `colorkey` it out for real per-pixel transparency.
 
     Returns True when a usable clip was produced at output_path.
     """
@@ -846,33 +852,11 @@ def render_composition_to_video(
         work_dir = output_path.parent
     work_dir.mkdir(parents=True, exist_ok=True)
 
+    keyed_html = _chroma_keyed_html(html_content)
     html_path = work_dir / f"{output_path.stem}_comp.html"
-    html_path.write_text(html_content, encoding="utf-8")
+    html_path.write_text(keyed_html, encoding="utf-8")
 
-    # ── Path 1: HyperFrames CLI ──────────────────────────────────────────────
-    npx = _find(_NPX_BINS)
-    if npx and is_hyperframes_available():
-        try:
-            r = subprocess.run(
-                [
-                    npx, "hyperframes", "render",
-                    str(html_path),
-                    "--output", str(output_path),
-                    "--fps", str(fps),
-                    "--width",  str(width),
-                    "--height", str(height),
-                ],
-                capture_output=True, text=True, timeout=120,
-            )
-            if r.returncode == 0 and output_path.exists() and output_path.stat().st_size > 0:
-                html_path.unlink(missing_ok=True)
-                print(f"[HYPERFRAMES] CLI render OK: {output_path.name}")
-                return True
-            print(f"[HYPERFRAMES] CLI failed (rc={r.returncode}): {r.stderr[:200]}")
-        except Exception as e:
-            print(f"[HYPERFRAMES] CLI error: {e}")
-
-    # ── Path 2: Chromium screenshot → static video ───────────────────────────
+    # ── Chromium screenshot → static video ───────────────────────────────
     chromium = _find(_CHROMIUM_CANDIDATES)
     if chromium:
         png_path = work_dir / f"{output_path.stem}_comp.png"
@@ -886,10 +870,10 @@ def render_composition_to_video(
                     "--disable-gpu",
                     "--disable-dev-shm-usage",
                     f"--window-size={width},{height}",
-                    "--force-device-scale-factor=2",
+                    "--force-device-scale-factor=1",
                     f"--virtual-time-budget={vt_budget_ms}",
                     f"--screenshot={png_path}",
-                    f"file://{html_path}",
+                    f"file://{html_path.resolve()}",
                 ],
                 capture_output=True, timeout=30,
             )
@@ -915,34 +899,67 @@ def render_composition_to_video(
             print(f"[HYPERFRAMES] Chrome path error: {e}")
         finally:
             png_path.unlink(missing_ok=True)
+    else:
+        print("[HYPERFRAMES] No chromium binary found — using ffmpeg text fallback")
 
-    # ── Path 3: Transparent fallback ─────────────────────────────────────────
+    # ── FFmpeg drawtext fallback — no browser required ───────────────────
     html_path.unlink(missing_ok=True)
-    return _transparent_fallback(output_path, duration, width, height, fps)
+    return _ffmpeg_text_fallback(html_content, output_path, duration, width, height, fps)
 
 
-def _transparent_fallback(
+def _dt_escape(text: str) -> str:
+    """Escape text for use inside an ffmpeg drawtext filter argument."""
+    return (
+        text.replace("\\", "\\\\")
+            .replace(":", "\\:")
+            .replace("'", "’")  # drawtext can't escape single quotes inside '...'
+            .replace("%", "pct")  # drawtext's '%' expansion syntax can't be escaped reliably
+    )
+
+
+def _ffmpeg_text_fallback(
+    html_content: str,
     output_path: Path,
     duration: float,
     width: int,
     height: int,
     fps: int,
 ) -> bool:
+    """Render a chroma-keyed text card via pure FFmpeg — no browser required.
+
+    Last-resort path when no Chromium binary is available. Extracts the
+    first headline text from the composition and draws it over
+    CHROMA_KEY_HEX so render.py's overlay colorkey filter still produces a
+    floating text card rather than a solid block.
+    """
+    texts = re.findall(
+        r'class="[^"]*\b(?:hf-text|title|number|big|large|text|handle)\b[^"]*"[^>]*>([^<]+)<',
+        html_content,
+    )
+    text = html.unescape(texts[0]).strip()[:40] if texts else ""
+
+    vf = ["format=yuv420p"]
+    if text:
+        vf.append(
+            f"drawtext=text='{_dt_escape(text)}':fontsize={int(height*0.07)}:fontcolor=white:"
+            f"x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.6:boxborderw=24"
+        )
+
     try:
         subprocess.run(
             [
                 FFMPEG_PATH, "-y", "-loglevel", "error",
-                "-f", "lavfi",
-                "-i", f"color=black@0.0:size={width}x{height}:rate={fps}",
+                "-f", "lavfi", "-i", f"color=c=0x{CHROMA_KEY_HEX}:size={width}x{height}:rate={fps}",
                 "-t", f"{duration:.3f}",
+                "-vf", ",".join(vf),
                 "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
                 "-pix_fmt", "yuv420p", "-an",
                 str(output_path),
             ],
             check=True, timeout=30,
         )
-        print(f"[HYPERFRAMES] Transparent fallback: {output_path.name}")
+        print(f"[HYPERFRAMES] ffmpeg text fallback: {output_path.name} text={text!r}")
         return True
     except Exception as e:
-        print(f"[HYPERFRAMES] Fallback failed: {e}")
+        print(f"[HYPERFRAMES] ffmpeg text fallback failed: {e}")
         return False
