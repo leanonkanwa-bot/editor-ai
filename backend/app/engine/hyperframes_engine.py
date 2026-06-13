@@ -315,6 +315,9 @@ def generate_composition_html(
         return _render_from_prompt(content, duration, width, height, brand_color)
 
     if graphic_type == "kinetic_title":
+        # Reference style: a persistent bold title badge sitting directly over
+        # the footage (no dark scrim) — brand-coloured text with a black
+        # outline for contrast, anchored near the top of frame.
         text = _esc(str(content.get("text", "")).upper())
         return f"""<!DOCTYPE html>
 <html>
@@ -323,20 +326,21 @@ def generate_composition_html(
 <style>
 * {{ margin:0;padding:0;box-sizing:border-box; }}
 html,body {{ width:{width}px;height:{height}px;overflow:hidden;background:transparent !important; }}
-.overlay {{
-    position:absolute;inset:0;background:rgba(0,0,0,0.7);
-    display:flex;align-items:center;justify-content:center;
+.wrap {{
+    position:absolute;inset:0;top:{int(height*0.06)}px;
+    display:flex;align-items:flex-start;justify-content:center;
 }}
 .title {{
-    font-family:'Inter',sans-serif;font-size:{int(height*0.10)}px;font-weight:900;
-    color:#FFFFFF;text-align:center;line-height:1.05;
-    max-width:{int(width*0.86)}px;
-    text-shadow:0 0 4px {brand_color},0 0 18px {brand_color};
+    font-family:'Inter',sans-serif;font-size:{int(height*0.085)}px;font-weight:900;
+    color:{brand_color};text-align:center;line-height:1.05;
+    max-width:{int(width*0.9)}px;
+    -webkit-text-stroke:2px #000000;
+    text-shadow:0 0 18px rgba(0,0,0,0.6);
 }}
 </style>
 </head>
 <body>
-<div class="overlay"><div class="title">{text}</div></div>
+<div class="wrap"><div class="title">{text}</div></div>
 </body>
 </html>"""
 
@@ -702,12 +706,12 @@ html,body {{ width:{width}px;height:{height}px;overflow:hidden;background:transp
 body {{ display:flex;flex-direction:column;align-items:center;justify-content:center; }}
 .number {{
     font-family:'{font}',Inter,sans-serif;font-size:{int(height*0.18)}px;font-weight:900;
-    color:{brand_color};line-height:1;opacity:0;transform:scale(0.7);
-    text-shadow:0 0 50px {brand_color}80;
+    color:#FFFFFF;line-height:1;opacity:0;transform:scale(0.7);
+    text-shadow:0 4px 24px rgba(0,0,0,0.8);
 }}
 .label {{
     font-family:'{font}',Inter,sans-serif;font-size:{int(height*0.03)}px;font-weight:700;
-    color:#fff;text-transform:uppercase;letter-spacing:0.12em;margin-top:{int(height*0.015)}px;
+    color:{brand_color};text-transform:uppercase;letter-spacing:0.12em;margin-top:{int(height*0.015)}px;
     opacity:0;
 }}
 </style>

@@ -1566,9 +1566,14 @@ def render(
             except (TypeError, ValueError):
                 continue
             if s_raw <= mg_at < e_raw:
+                # Same proportional remap as words above — a plain (mg_at - s)
+                # offset can land outside [0, actual_edit_dur) whenever
+                # snapping/padding shrinks the cut, placing the graphic on the
+                # wrong segment's footage or outside the enable() window.
+                at_progress = (mg_at - s_raw) / source_dur if source_dur > 0 else 0.0
                 remapped_motion_graphics.append({
                     **mg,
-                    "at":       seg_offset + (mg_at - s),
+                    "at":       max(0.0, seg_offset + at_progress * actual_edit_dur),
                     "duration": mg_dur,
                 })
 

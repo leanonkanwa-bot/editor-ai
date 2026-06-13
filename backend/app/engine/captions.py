@@ -950,6 +950,10 @@ def build_ass(
         # Context: previous phrase — same font, 60% white, 48px, 2px outline, above keyword
         f"Style: Context,{context_font},{context_sz},{context_color},{context_color},"
         f"{outline_color},{back_color},1,0,0,0,100,100,0,0,1,2,0,2,60,60,{context_mv},1\n"
+        # Word: impact/kinetic one-word captions — white, 88px, 3px outline, bottom.
+        # Numbers/%/$ are highlighted in brand color via inline override tags.
+        f"Style: Word,{keyword_font},{keyword_sz},&H00FFFFFF,&H00FFFFFF,"
+        f"{outline_color},{back_color},1,0,0,0,100,100,0,0,1,3,0,2,60,60,{keyword_mv},1\n"
         "\n[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, "
         "Effect, Text\n"
@@ -962,13 +966,16 @@ def build_ass(
     _ctx_anim = r"{\fad(80,0)}"
 
     if caption_style in ("impact", "kinetic"):
-        # One word at a time — very punchy
+        # One word at a time — very punchy. Normal words are white; numbers/%/$
+        # are emphasized in brand color (matches docstring color hierarchy).
         groups = _group_words(word_list, max_words=1, gap_s=0.05)
         _word_anim = (
             r"{\fad(60,0)\t(\fscx95\fscy95,\fscx105\fscy105)\t(\fscx105\fscy105,\fscx100\fscy100)}"
             if caption_style == "kinetic"
             else r"{\fad(50,0)\t(\fscx95\fscy95,\fscx100\fscy100)}"
         )
+        emphasis_ass = _hex_to_ass_bgr(brand_color) if brand_color else EMPHASIS_COLOR_ASS
+        _emph_re = re.compile(r"\d|%|\$")
         lines = [header]
         for gi, group in enumerate(groups):
             clean = [_strip_punct(w.text) for w in group]
@@ -990,7 +997,9 @@ def build_ass(
             if video_duration is not None and end > video_duration:
                 end = video_duration
             word_text = clean[0].upper()
-            lines.append(f"Dialogue: 1,{_ts(start)},{_ts(end)},Keyword,,0,0,0,,{_word_anim}{word_text}")
+            if _emph_re.search(word_text):
+                word_text = f"{{\\c{emphasis_ass}}}{word_text}{{\\c&H00FFFFFF&}}"
+            lines.append(f"Dialogue: 1,{_ts(start)},{_ts(end)},Word,,0,0,0,,{_word_anim}{word_text}")
         output_path.write_text("\n".join(lines), encoding="utf-8")
         return output_path
 
