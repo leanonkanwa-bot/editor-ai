@@ -93,7 +93,7 @@ def _style_palette(style: str, brand_color: str) -> dict:
         }
     return {
         "font": "Anton", "weight": "900", "transform": "uppercase",
-        "text": "#FFFFFF", "accent": brand_color or "#CCFF00", "bg": "#000000",
+        "text": "#FFFFFF", "accent": brand_color or "#FF7751", "bg": "#000000",
     }
 
 
@@ -201,7 +201,7 @@ def _render_from_prompt(content: dict, duration: float, width: int, height: int,
     subtext = _esc(str(content.get("subtext", "")))
     pal = _style_palette(str(content.get("style", "momentum")), brand_color)
 
-    text_color = cfg["text_color"] or pal["text"]
+    text_color = pal["text"]
     accent_color = cfg["accent_color"] or pal["accent"]
     font_size = max(1, int(height * (cfg["font_size_pct"] or 0.08)))
     entry_dur = cfg["entry_duration"]
@@ -332,10 +332,10 @@ html,body {{ width:{width}px;height:{height}px;overflow:hidden;background:transp
 }}
 .title {{
     font-family:'Inter',sans-serif;font-size:{int(height*0.085)}px;font-weight:900;
-    color:{brand_color};text-align:center;line-height:1.05;
+    color:#FFFFFF;text-align:center;line-height:1.05;
     max-width:{int(width*0.9)}px;
     -webkit-text-stroke:2px #000000;
-    text-shadow:0 0 18px rgba(0,0,0,0.6);
+    text-shadow:2px 2px 8px rgba(0,0,0,0.8),0 0 18px rgba(0,0,0,0.6);
 }}
 </style>
 </head>
@@ -486,9 +486,9 @@ body {{ display:flex;flex-direction:column;align-items:center;justify-content:fl
           color:rgba(255,255,255,0.75);margin-bottom:10px;opacity:0;
           letter-spacing:0.08em;text-transform:uppercase; }}
 .large {{ font-family:'{font}',Inter,sans-serif;font-size:{int(height*0.075)}px;
-          font-weight:800;color:{brand_color};text-align:center;line-height:1.1;
+          font-weight:800;color:#FFFFFF;text-align:center;line-height:1.1;
           opacity:0;transform:translateY(20px);
-          text-shadow:0 2px 30px rgba(0,0,0,0.8); }}
+          text-shadow:2px 2px 8px rgba(0,0,0,0.8),0 2px 30px rgba(0,0,0,0.8); }}
 </style>
 </head>
 <body data-duration="{duration}">
