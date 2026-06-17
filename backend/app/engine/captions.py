@@ -727,10 +727,10 @@ def _build_momentum_ass(
 ) -> Path:
     """Momentum style ASS captions.
 
-    Punchy 2-word kinetic groups — bold white Anton caps with a lime/chartreuse
+    Punchy 2-word kinetic groups — bold white Anton caps with a salmon (#FF7751)
     accent on numbers, money figures and percentages. Heavy black outline keeps
     text legible over any background, with a fast scale-pop entry per group.
-    Hook/stat/mantra moments render as full-screen lime-on-black title cards.
+    Hook/stat/mantra moments render as full-screen bold white title cards.
     """
     output_path = Path(output_path)
 
@@ -752,7 +752,7 @@ def _build_momentum_ass(
         return f"&H{alpha:02X}{b}{g}{r}"
 
     white_ass = _m_hex_to_ass("FFFFFF", 0)
-    lime_ass  = _m_hex_to_ass("CCFF00", 0)
+    emph_ass  = EMPHASIS_COLOR_ASS          # salmon #FF7751 — inline digit/$/% emphasis
     black_ass = _m_hex_to_ass("000000", 0)
 
     header = (
@@ -767,7 +767,7 @@ def _build_momentum_ass(
         "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
         "Alignment, MarginL, MarginR, MarginV, Encoding\n"
         # Word: bold white caps, heavy black outline — pops over any background.
-        # Lime emphasis on digits/%/$ is applied via inline {\c...} override
+        # Salmon emphasis on digits/%/$ is applied via inline {\c...} override
         # tags in the dialogue text (RULE 2), never as the Style color.
         f"Style: Word,Anton,{font_size},{white_ass},{white_ass},"
         f"{black_ass},&H00000000,-1,0,0,0,100,100,0,0,1,5,0,"
@@ -798,7 +798,7 @@ def _build_momentum_ass(
                     f"Dialogue: 1,{_ts(start)},{_ts(end)},TitleCard,,0,0,0,,{anim}{text}"
                 )
 
-    # ── Word groups — fast 2-word kinetic pops with lime emphasis ───────────
+    # ── Word groups — fast 2-word kinetic pops with salmon emphasis on digits ──
     PHRASE_SIZE = 2
     EMPH_RE = re.compile(r"\d|%|\$")
 
@@ -839,7 +839,7 @@ def _build_momentum_ass(
                 continue
             wt = wt.upper()
             if EMPH_RE.search(wt):
-                parts.append(f"{{\\c{lime_ass}}}{wt}{{\\c{white_ass}}}")
+                parts.append(f"{{\\c{emph_ass}}}{wt}{{\\c{white_ass}}}")
             else:
                 parts.append(wt)
         if not parts:

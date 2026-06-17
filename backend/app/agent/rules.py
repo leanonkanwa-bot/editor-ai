@@ -1991,10 +1991,10 @@ HOOK STRUCTURE (first 3 seconds — MANDATORY):
 
 CAPTION STYLE — MOMENTUM:
 - Bold white ALL-CAPS captions, 2 words per group, condensed display sans (Anton)
-- Numbers, money figures, and percentages highlighted in lime/chartreuse (#CCFF00)
+- Numbers, money figures, and percentages highlighted in brand accent color (salmon #FF7751)
 - Heavy black outline keeps text legible over any background
 - Fast scale-pop entry (overshoot to ~108% then settle to 100%) on every group
-- Hook/stat/mantra moments get a full-screen lime-on-black title card
+- Hook/stat/mantra moments get a full-screen bold white title card on dark background
 
 MOTION GRAPHICS — MOMENTUM:
 - portrait_callout: black & white headshot with a tilted red label banner
@@ -2003,10 +2003,17 @@ MOTION GRAPHICS — MOMENTUM:
   use for numbered frameworks, processes, or sequential steps
 - scoreboard_stat: big number / divider with center dot / smaller number+label —
   use for before/after comparisons and proof points
-- big_number: oversized comma-formatted number with lime glow — use for the
-  single most important statistic in a section
+- big_number: oversized comma-formatted number in WHITE with brand accent label —
+  use for the single most important statistic in a section
 - social_handle: rounded lower-third pill with handle + platform — use when
   citing a source, case study, or social proof
+
+MOTION GRAPHICS COLOR RULE — ABSOLUTE:
+- All motion graphic text MUST be WHITE (#FFFFFF) with a black outline/shadow
+- Brand accent color (#FF7751 salmon) is ONLY used for small accent elements
+  (borders, dots, underlines, labels) — NEVER as the main text fill
+- DO NOT use green, lime, chartreuse, or any shade of #00FF00/#CCFF00 anywhere
+- In hf_prompt descriptions: never mention a color for the main text — it is always white
 
 B-ROLL (business/finance-relevant only):
 - Office, screens, charts, handshake, cityscape, money — never lifestyle filler
@@ -2020,7 +2027,7 @@ ZOOM LIMITS:
 NEVER DO IN MOMENTUM STYLE:
 - No soft fades or slow dissolves between cuts
 - No silence longer than 0.7s anywhere in the final edit
-- No pastel or muted accent colors — lime/chartreuse #CCFF00 is the only highlight
+- No green, lime, or chartreuse colors anywhere — salmon #FF7751 is the only accent
 - No long static shots without a zoom or caption change
 """
 
