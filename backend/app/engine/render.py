@@ -9,7 +9,7 @@ Pipeline (production-correct order):
   3. Per-segment extract with 30ms audio fades baked in (Hard Rule 6, prevents
      audible pops at every cut).
   4. Lossless `-c copy` concat of segments (no double-encode).
-  5. Single re-encode pass: scale/crop → burn ASS subtitles LAST
+  5. Single re-encode pass: scale/crop -> burn ASS subtitles LAST
      (Hard Rule 7, never under overlays).
 
 Borrows the per-segment-extract / lossless-concat / 30ms-afade pattern from
@@ -38,14 +38,16 @@ from app.engine.graphics import (
 from app.engine.hyperframes_engine import (
     CHROMA_KEY_HEX,
     generate_composition_html,
+    generate_custom_motion_graphic,
     render_composition_to_video,
+    render_slide_to_video,
     render_with_hyperframes,
 )
 
 
-SHORT_PAD_S    = 0.12   # 120ms — word-safe start/end buffer
-LONG_PAD_S     = 0.20   # 200ms — cinematic breathing room
-AUDIO_FADE_S   = 0.05   # 50ms — anti-pop fade at every segment boundary
+SHORT_PAD_S    = 0.12   # 120ms -- word-safe start/end buffer
+LONG_PAD_S     = 0.20   # 200ms -- cinematic breathing room
+AUDIO_FADE_S   = 0.05   # 50ms -- anti-pop fade at every segment boundary
 AUDIO_HANDLE_S = 0.08   # 80ms audio handle kept before/after each cut edge
 
 
@@ -54,19 +56,19 @@ def _run(cmd: list[str]) -> None:
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode == 0:
         return
-    stderr = proc.stderr[-2000:] or "(empty — process produced no stderr)"
+    stderr = proc.stderr[-2000:] or "(empty -- process produced no stderr)"
     if proc.returncode < 0:
         sig = -proc.returncode
         hint = ""
         if sig == 9:
             hint = (
-                " — SIGKILL. The kernel killed ffmpeg, almost always because "
+                " -- SIGKILL. The kernel killed ffmpeg, almost always because "
                 "the container ran out of memory. Try a shorter video, lower "
                 "WHISPER_MODEL, or upgrade your hosting plan to give the "
                 "encoder more headroom."
             )
         elif sig == 15:
-            hint = " — SIGTERM. Something asked ffmpeg to stop."
+            hint = " -- SIGTERM. Something asked ffmpeg to stop."
         raise RuntimeError(
             f"ffmpeg killed by signal {sig}{hint}\n"
             f"  cmd: {shlex.join(cmd)}\n  stderr: {stderr}"
@@ -119,7 +121,7 @@ def _needs_proxy(info: dict[str, Any], target_w: int, target_h: int) -> bool:
     Proxying is triggered when:
     - Codec is ProRes, HEVC/H.265, or other heavy-decode format
       (these hold large reference-frame buffers during decode), OR
-    - Source resolution is larger than the target (4K→1080p decode is expensive).
+    - Source resolution is larger than the target (4K->1080p decode is expensive).
     """
     heavy_codecs = {"prores", "hevc", "vp9", "av1", "dnxhd", "dnxhr",
                     "mjpeg", "mpeg2video", "cfhd"}
@@ -144,10 +146,10 @@ def _create_proxy(
     Why: heavy-decode codecs (ProRes, HEVC, 4K) keep large reference-frame
     buffers alive for every segment cut. Decoding them once here and writing
     a cheap H.264 proxy means all subsequent _cut_proxy_segment calls use
-    stream-copy — zero decode memory, near-zero CPU.
+    stream-copy -- zero decode memory, near-zero CPU.
 
     Keyframe every 2 s (60 frames at 30 fps) so stream-copy cuts have ≤ 2 s
-    of alignment error (acceptable — the final re-encode corrects it).
+    of alignment error (acceptable -- the final re-encode corrects it).
     """
     vf = (
         f"scale={target_w}:{target_h}:force_original_aspect_ratio=increase"
@@ -181,7 +183,7 @@ def _cut_proxy_segment(
 ) -> None:
     """Cut a segment from the H.264 proxy using stream-copy for video.
 
-    Stream-copy means zero decode memory — we just copy the H.264 bitstream
+    Stream-copy means zero decode memory -- we just copy the H.264 bitstream
     bytes. Cuts snap to the nearest keyframe (≤ 2 s error), which the final
     re-encode corrects. Audio is re-encoded to apply normalization.
     """
@@ -224,8 +226,8 @@ def _snap_to_word_boundary(
     Priority 2: fallback to the nearest word edge only when no gap boundary
                 is found within SEARCH_WINDOW_S.
 
-    edge='start' → word.start AFTER t where gap before word ≥ WORD_GAP_S.
-    edge='end'   → word.end   BEFORE t where gap after word ≥ WORD_GAP_S.
+    edge='start' -> word.start AFTER t where gap before word ≥ WORD_GAP_S.
+    edge='end'   -> word.end   BEFORE t where gap after word ≥ WORD_GAP_S.
     """
     if not words:
         return t
@@ -289,7 +291,7 @@ def _extend_for_semantic_completeness(
 ) -> float:
     """Extend a segment end time if the last word is a dangling conjunction.
 
-    Example: "I ran 10 miles which is..." — cutting after "is" leaves an
+    Example: "I ran 10 miles which is..." -- cutting after "is" leaves an
     incomplete thought. This function scans forward up to search_window seconds
     to find the next natural pause (≥0.3s) or sentence-ending punctuation.
     """
@@ -318,15 +320,15 @@ def _extend_for_semantic_completeness(
                 continue
             if ws_t > end_t + search_window:
                 break
-            # Natural pause before this word → cut here
+            # Natural pause before this word -> cut here
             if prev_word_end is not None and ws_t - prev_word_end >= 0.3:
                 return min(prev_word_end, src_duration)
-            # Sentence-ending punctuation on this word → include it
+            # Sentence-ending punctuation on this word -> include it
             if str(w.get("text", "")).strip().endswith((".", "!", "?")):
                 return min(we, src_duration)
             prev_word_end = we
 
-    return end_t  # no clean extension found — keep original end
+    return end_t  # no clean extension found -- keep original end
 
 
 def _cut_segment(
@@ -392,7 +394,7 @@ def _concat(parts: list[Path], dst: Path) -> None:
 def _probe_av(path: Path) -> tuple[float, float]:
     """Probe audio and video durations to detect AV sync drift.
 
-    BUG 2 FIX — AV SYNC: runs after _concat() to surface timestamp
+    BUG 2 FIX -- AV SYNC: runs after _concat() to surface timestamp
     mismatches before they propagate through the rest of the pipeline.
     Returns (video_duration, audio_duration).
     """
@@ -417,7 +419,7 @@ def _probe_av(path: Path) -> tuple[float, float]:
         print(f"[AV PROBE] {path.name}: video={v_dur:.3f}s  audio={a_dur:.3f}s")
         if v_dur > 0 and a_dur > 0 and abs(v_dur - a_dur) > 0.1:
             print(
-                f"[AV PROBE] WARNING: AV SYNC MISMATCH — delta={abs(v_dur-a_dur):.3f}s "
+                f"[AV PROBE] WARNING: AV SYNC MISMATCH -- delta={abs(v_dur-a_dur):.3f}s "
                 f"(>{0.1:.1f}s threshold) in {path.name}"
             )
         return v_dur, a_dur
@@ -457,7 +459,7 @@ def _probe_av_durations(path: Path, label: str = "") -> tuple[float, float]:
 def _concat_audio_xfade(parts: list[Path], dst: Path) -> None:
     """Concatenate segments with 50ms exponential audio crossfade at every cut.
 
-    FIX 2: acrossfade smooths audio transitions completely — no clicks or pops
+    FIX 2: acrossfade smooths audio transitions completely -- no clicks or pops
     at cut points. Video is stream-copied (no re-encode); only audio is touched.
     Falls back to plain _concat() if fewer than 2 parts.
     """
@@ -753,7 +755,7 @@ def _zoom_filter_for_level(zoom_level: int, target_w: int, target_h: int) -> str
 
     Returns None for level 100 (full frame, no crop needed).
     For 130/150/170: scales up then center-crops back to target dimensions.
-    Uses lanczos for quality — these are still-frame crops, not animations.
+    Uses lanczos for quality -- these are still-frame crops, not animations.
     """
     if zoom_level <= 100:
         return None
@@ -812,7 +814,7 @@ def _concat_with_zoom(
     fc_parts: list[str] = []
     for i, zoom_level in enumerate(zoom_levels):
         zoom_f = _zoom_filter_for_level(zoom_level, target_w, target_h)
-        # Jump-zoom crop + SAR normalization + PTS reset. No zoompan here —
+        # Jump-zoom crop + SAR normalization + PTS reset. No zoompan here --
         # zoompan in filter_complex changes video duration while audio passes
         # through unchanged, causing AV sync drift of 2–3s.
         vf_chain = (
@@ -825,7 +827,7 @@ def _concat_with_zoom(
     concat_inputs = "".join(f"[v{i}][{i}:a]" for i in range(n))
     fc_parts.append(f"{concat_inputs}concat=n={n}:v=1:a=1[vout][aout]")
 
-    # filter_complex outputs cannot use -c:a copy — [aout] is a filtered stream.
+    # filter_complex outputs cannot use -c:a copy -- [aout] is a filtered stream.
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
         *inputs,
@@ -889,7 +891,7 @@ def _render_hyperframe_png(
 ) -> None:
     """Render a full-frame solid-color PNG for a hyperframe flash.
 
-    Generates the PNG via ffmpeg's lavfi color source — no enable= needed.
+    Generates the PNG via ffmpeg's lavfi color source -- no enable= needed.
     The resulting PNG is converted to a timed MKV clip by _png_to_timed_clip()
     and overlaid with setpts+eof_action=pass, completely avoiding any
     enable= expression in the filter_complex.
@@ -897,7 +899,7 @@ def _render_hyperframe_png(
     color_str is the output of _hex_to_rgb_at() e.g. '0xFF7751@1.0'.
     We strip the @opacity suffix since lavfi color=c= doesn't accept it.
     """
-    lavfi_color = color_str.split("@")[0]   # '0xFF7751@1.0' → '0xFF7751'
+    lavfi_color = color_str.split("@")[0]   # '0xFF7751@1.0' -> '0xFF7751'
     base_cmd = [
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-f", "lavfi",
@@ -922,7 +924,7 @@ def _render_hyperframe_png(
 def _png_to_timed_clip(png: Path, dst: Path, duration: float, fps: int) -> None:
     """Convert a static PNG to a short RGBA video clip at the target fps.
 
-    Uses the PNG video codec in a Matroska (.mkv) container — the only
+    Uses the PNG video codec in a Matroska (.mkv) container -- the only
     widely-available combination that preserves a full RGBA alpha channel
     for transparent overlay compositing.
 
@@ -933,7 +935,7 @@ def _png_to_timed_clip(png: Path, dst: Path, duration: float, fps: int) -> None:
     base video automatically (eof_action=pass).
 
     fps matches the project fps (30).  With 48 GB RAM there is no longer
-    any reason to cap at 1 fps — the full 30-fps clip is used so the
+    any reason to cap at 1 fps -- the full 30-fps clip is used so the
     overlay filter receives properly-timed frames throughout the clip.
     """
     _run([
@@ -960,15 +962,15 @@ def _build_pass1_filter_complex(
     """Build the filter_complex string for render pass 1.
 
     Video chain:
-      [0:v] → grade+scale+zoompan → overlay per timed clip → [vout_label]
+      [0:v] -> grade+scale+zoompan -> overlay per timed clip -> [vout_label]
 
     Timed clips (indices 1..N) cover both hyperframe flashes and motion
     graphics. They are positioned via setpts=PTS+at/TB so no enable=
     expression is needed anywhere in the video filter chain.
 
     Audio chain (when silences exist):
-      [0:a] → volume-duck chain → [aout]
-      Volume enable= uses \\, (backslash-comma) escaping — the only
+      [0:a] -> volume-duck chain -> [aout]
+      Volume enable= uses \\, (backslash-comma) escaping -- the only
       remaining enable= in the entire pipeline.
 
     Returns:
@@ -986,12 +988,12 @@ def _build_pass1_filter_complex(
     # Inputs at indices 1..N are pre-cut MKV clips (RGBA, duration = rg.duration).
     # setpts=PTS+at/TB shifts each clip to its correct position in the timeline.
     # eof_action=pass lets the base video show through before and after the clip.
-    # No enable= expression is needed at all — the clip simply doesn't exist
+    # No enable= expression is needed at all -- the clip simply doesn't exist
     # outside its window, so the overlay falls through to the base video.
     #
     # COMMA ESCAPING: x_expr / y_expr from graphics.py use plain commas inside
     # function calls like max(a,b), if(c,a,b), lt(a,b).  In a filter_complex
-    # option value, an unescaped comma is a filter-chain separator — FFmpeg would
+    # option value, an unescaped comma is a filter-chain separator -- FFmpeg would
     # split "y=max(0,345-h/2)" into two filters: "y=max(0" and "345-h/2)…".
     # Replace every plain comma with \, so the filter_complex parser treats them
     # as literal commas and forwards them intact to the expression evaluator.
@@ -1031,7 +1033,7 @@ def _build_pass1_filter_complex(
 
 
 def _color_grade_filter(content_type: str) -> str:
-    """Disabled — returns empty string so no color/grade filter is applied."""
+    """Disabled -- returns empty string so no color/grade filter is applied."""
     return ""
 
 
@@ -1055,7 +1057,7 @@ def _fetch_broll_clip(
     )
     print(f"[BROLL] Called with query={query!r}  dst={dst}  key_set={bool(key)}")
     if not key:
-        print("[BROLL] No PEXELS_API_KEY — skipping")
+        print("[BROLL] No PEXELS_API_KEY -- skipping")
         return False
 
     orientation = "portrait" if target_h > target_w else "landscape"
@@ -1076,24 +1078,24 @@ def _fetch_broll_clip(
         if not all_videos:
             return False
 
-        # BUG 3 FIX — minimum duration: only use videos >= 4s so we can trim
+        # BUG 3 FIX -- minimum duration: only use videos >= 4s so we can trim
         # cleanly and still have quality frames throughout the b-roll window.
         videos = [v for v in all_videos if v.get("duration", 0) >= 4]
         if not videos:
-            print(f"[BROLL] All {len(all_videos)} videos too short (<4s) — skipping")
+            print(f"[BROLL] All {len(all_videos)} videos too short (<4s) -- skipping")
             return False
         print(f"[BROLL] {len(videos)} video(s) pass the >=4s duration filter")
 
-        # BUG 3 FIX — quality filter: only download HD or UHD files.
-        # SD files are visibly blurry at 1080p — they degrade the output.
-        # Priority: portrait UHD (1080×1920) → portrait HD → any HD → skip.
+        # BUG 3 FIX -- quality filter: only download HD or UHD files.
+        # SD files are visibly blurry at 1080p -- they degrade the output.
+        # Priority: portrait UHD (1080×1920) -> portrait HD -> any HD -> skip.
         video = videos[0]
         files = video.get("video_files", [])
         print(f"[BROLL] Video files available: {[(f.get('width'), f.get('height'), f.get('quality')) for f in files]}")
 
         preferred_files = [f for f in files if f.get("quality") in ("uhd", "hd")]
         if not preferred_files:
-            print(f"[BROLL] No HD/UHD files for query {query!r} — skipping (SD only)")
+            print(f"[BROLL] No HD/UHD files for query {query!r} -- skipping (SD only)")
             return False
 
         # Portrait-first selection: pick largest portrait by pixel area.
@@ -1115,7 +1117,7 @@ def _fetch_broll_clip(
                 key=lambda f: (f.get("width") or 0) * (f.get("height") or 0),
                 reverse=True,
             )[0]
-            print(f"[BROLL] No portrait files — using best available orientation")
+            print(f"[BROLL] No portrait files -- using best available orientation")
 
         if not best or not best.get("link"):
             print("[BROLL] No suitable HD/UHD file found in video_files")
@@ -1132,7 +1134,7 @@ def _fetch_broll_clip(
         with open(str(tmp_path), "wb") as fh:
             for chunk in dl.iter_content(chunk_size=65536):
                 fh.write(chunk)
-        print(f"[BROLL] Downloaded {tmp_path.stat().st_size} bytes → {tmp_path.name}")
+        print(f"[BROLL] Downloaded {tmp_path.stat().st_size} bytes -> {tmp_path.name}")
 
         # Trim to required duration and crop-to-fill target dimensions
         _run([
@@ -1167,7 +1169,7 @@ def _fetch_broll_clip(
 def _dedup_segments(segments: list[dict]) -> list[dict]:
     """Remove exact duplicate (start, end) pairs and empty segments.
 
-    Preserves the planner's intended edit order — do NOT sort by start time.
+    Preserves the planner's intended edit order -- do NOT sort by start time.
     The order of the array IS the playback order; sorting would destroy
     any reordering the planner did for psychological impact.
     Non-chronological source timestamps are intentional (e.g. hook at t=47s
@@ -1198,7 +1200,7 @@ def _merge_short_segments(segments: list[dict], min_duration: float = 2.0) -> li
     Short segments cause zoompan frame-stretching artifacts and look like
     glitches. Merging with the next segment preserves the content while
     giving zoompan enough frames to operate correctly.
-    Preserves edit order — does NOT sort by source timestamp.
+    Preserves edit order -- does NOT sort by source timestamp.
     """
     if not segments:
         return segments
@@ -1210,7 +1212,7 @@ def _merge_short_segments(segments: list[dict], min_duration: float = 2.0) -> li
         if dur < min_duration and i + 1 < len(segments):
             next_seg = segments[i + 1]
             merged_dur = float(next_seg["end"]) - float(seg["start"])
-            print(f"[MERGE] Segment {i} too short ({dur:.2f}s < {min_duration:.1f}s) — merging with next → {merged_dur:.2f}s")
+            print(f"[MERGE] Segment {i} too short ({dur:.2f}s < {min_duration:.1f}s) -- merging with next -> {merged_dur:.2f}s")
             seg["end"] = next_seg["end"]
             # Keep current segment's beat/zoom metadata
             merged.append(seg)
@@ -1222,7 +1224,7 @@ def _merge_short_segments(segments: list[dict], min_duration: float = 2.0) -> li
 
 
 # Short function words repeat constantly in fluent speech without being a
-# transcription stutter — never trim on these alone (BUG 1).
+# transcription stutter -- never trim on these alone (BUG 1).
 _BOUNDARY_COMMON_WORDS = {
     "i", "a", "the", "to", "and", "but", "so", "that", "it", "is", "of",
     "in", "on", "for", "you", "we", "they", "he", "she", "this", "with",
@@ -1243,9 +1245,9 @@ def _fix_word_boundaries(segments: list[dict], all_words: list[dict]) -> list[di
     pushed slightly outside [start, end) are still considered.
 
     Checks (in order):
-      1. Single-word duplicate — only for substantive words (not common
+      1. Single-word duplicate -- only for substantive words (not common
          function words, which coincidentally repeat in normal speech).
-      2. Two-word duplicate — "I wanted" / "I wanted ..." — a strong signal
+      2. Two-word duplicate -- "I wanted" / "I wanted ..." -- a strong signal
          of an actual repeat even when the single-word check doesn't fire
          (e.g. last word of N is "wanted" but first word of N+1 is "I").
     """
@@ -1292,7 +1294,7 @@ def _verify_caption_sync(
     """Drop caption words outside the edited video's duration and log anomalies.
 
     Called just before build_ass() to prevent captions from appearing at
-    times that don't exist in the final video — which looks like frozen or
+    times that don't exist in the final video -- which looks like frozen or
     ghost captions at the end of the video.
     """
     import logging as _lg
@@ -1312,7 +1314,7 @@ def _verify_caption_sync(
             issues.append(
                 f"'{w.text}' end={w.end:.3f}s exceeds video duration={edited_duration:.3f}s"
             )
-            # Clamp rather than drop — the word starts inside the video.
+            # Clamp rather than drop -- the word starts inside the video.
             valid.append(WordTiming(text=w.text, start=w.start, end=min(w.end, edited_duration)))
             continue
         valid.append(w)
@@ -1372,7 +1374,7 @@ def render(
     fps = 30
     pad = SHORT_PAD_S if short_form else LONG_PAD_S
 
-    # Detect 4K input — preserve native resolution, don't downscale.
+    # Detect 4K input -- preserve native resolution, don't downscale.
     video_info = _probe_video_info(src)
     src_w_raw = video_info.get("width", 0)
     src_h_raw = video_info.get("height", 0)
@@ -1389,13 +1391,13 @@ def render(
     keep = plan.keep_segments or [
         {"start": 0.0, "end": float(transcript.get("duration", 0.0))}
     ]
-    # Resolve any raw planner overlaps before cutting — prevents word repetition.
+    # Resolve any raw planner overlaps before cutting -- prevents word repetition.
     keep = _dedup_segments(keep)
     keep = _merge_short_segments(keep)
     _all_words_flat = [w for tseg in transcript.get("segments", []) for w in tseg.get("words", [])]
     keep = _fix_word_boundaries(keep, _all_words_flat)
     # FIX 3: boundary trimming can shrink a segment's planned duration (end -
-    # start) below the minimum — re-run the merge pass so a segment that was
+    # start) below the minimum -- re-run the merge pass so a segment that was
     # fine before trimming (e.g. a 5s hook trimmed down to 0.55s) still gets
     # merged with its neighbor instead of playing as a near-instant glitch.
     keep = _merge_short_segments(keep)
@@ -1406,7 +1408,7 @@ def render(
 
     # Proxy: if the source is a heavy-decode format (ProRes, HEVC) or larger
     # than the target resolution, pre-transcode it once to a target-res H.264.
-    # All segment cuts then use stream-copy on the proxy → zero decode RAM.
+    # All segment cuts then use stream-copy on the proxy -> zero decode RAM.
     use_proxy = _needs_proxy(video_info, target_w, target_h)
     if use_proxy:
         proxy_path = work_dir / "proxy.mp4"
@@ -1418,7 +1420,7 @@ def render(
     parts: list[Path] = []
     zoom_levels: list[int] = []
     zoom_segments: list[int] = []
-    cum = 0.0  # exact video output timeline — no audio-handle inflation
+    cum = 0.0  # exact video output timeline -- no audio-handle inflation
     remapped_zoom: list[dict[str, Any]] = []
     remapped_words: list[WordTiming] = []
     remapped_silences: list[dict[str, Any]] = []
@@ -1426,6 +1428,7 @@ def render(
     remapped_moments: list[dict[str, Any]] = []
     remapped_motion_graphics: list[dict[str, Any]] = []
     cut_timestamps: list[float] = []  # output-timeline timestamps of cut points
+    slide_ranges: list[tuple[float, float]] = []  # edit-timeline ranges occupied by MG slides
 
     for i, seg in enumerate(keep):
         s_raw = float(seg["start"])
@@ -1433,7 +1436,7 @@ def render(
         if e_raw <= s_raw:
             continue
 
-        # Hard Rule 1 — snap to word boundaries
+        # Hard Rule 1 -- snap to word boundaries
         s = _snap_to_word_boundary(s_raw, words, edge="start")
         e = _snap_to_word_boundary(e_raw, words, edge="end")
         # Semantic completeness: extend end if snapped edge is a dangling conjunction.
@@ -1442,19 +1445,108 @@ def render(
         if i + 1 < len(keep):
             _next_s_raw = float(keep[i + 1]["start"])
             e = min(e, max(s + 0.15, _next_s_raw - 0.05))
-        # Hard Rule 2 — pad cut edges
+        # Hard Rule 2 -- pad cut edges
         s = max(0.0, s - pad)
         e = min(src_duration, e + pad) if src_duration > 0 else e + pad
         if e - s < 0.15:
             continue
 
         part = work_dir / f"part_{i:04d}.mp4"
+
+        # ── Full-screen motion graphic segments (long-form) ─────────────────
+        is_slide = bool(seg.get("is_slide"))
+        if is_slide:
+            from app.core.config import settings as _cfg
+
+            slide_content = dict(seg.get("slide_content") or {})
+            accent = str(seg.get("accent_color", "#00C3FF"))
+            slide_content.setdefault("accent_color", accent)
+            slide_dur = max(0.5, e - s)
+            _slide_dir = work_dir / "slides"
+            _slide_dir.mkdir(parents=True, exist_ok=True)
+            _slide_vid = _slide_dir / f"slide_{i:04d}.mp4"
+            _slide_html: str | None = None
+            _mg_path = "none"
+
+            concept_desc = str(seg.get("concept_description", ""))
+            slide_type = str(seg.get("slide_type", ""))
+
+            if _cfg.motion_graphics_mode == "generated" and concept_desc:
+                # ── AI-generated path ────────────────────────────────
+                _slide_html, _mg_path = generate_custom_motion_graphic(
+                    concept_description=concept_desc,
+                    content=slide_content,
+                    duration=slide_dur,
+                    width=target_w, height=target_h,
+                    accent_color=accent,
+                    work_dir=_slide_dir,
+                )
+
+            if _slide_html is None and slide_type:
+                # ── Template fallback path ───────────────────────────
+                _slide_html = generate_composition_html(
+                    slide_type, slide_content, slide_dur,
+                    target_w, target_h,
+                    brand_color=accent,
+                )
+                _mg_path = f"fallback:{slide_type}"
+
+            _slide_ok = False
+            if _slide_html:
+                _slide_ok = render_slide_to_video(
+                    _slide_html, _slide_vid, slide_dur,
+                    target_w, target_h, fps=fps, work_dir=_slide_dir,
+                )
+
+            if _slide_ok and _slide_vid.exists():
+                _audio_tmp = _slide_dir / f"slide_audio_{i:04d}.aac"
+                _run([
+                    FFMPEG_PATH, "-y", "-loglevel", "error",
+                    "-ss", f"{s:.6f}", "-accurate_seek",
+                    "-i", str(cut_src),
+                    "-t", f"{slide_dur:.6f}",
+                    "-vn", "-c:a", "aac", "-b:a", "192k", "-ar", "44100",
+                    str(_audio_tmp),
+                ])
+                _run([
+                    FFMPEG_PATH, "-y", "-loglevel", "error",
+                    "-i", str(_slide_vid),
+                    "-i", str(_audio_tmp),
+                    "-map", "0:v", "-map", "1:a",
+                    "-c:v", "copy", "-c:a", "copy",
+                    "-avoid_negative_ts", "make_zero",
+                    "-shortest", str(part),
+                ])
+                try:
+                    _audio_tmp.unlink(missing_ok=True)
+                    _slide_vid.unlink(missing_ok=True)
+                except Exception:
+                    pass
+                print(f"[MG] Segment {i}: {_mg_path} ({slide_dur:.1f}s)")
+            else:
+                print(f"[MG] Segment {i}: render failed, using speaker footage")
+                if use_proxy:
+                    _cut_proxy_segment(cut_src, s, e, part)
+                else:
+                    _cut_segment(cut_src, s, e, part, target_w, target_h, fps)
+
+            zoom_level = 100
+            zoom_segments.append(i)
+            zoom_levels.append(zoom_level)
+            parts.append(part)
+            seg_offset = cum
+            cut_timestamps.append(cum)
+            slide_ranges.append((cum, cum + slide_dur))
+            cum += slide_dur
+            continue
+        # ─────────────────────────────────────────────────────────────────────
+
         if use_proxy:
             _cut_proxy_segment(cut_src, s, e, part)
         else:
             _cut_segment(cut_src, s, e, part, target_w, target_h, fps)
 
-        # Jump zoom — Priestley/Momentum styles use beat-mapped levels; viral uses planner levels.
+        # Jump zoom -- Priestley/Momentum styles use beat-mapped levels; viral uses planner levels.
         zoom_level = int(seg.get("zoom_level", 130))
         if editing_style == "priestley":
             _beat = (seg.get("beat") or "default").lower()
@@ -1472,7 +1564,7 @@ def render(
         parts.append(part)
 
         # All timeline remapping uses cum (exact video output clock) and s (snapped
-        # cut start). No audio handles — _cut_segment() cuts exactly [s, e], so
+        # cut start). No audio handles -- _cut_segment() cuts exactly [s, e], so
         # cum + (ws - s) places captions on the identical clock as the video frames.
         seg_offset = cum
 
@@ -1491,7 +1583,7 @@ def render(
         print(f"[CAP DEBUG] seg {i}: looking for words between {s_raw:.3f} and {e_raw:.3f}")
         words_in_range = [w for w in all_words if (s_raw - 0.5) <= float(w["start"]) < (e_raw + 0.2)]
         print(f"[CAP DEBUG] found {len(words_in_range)} words in range")
-        # FIX 1 — CAPTION DESYNC: scale each word's position proportionally
+        # FIX 1 -- CAPTION DESYNC: scale each word's position proportionally
         # from the planned source span [s_raw, e_raw) into the actual edit
         # span [0, actual_edit_dur). A plain (ws - s) offset overflows past
         # this segment's video frames whenever snapping/padding shrinks the
@@ -1566,7 +1658,7 @@ def render(
             except (TypeError, ValueError):
                 continue
             if s_raw <= mg_at < e_raw:
-                # Same proportional remap as words above — a plain (mg_at - s)
+                # Same proportional remap as words above -- a plain (mg_at - s)
                 # offset can land outside [0, actual_edit_dur) whenever
                 # snapping/padding shrinks the cut, placing the graphic on the
                 # wrong segment's footage or outside the enable() window.
@@ -1579,14 +1671,14 @@ def render(
 
         if parts:  # record cut point in output timeline
             cut_timestamps.append(cum)
-        cum += (e - s)  # exact segment duration — no audio-handle inflation
+        cum += (e - s)  # exact segment duration -- no audio-handle inflation
 
     if not parts:
         raise RuntimeError("No keep_segments produced any clip.")
 
     print(f"[ZOOM] Total segments with zoom: {len(zoom_segments)}")
 
-    # PROBLEM 2 FIX — AV DESYNC after reordering:
+    # PROBLEM 2 FIX -- AV DESYNC after reordering:
     # Re-encode every extracted segment to a clean PTS-zero baseline before
     # concat. Reordered segments (e.g. hook from t=35s played first) carry
     # their original container PTS even after accurate-seek extraction; the
@@ -1597,7 +1689,7 @@ def render(
     clean_parts: list[Path] = []
     for _pi, _p in enumerate(parts):
         _cp = clean_dir / f"clean_{_pi:04d}.mp4"
-        print(f"[CLEAN] Re-encoding segment {_pi} → {_cp.name}")
+        print(f"[CLEAN] Re-encoding segment {_pi} -> {_cp.name}")
         _reencode_clean(_p, _cp, fps)
         clean_parts.append(_cp)
 
@@ -1612,7 +1704,7 @@ def render(
                          if float(s["end"]) > float(s["start"]))
     print(f"[AUDIO] Expected duration (plan boundaries): {_audio_expected:.3f}s")
 
-    # PROBLEM 1 FIX — FREEZE (video longer than audio):
+    # PROBLEM 1 FIX -- FREEZE (video longer than audio):
     # When video stream runs longer than audio, the last frames are silent
     # freeze frames. Trim concat to exact audio duration using [AV PROBE]
     # audio as the reference (not planned duration, which may differ).
@@ -1620,12 +1712,12 @@ def render(
         _trimmed_path = work_dir / "concat_trimmed.mp4"
         print(
             f"[TRIM] Video ({_concat_v_dur:.3f}s) > audio ({_concat_a_dur:.3f}s) "
-            f"by {_concat_v_dur - _concat_a_dur:+.3f}s — trimming to audio duration"
+            f"by {_concat_v_dur - _concat_a_dur:+.3f}s -- trimming to audio duration"
         )
         _trim_to_audio(concat_path, _trimmed_path, _concat_a_dur)
         concat_path = _trimmed_path
 
-    # BUG 3 FIX — DURATION MISMATCH: log the delta for diagnostics only.
+    # BUG 3 FIX -- DURATION MISMATCH: log the delta for diagnostics only.
     # The words are already correctly positioned via seg_offset (exact video clock),
     # so scaling them again by actual/planned introduces drift rather than fixing it.
     _concat_actual = _probe_duration(concat_path)
@@ -1636,12 +1728,12 @@ def render(
             f"planned={_audio_expected:.3f}s delta={_concat_delta:+.3f}s"
         )
 
-    # NOTE: caption timestamp scaling removed — words are mapped via seg_offset
+    # NOTE: caption timestamp scaling removed -- words are mapped via seg_offset
     # (exact video output clock), not plan boundaries.  Scaling by actual/planned
     # was introducing drift and causing AV desync.
 
     # Remap b-roll windows to the cut timeline so captions pause there.
-    # BUG FIX — B-ROLL TIMING:
+    # BUG FIX -- B-ROLL TIMING:
     # Hard rule: 2.5s ≤ b-roll ≤ 4s. Anything shorter is a flash that just
     # confuses the viewer. Clamp the agent's suggestion into that window;
     # if the agent gave us 0s/0.1s of duration the clamp pulls it up to
@@ -1649,7 +1741,7 @@ def render(
     BROLL_MIN_S = 1.5
     BROLL_MAX_S = 3.0
     remapped_broll: list[tuple[float, float]] = []
-    broll_queries: list[str] = []   # parallel to remapped_broll — Pexels search terms
+    broll_queries: list[str] = []   # parallel to remapped_broll -- Pexels search terms
     for br in plan.broll_suggestions:
         try:
             br_at = float(br.get("at", 0))
@@ -1684,7 +1776,7 @@ def render(
             hf_at = float(hf.get("at", 0))
         except (TypeError, ValueError):
             continue
-        # Default color: hyperframe → brand_color → electric yellow.
+        # Default color: hyperframe -> brand_color -> electric yellow.
         hf_color = hf.get("color") or brand_color or "#FFE500"
         run = 0.0
         for seg in keep:
@@ -1699,13 +1791,18 @@ def render(
                 break
             run += max(0.0, ee - ss)
 
-    # FIX 4: Larger silence thresholds — keep natural breathing pauses intact.
+    # FIX 4: Larger silence thresholds -- keep natural breathing pauses intact.
     # Short-form: only remove pauses > 0.5s (was 0.25s); compress to 0.30s.
     # Long-form:  only remove pauses > 0.8s (was 0.6s);  compress to 0.50s.
     _sil_min = 0.50 if short_form else 0.80
     _sil_max = 0.30 if short_form else 0.50
     if remapped_words:
         long_pauses = _find_long_pauses(remapped_words, min_gap_s=_sil_min)
+        if slide_ranges:
+            long_pauses = [
+                (ps, pe) for ps, pe in long_pauses
+                if not any(ps < sr_e and pe > sr_s for sr_s, sr_e in slide_ranges)
+            ]
         if long_pauses:
             compressed_path = work_dir / "concat_compressed.mp4"
             kept_intervals = _compress_pauses(
@@ -1755,7 +1852,7 @@ def render(
     total_duration = _probe_duration(concat_path)
 
     # Enforce minimum gap between b-roll clips to prevent over-cutting.
-    # Short-form: adaptive — max(5s, 15% of total duration). A 37s video gets
+    # Short-form: adaptive -- max(5s, 15% of total duration). A 37s video gets
     # 5.55s gap, meaning b-roll can actually land. Long-form: 20% of duration, min 8s.
     # Also drop any b-roll in the first 2s (hook must show the speaker's face).
     _min_broll_gap = max(5.0, total_duration * 0.15) if short_form else max(8.0, total_duration * 0.20)
@@ -1777,9 +1874,9 @@ def render(
     remapped_broll = _filtered_broll
     broll_queries  = _filtered_queries
 
-    # FIX 1 — SALMON SCREEN: disable hyperframes completely.
+    # FIX 1 -- SALMON SCREEN: disable hyperframes completely.
     # Color-flash MKV overlays render as a solid salmon/colored screen at any
-    # timestamp — disable until the overlay pipeline is validated.
+    # timestamp -- disable until the overlay pipeline is validated.
     remapped_hyperframes = []
 
     import logging as _logging
@@ -1787,7 +1884,7 @@ def render(
     import tempfile as _tempfile
     _log = _logging.getLogger(__name__)
 
-    # BUG 4 FIX — CAPTION BOUNDARY SHIFT: any caption word whose remapped start
+    # BUG 4 FIX -- CAPTION BOUNDARY SHIFT: any caption word whose remapped start
     # coincides exactly with a segment cut boundary gets a +0.05s nudge.
     # On the cut frame the decoder may show a black or transitional frame; a
     # caption appearing at that exact instant can look frozen or misplaced.
@@ -1805,12 +1902,12 @@ def render(
     # any sync anomalies so mismatches are visible in server logs.
     remapped_words = _verify_caption_sync(remapped_words, total_duration)
 
-    # FIX 4 — Caption sync verification
+    # FIX 4 -- Caption sync verification
     print(f"[SYNC CHECK] Video duration: {total_duration:.3f}s")
     if remapped_words:
         print(
             f"[SYNC CHECK] Caption range: "
-            f"{remapped_words[0].start:.3f}s → {remapped_words[-1].end:.3f}s"
+            f"{remapped_words[0].start:.3f}s -> {remapped_words[-1].end:.3f}s"
         )
         print(
             f"[SYNC CHECK] First 5 words: "
@@ -1820,7 +1917,7 @@ def render(
         if _words_after:
             print(
                 f"[SYNC CHECK] WARNING: {len(_words_after)} word(s) start after "
-                f"video duration — dropping them"
+                f"video duration -- dropping them"
             )
         if remapped_words[-1].end > total_duration + 0.5:
             print(
@@ -1828,7 +1925,7 @@ def render(
                 f"{remapped_words[-1].end:.3f}s > video {total_duration:.3f}s + 0.5s"
             )
     else:
-        print("[SYNC CHECK] WARNING: no remapped words — captions will be empty!")
+        print("[SYNC CHECK] WARNING: no remapped words -- captions will be empty!")
 
     _log.info(
         "caption sync: %d words; range=%.3f–%.3fs; first3=%s",
@@ -1838,8 +1935,8 @@ def render(
         [(w.text, round(w.start, 3), round(w.end, 3)) for w in remapped_words[:3]],
     )
 
-    # PART 4 — caption_style_map: per-segment style hints from the planner.
-    # Maps source segment start time → caption style ("normal" | "emphasis" | "highlight").
+    # PART 4 -- caption_style_map: per-segment style hints from the planner.
+    # Maps source segment start time -> caption style ("normal" | "emphasis" | "highlight").
     caption_style_map = {
         float(seg.get("start", 0)): seg.get("caption_style", "normal")
         for seg in (plan.keep_segments or [])
@@ -1853,7 +1950,7 @@ def render(
     _long = not short_form
     _use_moments = _long and bool(remapped_moments)
     if _long and not remapped_moments:
-        print("[CAPTIONS] Long-form has no caption_moments — falling back to short-form word-by-word")
+        print("[CAPTIONS] Long-form has no caption_moments -- falling back to short-form word-by-word")
     if not skip_captions:
         build_ass(
             remapped_words,
@@ -1871,7 +1968,7 @@ def render(
         print(f"[CAPTIONS] ASS file written: {ass_path}")
         print(f"[CAPTIONS] ASS file size: {ass_path.stat().st_size} bytes")
     else:
-        print("[CAPTIONS] Disabled (skip_captions=True) — no ASS file generated")
+        print("[CAPTIONS] Disabled (skip_captions=True) -- no ASS file generated")
 
     face_cx_pct = 50.0
     face_cy_pct = 50.0
@@ -1884,7 +1981,7 @@ def render(
         face_cy_pct = (ft + fb) / 2
     total_frames = max(1, int(total_duration * fps))
 
-    # Motion graphics disabled — clean professional output.
+    # Motion graphics disabled -- clean professional output.
     # Only cuts + captions + zoom are applied.
     rendered_graphics: list[RenderedGraphic] = []
 
@@ -1908,7 +2005,7 @@ def render(
 
     # ── Pre-render hyperframe flash PNGs ──────────────────────────────────
     # Each flash is a full-frame solid-color PNG (+ optional text) turned into
-    # a timed MKV clip via _png_to_timed_clip() — same mechanism as motion
+    # a timed MKV clip via _png_to_timed_clip() -- same mechanism as motion
     # graphics. This completely eliminates enable= from the video filter chain:
     # no drawbox, no drawtext, no gte/lte timing expressions.
     hf_dir = work_dir / "hyperframes"
@@ -1918,10 +2015,10 @@ def render(
         try:
             hf_at = float(hf.get("at", 0))
             hf_color = _hex_to_rgb_at(hf.get("color") or brand_color or "#FF7751")
-            # BUG 1 FIX: cap to 0.06s (2 frames at 30fps) — a flash, not a screen.
+            # BUG 1 FIX: cap to 0.06s (2 frames at 30fps) -- a flash, not a screen.
             hf_dur = max(0.033, min(0.06, float(hf.get("duration", 0.05))))
             hf_png = hf_dir / f"hf_{i:03d}.png"
-            # Color flash only — no text overlay on hyperframes.
+            # Color flash only -- no text overlay on hyperframes.
             _render_hyperframe_png(
                 hf_color, hf_png, target_w, target_h,
                 text=None, system_font=None,
@@ -1935,7 +2032,7 @@ def render(
 
     # ── Convert all PNGs to timed RGBA MKV clips ──────────────────────────
     # Hyperframes first in the chain so motion graphics overlay on top of them
-    # (matching original drawbox → overlay ordering).
+    # (matching original drawbox -> overlay ordering).
     clips_dir = work_dir / "graphic_clips"
     clips_dir.mkdir(parents=True, exist_ok=True)
     graphic_clip_paths: list[Path] = []
@@ -1949,7 +2046,7 @@ def render(
         except Exception as _e:
             _log.warning("graphic clip failed (%s): %s", rg.kind, _e)
 
-    # ── Pass 1: grade + scale + audio duck → base ────────────────────────
+    # ── Pass 1: grade + scale + audio duck -> base ────────────────────────
     # Overlays are applied sequentially below (one ffmpeg call per clip).
     # This is more reliable than one giant filter_complex: memory is bounded
     # by two inputs per call regardless of how many graphics exist.
@@ -1960,7 +2057,7 @@ def render(
     # Pass 1 only needs fps normalization and PTS reset.
     _zoom_str = f"fps={fps},setpts=N/FRAME_RATE/TB"
 
-    # Cover stream chat / subscriber UI in top-right corner — short-form only.
+    # Cover stream chat / subscriber UI in top-right corner -- short-form only.
     # In long-form (16:9) the crop is different and the UI position varies.
     _stream_ui_cover = "drawbox=x=W-300:y=0:w=300:h=200:color=black:t=fill" if short_form else None
     _vf_p1 = [p for p in [color_grade, scale_filter, _stream_ui_cover, _zoom_str] if p]
@@ -1989,7 +2086,7 @@ def render(
     _cmd_p1 += [
         "-frames:v", str(total_frames),
         "-vsync", "cfr",
-        # Lossless intermediate video — only one lossy encode in the final pass.
+        # Lossless intermediate video -- only one lossy encode in the final pass.
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
         "-threads", "4",
         "-x264-params", "rc-lookahead=0:bframes=0",
@@ -2025,7 +2122,7 @@ def render(
         "broll: plan has %d suggestion(s); remapped=%d; PEXELS_API_KEY=%s",
         len(plan.broll_suggestions),
         len(remapped_broll),
-        "SET" if _pexels_key_set else "NOT SET — skipping all broll",
+        "SET" if _pexels_key_set else "NOT SET -- skipping all broll",
     )
     _broll_dir = work_dir / "broll_clips"
     _broll_dir.mkdir(parents=True, exist_ok=True)
@@ -2044,7 +2141,7 @@ def render(
         _broll_clips_downloaded += 1
         br_clip = _br_clip_path
         _next_br_path = _tmp_dir / f"br{_bi}_{output_path.stem}.mp4"
-        # Slide-in from right edge (0→x=0 over _slide s), hold, slide-out to left.
+        # Slide-in from right edge (0->x=0 over _slide s), hold, slide-out to left.
         _slide = max(0.1, min(0.25, br_dur * 0.15))
         _x_expr = (
             f"'if(lte(t,{br_s+_slide:.3f})"
@@ -2109,7 +2206,7 @@ def render(
         _overlay_intermediates.append(_current_path)
         _current_path = _next_path
 
-    # ── Motion graphics: HyperFrames HTML → MP4, alpha-composited overlay ─
+    # ── Motion graphics: HyperFrames HTML -> MP4, alpha-composited overlay ─
     print(f"[MG] Rendering {len(remapped_motion_graphics)} motion graphics")
     if remapped_motion_graphics:
         _mg_dir = work_dir / "motion_graphics"
@@ -2180,12 +2277,12 @@ def render(
 
     # ── Final pass: burn ASS captions ─────────────────────────────────────
     # Separate ffmpeg invocation so subtitle path escaping is handled by the
-    # OS arg list (no shell expansion) — only the ffmpeg filter parser sees it.
+    # OS arg list (no shell expansion) -- only the ffmpeg filter parser sees it.
     if not skip_captions:
         _ass_tmp = _tmp_dir / f"captions_{ass_path.parent.name}.ass"
         _shutil.copy2(ass_path, _ass_tmp)
         _ass_str = str(_ass_tmp).replace("\\", "/").replace(":", "\\:")
-    # Per-format output bitrate targets — prevent quality floor drops on
+    # Per-format output bitrate targets -- prevent quality floor drops on
     # complex scenes while keeping file size reasonable.
     if is_4k:
         _out_bv, _out_maxrate, _out_bufsize = "20M", "30M", "60M"
@@ -2245,7 +2342,7 @@ def render(
             import os as _os
             _os.replace(str(_music_out), str(output_path))
         except Exception:
-            pass  # Music mix failed — ship clean audio instead
+            pass  # Music mix failed -- ship clean audio instead
 
     return {
         "output": str(output_path),

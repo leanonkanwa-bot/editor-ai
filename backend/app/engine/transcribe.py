@@ -40,7 +40,11 @@ from app.core.config import settings
 # On Linux / macOS we fall back to shutil.which() → bare name.
 # ---------------------------------------------------------------------------
 if sys.platform == "win32":
-    _WIN_BIN = r"C:\Users\KANWAGI\Downloads\ffmpeg-master-latest-win64-gpl-shared\ffmpeg-master-latest-win64-gpl-shared\bin"
+    _WIN_CANDIDATES = [
+        r"C:\Users\KANWAGI\Downloads\ffmpeg-master-latest-win64-gpl-shared\ffmpeg-master-latest-win64-gpl-shared\bin",
+        r"C:\tmp\ffmpeg_extract\ffmpeg-8.1.1-essentials_build\bin",
+    ]
+    _WIN_BIN = next((p for p in _WIN_CANDIDATES if os.path.isdir(p)), _WIN_CANDIDATES[0])
     FFMPEG_PATH: str = _WIN_BIN + r"\ffmpeg.exe"
     FFPROBE_PATH: str = _WIN_BIN + r"\ffprobe.exe"
 else:

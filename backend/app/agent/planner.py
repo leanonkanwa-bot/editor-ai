@@ -638,6 +638,40 @@ def plan_edit(
                     "      emphasis_words: 1–2 words verbatim in text — brand color + 110% size.\n"
                     "      text: exact verbatim spoken words — never invented, never paraphrased.\n"
                     "      start/end: must fall within the corresponding keep_segment window.\n\n"
+                    "LONG-FORM MOTION GRAPHICS (is_slide entries in keep_segments):\n"
+                    "  When the speaker explains a concept, formula, statistic, comparison,\n"
+                    "  or progression, you may insert a full-screen animated motion graphic\n"
+                    "  that REPLACES speaker footage (audio continues underneath).\n"
+                    "  ALL text/numbers must come from THIS transcript.  Never invent content.\n"
+                    "  Zero graphics is valid if nothing fits.\n"
+                    "  HARD CAP: maximum 4 motion graphics per video.  Pick the most impactful\n"
+                    "  moments — prefer sections where visual explanation adds the most value.\n\n"
+                    "  Add an entry inside keep_segments with these fields:\n"
+                    '    { "start": N.N, "end": N.N, "is_slide": true,\n'
+                    '      "concept_description": "<rich natural-language description of the visual>",\n'
+                    '      "slide_content": { <extracted text/numbers/labels from transcript> },\n'
+                    '      "accent_color": "#00C3FF",\n'
+                    '      "beat": "explanation", "zoom_level": 100, "caption_style": "priestley" }\n\n'
+                    "  concept_description: A detailed visual brief (2-4 sentences) describing what\n"
+                    "  the motion graphic should look like.  Be SPECIFIC about layout, shapes,\n"
+                    "  colors, and animation.  Examples of good descriptions:\n"
+                    '    - "A dark background with a large digital counter counting up from 0 to\n'
+                    '       1,500,000 in cyan. Label below reads \'Total Revenue\' in white."\n'
+                    '    - "A horizontal bar chart with 4 bars growing from left to right,\n'
+                    '       labeled Phase 1, Phase 2, Phase 3, Phase 4. Each bar is cyan with\n'
+                    '       white labels. Bars animate in sequentially top to bottom."\n'
+                    '    - "A before/after split screen. Left side dark-tinted with red accent\n'
+                    '       showing \'Old Method\' and \'2 hours/day\'. Right side bright with cyan\n'
+                    '       accent showing \'New Method\' and \'20 minutes/day\'."\n\n'
+                    "  slide_content: Structured data extracted verbatim from the transcript:\n"
+                    '    { "title": "<heading>", "items": [...], "value": "<number>",\n'
+                    '      "label": "<label>", "steps": [...] }\n'
+                    "  Include whatever fields match the content — there is no fixed schema.\n\n"
+                    "  Rules:\n"
+                    "  - Slides last 5–20s.  No captions on slide segments.\n"
+                    "  - start/end = SOURCE timestamps where audio is extracted.\n"
+                    "  - Only during EXPLANATION sections (never hook, story, emotional moments).\n"
+                    "  - Match the graphic to what the speaker is ACTUALLY doing in that moment.\n"
                     if fmt == "long" else ""
                     ) +
                     "PHASE 5 — SELF-EVALUATION (before finalizing output)\n"

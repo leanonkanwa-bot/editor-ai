@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     # no stock video is downloaded or overlaid.
     pexels_api_key: str = ""
 
+    # Motion graphics generation mode for long-form videos.
+    # "generated" = AI-generated custom visuals via Claude API (default).
+    # "templates_only" = use only the 9 hand-built templates, no API call.
+    # Toggle via Railway env var to instantly roll back without a deploy.
+    motion_graphics_mode: str = "generated"
+
     @property
     def uploads_dir(self) -> Path:
         return (BACKEND_DIR / self.storage_uploads).resolve()

@@ -1444,6 +1444,62 @@ SECTION TRANSITIONS:
 
 
 # ---------------------------------------------------------------------------
+# Long-form slide replacement templates
+# ---------------------------------------------------------------------------
+
+LONG_FORM_SLIDE_STYLE = """\
+LONG-FORM MOTION GRAPHICS SYSTEM
+===================================
+When the speaker explains a concept, formula, statistic, comparison, or
+progression, you may REPLACE speaker footage with a full-screen animated
+motion graphic.  Audio continues under the graphic.  NO captions on these
+segments.  Graphics must last 5–20 seconds each.
+
+HARD CAP: maximum 4 motion graphics per video.  Pick the most impactful
+explanation moments.  Zero graphics is valid if nothing fits.
+
+CRITICAL — CONTENT MUST COME FROM THIS VIDEO'S TRANSCRIPT:
+All text/numbers in slide_content MUST be extracted verbatim or summarized
+from what THIS speaker actually says.  Never invent content, never use
+placeholder text, never copy examples from this prompt.
+
+Each motion graphic appears as an entry inside keep_segments with:
+  "is_slide": true,
+  "concept_description": "<rich 2-4 sentence visual brief>",
+  "slide_content": { <structured text/numbers from transcript> },
+  "accent_color": "#00C3FF"
+
+concept_description: Describe the VISUAL you want — layout, shapes, colors,
+animation.  Be specific.  The system will generate custom HTML/CSS/GSAP
+animation from this description.  You are NOT limited to fixed templates —
+describe any visual concept that matches what the speaker is explaining.
+
+Examples of good concept_descriptions (DO NOT COPY these — write descriptions
+specific to THIS video's content):
+  - "Large counter counting up from 0 to [actual number from transcript] in
+     cyan on dark background.  Label below reads '[actual label]' in white."
+  - "Horizontal bar chart with [N] bars labeled [actual labels].  Bars grow
+     left to right in sequence, cyan with white text."
+  - "Before/after split: left side dark-tinted '[old way from transcript]',
+     right side cyan-accented '[new way from transcript]'."
+  - "Flow diagram: source card '[name]' on left, dashed lines to [N]
+     destination cards on right labeled '[actual names]'."
+  - "Checklist of [N] items from transcript, each revealing with a cyan
+     checkmark animation, staggered 0.3s apart."
+
+slide_content: Structured data — include whatever fields match the content:
+  { "title": "...", "items": [...], "value": "...", "label": "...",
+    "steps": [...], "source": "...", "destinations": [...] }
+
+SELECTION LOGIC — content-aware, never forced:
+- Only during EXPLANATION sections (never hook, story, emotional moments).
+- Match the graphic to what the speaker is ACTUALLY doing: calculations get
+  charts/counters, lists get checklists, comparisons get split screens.
+- accent_color must always be "#00C3FF" for long-form.
+"""
+
+
+# ---------------------------------------------------------------------------
 # Output contract — the JSON the agent must emit. Renderer reads this.
 # ---------------------------------------------------------------------------
 
@@ -1568,7 +1624,17 @@ Reply with a SINGLE JSON object, no prose, matching this schema:
       "score": <net score>,
       "cut_before_silence": true|false,
       "retention_note": "<why this keeps the viewer watching>",
-      "zoom_level": 100|130|150|170 }
+      "zoom_level": 100|130|150|170,
+      /* ── Optional: motion graphic replacement (long-form only) ────
+         When is_slide is true, this segment's speaker footage is REPLACED
+         by a full-screen animated graphic. Audio continues underneath.
+         Include these extra fields on the segment:
+      */
+      "is_slide": false,                           // set true to replace footage
+      "concept_description": "<visual brief>",     // 2-4 sentence description of the graphic
+      "slide_content": { /* extracted text/numbers from transcript */ },
+      "accent_color": "#00C3FF"                    // always cyan for long-form
+      }
   ],
   "drop_segments": [
     { "start": <s>, "end": <s>,
@@ -2180,6 +2246,8 @@ def system_prompt(
             "  list_item (landscape): position='bottom_left' (Alignment=1, left-anchored)\n"
             "  list_item (portrait): position='bottom_center' (Alignment=2)\n\n"
             + _zoom_level_rules
+            + "\n\n"
+            + LONG_FORM_SLIDE_STYLE
         )
     else:
         blocks.append(_zoom_level_rules)
