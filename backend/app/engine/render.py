@@ -1959,6 +1959,7 @@ def render(
     # short-form captions if the planner produced none (better than zero captions).
     _long = not short_form
     _use_moments = _long and bool(remapped_moments)
+    print(f"[CAPTIONS] short_form={short_form} _long={_long} remapped_moments={len(remapped_moments)} _use_moments={_use_moments} → mode={'long' if _use_moments else 'short'}")
     if _long and not remapped_moments:
         print("[CAPTIONS] Long-form has no caption_moments -- falling back to short-form word-by-word")
     if not skip_captions:

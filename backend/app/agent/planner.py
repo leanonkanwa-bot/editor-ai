@@ -119,6 +119,7 @@ class EditPlan:
         # Takes the first line of each beat section as a concept caption.
         if self.raw.get("format") == "long":
             script = self.raw.get("script_structure", [])
+            print(f"[CAPTIONS] format='long', script_structure has {len(script)} entries, model caption_moments={len(moments)}")
             auto: list[dict[str, Any]] = []
             for beat in script:
                 lines = beat.get("lines", [])
