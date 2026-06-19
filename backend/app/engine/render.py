@@ -1363,6 +1363,10 @@ def render(
     work_dir.mkdir(parents=True, exist_ok=True)
     _health_check(src)
 
+    print(f"[RENDER] plan.format={plan.format!r} plan.raw.get('format')={plan.raw.get('format')!r} | short_form will be {plan.format == 'short'!r}")
+    _n_slides = sum(1 for s in (plan.keep_segments or []) if isinstance(s, dict) and s.get("is_slide"))
+    print(f"[MG] Total is_slide segments in plan: {_n_slides}")
+
     try:
         from app.engine.font_manager import preload_style_fonts
         preload_style_fonts(editing_style)

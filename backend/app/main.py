@@ -73,13 +73,8 @@ app = FastAPI(title="AI Video Editor Agent", version="0.1.0")
 
 @app.on_event("startup")
 def _on_startup() -> None:
-    try:
-        _commit = subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"],
-            stderr=subprocess.DEVNULL,
-        ).decode().strip()
-    except Exception:
-        _commit = "unknown"
+    _commit_file = Path(__file__).resolve().parent.parent / "COMMIT_HASH"
+    _commit = _commit_file.read_text().strip() if _commit_file.exists() else "unknown"
     print(f"[BUILD] Running commit: {_commit}")
     _cleanup_old_uploads()
 
