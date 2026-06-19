@@ -553,7 +553,6 @@ def _build_priestley_ass(
     # instead of the wrong width-based scale=0.5625 → 24px.
     scale = video_h / 1080.0
     font_size  = max(24, int(42  * scale))
-    title_size = max(48, int(130 * scale))
     # Alignment=2 = bottom-center; MarginV = distance from bottom edge.
     # 12% keeps text at ~82% from top — correct Priestley lower-third position.
     margin_v   = int(video_h * 0.12)
@@ -569,8 +568,6 @@ def _build_priestley_ass(
     white_ass    = _p_hex_to_ass("FFFFFF", 0)
     gold_ass     = _p_hex_to_ass("FFDE4D", 0)
     black70_ass  = _p_hex_to_ass("000000", 0x4C)   # 70% opacity black box
-    burgundy_ass = _p_hex_to_ass("2B080C", 0)
-    cream_ass    = _p_hex_to_ass("FDFBF7", 0)
 
     header = (
         "[Script Info]\n"
@@ -589,31 +586,12 @@ def _build_priestley_ass(
         f"Style: Dialogue,Inter,{font_size},{white_ass},{gold_ass},"
         f"&H00000000,{black70_ass},-1,0,0,0,100,100,0,0,4,0,0,"
         f"2,{margin_lr},{margin_lr},{margin_v},1\n"
-        # TitleCard: cream text, burgundy box, center (Alignment=5)
-        f"Style: TitleCard,Inter,{title_size},{cream_ass},{gold_ass},"
-        f"&H00000000,{burgundy_ass},-1,0,0,0,100,100,0,0,1,0,0,"
-        f"5,60,60,60,1\n"
         "\n[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, "
         "Effect, Text\n"
     )
 
     lines = [header]
-
-    # ── Title cards from caption_moments (hook / stat / mantra) ─────────────
-    if caption_moments:
-        for moment in caption_moments:
-            style_type = str(moment.get("style", "concept"))
-            if style_type in ("hook", "stat", "mantra"):
-                text = str(moment.get("text", "")).strip().upper()
-                if not text:
-                    continue
-                start = float(moment.get("start", 0))
-                end   = float(moment.get("end", start + 2.5))
-                anim = r"{\fscx100\fscy100\t(0,1500,\fscx105\fscy105)}"
-                lines.append(
-                    f"Dialogue: 1,{_ts(start)},{_ts(end)},TitleCard,,0,0,0,,{anim}{text}"
-                )
 
     # ── Dialogue captions — karaoke highlight with gold active word ──────────
     PHRASE_SIZE = 4
