@@ -1320,9 +1320,9 @@ async def test_remotion():
         "stderr": r.stderr[-3000:],
     }
 
+    render_ok = r.returncode == 0 and output_path.exists()
     if output_path.exists():
         results["output_size_mb"] = round(output_path.stat().st_size / 1024 / 1024, 2)
-        # Probe output
         p = _sp.run([
             FFPROBE_PATH,
             "-v", "error", "-show_entries", "stream=codec_name,width,height,duration",
@@ -1330,17 +1330,14 @@ async def test_remotion():
         ], capture_output=True, text=True)
         if p.returncode == 0:
             results["output_probe"] = _json.loads(p.stdout)
-    else:
-        results["output_exists"] = False
 
-    # Cleanup
     for f in [test_src, manifest_path, output_path]:
         try:
             f.unlink(missing_ok=True)
         except Exception:
             pass
 
-    results["verdict"] = "PASS" if r.returncode == 0 and output_path.exists() else "FAIL"
+    results["verdict"] = "PASS" if render_ok else "FAIL"
     return results
 
 
