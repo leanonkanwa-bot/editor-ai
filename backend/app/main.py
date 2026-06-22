@@ -1243,6 +1243,107 @@ async def test_broll():
         return {"error": str(e), "key_set": bool(key)}
 
 
+@app.get("/api/test-remotion")
+async def test_remotion():
+    """Diagnostic: verify Remotion can render a zoom composition.
+
+    Creates a 3s synthetic test video, applies a drift zoom via Remotion,
+    and reports whether the render succeeded plus timing info.
+    """
+    import subprocess as _sp
+    import json as _json
+    import time as _time
+    from app.engine.transcribe import FFMPEG_PATH, FFPROBE_PATH
+
+    remotion_dir = Path(__file__).resolve().parent.parent / "app" / "engine" / "remotion"
+    work = Path("/tmp/remotion_test")
+    work.mkdir(parents=True, exist_ok=True)
+
+    results: dict = {"steps": {}}
+
+    # Step 1: Check Remotion dependencies installed
+    node_modules = remotion_dir / "node_modules"
+    results["remotion_installed"] = node_modules.exists()
+    if not node_modules.exists():
+        results["error"] = "Remotion node_modules not found -- npm install may have failed during build"
+        return results
+
+    # Step 2: Create a 3s synthetic test video
+    test_src = work / "test_input.mp4"
+    t0 = _time.time()
+    r = _sp.run([
+        FFMPEG_PATH, "-y", "-loglevel", "error",
+        "-f", "lavfi", "-i", "color=c=blue:s=1920x1080:d=3:r=30",
+        "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
+        "-t", "3", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac",
+        str(test_src),
+    ], capture_output=True, text=True)
+    results["steps"]["create_test_video"] = {
+        "ok": r.returncode == 0,
+        "time_s": round(_time.time() - t0, 2),
+        "err": r.stderr[-300:] if r.returncode != 0 else "",
+    }
+    if r.returncode != 0:
+        results["error"] = "Failed to create test video"
+        return results
+
+    # Step 3: Write manifest JSON
+    manifest = {
+        "videoSrc": str(test_src),
+        "zoomEntries": [
+            {"start": 0.0, "end": 3.0, "from": 1.0, "to": 1.05, "kind": "drift"},
+        ],
+        "defaultZoom": 1.3,
+        "durationFrames": 90,
+        "fps": 30,
+        "width": 1920,
+        "height": 1080,
+    }
+    manifest_path = work / "manifest.json"
+    manifest_path.write_text(_json.dumps(manifest))
+
+    # Step 4: Run Remotion render
+    output_path = work / "test_output.mp4"
+    render_script = remotion_dir / "render.mjs"
+    t0 = _time.time()
+    r = _sp.run(
+        ["node", str(render_script), str(manifest_path), str(output_path)],
+        capture_output=True, text=True,
+        timeout=120,
+        env={**__import__("os").environ, "DISPLAY": ":99"},
+    )
+    render_time = round(_time.time() - t0, 2)
+    results["steps"]["remotion_render"] = {
+        "ok": r.returncode == 0,
+        "time_s": render_time,
+        "stdout": r.stdout[-500:],
+        "err": r.stderr[-500:] if r.returncode != 0 else "",
+    }
+
+    if output_path.exists():
+        results["output_size_mb"] = round(output_path.stat().st_size / 1024 / 1024, 2)
+        # Probe output
+        p = _sp.run([
+            FFPROBE_PATH,
+            "-v", "error", "-show_entries", "stream=codec_name,width,height,duration",
+            "-of", "json", str(output_path),
+        ], capture_output=True, text=True)
+        if p.returncode == 0:
+            results["output_probe"] = _json.loads(p.stdout)
+    else:
+        results["output_exists"] = False
+
+    # Cleanup
+    for f in [test_src, manifest_path, output_path]:
+        try:
+            f.unlink(missing_ok=True)
+        except Exception:
+            pass
+
+    results["verdict"] = "PASS" if r.returncode == 0 and output_path.exists() else "FAIL"
+    return results
+
+
 editor_dir = Path(__file__).resolve().parents[2] / "editor_frontend"
 if not editor_dir.exists():
     # fallback for local dev where files live in frontend/
