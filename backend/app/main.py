@@ -1273,7 +1273,7 @@ async def test_remotion():
     t0 = _time.time()
     r = _sp.run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
-        "-f", "lavfi", "-i", "color=c=blue:s=1920x1080:d=3:r=30",
+        "-f", "lavfi", "-i", "testsrc2=s=1920x1080:d=3:r=30",
         "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo",
         "-t", "3", "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac",
         str(test_src),
@@ -1291,7 +1291,7 @@ async def test_remotion():
     manifest = {
         "videoSrc": str(test_src),
         "zoomEntries": [
-            {"start": 0.0, "end": 3.0, "from": 1.0, "to": 1.05, "kind": "drift"},
+            {"start": 0.0, "end": 3.0, "from": 1.0, "to": 1.3, "kind": "drift"},
         ],
         "defaultZoom": 1.3,
         "durationFrames": 90,
@@ -1330,6 +1330,31 @@ async def test_remotion():
         ], capture_output=True, text=True)
         if p.returncode == 0:
             results["output_probe"] = _json.loads(p.stdout)
+
+        # Extract frames at key timestamps for visual zoom verification
+        import base64 as _b64
+        frames_dir = work / "frames"
+        frames_dir.mkdir(parents=True, exist_ok=True)
+        frame_times = [0.1, 0.6, 1.2, 1.8, 2.4, 2.9]
+        frames_b64: list[dict] = []
+        for ft in frame_times:
+            fp = frames_dir / f"frame_{ft:.1f}.jpg"
+            _sp.run([
+                FFMPEG_PATH, "-y", "-loglevel", "error",
+                "-ss", f"{ft:.3f}", "-i", str(output_path),
+                "-frames:v", "1", "-q:v", "3", str(fp),
+            ], capture_output=True, text=True)
+            if fp.exists():
+                frames_b64.append({
+                    "t": ft,
+                    "data": _b64.b64encode(fp.read_bytes()).decode("ascii"),
+                })
+                fp.unlink(missing_ok=True)
+        results["frames"] = frames_b64
+        try:
+            frames_dir.rmdir()
+        except Exception:
+            pass
 
     for f in [test_src, manifest_path, output_path]:
         try:
