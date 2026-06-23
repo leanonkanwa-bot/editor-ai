@@ -1366,6 +1366,40 @@ async def test_remotion():
     return results
 
 
+@app.get("/api/test-remotion/view", include_in_schema=False)
+async def test_remotion_view():
+    """Run the Remotion zoom test and return an HTML page with extracted frames."""
+    result = await test_remotion()
+    frames = result.get("frames", [])
+    verdict = result.get("verdict", "UNKNOWN")
+    render_time = result.get("steps", {}).get("remotion_render", {}).get("time_s", "?")
+    probe = result.get("output_probe", {})
+    size_mb = result.get("output_size_mb", "?")
+
+    imgs = ""
+    for f in frames:
+        imgs += (
+            f'<div style="text-align:center">'
+            f'<img src="data:image/jpeg;base64,{f["data"]}" '
+            f'style="width:420px;border:1px solid #333;border-radius:4px">'
+            f'<div style="margin-top:4px;font-size:14px;color:#ccc">t = {f["t"]:.1f}s</div>'
+            f'</div>'
+        )
+
+    html = f"""<!DOCTYPE html>
+<html><head><title>Remotion Zoom Test</title></head>
+<body style="background:#111;color:#fff;font-family:system-ui;padding:24px">
+<h2>Remotion Zoom Test — {verdict}</h2>
+<p>Render: {render_time}s &nbsp;|&nbsp; Output: {size_mb} MB &nbsp;|&nbsp;
+Zoom: 1.0 &rarr; 1.3 drift over 3s (testsrc2 pattern)</p>
+<div style="display:flex;flex-wrap:wrap;gap:16px;margin-top:16px">{imgs}</div>
+<details style="margin-top:24px"><summary>Full result JSON</summary>
+<pre style="background:#222;padding:12px;border-radius:4px;overflow-x:auto;font-size:12px;max-height:400px">{__import__('json').dumps({k:v for k,v in result.items() if k != 'frames'}, indent=2)}</pre>
+</details>
+</body></html>"""
+    return Response(content=html, media_type="text/html")
+
+
 editor_dir = Path(__file__).resolve().parents[2] / "editor_frontend"
 if not editor_dir.exists():
     # fallback for local dev where files live in frontend/
