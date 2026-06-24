@@ -61,6 +61,80 @@ def _find(candidates: list[str]) -> str | None:
     return next((p for p in candidates if p and os.path.exists(p)), None)
 
 
+def _wrap_for_hyperframes(html: str, duration: float, width: int, height: int) -> str:
+    """Inject a data-composition-id wrapper div if not already present.
+
+    The official HyperFrames CLI requires a root composition element with
+    data-composition-id, data-start, data-duration, data-width, data-height.
+    Our existing HTML generators (Claude API + templates) produce HTML without
+    these attributes. This adapter bridges the gap without modifying generators.
+    """
+    if "data-composition-id" in html:
+        return html
+    wrapper_open = (
+        f'<div data-composition-id="root" data-start="0" '
+        f'data-duration="{duration}" data-width="{width}" data-height="{height}">'
+    )
+    import re as _re
+    html = _re.sub(
+        r"(<body[^>]*>)",
+        rf"\1\n{wrapper_open}",
+        html,
+        count=1,
+    )
+    html = html.replace("</body>", "</div>\n</body>", 1)
+    return html
+
+
+def _render_with_hyperframes_cli(
+    html_content: str,
+    output_path: Path,
+    duration: float,
+    width: int,
+    height: int,
+    fps: int,
+    work_dir: Path,
+) -> bool:
+    """Render HTML via the official HyperFrames CLI (deterministic beginFrame)."""
+    project_dir = work_dir / f"hf_project_{output_path.stem}"
+    project_dir.mkdir(parents=True, exist_ok=True)
+
+    wrapped = _wrap_for_hyperframes(html_content, duration, width, height)
+    (project_dir / "index.html").write_text(wrapped, encoding="utf-8")
+
+    env = os.environ.copy()
+    env["DISPLAY"] = env.get("DISPLAY", ":99")
+    timeout = max(120, int(duration * 30))
+
+    try:
+        result = subprocess.run(
+            [
+                "npx", "hyperframes", "render",
+                str(project_dir),
+                "-o", str(output_path),
+                "--fps", str(fps),
+                "--quality", "draft",
+            ],
+            capture_output=True, text=True, timeout=timeout, env=env,
+        )
+    except Exception as e:
+        print(f"[HF-CLI] Error: {e}")
+        return False
+    finally:
+        try:
+            (project_dir / "index.html").unlink(missing_ok=True)
+            project_dir.rmdir()
+        except Exception:
+            pass
+
+    if result.returncode == 0 and output_path.exists() and output_path.stat().st_size > 0:
+        print(f"[HF-CLI] Rendered: {output_path.name} ({output_path.stat().st_size // 1024}KB)")
+        return True
+
+    print(f"[HF-CLI] Failed (rc={result.returncode}): {result.stderr[-300:]}")
+    return False
+
+
 def render_with_hyperframes(html_path: Path, output_path: Path, width: int, height: int, fps: int) -> bool:
     """Render a standalone HTML composition to a transparent MP4 via the HyperFrames CLI."""
     npx = _find(_NPX_BINS) or "npx"
@@ -1531,16 +1605,13 @@ def render_composition_to_video(
     """Render an HTML composition to a chroma-keyed MP4 clip.
 
     Priority order:
-      1. Chromium single-screenshot → FFmpeg video (settled animation state)
-      2. Puppeteer + Xvfb (real browser, real GSAP animations)
-      3. FFmpeg drawtext fallback (no browser required)
+      1. Official HyperFrames CLI (deterministic beginFrame capture)
+      2. Chromium single-screenshot -> FFmpeg video (static fallback)
+      3. Puppeteer + Xvfb (wall-clock fallback)
+      4. FFmpeg drawtext fallback (no browser required)
 
-    The HyperFrames CLI path is intentionally skipped here — `npx hyperframes`
-    needs Node + a display and reliably fails on headless hosts (Railway).
-    All remaining paths render against CHROMA_KEY_HEX so render.py's overlay
-    pass can `colorkey` it out for real per-pixel transparency.
-
-    Returns True when a usable clip was produced at output_path.
+    All paths render against CHROMA_KEY_HEX so render.py's overlay
+    pass can colorkey it out for real per-pixel transparency.
     """
     output_path = Path(output_path)
     if work_dir is None:
@@ -1548,10 +1619,15 @@ def render_composition_to_video(
     work_dir.mkdir(parents=True, exist_ok=True)
 
     keyed_html = _chroma_keyed_html(html_content)
+
+    # ── Primary: official HyperFrames CLI (deterministic beginFrame) ─────
+    if _render_with_hyperframes_cli(keyed_html, output_path, duration, width, height, fps, work_dir):
+        print(f"[HYPERFRAMES] CLI render OK: {output_path.name}")
+        return True
+
+    # ── Fallback 1: Chromium screenshot -> static video ──────────────────
     html_path = work_dir / f"{output_path.stem}_comp.html"
     html_path.write_text(keyed_html, encoding="utf-8")
-
-    # ── Chromium screenshot → static video ───────────────────────────────
     chromium = _find(_CHROMIUM_CANDIDATES)
     if chromium:
         png_path = work_dir / f"{output_path.stem}_comp.png"
@@ -1587,7 +1663,7 @@ def render_composition_to_video(
                 )
                 png_path.unlink(missing_ok=True)
                 html_path.unlink(missing_ok=True)
-                print(f"[HYPERFRAMES] Chrome screenshot render OK: {output_path.name}")
+                print(f"[HYPERFRAMES] Chrome screenshot fallback OK: {output_path.name}")
                 return True
             print(f"[HYPERFRAMES] Chrome screenshot failed (rc={r.returncode}): {r.stderr[-200:]}")
         except Exception as e:
@@ -1597,7 +1673,7 @@ def render_composition_to_video(
     else:
         print("[HYPERFRAMES] No chromium binary found")
 
-    # ── Puppeteer + Xvfb (real browser, real GSAP animations) ────────────
+    # ── Fallback 2: Puppeteer + Xvfb (wall-clock capture) ───────────────
     try:
         subprocess.Popen(
             ["Xvfb", ":99", "-screen", "0", "1920x1080x24"],
@@ -1613,7 +1689,7 @@ def render_composition_to_video(
         html_path.unlink(missing_ok=True)
         return True
 
-    # ── FFmpeg drawtext fallback — no browser required ───────────────────
+    # ── Fallback 3: FFmpeg drawtext — no browser required ────────────────
     html_path.unlink(missing_ok=True)
     return _ffmpeg_text_fallback(html_content, output_path, duration, width, height, fps)
 
@@ -1627,23 +1703,29 @@ def render_slide_to_video(
     fps: int = 30,
     work_dir: Path | None = None,
 ) -> bool:
-    """Render a full-screen slide HTML to MP4 via hf_render.mjs frame-by-frame.
+    """Render a full-screen slide HTML to MP4.
 
-    Uses the same Puppeteer/hf_render.mjs pipeline as overlay motion graphics
-    so animated GSAP timelines play correctly. No chroma key — slides replace
-    speaker footage entirely with a black background.
+    Priority:
+      1. Official HyperFrames CLI (deterministic beginFrame capture)
+      2. Puppeteer hf_render.mjs (wall-clock fallback)
+      3. Chrome static screenshot (last resort, no animation)
     """
     output_path = Path(output_path)
     if work_dir is None:
         work_dir = output_path.parent
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    # ── Primary: hf_render.mjs frame-by-frame (validated pipeline) ───────
-    if _render_with_puppeteer(html_content, output_path, duration, width, height, fps, work_dir):
-        print(f"[SLIDE] hf_render.mjs render OK: {output_path.name}")
+    # ── Primary: official HyperFrames CLI (deterministic beginFrame) ─────
+    if _render_with_hyperframes_cli(html_content, output_path, duration, width, height, fps, work_dir):
+        print(f"[SLIDE] HyperFrames CLI render OK: {output_path.name}")
         return True
 
-    # ── Fallback: Chrome static screenshot ───────────────────────────────
+    # ── Fallback 1: hf_render.mjs Puppeteer (wall-clock capture) ────────
+    if _render_with_puppeteer(html_content, output_path, duration, width, height, fps, work_dir):
+        print(f"[SLIDE] hf_render.mjs fallback OK: {output_path.name}")
+        return True
+
+    # ── Fallback 2: Chrome static screenshot ─────────────────────────────
     _WIN_CHROME = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
     _chromium_candidates = _CHROMIUM_CANDIDATES + [_WIN_CHROME]
     chromium = _find(_chromium_candidates)
