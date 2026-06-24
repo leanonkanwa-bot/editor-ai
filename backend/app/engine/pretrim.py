@@ -42,13 +42,22 @@ from app.engine.captions import WordTiming
 @dataclass
 class TimingMap:
     """Maps source timeline to trimmed-output timeline."""
-    kept_intervals: list[tuple[float, float]]
+    source_intervals: list[tuple[float, float]]
+    compressed_intervals: list[tuple[float, float]] | None
     output_duration: float
     remapped_words: list[WordTiming]
 
     def source_to_output(self, t: float) -> float:
-        """Convert a source timestamp to its position in the trimmed output."""
-        return _remap_time(t, self.kept_intervals)
+        """Convert a source timestamp to its position in the trimmed output.
+
+        Two-stage remap:
+          1. source → concat timeline (via source_intervals)
+          2. concat → final timeline (via compressed_intervals, if pauses compressed)
+        """
+        concat_t = _remap_time(t, self.source_intervals)
+        if self.compressed_intervals:
+            return _remap_time(concat_t, self.compressed_intervals)
+        return concat_t
 
 
 def pretrim(
@@ -83,7 +92,7 @@ def pretrim(
 
     # ── Cut each segment with word-boundary snapping ─────────────────
     parts: list[Path] = []
-    kept_intervals: list[tuple[float, float]] = []
+    source_intervals: list[tuple[float, float]] = []
     remapped_words: list[WordTiming] = []
     cum = 0.0
 
@@ -137,7 +146,7 @@ def pretrim(
                 end=max(0.0, seg_offset + (we - s_padded)),
             ))
 
-        kept_intervals.append((cum, cum + seg_dur))
+        source_intervals.append((s_padded, e_padded))
         parts.append(part)
         cum += seg_dur
 
@@ -172,6 +181,7 @@ def pretrim(
     sil_min = 0.50 if short_form else 0.80
     sil_max = 0.30 if short_form else 0.50
     output_path = concat_path
+    _compressed: list[tuple[float, float]] | None = None
 
     if remapped_words:
         long_pauses = _find_long_pauses(remapped_words, min_gap_s=sil_min)
@@ -191,7 +201,7 @@ def pretrim(
                     )
                     for w in remapped_words
                 ]
-                kept_intervals = compressed_intervals
+                _compressed = compressed_intervals
 
     output_duration = _probe_duration(output_path)
     print(f"[PRETRIM] Output: {output_path.name} ({output_duration:.1f}s, {len(remapped_words)} words)")
@@ -216,7 +226,8 @@ def pretrim(
     concat_path.unlink(missing_ok=True)
 
     timing_map = TimingMap(
-        kept_intervals=kept_intervals,
+        source_intervals=source_intervals,
+        compressed_intervals=_compressed,
         output_duration=_probe_duration(final_path),
         remapped_words=remapped_words,
     )
