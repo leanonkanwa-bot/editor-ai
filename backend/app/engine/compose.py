@@ -400,6 +400,10 @@ def compose(
              data-track-index="1"></video>
     </div>
 
+    <audio id="bg-audio" src="input-video.mp4"
+           data-start="0" data-duration="{duration:.3f}"
+           data-track-index="4" data-volume="1"></audio>
+
 {chr(10).join(f"    {host}" for host in card_hosts)}
 
     <script src="vendor/gsap.min.js"></script>
