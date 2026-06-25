@@ -1674,17 +1674,7 @@ def render_composition_to_video(
         print("[HYPERFRAMES] No chromium binary found")
 
     # ── Fallback 2: Puppeteer + Xvfb (wall-clock capture) ───────────────
-    try:
-        subprocess.Popen(
-            ["Xvfb", ":99", "-screen", "0", "1920x1080x24"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        import time as _time
-        _time.sleep(1)
-    except Exception:
-        pass
-
+    # Xvfb :99 is already running from Dockerfile CMD — don't spawn another
     if _render_with_puppeteer(keyed_html, output_path, duration, width, height, fps, work_dir):
         html_path.unlink(missing_ok=True)
         return True

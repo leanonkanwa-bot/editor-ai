@@ -52,6 +52,21 @@ AUDIO_HANDLE_S = 0.08   # 80ms audio handle kept before/after each cut edge
 
 
 
+def _kill_orphan_chrome() -> None:
+    """Kill any lingering Chrome/Chromium processes to prevent memory accumulation."""
+    import os as _os
+    try:
+        result = subprocess.run(
+            ["pkill", "-9", "-f", "chrome.*headless"],
+            capture_output=True, timeout=5,
+        )
+        killed = result.returncode == 0
+        if killed:
+            print("[CLEANUP] Killed orphan Chrome processes")
+    except Exception:
+        pass
+
+
 def _run(cmd: list[str]) -> None:
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode == 0:
@@ -1590,12 +1605,16 @@ def _render_hyperframes(
     # Stage 4: Render via HyperFrames CLI
     print("[HF] Stage 4: Rendering via HyperFrames CLI...")
     import os as _os
+    import signal as _signal
     env = _os.environ.copy()
     env["DISPLAY"] = env.get("DISPLAY", ":99")
     fps = storyboard["composition"]["fps"]
     public_dir = project_dir / "public"
+    _timeout = max(600, int(timing_map.output_duration * 45))
 
-    proc = subprocess.run(
+    # Launch in its own process group so we can kill the entire tree
+    # (npx + Chrome children) on timeout, preventing orphaned processes.
+    proc = subprocess.Popen(
         [
             "npx", "hyperframes", "render",
             str(public_dir),
@@ -1606,12 +1625,25 @@ def _render_hyperframes(
             "--protocol-timeout", "600000",
             "--low-memory-mode",
         ],
-        capture_output=True, text=True,
-        timeout=max(600, int(timing_map.output_duration * 45)),
-        env=env,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, env=env,
+        start_new_session=True,
     )
+    try:
+        stdout, stderr = proc.communicate(timeout=_timeout)
+    except subprocess.TimeoutExpired:
+        print("[HF] Render timed out — killing process group")
+        try:
+            _os.killpg(_os.getpgid(proc.pid), _signal.SIGKILL)
+        except Exception:
+            proc.kill()
+        proc.wait(timeout=10)
+        _kill_orphan_chrome()
+        raise RuntimeError("HyperFrames CLI render timed out")
+
     if proc.returncode != 0 or not output_path.exists():
-        print(f"[HF] Render failed (rc={proc.returncode}): {proc.stderr[-500:]}")
+        print(f"[HF] Render failed (rc={proc.returncode}): {stderr[-500:]}")
+        _kill_orphan_chrome()
         raise RuntimeError("HyperFrames CLI render failed")
 
     print(f"[HF] Done: {output_path}")
@@ -1664,6 +1696,7 @@ def render(
             import traceback as _tb
             print(f"[RENDER] HyperFrames pipeline failed: {_hf_err}")
             print(f"[RENDER] Traceback:\n{_tb.format_exc()}")
+            _kill_orphan_chrome()
             print("[RENDER] Falling back to FFmpeg pipeline")
 
     # ── FFmpeg pipeline (default / fallback) ──────────────────────────
