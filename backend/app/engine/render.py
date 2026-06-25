@@ -1601,10 +1601,13 @@ def _render_hyperframes(
             str(public_dir),
             "-o", str(output_path),
             "--fps", str(fps),
-            "--quality", "standard",
+            "--quality", "draft",
+            "--workers", "1",
+            "--protocol-timeout", "600000",
+            "--low-memory-mode",
         ],
         capture_output=True, text=True,
-        timeout=max(300, int(timing_map.output_duration * 30)),
+        timeout=max(600, int(timing_map.output_duration * 45)),
         env=env,
     )
     if proc.returncode != 0 or not output_path.exists():
