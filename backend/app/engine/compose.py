@@ -206,8 +206,15 @@ def _build_timeline_js(cards: list[dict], zoom_entries: list[dict] | None = None
         dur = end - start
         sel = f'.card-host[data-card-id="{card_id}"]'
 
-        fade_in_dur = min(0.4, dur * 0.15)
-        fade_out_dur = min(0.35, dur * 0.12)
+        is_caption = card.get("type") == "caption"
+
+        if is_caption:
+            # Captions: near-instant appearance (no cinematic fade)
+            fade_in_dur = 0.05
+            fade_out_dur = 0.05
+        else:
+            fade_in_dur = min(0.4, dur * 0.15)
+            fade_out_dur = min(0.35, dur * 0.12)
 
         # Enter: set visible + fade in
         lines.append(f'  tl.set(\'{sel}\', {{ visibility: "visible" }}, {start:.4f});')
@@ -218,18 +225,13 @@ def _build_timeline_js(cards: list[dict], zoom_entries: list[dict] | None = None
             f'{start:.4f});'
         )
 
-        # Caption cards: staggered word fade-in
-        if card.get("type") == "caption":
+        # Caption cards: all words appear together (no stagger delay)
+        if is_caption:
             word_sel = f'.card[data-card-id="{card_id}"] .cap-word'
             word_count = len(card.get("words", []))
             if word_count > 0:
-                total_stagger = min(dur * 0.6, word_count * 0.08)
-                per_word = total_stagger / max(1, word_count)
                 lines.append(
-                    f'  tl.from(\'{word_sel}\', '
-                    f'{{ opacity: 0, y: 6, duration: 0.15, ease: "power2.out", '
-                    f'stagger: {per_word:.4f} }}, '
-                    f'{start + fade_in_dur:.4f});'
+                    f'  tl.set(\'{word_sel}\', {{ opacity: 1, y: 0 }}, {start:.4f});'
                 )
 
         # Graphic cards: scale-pop entrance on title
