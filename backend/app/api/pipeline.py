@@ -91,17 +91,26 @@ def run_job(
         # ── Step 2: Silence removal (Feature 2) ───────────────────────────
         store.update(job_id, status="transcribing", progress=20,
                      message="Removing silences and filler words…")
-        try:
-            remover = RhythmAwareSilenceRemover()
-            word_timestamps = [
-                w for seg in transcript.get("segments", [])
-                for w in seg.get("words", [])
-            ]
-            drops = remover.process(word_timestamps, transcript.get("segments", []))
-            transcript_clean = apply_drops_to_transcript(transcript, drops)
-        except Exception:
+        from app.core.config import settings as _cfg
+        if _cfg.disable_cuts:
+            # DISABLE_CUTS: skip timestamp adjustment — the video plays
+            # uncut, so drop-shifted timestamps would cause progressive
+            # drift (captions ahead of speech, gap growing toward the end).
             transcript_clean = transcript
             drops = []
+            print("[PIPELINE] DISABLE_CUTS=true — skipping silence removal timestamp shift")
+        else:
+            try:
+                remover = RhythmAwareSilenceRemover()
+                word_timestamps = [
+                    w for seg in transcript.get("segments", [])
+                    for w in seg.get("words", [])
+                ]
+                drops = remover.process(word_timestamps, transcript.get("segments", []))
+                transcript_clean = apply_drops_to_transcript(transcript, drops)
+            except Exception:
+                transcript_clean = transcript
+                drops = []
 
         # ── Step 3: Energy detection (Feature 4) ──────────────────────────
         store.update(job_id, status="transcribing", progress=25,
