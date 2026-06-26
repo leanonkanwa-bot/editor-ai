@@ -318,18 +318,13 @@ def compose(
         else:
             print("[COMPOSE] WARNING: gsap.min.js not found")
 
-    # Re-encode video with dense keyframes for HyperFrames seekability
+    # Copy the pre-trimmed video directly — pretrim.py already re-encoded
+    # with dense keyframes (g=30, keyint_min=30). A second re-encode would
+    # introduce PTS rounding errors that compound into progressive drift.
     video_dst = public_dir / "input-video.mp4"
-    import subprocess
-    subprocess.run([
-        FFMPEG_PATH, "-y", "-loglevel", "error",
-        "-i", str(trimmed_video),
-        "-c:v", "libx264", "-crf", "18",
-        "-g", str(fps), "-keyint_min", str(fps),
-        "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-        "-c:a", "aac", "-b:a", "192k",
-        str(video_dst),
-    ], capture_output=True, text=True, timeout=300)
+    shutil.copy2(str(trimmed_video), str(video_dst))
+    print(f"[COMPOSE] Video copied: {video_dst} ({video_dst.stat().st_size // 1024}KB)")
+    print(f"[COMPOSE] Storyboard duration: {duration:.3f}s")
 
     # Separate cards by type for track assignment
     all_cards = storyboard.get("cards", [])
