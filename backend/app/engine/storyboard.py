@@ -57,19 +57,46 @@ def _segment_captions(
             seg_start_times.add(round(float(seg_words[0].get("start", 0)), 3))
 
     _MIN_WORD_DUR = 0.1  # clamp zero-duration words to this minimum
+
+    # Build all_words from remapped_words (correct timing) with seg_start
+    # tags from transcript_segments (sentence boundaries). Both lists have
+    # the same words in the same order (pretrim preserves order), just
+    # with different grouping structure. Walk them in lockstep.
     all_words: list[dict] = []
     _skipped_empty = 0
     _clamped_zero_dur = []
+
+    # Flatten transcript_segments into a parallel list of (text, is_seg_start)
+    seg_tags: list[tuple[str, bool]] = []
+    for seg in transcript_segments:
+        first_in_seg = True
+        for sw in seg.get("words", []):
+            text = sw.get("text", "").strip()
+            if not text:
+                continue
+            seg_tags.append((text, first_in_seg))
+            first_in_seg = False
+
+    # Walk remapped_words and seg_tags in lockstep by position
+    tag_idx = 0
     for w in remapped_words:
         text = w.text.strip()
         if not text:
             _skipped_empty += 1
             continue
+
+        # Get seg_start from the parallel tag list
+        is_seg_start = False
+        if tag_idx < len(seg_tags):
+            is_seg_start = seg_tags[tag_idx][1]
+            tag_idx += 1
+
         w_start = w.start
         w_end = w.end
         if w_end <= w_start:
             w_end = w_start + _MIN_WORD_DUR
             _clamped_zero_dur.append(f"\"{text}\" at {w_start:.2f}s")
+
         text_lower = text.lower().strip(".,!?;:'\"")
         all_words.append({
             "text": text,
@@ -77,52 +104,24 @@ def _segment_captions(
             "end": round(w_end, 4),
             "emphasis": text_lower in emphasis_set,
             "category": word_categories.get(text_lower, ""),
+            "seg_start": is_seg_start,
         })
 
-    # Log what was filtered/clamped
     print(f"[CAPTION AUDIT] remapped_words: {len(remapped_words)} total, "
           f"{len(all_words)} kept, {_skipped_empty} empty, "
           f"{len(_clamped_zero_dur)} zero-dur clamped to {_MIN_WORD_DUR}s")
     if _clamped_zero_dur:
         print(f"[CAPTION AUDIT] Clamped zero-dur words: {_clamped_zero_dur[:10]}")
-
-    # Also count source transcript words for upstream comparison
-    _src_word_count = sum(
-        1 for seg in transcript_segments
-        for w in seg.get("words", [])
-        if w.get("text", "").strip()
-    )
-    if _src_word_count != len(remapped_words):
-        print(f"[CAPTION AUDIT] WARNING: source transcript has {_src_word_count} words "
-              f"but remapped_words has {len(remapped_words)} — "
-              f"{_src_word_count - len(remapped_words)} lost upstream in pretrim")
-
-    # Match remapped words to segment boundaries via the source word list.
-    # pretrim.py builds remapped_words in the SAME ORDER as the source
-    # transcript words, so we can match by index. Apply the SAME filter
-    # as all_words: skip empty text only (zero-duration words are now
-    # KEPT with clamped duration, so they must be counted here too).
-    seg_boundary_indices: set[int] = set()
-    word_idx = 0
-    for seg in transcript_segments:
-        seg_words = seg.get("words", [])
-        first_valid_in_seg = True
-        for sw in seg_words:
-            text = sw.get("text", "").strip()
-            if not text:
-                continue
-            if first_valid_in_seg:
-                seg_boundary_indices.add(word_idx)
-                first_valid_in_seg = False
-            word_idx += 1
+    if tag_idx != len(seg_tags):
+        print(f"[CAPTION AUDIT] WARNING: seg_tags has {len(seg_tags)} entries "
+              f"but only {tag_idx} consumed (mismatch with remapped_words)")
 
     # Step 1: group by sentence boundary OR word count
     raw_groups: list[list[dict]] = []
     current: list[dict] = []
-    for idx, w in enumerate(all_words):
+    for w in all_words:
         if current:
-            is_seg_boundary = idx in seg_boundary_indices
-            if is_seg_boundary or len(current) >= _MAX_WORDS:
+            if w.get("seg_start") or len(current) >= _MAX_WORDS:
                 raw_groups.append(current)
                 current = []
         current.append(w)
@@ -163,6 +162,23 @@ def _segment_captions(
             "zone": "lower-third",
             "words": group,
         })
+
+    # ── BOUNDARY INVARIANT — every seg_start word must begin a card ────
+    _boundary_violations = []
+    for c in cards:
+        for wi, w in enumerate(c["words"]):
+            if w.get("seg_start") and wi > 0:
+                prev = c["words"][wi - 1]["text"]
+                _boundary_violations.append(
+                    f"Card {c['id']}: \"{w['text']}\" is seg_start but at "
+                    f"position {wi} (after \"{prev}\"), not at card start"
+                )
+    if _boundary_violations:
+        print(f"[CAPTION AUDIT] CRITICAL — {len(_boundary_violations)} boundary violations:")
+        for v in _boundary_violations[:10]:
+            print(f"  {v}")
+    else:
+        print(f"[CAPTION AUDIT] BOUNDARY CHECK: all segment-start words begin their cards")
 
     # ── COVERAGE AUDIT — log every discrepancy ──────────────────────────
     input_texts = [w["text"] for w in all_words]

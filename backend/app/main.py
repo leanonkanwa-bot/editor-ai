@@ -1281,6 +1281,8 @@ async def caption_audit():
         "lost_count": len(lost_in_pretrim),
         "zero_duration_words": zero_dur,
         "zero_dur_count": len(zero_dur),
+        "source_words": src,
+        "remapped_words": remapped,
     }
 
 
