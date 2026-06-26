@@ -59,9 +59,14 @@ def _build_card_host(card: dict, layout: str, track_index: int) -> str:
     start = float(card.get("startSec", 0))
     duration = float(card.get("endSec", start + 3)) - start
     zone = card.get("zone", "lower-third")
-    bounds = _zone_bounds(zone, layout)
 
     is_caption = card.get("type") == "caption"
+
+    # Graphic cards must NEVER use lower-third (reserved for captions)
+    if not is_caption and zone == "lower-third":
+        zone = "video-overlay"
+
+    bounds = _zone_bounds(zone, layout)
 
     if is_caption:
         inner = _build_caption_card_html(card)
@@ -80,49 +85,116 @@ def _build_card_host(card: dict, layout: str, track_index: int) -> str:
     )
 
 
+_STYLE_CSS = {
+    "minimal": {
+        "bg": "rgba(0,0,0,0.85)", "text": "#FFFFFF", "accent": "var(--accent-0)",
+        "font": '"Inter", ui-sans-serif, sans-serif', "title_size": "72px",
+        "border": "none", "radius": "0",
+    },
+    "spotlight": {
+        "bg": "linear-gradient(135deg, rgba(20,0,40,0.92), rgba(40,10,60,0.88))",
+        "text": "#FFFFFF", "accent": "var(--accent-0)",
+        "font": '"Inter", ui-sans-serif, sans-serif', "title_size": "64px",
+        "border": "1px solid rgba(255,255,255,0.1)", "radius": "20px",
+    },
+    "editorial": {
+        "bg": "rgba(255,245,235,0.92)", "text": "#1e1e1e", "accent": "#e05050",
+        "font": '"Georgia", "Playfair Display", serif', "title_size": "56px",
+        "border": "none", "radius": "16px",
+    },
+    "geom": {
+        "bg": "rgba(0,0,0,0.9)", "text": "#FFFFFF", "accent": "#c8ff00",
+        "font": '"Inter", ui-sans-serif, sans-serif', "title_size": "68px",
+        "border": "3px solid #c8ff00", "radius": "0",
+    },
+    "swiss": {
+        "bg": "rgba(255,255,255,0.93)", "text": "#111111", "accent": "#e03131",
+        "font": '"Inter", "Helvetica Neue", sans-serif', "title_size": "60px",
+        "border": "none", "radius": "8px",
+    },
+    "terminal": {
+        "bg": "rgba(10,10,10,0.95)", "text": "#4ade80", "accent": "#4ade80",
+        "font": '"Courier New", "JetBrains Mono", monospace', "title_size": "48px",
+        "border": "1px solid #4ade80", "radius": "4px",
+    },
+    "academic": {
+        "bg": "rgba(255,249,227,0.9)", "text": "#1e1e1e", "accent": "#1971c2",
+        "font": '"Georgia", serif', "title_size": "52px",
+        "border": "2px solid rgba(25,113,194,0.3)", "radius": "12px",
+    },
+    "whiteboard": {
+        "bg": "rgba(255,255,255,0.88)", "text": "#333333", "accent": "#e8590c",
+        "font": '"Caveat", "Comic Sans MS", cursive', "title_size": "56px",
+        "border": "2px dashed #999", "radius": "16px",
+    },
+    "audit": {
+        "bg": "rgba(246,239,225,0.92)", "text": "#2d2d2d", "accent": "#bf5700",
+        "font": '"Georgia", serif', "title_size": "48px",
+        "border": "1px solid #c4b8a4", "radius": "8px",
+    },
+    "xhs": {
+        "bg": "rgba(255,245,240,0.9)", "text": "#1e1e1e", "accent": "#ff2d55",
+        "font": '"Inter", ui-sans-serif, sans-serif', "title_size": "52px",
+        "border": "none", "radius": "20px",
+    },
+}
+
+
 def _build_graphic_card_html(card: dict) -> str:
-    """Build inner HTML for a graphic overlay card."""
+    """Build inner HTML for a graphic overlay card with style-aware CSS."""
     card_id = card["id"]
     hints = card.get("contentHints", {})
     kicker = hints.get("kicker", "")
     title = hints.get("title", "")
     detail = hints.get("detail", "")
     number = hints.get("number", "")
-    style = hints.get("style", "key_phrase")
+    vis_style = card.get("visualStyle", "minimal")
+    s = _STYLE_CSS.get(vis_style, _STYLE_CSS["minimal"])
+
+    display_text = number if number else title
+    title_size = "96px" if number else s["title_size"]
 
     parts = [f'<div class="card" data-card-id="{card_id}">']
     parts.append(f'<style>')
     parts.append(f'.card[data-card-id="{card_id}"] .root {{')
     parts.append(f'  width: 100%; height: 100%; display: flex; flex-direction: column;')
-    parts.append(f'  justify-content: center; align-items: center; padding: 40px;')
-    parts.append(f'  font-family: "Inter", "Montserrat", ui-sans-serif, system-ui, sans-serif;')
-    parts.append(f'  color: var(--text); gap: 12px;')
+    parts.append(f'  justify-content: center; align-items: center;')
+    parts.append(f'  padding: 48px; gap: 16px;')
+    parts.append(f'}}')
+    parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
+    parts.append(f'  background: {s["bg"]}; border-radius: {s["radius"]};')
+    parts.append(f'  border: {s["border"]}; padding: 40px 48px;')
+    parts.append(f'  display: flex; flex-direction: column; align-items: center;')
+    parts.append(f'  gap: 12px; max-width: 85%;')
+    parts.append(f'  box-shadow: 0 8px 32px rgba(0,0,0,0.3);')
+    parts.append(f'  backdrop-filter: blur(8px);')
     parts.append(f'}}')
     if kicker:
         parts.append(f'.card[data-card-id="{card_id}"] .kicker {{')
-        parts.append(f'  font-size: 24px; font-weight: 700; letter-spacing: 0.15em;')
-        parts.append(f'  text-transform: uppercase; color: var(--accent-0); opacity: 0.9;')
+        parts.append(f'  font-family: {s["font"]}; font-size: 22px; font-weight: 700;')
+        parts.append(f'  letter-spacing: 0.15em; text-transform: uppercase;')
+        parts.append(f'  color: {s["accent"]}; opacity: 0.9;')
         parts.append(f'}}')
     parts.append(f'.card[data-card-id="{card_id}"] .title {{')
-    if number:
-        parts.append(f'  font-size: 96px; font-weight: 900; line-height: 1.1;')
-    else:
-        parts.append(f'  font-size: 64px; font-weight: 800; line-height: 1.15;')
-    parts.append(f'  text-align: center; max-width: 90%;')
+    parts.append(f'  font-family: {s["font"]}; font-size: {title_size};')
+    parts.append(f'  font-weight: 800; line-height: 1.15; text-align: center;')
+    parts.append(f'  color: {s["text"]}; max-width: 100%;')
     parts.append(f'}}')
     if detail:
         parts.append(f'.card[data-card-id="{card_id}"] .detail {{')
-        parts.append(f'  font-size: 28px; font-weight: 400; opacity: 0.7; text-align: center;')
-        parts.append(f'  max-width: 80%;')
+        parts.append(f'  font-family: {s["font"]}; font-size: 26px;')
+        parts.append(f'  font-weight: 400; opacity: 0.7; text-align: center;')
+        parts.append(f'  color: {s["text"]}; max-width: 90%;')
         parts.append(f'}}')
     parts.append(f'</style>')
     parts.append(f'<div class="root">')
+    parts.append(f'  <div class="card-panel">')
     if kicker:
-        parts.append(f'  <div class="kicker" id="{card_id}-kicker">{_esc(kicker)}</div>')
-    display_text = number if number else title
-    parts.append(f'  <div class="title" id="{card_id}-title">{_esc(display_text)}</div>')
+        parts.append(f'    <div class="kicker" id="{card_id}-kicker">{_esc(kicker)}</div>')
+    parts.append(f'    <div class="title" id="{card_id}-title">{_esc(display_text)}</div>')
     if detail:
-        parts.append(f'  <div class="detail" id="{card_id}-detail">{_esc(detail)}</div>')
+        parts.append(f'    <div class="detail" id="{card_id}-detail">{_esc(detail)}</div>')
+    parts.append(f'  </div>')
     parts.append(f'</div>')
     parts.append(f'</div>')
     return "\n".join(parts)

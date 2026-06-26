@@ -297,7 +297,8 @@ OUTPUT: a JSON array of card objects. Each card:
   "startSec": <seconds in the edited video>,
   "endSec": <seconds>,
   "accentIndex": <0-4>,
-  "zone": "fullscreen"|"lower-third"|"side-panel"|"video-overlay",
+  "zone": "fullscreen"|"side-panel"|"video-overlay",
+  "visualStyle": "<one of the 10 styles below>",
   "contentHints": {{
     "kicker": "<optional short label>",
     "title": "<main text>",
@@ -307,17 +308,34 @@ OUTPUT: a JSON array of card objects. Each card:
   }}
 }}
 
+VISUAL STYLES — pick the best fit for each card's content:
+  minimal    — pure black/white, huge bold type, maximum impact
+  spotlight  — dark gradient background with accent glow, cinematic feel
+  editorial  — warm coral block + cream, serif-style elegance
+  geom       — bold geometric shapes, chartreuse + hot pink on black
+  swiss      — clean white canvas, red accent, precise grid alignment
+  terminal   — monospace font, ASCII border, green-on-black hacker style
+  academic   — blue grid on warm paper, scholarly feel
+  whiteboard — hand-drawn Caveat font, sketched borders, casual
+  audit      — manila paper, justified serif, formal report style
+  xhs        — cream + hot pink, social chips, hashtag-friendly
+
+ZONES — where the card sits on screen:
+  fullscreen    — covers whole canvas (hero moments, big statements)
+  side-panel    — left or right portion (data, comparisons)
+  video-overlay — full canvas but transparent (glass effect over video)
+  NEVER use "lower-third" — that zone is reserved for captions only.
+
 RULES:
 - Target {target_cards} cards for a {trimmed_duration:.0f}s video
 - Card startSec/endSec must be within [0, {trimmed_duration:.1f}]
 - Cards should NOT overlap each other in time
 - Each card should last 3-8 seconds
-- Vary zones: use lower-third for quick annotations, fullscreen for
-  hero moments, side-panel for data, video-overlay for emotional peaks
-- Vary accentIndex (0-4) across cards for visual rhythm
-- Content must come from what the speaker actually says (see transcript lines below)
-- For stat/number content: extract the exact number from the transcript
-- For key-phrase/quote content: use verbatim short phrases (2-5 words)
+- Match visualStyle to content: spotlight for emotional peaks, minimal
+  for key phrases, terminal for technical data, swiss for clean stats,
+  editorial for quotes. Vary styles across cards for visual rhythm.
+- Vary accentIndex (0-4) across cards
+- Content must come from what the speaker actually says
 - Place cards at NARRATIVELY IMPORTANT moments — not evenly spaced
 
 BRAND: accent color {brand_color}, content type: {content_type}, style: {editing_style}
