@@ -284,6 +284,8 @@ async def submit_edit(
     content_type_hint: str = Form(""),
     # Template Memory (Feature 1)
     template_id: str = Form(""),
+    # Style pack
+    style_pack: str = Form("lean_glass"),
     # Coach profile (Feature 3)
     profile_id: str = Form(""),
     _: None = Depends(_check_auth),
@@ -338,6 +340,7 @@ async def submit_edit(
         platform=platform,
         content_type_hint=content_type_hint,
         template_id=template_id,
+        style_pack=style_pack,
         coach_profile=coach_profile,
     )
     store.update(job.id, source_path=str(dest), params=run_params)

@@ -884,6 +884,9 @@ async function chunkedUpload(file) {
   if (selectedEditingStyle === "priestley" || selectedEditingStyle === "momentum") {
     fd.set("caption_style", selectedEditingStyle);
   }
+  // Style pack
+  const _spVal = document.getElementById("stylePackValue");
+  if (_spVal) fd.set("style_pack", _spVal.value);
 
   const editRes = await apiFetch("/api/edit", { method: "POST", body: fd });
   if (editRes.status === 401) { loginCard?.classList.remove("hidden"); appCard?.classList.add("hidden"); statusCard?.classList.add("hidden"); submitBtn.disabled = false; submitBtn.querySelector(".btn-label").textContent = "Éditer ma vidéo"; submitBtn.classList.remove("loading"); return; }
@@ -934,6 +937,9 @@ function directUpload(file) {
   if (selectedEditingStyle === "priestley" || selectedEditingStyle === "momentum") {
     _xfd.set("caption_style", selectedEditingStyle);
   }
+  // Style pack
+  const _spEl = document.getElementById("stylePackValue");
+  if (_spEl) _xfd.set("style_pack", _spEl.value);
   xhr.send(_xfd);
 }
 

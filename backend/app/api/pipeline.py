@@ -71,6 +71,8 @@ def run_job(
     content_type_hint: str = "",
     # Template Memory (Feature 1)
     template_id: str = "",
+    # Style pack
+    style_pack: str = "lean_glass",
     # Coach Profile IA (Feature 3)
     coach_profile: dict | None = None,
     # Absorbed from stored params (re-detected internally — ignored here)
@@ -352,6 +354,7 @@ def run_job(
                 brand_color=brand_color,
                 aesthetic=aesthetic,
                 editing_style=editing_style,
+                style_pack=style_pack,
                 content_type=detected_content_type,
             ),
         )
@@ -466,6 +469,7 @@ def run_render_phase(job_id: str, src: Path) -> None:
             brand_color=params.get("brand_color"),
             aesthetic=params.get("aesthetic", "dark-pro"),
             editing_style=params.get("editing_style", "viral"),
+            style_pack=params.get("style_pack", "lean_glass"),
             subject_position=subject_pos,
             graphic_specs=graphic_specs,
             content_type=content_type,

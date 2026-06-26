@@ -1535,6 +1535,7 @@ def _render_hyperframes(
     brand_color: str = "#FF7751",
     content_type: str = "coaching",
     editing_style: str = "viral",
+    style_pack: str = "lean_glass",
 ) -> dict[str, Any]:
     """Full HyperFrames pipeline: pre-trim -> storyboard -> compose -> render."""
     from app.engine.pretrim import pretrim
@@ -1619,6 +1620,7 @@ def _render_hyperframes(
         trimmed_video=trimmed,
         work_dir=work_dir,
         zoom_entries=remapped_zoom,
+        style_pack=style_pack,
     )
 
     # Stage 4: Render via HyperFrames CLI
@@ -1707,6 +1709,7 @@ def render(
     graphic_specs: list | None = None,
     content_type: str = "coaching",
     editing_style: str = "viral",
+    style_pack: str = "lean_glass",
 ) -> dict[str, Any]:
     work_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1718,6 +1721,7 @@ def render(
                 brand_color=brand_color or "#FF7751",
                 content_type=content_type,
                 editing_style=editing_style,
+                style_pack=style_pack,
             )
         except Exception as _hf_err:
             import traceback as _tb

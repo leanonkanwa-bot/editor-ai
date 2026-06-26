@@ -415,6 +415,7 @@ def compose(
     trimmed_video: Path,
     work_dir: Path,
     zoom_entries: list[dict] | None = None,
+    style_pack: str = "lean_glass",
 ) -> Path:
     """Assemble a HyperFrames project directory from a storyboard.
 

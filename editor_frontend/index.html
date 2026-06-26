@@ -641,12 +641,25 @@
         .btn-upgrade { display: none; }
       }
 
-      /* ── BRIEF / ADVANCED TOGGLE ─────────────────────────────── */
-      .brief-toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: .55rem 0; font-size: .875rem; font-weight: 500; color: var(--text-secondary); border-top: 1px solid var(--border); margin-top: .75rem; transition: color .15s; user-select: none; }
-      .brief-toggle:hover { color: var(--text); }
-      .brief-toggle .arrow { transition: transform .2s; }
-      .brief-body { display: none; padding-top: .75rem; }
-      .brief-body.open { display: block; }
+      /* ── STYLE PACK SELECTOR ──────────────────────────────────── */
+      .style-pack-selector { display: flex; flex-direction: column; gap: .4rem; }
+      .style-pack-btn {
+        display: flex; align-items: center; gap: .75rem;
+        padding: .6rem .85rem; border-radius: 10px;
+        border: 2px solid var(--border); background: var(--surface);
+        cursor: pointer; font-family: var(--font); text-align: left;
+        transition: border-color .15s, background .15s; width: 100%;
+      }
+      .style-pack-btn:hover { border-color: rgba(76,201,240,0.4); }
+      .style-pack-btn.active { border-color: #4cc9f0; background: rgba(76,201,240,0.06); }
+      [data-theme="dark"] .style-pack-btn.active { background: rgba(76,201,240,0.08); }
+      .style-pack-preview { flex-shrink: 0; }
+      .sp-swatch { width: 44px; height: 28px; border-radius: 6px; }
+      .style-pack-info { flex: 1; min-width: 0; }
+      .sp-name { font-size: .85rem; font-weight: 700; color: var(--text); }
+      .sp-desc { font-size: .7rem; color: var(--text-secondary); margin-top: .1rem; }
+      .sp-check { font-size: .85rem; color: #4cc9f0; font-weight: 700; display: none; flex-shrink: 0; }
+      .style-pack-btn.active .sp-check { display: inline; }
 
       /* Seg selector */
       .seg { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
@@ -766,129 +779,22 @@
               </div>
             </div>
 
-            <!-- Instructions -->
+            <!-- Style Pack -->
             <div class="field">
-              <span class="section-label">Instructions (optionnel)</span>
-              <textarea name="instructions" placeholder="Décrivez le contenu, le public cible, le style de montage souhaité…" rows="2"></textarea>
-            </div>
-
-            <!-- Advanced options (collapsed) -->
-            <div class="brief-toggle" id="advToggle" role="button" tabindex="0">
-              <span>Options avancées</span>
-              <svg class="arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-            </div>
-            <div class="brief-body" id="advBody">
-              <!-- Template selector -->
-              <div class="template-row">
-                <select id="templateSelect" name="template_id" style="flex:1">
-                  <option value="">Template de montage — Auto</option>
-                </select>
+              <span class="section-label">Style visuel</span>
+              <div class="style-pack-selector" id="stylePackSelector">
+                <button type="button" class="style-pack-btn active" data-pack="lean_glass">
+                  <div class="style-pack-preview">
+                    <div class="sp-swatch" style="background:linear-gradient(160deg,rgba(18,18,28,0.85),rgba(8,8,16,0.92));border:1px solid rgba(76,201,240,0.25);box-shadow:0 0 12px rgba(76,201,240,0.2)"></div>
+                  </div>
+                  <div class="style-pack-info">
+                    <div class="sp-name">LeanGlass</div>
+                    <div class="sp-desc">Panneaux vitrés sombres · lueur cyan · texture grain</div>
+                  </div>
+                  <span class="sp-check">✓</span>
+                </button>
               </div>
-              <div class="template-chips" id="templateChips"></div>
-
-              <!-- Platform -->
-              <div class="field" style="margin-top:.75rem">
-                <span class="section-label">Plateforme cible</span>
-                <div class="seg">
-                  <input type="radio" name="platform_hint" id="plt-reels" value="reels" checked />
-                  <label for="plt-reels">Reels / TikTok</label>
-                  <input type="radio" name="platform_hint" id="plt-yt" value="youtube" />
-                  <label for="plt-yt">YouTube</label>
-                  <input type="radio" name="platform_hint" id="plt-shorts" value="shorts" />
-                  <label for="plt-shorts">Shorts</label>
-                </div>
-              </div>
-
-              <!-- Caption style -->
-              <div class="field">
-                <span class="section-label">Style de captions</span>
-                <div class="caption-preset-grid" id="captionPresetSelector">
-                  <button type="button" class="caption-preset-btn active" data-preset="impact" data-style="impact">
-                    <div class="caption-preset-thumb"><span style="color:#FF7751;font-size:.55rem;font-weight:900;text-transform:uppercase">MOT</span></div>
-                    <div class="caption-preset-info">
-                      <div class="cp-name">Impact</div>
-                      <div class="cp-desc">Un mot à la fois, très dynamique</div>
-                    </div>
-                  </button>
-                  <button type="button" class="caption-preset-btn" data-preset="twolevel" data-style="twolevel">
-                    <div class="caption-preset-thumb"><span style="color:#ccc;font-size:.38rem;font-weight:700;line-height:1.2;text-align:center">PHRASE<br><span style="color:#FF7751">ACCENT</span></span></div>
-                    <div class="caption-preset-info">
-                      <div class="cp-name">Two-Level</div>
-                      <div class="cp-desc">Phrase + mot-clé mis en valeur</div>
-                    </div>
-                  </button>
-                  <button type="button" class="caption-preset-btn" data-preset="kinetic" data-style="kinetic">
-                    <div class="caption-preset-thumb"><span style="color:#60a5fa;font-size:.5rem;font-weight:800">KINETIC</span></div>
-                    <div class="caption-preset-info">
-                      <div class="cp-name">Kinetic</div>
-                      <div class="cp-desc">Animation mot par mot</div>
-                    </div>
-                  </button>
-                  <button type="button" class="caption-preset-btn" data-preset="karaoke" data-style="karaoke">
-                    <div class="caption-preset-thumb"><span style="color:#f472b6;font-size:.5rem;font-weight:700">KARAOKE</span></div>
-                    <div class="caption-preset-info">
-                      <div class="cp-name">Karaoké</div>
-                      <div class="cp-desc">Surlignage progressif</div>
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              <!-- B-roll -->
-              <div class="field" style="margin-top:.75rem">
-                <span class="section-label">B-roll</span>
-                <div class="seg">
-                  <input type="radio" name="broll_enabled" id="broll-on" value="true" checked />
-                  <label for="broll-on">Activé</label>
-                  <input type="radio" name="broll_enabled" id="broll-off" value="false" />
-                  <label for="broll-off">Désactivé</label>
-                </div>
-              </div>
-
-              <!-- Zoom level -->
-              <div class="field">
-                <span class="section-label">Niveau de zoom</span>
-                <div class="seg">
-                  <input type="radio" name="zoom_max_level" id="zoom-subtle" value="102" checked />
-                  <label for="zoom-subtle">Subtil</label>
-                  <input type="radio" name="zoom_max_level" id="zoom-standard" value="130" />
-                  <label for="zoom-standard">Standard</label>
-                  <input type="radio" name="zoom_max_level" id="zoom-dramatic" value="150" />
-                  <label for="zoom-dramatic">Dramatique</label>
-                </div>
-              </div>
-
-              <!-- Silence removal -->
-              <div class="field">
-                <span class="section-label">Suppression des silences</span>
-                <div class="seg">
-                  <input type="radio" name="silence_removal" id="sil-aggressive" value="aggressive" />
-                  <label for="sil-aggressive">Agressive</label>
-                  <input type="radio" name="silence_removal" id="sil-normal" value="normal" checked />
-                  <label for="sil-normal">Normale</label>
-                  <input type="radio" name="silence_removal" id="sil-conservative" value="conservative" />
-                  <label for="sil-conservative">Conservative</label>
-                </div>
-              </div>
-
-              <!-- Caption position -->
-              <div class="field">
-                <span class="section-label">Position des captions</span>
-                <div class="seg">
-                  <input type="radio" name="caption_position" id="cap-bottom" value="bottom" checked />
-                  <label for="cap-bottom">Bas</label>
-                  <input type="radio" name="caption_position" id="cap-center" value="center" />
-                  <label for="cap-center">Centre</label>
-                  <input type="radio" name="caption_position" id="cap-auto" value="auto" />
-                  <label for="cap-auto">Auto</label>
-                </div>
-              </div>
-
-              <!-- Notification email -->
-              <div class="field">
-                <span class="section-label">Notification par email (optionnel)</span>
-                <input type="email" id="notifEmail" name="notification_email" placeholder="you@email.com" />
-              </div>
+              <input type="hidden" name="style_pack" id="stylePackValue" value="lean_glass" />
             </div>
 
             <div style="margin-top:1rem">
@@ -1387,18 +1293,18 @@
     <script src="app.js" defer></script>
 
     <script>
-      // ── Advanced options toggle ───────────────────────────────
+      // ── Style pack selector ──────────────────────────────────
       (function() {
-        const toggle = document.getElementById("advToggle");
-        const body   = document.getElementById("advBody");
-        if (!toggle || !body) return;
-        function setOpen(open) {
-          body.classList.toggle("open", open);
-          const arrow = toggle.querySelector(".arrow");
-          if (arrow) arrow.style.transform = open ? "rotate(180deg)" : "";
-        }
-        toggle.addEventListener("click", () => setOpen(!body.classList.contains("open")));
-        toggle.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(!body.classList.contains("open")); } });
+        const container = document.getElementById("stylePackSelector");
+        const hidden    = document.getElementById("stylePackValue");
+        if (!container || !hidden) return;
+        container.addEventListener("click", (e) => {
+          const btn = e.target.closest(".style-pack-btn");
+          if (!btn) return;
+          container.querySelectorAll(".style-pack-btn").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          hidden.value = btn.dataset.pack;
+        });
       })();
 
       // ── Notification bell ─────────────────────────────────────
