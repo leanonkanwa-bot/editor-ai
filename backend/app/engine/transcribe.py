@@ -234,6 +234,25 @@ def transcribe(video_path: Path) -> Transcript:
         else:
             print(f"[WHISPER] Kept all {_total_words} words (0 dropped)")
 
+        # Diagnostic: audio duration vs transcript coverage
+        try:
+            _wav_probe = subprocess.run(
+                [FFPROBE_PATH, "-v", "error", "-show_entries", "format=duration",
+                 "-of", "csv=p=0", str(wav_path)],
+                capture_output=True, text=True, timeout=10,
+            )
+            _wav_dur = float(_wav_probe.stdout.strip()) if _wav_probe.returncode == 0 else 0
+        except Exception:
+            _wav_dur = 0
+        _last_word_end = max((w.end for s in segments for w in s.words), default=0)
+        _last_seg_end = max((s.end for s in segments), default=0)
+        print(f"[WHISPER] Audio duration: {_wav_dur:.2f}s")
+        print(f"[WHISPER] Last segment end: {_last_seg_end:.2f}s")
+        print(f"[WHISPER] Last word end: {_last_word_end:.2f}s")
+        if _wav_dur > 0 and _last_word_end < _wav_dur - 2.0:
+            print(f"[WHISPER] WARNING: transcript stops {_wav_dur - _last_word_end:.1f}s "
+                  f"before audio ends — possible missed speech at tail")
+
         full_text = " ".join(s.text for s in segments).strip()
         detected_lang = getattr(info, "language", None) or "en"
         return Transcript(
