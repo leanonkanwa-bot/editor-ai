@@ -796,6 +796,53 @@ def rewrite_hook(
         }
 
 
+def _repair_json(raw: str) -> str:
+    """Fix common LLM JSON mistakes before parsing.
+
+    Handles: unescaped quotes inside string values, trailing commas,
+    unescaped newlines/tabs.
+    """
+    import re as _re
+    s = raw
+    s = s.replace("\t", "\\t")
+    s = _re.sub(r",\s*([}\]])", r"\1", s)
+    # Fix unescaped double quotes inside string values:
+    # Walk character by character, tracking whether we're inside a string.
+    out = []
+    in_string = False
+    i = 0
+    while i < len(s):
+        ch = s[i]
+        if ch == "\\" and in_string:
+            out.append(ch)
+            if i + 1 < len(s):
+                out.append(s[i + 1])
+                i += 2
+            else:
+                i += 1
+            continue
+        if ch == '"':
+            if not in_string:
+                in_string = True
+                out.append(ch)
+            else:
+                rest = s[i + 1:].lstrip()
+                if not rest or rest[0] in (",", "}", "]", ":"):
+                    in_string = False
+                    out.append(ch)
+                else:
+                    out.append('\\"')
+            i += 1
+            continue
+        if ch == "\n" and in_string:
+            out.append("\\n")
+            i += 1
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
 def _extract_json(text: str) -> dict[str, Any]:
     text = text.strip()
     if text.startswith("```"):
@@ -807,4 +854,9 @@ def _extract_json(text: str) -> dict[str, Any]:
     end = text.rfind("}")
     if start == -1 or end == -1:
         raise ValueError(f"Agent did not return JSON. Got:\n{text[:500]}")
-    return json.loads(text[start : end + 1])
+    raw = text[start : end + 1]
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        repaired = _repair_json(raw)
+        return json.loads(repaired)

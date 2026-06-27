@@ -369,7 +369,11 @@ Design {target_cards} graphic overlay cards for this video."""
         raw = response.content[0].text.strip()
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-        cards = json.loads(raw)
+        try:
+            cards = json.loads(raw)
+        except json.JSONDecodeError:
+            from app.agent.planner import _repair_json
+            cards = json.loads(_repair_json(raw))
         if not isinstance(cards, list):
             cards = cards.get("cards", [])
         # Clamp to video duration
