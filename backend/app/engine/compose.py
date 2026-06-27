@@ -88,6 +88,7 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
 # Cross-pack constants (brand signature, not pack-specific)
 _EASE_IN = "cubic-bezier(0.22, 0.68, 0.35, 1.03)"
 _EASE_OUT_FAST = "cubic-bezier(0.55, 0, 0.85, 0.36)"
+_EASE_VIBE_IN = "cubic-bezier(0.18, 0.89, 0.32, 1.12)"
 
 _LEAN_GLASS = {
     "id": "lean_glass",
@@ -143,14 +144,54 @@ _LEAN_PAPER = {
     "backdrop_restore": "brightness(1) blur(0px) saturate(1)",
 }
 
-_PACKS = {"lean_glass": _LEAN_GLASS, "lean_paper": _LEAN_PAPER}
+_LEAN_VIBE = {
+    "id": "lean_vibe",
+    "bg": "linear-gradient(135deg, #FF6B9D, #FFA94D)",
+    "text": "#FFFFFF",
+    "text_secondary": "rgba(255,255,255,0.75)",
+    "accent": "#FFE66D",
+    "font": '"Poppins", ui-sans-serif, system-ui, sans-serif',
+    "font_weight": "800",
+    "title_size": "64px",
+    "number_size": "96px",
+    "kicker_size": "22px",
+    "detail_size": "26px",
+    "border": "3px solid #FFFFFF",
+    "radius": "24px",
+    "shadow": "0 8px 32px rgba(255,107,157,0.3), 0 4px 16px rgba(0,0,0,0.15)",
+    "shadow_inset": "",
+    "panel_filter": "",
+    "title_glow": "0 0 24px rgba(255,230,109,0.3)",
+    "title_glow_intense": "0 0 40px rgba(255,230,109,0.5)",
+    "has_grain": True,
+    "grain_type": "confetti",
+    "shimmer_color": "rgba(255,230,109,0.18)",
+    "accent_line_glow": "0 0 10px rgba(255,230,109,0.4)",
+    "accent_line_glow_bright": "0 0 18px rgba(255,230,109,0.6)",
+    "backdrop_dim": "brightness(0.35) blur(5px) saturate(1.3)",
+    "backdrop_restore": "brightness(1) blur(0px) saturate(1)",
+}
 
-# Inline SVG grain texture (LeanGlass only)
+_PACKS = {"lean_glass": _LEAN_GLASS, "lean_paper": _LEAN_PAPER, "lean_vibe": _LEAN_VIBE}
+
+# Inline SVG textures
 _GRAIN_SVG = (
     "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E"
     "%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' "
     "numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E"
     "%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='0.04'/%3E%3C/svg%3E"
+)
+_CONFETTI_SVG = (
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E"
+    "%3Ccircle cx='25' cy='40' r='2' fill='%23fff' opacity='0.08'/%3E"
+    "%3Ccircle cx='80' cy='15' r='1.5' fill='%23FFE66D' opacity='0.1'/%3E"
+    "%3Ccircle cx='140' cy='65' r='2.5' fill='%23fff' opacity='0.06'/%3E"
+    "%3Ccircle cx='50' cy='130' r='1.5' fill='%23FFE66D' opacity='0.08'/%3E"
+    "%3Ccircle cx='170' cy='110' r='2' fill='%23fff' opacity='0.07'/%3E"
+    "%3Ccircle cx='110' cy='170' r='1.5' fill='%23FFE66D' opacity='0.09'/%3E"
+    "%3Ccircle cx='30' cy='180' r='2' fill='%23fff' opacity='0.05'/%3E"
+    "%3Ccircle cx='160' cy='30' r='1.5' fill='%23fff' opacity='0.07'/%3E"
+    "%3C/svg%3E"
 )
 
 
@@ -188,10 +229,11 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None) -> str:
         parts.append(f'  -webkit-backdrop-filter: {p["panel_filter"]};')
     parts.append('}')
     if p["has_grain"]:
+        tex_svg = _CONFETTI_SVG if p.get("grain_type") == "confetti" else _GRAIN_SVG
         parts.append(f'.card[data-card-id="{card_id}"] .card-panel::after {{')
         parts.append(f'  content: ""; position: absolute; inset: 0;')
         parts.append(f'  border-radius: {p["radius"]};')
-        parts.append(f'  background-image: url("{_GRAIN_SVG}");')
+        parts.append(f'  background-image: url("{tex_svg}");')
         parts.append(f'  background-repeat: repeat; pointer-events: none;')
         parts.append('}')
     if kicker:
@@ -475,10 +517,12 @@ def _build_timeline_js(
 ) -> str:
     """Build the master GSAP timeline script including zoom/pan on the video wrapper."""
     p = pack or _LEAN_GLASS
+    is_vibe = p["id"] == "lean_vibe"
+    ease_in = _EASE_VIBE_IN if is_vibe else _EASE_IN
     lines = [
         "(function () {",
         '  const tl = window.gsap.timeline({ paused: true });',
-        f'  var _eIn = "{_EASE_IN}";',
+        f'  var _eIn = "{ease_in}";',
         f'  var _eOut = "{_EASE_OUT_FAST}";',
         "",
     ]
@@ -601,7 +645,6 @@ def _build_timeline_js(
                     count_dur = min(1.5, max(0.6, dur * 0.25))
                     count_end = t_in + count_dur
                     if is_paper:
-                        # LeanPaper: shadow lightens during count (inverse of LeanGlass)
                         lines.append(
                             f'  (function(){{ var o={{v:0}}; tl.to(o, {{v:{num_val}, '
                             f'duration: {count_dur:.3f}, ease: _eIn, onUpdate: function(){{ '
@@ -611,8 +654,16 @@ def _build_timeline_js(
                             f'el.style.color="rgba(26,26,26,"+(0.3+0.7*r)+")"; '
                             f'}} }}}}, {t_in:.4f}); }})();'
                         )
+                    elif is_vibe:
+                        lines.append(
+                            f'  (function(){{ var o={{v:0}}; tl.to(o, {{v:{num_val}, '
+                            f'duration: {count_dur:.3f}, ease: _eIn, onUpdate: function(){{ '
+                            f'var el=document.querySelector(\'{title_sel}\'); '
+                            f'if(el){{ el.textContent=Math.round(o.v).toLocaleString()+\'{_esc_js(num_suffix)}\'; '
+                            f'el.style.opacity=0.7+0.3*(o.v/{num_val}); '
+                            f'}} }}}}, {t_in:.4f}); }})();'
+                        )
                     else:
-                        # LeanGlass: glow intensifies during count
                         lines.append(
                             f'  (function(){{ var o={{v:0}}; tl.to(o, {{v:{num_val}, '
                             f'duration: {count_dur:.3f}, ease: _eIn, onUpdate: function(){{ '
@@ -622,9 +673,10 @@ def _build_timeline_js(
                             f'el.style.textShadow="0 0 "+(40+16*r)+"px rgba(76,201,240,"+(0.25+0.20*r)+")"; '
                             f'}} }}}}, {t_in:.4f}); }})();'
                         )
+                    pop_scale = "1.15" if is_vibe else "1.08"
                     lines.append(
                         f'  tl.to(\'{title_sel}\', '
-                        f'{{ scale: 1.08, duration: 0.12, ease: _eIn }}, '
+                        f'{{ scale: {pop_scale}, duration: 0.12, ease: _eIn }}, '
                         f'{count_end:.4f});'
                     )
                     lines.append(
@@ -653,7 +705,6 @@ def _build_timeline_js(
                     )
             elif content_style == "key_phrase":
                 if is_paper:
-                    # LeanPaper: text visible immediately, underline draws left-to-right
                     lines.append(
                         f'  tl.fromTo(\'{title_sel}\', '
                         f'{{ opacity: 0 }}, '
@@ -667,8 +718,19 @@ def _build_timeline_js(
                         f'{{ width: 160, duration: 0.600, ease: "power2.inOut" }}, '
                         f'{t_in + 0.15:.4f});'
                     )
+                elif is_vibe:
+                    lines.append(
+                        f'  tl.fromTo(\'{title_sel}\', '
+                        f'{{ opacity: 0, scale: 0.7 }}, '
+                        f'{{ opacity: 1, scale: 1.05, duration: 0.350, ease: _eIn }}, '
+                        f'{t_in:.4f});'
+                    )
+                    lines.append(
+                        f'  tl.to(\'{title_sel}\', '
+                        f'{{ scale: 1, duration: 0.200, ease: _eOut }}, '
+                        f'{t_in + 0.35:.4f});'
+                    )
                 else:
-                    # LeanGlass: mask-reveal horizontal clip wipe
                     lines.append(
                         f'  tl.fromTo(\'{title_sel}\', '
                         f'{{ clipPath: "inset(0 100% 0 0)" }}, '
@@ -686,7 +748,6 @@ def _build_timeline_js(
                 left_sel = f'.card[data-card-id="{card_id}"] #{card_id}-left'
                 right_sel = f'.card[data-card-id="{card_id}"] #{card_id}-right'
                 sep_sel = f'.card[data-card-id="{card_id}"] #{card_id}-sep'
-                # Both sides slide in from opposite edges
                 lines.append(
                     f'  tl.fromTo(\'{left_sel}\', '
                     f'{{ opacity: 0, x: -60 }}, '
@@ -699,13 +760,18 @@ def _build_timeline_js(
                     f'{{ opacity: 1, x: 0, duration: 0.450, ease: _eIn }}, '
                     f'{t_in + 0.15:.4f});'
                 )
-                # Separator draws top-to-bottom
                 lines.append(
                     f'  tl.fromTo(\'{sep_sel}\', '
                     f'{{ height: 0 }}, '
                     f'{{ height: 80, duration: 0.400, ease: _eIn }}, '
                     f'{t_in + 0.20:.4f});'
                 )
+                if is_vibe:
+                    lines.append(
+                        f'  tl.to(\'{sep_sel}\', '
+                        f'{{ boxShadow: "0 0 16px {p["accent"]}", duration: 0.200 }}, '
+                        f'{t_in + 0.60:.4f});'
+                    )
             elif content_style == "list":
                 items = card.get("contentHints", {}).get("items", [])
                 n_items = min(len(items), 8)
@@ -715,7 +781,6 @@ def _build_timeline_js(
                     bullet_sel = f'{item_sel} .list-bullet'
                     stagger = i * 0.12 if i < cascade_limit else cascade_limit * 0.12
                     if is_paper:
-                        # LeanPaper: pure fade, subdued bullet pop
                         lines.append(
                             f'  tl.fromTo(\'{item_sel}\', '
                             f'{{ opacity: 0 }}, '
@@ -728,8 +793,25 @@ def _build_timeline_js(
                             f'{{ scale: 1, duration: 0.200, ease: _eIn }}, '
                             f'{t_in + stagger:.4f});'
                         )
+                    elif is_vibe:
+                        lines.append(
+                            f'  tl.fromTo(\'{item_sel}\', '
+                            f'{{ opacity: 0, scale: 0 }}, '
+                            f'{{ opacity: 1, scale: 1, duration: 0.300, ease: _eIn }}, '
+                            f'{t_in + stagger:.4f});'
+                        )
+                        lines.append(
+                            f'  tl.fromTo(\'{bullet_sel}\', '
+                            f'{{ scale: 0.2 }}, '
+                            f'{{ scale: 1.2, duration: 0.200, ease: _eIn }}, '
+                            f'{t_in + stagger - 0.05:.4f});'
+                        )
+                        lines.append(
+                            f'  tl.to(\'{bullet_sel}\', '
+                            f'{{ scale: 1, duration: 0.150, ease: _eOut }}, '
+                            f'{t_in + stagger + 0.15:.4f});'
+                        )
                     else:
-                        # LeanGlass: fade + 12px left-slide, spring bullet pop
                         lines.append(
                             f'  tl.fromTo(\'{item_sel}\', '
                             f'{{ opacity: 0, x: -12 }}, '
@@ -750,6 +832,18 @@ def _build_timeline_js(
                         f'{{ opacity: 1, duration: 0.250, ease: _eIn }}, '
                         f'{t_in:.4f});'
                     )
+                elif is_vibe:
+                    lines.append(
+                        f'  tl.fromTo(\'{title_sel}\', '
+                        f'{{ opacity: 0, scale: 0.7 }}, '
+                        f'{{ opacity: 1, scale: 1.05, duration: 0.350, ease: _eIn }}, '
+                        f'{t_in:.4f});'
+                    )
+                    lines.append(
+                        f'  tl.to(\'{title_sel}\', '
+                        f'{{ scale: 1, duration: 0.200, ease: _eOut }}, '
+                        f'{t_in + 0.35:.4f});'
+                    )
                 else:
                     lines.append(
                         f'  tl.fromTo(\'{title_sel}\', '
@@ -767,6 +861,7 @@ def _build_timeline_js(
                     f'{{ width: "100%", duration: {line_dur:.3f}, ease: "power2.inOut" }}, '
                     f'{t_in:.4f});'
                 )
+                dot_pop_scale = "1.5" if is_vibe else "1.3"
                 for si in range(n_steps):
                     dot_sel = f'.card[data-card-id="{card_id}"] #{card_id}-dot-{si}'
                     dot_t = t_in + (si + 1) * (line_dur / max(n_steps, 1))
@@ -779,7 +874,7 @@ def _build_timeline_js(
                     else:
                         lines.append(
                             f'  tl.to(\'{dot_sel}\', '
-                            f'{{ background: "{p["accent"]}", scale: 1.3, '
+                            f'{{ background: "{p["accent"]}", scale: {dot_pop_scale}, '
                             f'boxShadow: "0 0 14px {p["accent"]}", '
                             f'duration: 0.200, ease: _eIn }}, {dot_t:.4f});'
                         )
@@ -791,18 +886,42 @@ def _build_timeline_js(
             elif content_style == "dialogue":
                 dlg_a_sel = f'.card[data-card-id="{card_id}"] #{card_id}-dlg-a'
                 dlg_b_sel = f'.card[data-card-id="{card_id}"] #{card_id}-dlg-b'
-                lines.append(
-                    f'  tl.fromTo(\'{dlg_a_sel}\', '
-                    f'{{ opacity: 0, x: -30 }}, '
-                    f'{{ opacity: 1, x: 0, duration: 0.400, ease: _eIn }}, '
-                    f'{t_in:.4f});'
-                )
-                lines.append(
-                    f'  tl.fromTo(\'{dlg_b_sel}\', '
-                    f'{{ opacity: 0, x: 30 }}, '
-                    f'{{ opacity: 1, x: 0, duration: 0.400, ease: _eIn }}, '
-                    f'{t_in + 0.25:.4f});'
-                )
+                if is_vibe:
+                    lines.append(
+                        f'  tl.fromTo(\'{dlg_a_sel}\', '
+                        f'{{ opacity: 0, scale: 0.8 }}, '
+                        f'{{ opacity: 1, scale: 1.05, duration: 0.400, ease: _eIn }}, '
+                        f'{t_in:.4f});'
+                    )
+                    lines.append(
+                        f'  tl.to(\'{dlg_a_sel}\', '
+                        f'{{ scale: 1, duration: 0.180, ease: _eOut }}, '
+                        f'{t_in + 0.40:.4f});'
+                    )
+                    lines.append(
+                        f'  tl.fromTo(\'{dlg_b_sel}\', '
+                        f'{{ opacity: 0, scale: 0.8 }}, '
+                        f'{{ opacity: 1, scale: 1.05, duration: 0.400, ease: _eIn }}, '
+                        f'{t_in + 0.25:.4f});'
+                    )
+                    lines.append(
+                        f'  tl.to(\'{dlg_b_sel}\', '
+                        f'{{ scale: 1, duration: 0.180, ease: _eOut }}, '
+                        f'{t_in + 0.65:.4f});'
+                    )
+                else:
+                    lines.append(
+                        f'  tl.fromTo(\'{dlg_a_sel}\', '
+                        f'{{ opacity: 0, x: -30 }}, '
+                        f'{{ opacity: 1, x: 0, duration: 0.400, ease: _eIn }}, '
+                        f'{t_in:.4f});'
+                    )
+                    lines.append(
+                        f'  tl.fromTo(\'{dlg_b_sel}\', '
+                        f'{{ opacity: 0, x: 30 }}, '
+                        f'{{ opacity: 1, x: 0, duration: 0.400, ease: _eIn }}, '
+                        f'{t_in + 0.25:.4f});'
+                    )
             elif content_style == "trend":
                 path_sel = f'.card[data-card-id="{card_id}"] #{card_id}-trend-path'
                 dot_sel = f'.card[data-card-id="{card_id}"] #{card_id}-trend-dot'
@@ -824,6 +943,18 @@ def _build_timeline_js(
                         f'{{ opacity: 1, duration: 0.300, ease: _eIn }}, '
                         f'{t_in + 1.35:.4f});'
                     )
+                elif is_vibe:
+                    lines.append(
+                        f'  tl.to(\'{dot_sel}\', '
+                        f'{{ opacity: 1, scale: 2.0, '
+                        f'filter: "drop-shadow(0 0 12px {p["accent"]})", '
+                        f'duration: 0.250, ease: _eIn }}, {t_in + 1.20:.4f});'
+                    )
+                    lines.append(
+                        f'  tl.to(\'{dot_sel}\', '
+                        f'{{ scale: 1, duration: 0.200, ease: _eOut }}, '
+                        f'{t_in + 1.45:.4f});'
+                    )
                 else:
                     lines.append(
                         f'  tl.to(\'{dot_sel}\', '
@@ -844,18 +975,33 @@ def _build_timeline_js(
                     f'{t_in:.4f});'
                 )
                 attr_sel = f'.card[data-card-id="{card_id}"] #{card_id}-attr'
-                lines.append(
-                    f'  tl.fromTo(\'{attr_sel}\', '
-                    f'{{ opacity: 0 }}, '
-                    f'{{ opacity: 1, duration: 0.300, ease: _eIn }}, '
-                    f'{t_in + 0.20:.4f});'
-                )
+                if is_vibe:
+                    lines.append(
+                        f'  tl.fromTo(\'{attr_sel}\', '
+                        f'{{ opacity: 0, scale: 0.8 }}, '
+                        f'{{ opacity: 1, scale: 1, duration: 0.300, ease: _eIn }}, '
+                        f'{t_in + 0.20:.4f});'
+                    )
+                else:
+                    lines.append(
+                        f'  tl.fromTo(\'{attr_sel}\', '
+                        f'{{ opacity: 0 }}, '
+                        f'{{ opacity: 1, duration: 0.300, ease: _eIn }}, '
+                        f'{t_in + 0.20:.4f});'
+                    )
             else:
                 if is_paper:
                     lines.append(
                         f'  tl.fromTo(\'{title_sel}\', '
                         f'{{ opacity: 0, scale: 1.04 }}, '
                         f'{{ opacity: 1, scale: 1, duration: 0.400, ease: _eIn }}, '
+                        f'{t_in:.4f});'
+                    )
+                elif is_vibe:
+                    lines.append(
+                        f'  tl.fromTo(\'{title_sel}\', '
+                        f'{{ opacity: 0, rotation: -3, scale: 0.95 }}, '
+                        f'{{ opacity: 1, rotation: 0, scale: 1, duration: 0.400, ease: _eIn }}, '
                         f'{t_in:.4f});'
                     )
                 else:
