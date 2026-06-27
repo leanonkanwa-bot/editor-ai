@@ -320,9 +320,8 @@ RULES:
 - Each card should last 3-8 seconds
 - Vary accentIndex (0-4) across cards for visual rhythm
 - Content must come from what the speaker actually says
-- TIMING: startSec must be AFTER the speaker finishes saying the words
-  the card quotes — never show text before it is spoken. Place cards
-  0.3-1s after the referenced line ends, as a visual reinforcement.
+- TIMING: startSec should match when the speaker BEGINS saying the
+  words the card references — synchronous with speech, like captions.
 - Place cards at NARRATIVELY IMPORTANT moments — not evenly spaced
 
 BRAND: accent color {brand_color}, content type: {content_type}, style: {editing_style}
