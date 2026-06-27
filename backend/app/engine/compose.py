@@ -105,6 +105,10 @@ _LEAN_GLASS = {
     "shadow_inset": "inset 0 1px 0 rgba(255,255,255,0.06)",
     "blur": "blur(16px) saturate(1.4)",
     "title_glow": "0 0 40px rgba(76,201,240,0.25)",
+    "title_glow_intense": "0 0 56px rgba(76,201,240,0.45)",
+    # iOS-spring-inspired ease: subtle 3% overshoot then settle
+    "ease_in": "cubic-bezier(0.22, 0.68, 0.35, 1.03)",
+    "ease_out_fast": "cubic-bezier(0.55, 0, 0.85, 0.36)",
 }
 
 # Inline SVG grain texture (deterministic, no external asset)
@@ -244,9 +248,14 @@ def _build_timeline_js(
     subject_position: dict | None = None,
 ) -> str:
     """Build the master GSAP timeline script including zoom/pan on the video wrapper."""
+    p = _LEAN_GLASS
+    ease_in = p["ease_in"]
+    ease_out_fast = p["ease_out_fast"]
     lines = [
         "(function () {",
         '  const tl = window.gsap.timeline({ paused: true });',
+        f'  var _eIn = "{ease_in}";',
+        f'  var _eOut = "{ease_out_fast}";',
         "",
     ]
 
@@ -313,7 +322,7 @@ def _build_timeline_js(
             lines.append(
                 f'  tl.fromTo(\'{sel}\', '
                 f'{{ opacity: 0 }}, '
-                f'{{ opacity: 1, duration: {fade_in_dur:.3f}, ease: "power2.out" }}, '
+                f'{{ opacity: 1, duration: {fade_in_dur:.3f}, ease: _eIn }}, '
                 f'{start:.4f});'
             )
             word_sel = f'.card[data-card-id="{card_id}"] .cap-word'
@@ -324,21 +333,21 @@ def _build_timeline_js(
                 )
         else:
             panel_sel = f'.card[data-card-id="{card_id}"] .card-panel'
+            # Entrance: 0.32s with spring ease
             lines.append(
                 f'  tl.fromTo(\'{sel}\', '
                 f'{{ opacity: 0 }}, '
-                f'{{ opacity: 1, duration: 0.300, ease: "power2.out" }}, '
+                f'{{ opacity: 1, duration: 0.320, ease: _eIn }}, '
                 f'{start:.4f});'
             )
             lines.append(
                 f'  tl.fromTo(\'{panel_sel}\', '
                 f'{{ filter: "blur(12px)", scale: 1.02 }}, '
-                f'{{ filter: "blur(0px)", scale: 1, duration: 0.350, ease: "power2.out" }}, '
+                f'{{ filter: "blur(0px)", scale: 1, duration: 0.350, ease: _eIn }}, '
                 f'{start:.4f});'
             )
 
-            # Dimmed backdrop: when a center-zone card conflicts with the
-            # speaker's face, dim the video so the card is the sole focus.
+            # Dimmed backdrop for center-zone cards conflicting with speaker
             card_zone = card.get("zone", "")
             center_zone = card_zone in ("fullscreen", "video-overlay")
             face_centered = has_face_data and 30.0 <= face_cx <= 70.0
@@ -346,12 +355,12 @@ def _build_timeline_js(
                 lines.append(
                     f'  tl.to("#video-wrap", '
                     f'{{ filter: "brightness(0.25) blur(4px)", '
-                    f'duration: 0.30, ease: "power2.in" }}, {start:.4f});'
+                    f'duration: 0.30, ease: _eIn }}, {start:.4f});'
                 )
                 lines.append(
                     f'  tl.to("#video-wrap", '
                     f'{{ filter: "brightness(1) blur(0px)", '
-                    f'duration: 0.30, ease: "power2.out" }}, {end - 0.30:.4f});'
+                    f'duration: 0.18, ease: _eOut }}, {end - 0.18:.4f});'
                 )
 
             content_style = card.get("contentHints", {}).get("style", "key_phrase")
@@ -363,45 +372,47 @@ def _build_timeline_js(
             if content_style == "stat" and card.get("contentHints", {}).get("number"):
                 num_val, num_suffix = _safe_number(card["contentHints"]["number"])
                 if num_val is not None:
-                    # Count-up with color flash + scale pulse (apple-money-count pattern)
                     count_dur = min(1.5, max(0.6, dur * 0.25))
                     count_end = t_in + count_dur
+                    # Count-up with dynamic shadow: glow intensifies during count
                     lines.append(
                         f'  (function(){{ var o={{v:0}}; tl.to(o, {{v:{num_val}, '
-                        f'duration: {count_dur:.3f}, ease: "power2.out", onUpdate: function(){{ '
+                        f'duration: {count_dur:.3f}, ease: _eIn, onUpdate: function(){{ '
                         f'var el=document.querySelector(\'{title_sel}\'); '
-                        f'if(el) el.textContent=Math.round(o.v).toLocaleString()+\'{_esc_js(num_suffix)}\'; '
-                        f'}}}}, {t_in:.4f}); }})();'
+                        f'if(el){{ el.textContent=Math.round(o.v).toLocaleString()+\'{_esc_js(num_suffix)}\'; '
+                        f'var p=o.v/{num_val}; '
+                        f'el.style.textShadow="0 0 "+(40+16*p)+"px rgba(76,201,240,"+(0.25+0.20*p)+")"; '
+                        f'}} }}}}, {t_in:.4f}); }})();'
                     )
-                    # Scale pulse on count completion
+                    # Scale pulse on completion
                     lines.append(
                         f'  tl.to(\'{title_sel}\', '
-                        f'{{ scale: 1.08, duration: 0.12, ease: "back.out(2)" }}, '
+                        f'{{ scale: 1.08, duration: 0.12, ease: _eIn }}, '
                         f'{count_end:.4f});'
                     )
                     lines.append(
                         f'  tl.to(\'{title_sel}\', '
-                        f'{{ scale: 1, duration: 0.20, ease: "power2.out" }}, '
+                        f'{{ scale: 1, duration: 0.20, ease: _eOut }}, '
                         f'{count_end + 0.12:.4f});'
                     )
-                    # Accent color flash on count completion
+                    # Color flash on completion
                     lines.append(
                         f'  tl.to(\'{title_sel}\', '
-                        f'{{ color: "{_LEAN_GLASS["accent"]}", '
-                        f'textShadow: "0 0 48px rgba(76,201,240,0.4)", '
+                        f'{{ color: "{p["accent"]}", '
+                        f'textShadow: "{_esc_js(p["title_glow_intense"])}", '
                         f'duration: 0.15 }}, {count_end:.4f});'
                     )
                     lines.append(
                         f'  tl.to(\'{title_sel}\', '
-                        f'{{ color: "{_LEAN_GLASS["text"]}", '
-                        f'textShadow: "{_esc_js(_LEAN_GLASS["title_glow"])}", '
+                        f'{{ color: "{p["text"]}", '
+                        f'textShadow: "{_esc_js(p["title_glow"])}", '
                         f'duration: 0.6 }}, {count_end + 0.15:.4f});'
                     )
                 else:
                     lines.append(
                         f'  tl.fromTo(\'{title_sel}\', '
                         f'{{ opacity: 0, filter: "blur(8px)" }}, '
-                        f'{{ opacity: 1, filter: "blur(0px)", duration: 0.400, ease: "power2.out" }}, '
+                        f'{{ opacity: 1, filter: "blur(0px)", duration: 0.400, ease: _eIn }}, '
                         f'{t_in:.4f});'
                     )
             elif content_style == "key_phrase":
@@ -415,28 +426,39 @@ def _build_timeline_js(
                 lines.append(
                     f'  tl.fromTo(\'{title_sel}\', '
                     f'{{ opacity: 0, y: 40 }}, '
-                    f'{{ opacity: 1, y: 0, duration: 0.500, ease: "power3.out" }}, '
+                    f'{{ opacity: 1, y: 0, duration: 0.500, ease: _eIn }}, '
                     f'{t_in:.4f});'
                 )
             else:
                 lines.append(
                     f'  tl.fromTo(\'{title_sel}\', '
                     f'{{ opacity: 0, filter: "blur(8px)" }}, '
-                    f'{{ opacity: 1, filter: "blur(0px)", duration: 0.400, ease: "power2.out" }}, '
+                    f'{{ opacity: 1, filter: "blur(0px)", duration: 0.400, ease: _eIn }}, '
                     f'{t_in:.4f});'
                 )
 
             lines.append(
                 f'  tl.fromTo(\'{kicker_sel}\', '
                 f'{{ opacity: 0, y: -8 }}, '
-                f'{{ opacity: 1, y: 0, duration: 0.250, ease: "power2.out" }}, '
+                f'{{ opacity: 1, y: 0, duration: 0.250, ease: _eIn }}, '
                 f'{start + 0.10:.4f});'
             )
             lines.append(
                 f'  tl.fromTo(\'{line_sel}\', '
                 f'{{ width: 0 }}, '
-                f'{{ width: 120, duration: 0.400, ease: "power2.out" }}, '
+                f'{{ width: 120, duration: 0.400, ease: _eIn }}, '
                 f'{t_in + 0.30:.4f});'
+            )
+            # Breathing underline: glow pulse for card's visible duration
+            pulse_dur = max(0.5, dur - 1.0)
+            pulse_repeats = max(1, int(pulse_dur / 2.5))
+            lines.append(
+                f'  tl.fromTo(\'{line_sel}\', '
+                f'{{ boxShadow: "0 0 12px {p["accent"]}" }}, '
+                f'{{ boxShadow: "0 0 20px {p["accent"]}", '
+                f'duration: 1.25, ease: "sine.inOut", '
+                f'repeat: {pulse_repeats}, yoyo: true }}, '
+                f'{t_in + 0.70:.4f});'
             )
             # Shimmer sweep across glass panel after materialization
             shimmer_sel = f'.card[data-card-id="{card_id}"] #{card_id}-shimmer'
@@ -448,25 +470,25 @@ def _build_timeline_js(
                 f'{shimmer_start:.4f});'
             )
 
-        # Exit
+        # Exit — faster than entrance (asymmetric timing)
         if is_caption:
             exit_start = end - fade_out_dur
             lines.append(
                 f'  tl.to(\'{sel}\', '
-                f'{{ opacity: 0, duration: {fade_out_dur:.3f}, ease: "power2.in" }}, '
+                f'{{ opacity: 0, duration: {fade_out_dur:.3f}, ease: _eOut }}, '
                 f'{exit_start:.4f});'
             )
         else:
-            exit_start = end - 0.30
+            exit_start = end - 0.18
             panel_sel = f'.card[data-card-id="{card_id}"] .card-panel'
             lines.append(
                 f'  tl.to(\'{sel}\', '
-                f'{{ opacity: 0, duration: 0.300, ease: "power2.in" }}, '
+                f'{{ opacity: 0, duration: 0.180, ease: _eOut }}, '
                 f'{exit_start:.4f});'
             )
             lines.append(
                 f'  tl.to(\'{panel_sel}\', '
-                f'{{ scale: 0.97, duration: 0.300, ease: "power2.in" }}, '
+                f'{{ scale: 0.97, duration: 0.180, ease: _eOut }}, '
                 f'{exit_start:.4f});'
             )
         lines.append(f'  tl.set(\'{sel}\', {{ visibility: "hidden" }}, {end:.4f});')
