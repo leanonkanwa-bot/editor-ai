@@ -333,7 +333,9 @@ def plan_edit(
                 "text": (
                     f"FORMAT TARGET: {fmt}\n"
                     f"DURATION: {duration:.2f}s\n"
-                    f"LANGUAGE: {transcript.get('language', 'en')}\n"
+                    f"LANGUAGE: {transcript.get('language', 'en')} — write ALL text fields "
+                    f"(summary, reason, key_lines, titres_ctr, script_structure lines) "
+                    f"in {transcript.get('language', 'en')}, matching the speaker's language.\n"
                     f"{face_context}\n"
                     f"{coach_context}\n"
                     "PRE-ANALYSIS (do before building the plan):\n"

@@ -1609,6 +1609,7 @@ def _render_hyperframes(
         editing_style=editing_style,
         format_hint=plan.format,
         timing_map=timing_map,
+        language=transcript.get("language", "en"),
     )
     n_graphic = sum(1 for c in storyboard.get("cards", []) if c.get("type") != "caption")
     n_caption = sum(1 for c in storyboard.get("cards", []) if c.get("type") == "caption")

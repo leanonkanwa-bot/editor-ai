@@ -229,6 +229,7 @@ def _generate_graphic_cards(
     editing_style: str,
     format_hint: str,
     timing_map: TimingMap,
+    language: str = "en",
 ) -> list[dict]:
     """Generate graphic overlay cards via Claude API call.
 
@@ -342,6 +343,10 @@ RULES:
   words the card references — synchronous with speech, like captions.
 - Place cards at NARRATIVELY IMPORTANT moments — not evenly spaced
 
+LANGUAGE: {language}
+- ALL card text (kicker, title, detail, items, steps, line_a/line_b,
+  attribution) MUST be in {language} — match the speaker's language exactly.
+
 BRAND: accent color {brand_color}, content type: {content_type}, style: {editing_style}
 
 Reply with ONLY a JSON array, no explanation."""
@@ -402,6 +407,7 @@ def generate_storyboard(
     editing_style: str,
     format_hint: str,
     timing_map: TimingMap,
+    language: str = "en",
 ) -> dict:
     """Generate a complete storyboard: graphic cards + caption cards.
 
@@ -421,6 +427,7 @@ def generate_storyboard(
         editing_style=editing_style,
         format_hint=format_hint,
         timing_map=timing_map,
+        language=language,
     )
 
     # Generate caption cards mechanically
