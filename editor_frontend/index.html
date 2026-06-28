@@ -642,10 +642,27 @@
       }
 
       /* ── STYLE PACK SELECTOR ──────────────────────────────────── */
-      .style-pack-selector { display: flex; flex-direction: column; gap: .4rem; }
+      /* ── STYLE PACK — two-column layout ────────────────────── */
+      .sp-layout { display: flex; gap: 1rem; align-items: flex-start; }
+      .sp-list { display: flex; flex-direction: column; gap: .35rem; flex: 1; min-width: 0; }
+      .sp-hero-wrap {
+        flex-shrink: 0; width: 180px; position: relative;
+        aspect-ratio: 9/16; border-radius: var(--radius);
+        overflow: hidden; border: 1px solid var(--border);
+        background: var(--surface);
+      }
+      .sp-hero-video { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .sp-hero-swatch { position: absolute; inset: 0; }
+      .sp-hero-video[data-error] + .sp-hero-swatch { display: block; }
+      .sp-hero-video:not([data-error]) + .sp-hero-swatch { display: none; }
+      .sp-hero-label {
+        position: absolute; bottom: 0; left: 0; right: 0;
+        padding: .4rem .6rem; background: linear-gradient(transparent, rgba(0,0,0,.6));
+        color: #fff; font-size: .72rem; font-weight: 600;
+      }
       .style-pack-btn {
-        display: flex; align-items: center; gap: .75rem;
-        padding: .6rem .85rem; border-radius: 10px;
+        display: flex; align-items: center; gap: .6rem;
+        padding: .45rem .7rem; border-radius: 8px;
         border: 2px solid var(--border); background: var(--surface);
         cursor: pointer; font-family: var(--font); text-align: left;
         transition: border-color .15s, background .15s; width: 100%;
@@ -653,17 +670,21 @@
       .style-pack-btn:hover { border-color: rgba(76,201,240,0.4); }
       .style-pack-btn.active { border-color: #4cc9f0; background: rgba(76,201,240,0.06); }
       [data-theme="dark"] .style-pack-btn.active { background: rgba(76,201,240,0.08); }
-      .style-pack-preview { flex-shrink: 0; position: relative; width: 54px; height: 96px; border-radius: 6px; overflow: hidden; }
+      .style-pack-preview { flex-shrink: 0; position: relative; width: 36px; height: 64px; border-radius: 4px; overflow: hidden; }
       .sp-video { width: 100%; height: 100%; object-fit: cover; display: block; }
       .sp-fallback { position: absolute; inset: 0; }
       .sp-video:not([src=""]) + .sp-fallback { display: none; }
       .sp-video[data-error] + .sp-fallback { display: block; }
-      .sp-swatch { width: 100%; height: 100%; border-radius: 6px; }
+      .sp-swatch { width: 100%; height: 100%; border-radius: 4px; }
       .style-pack-info { flex: 1; min-width: 0; }
-      .sp-name { font-size: .85rem; font-weight: 700; color: var(--text); }
-      .sp-desc { font-size: .7rem; color: var(--text-secondary); margin-top: .1rem; }
-      .sp-check { font-size: .85rem; color: #4cc9f0; font-weight: 700; display: none; flex-shrink: 0; }
+      .sp-name { font-size: .8rem; font-weight: 700; color: var(--text); }
+      .sp-desc { font-size: .65rem; color: var(--text-secondary); margin-top: .05rem; }
+      .sp-check { font-size: .8rem; color: #4cc9f0; font-weight: 700; display: none; flex-shrink: 0; }
       .style-pack-btn.active .sp-check { display: inline; }
+      @media (max-width: 540px) {
+        .sp-layout { flex-direction: column-reverse; }
+        .sp-hero-wrap { width: 100%; max-width: 240px; margin: 0 auto; }
+      }
 
       /* Seg selector */
       .seg { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
@@ -786,7 +807,8 @@
             <!-- Style Pack -->
             <div class="field">
               <span class="section-label">Style visuel</span>
-              <div class="style-pack-selector" id="stylePackSelector">
+              <div class="sp-layout">
+              <div class="style-pack-selector sp-list" id="stylePackSelector">
                 <button type="button" class="style-pack-btn active" data-pack="lean_glass">
                   <div class="style-pack-preview">
                     <video class="sp-video" src="previews/lean_glass.mp4" loop muted playsinline loading="lazy"></video>
@@ -853,6 +875,12 @@
                   </div>
                   <span class="sp-check">✓</span>
                 </button>
+              </div>
+              <div class="sp-hero-wrap" id="spHero">
+                <video class="sp-hero-video" id="spHeroVideo" src="previews/lean_glass.mp4" loop muted playsinline></video>
+                <div class="sp-hero-swatch" id="spHeroSwatch" style="background:linear-gradient(160deg,rgba(18,18,28,0.85),rgba(8,8,16,0.92))"></div>
+                <div class="sp-hero-label" id="spHeroLabel">LeanGlass</div>
+              </div>
               </div>
               <input type="hidden" name="style_pack" id="stylePackValue" value="lean_glass" />
             </div>
@@ -1353,24 +1381,62 @@
     <script src="app.js" defer></script>
 
     <script>
-      // ── Style pack selector + video previews ────────────────
+      // ── Style pack selector + hero preview ──────────────────
       (function() {
         const container = document.getElementById("stylePackSelector");
         const hidden    = document.getElementById("stylePackValue");
-        if (!container || !hidden) return;
+        const heroVideo = document.getElementById("spHeroVideo");
+        const heroSwatch = document.getElementById("spHeroSwatch");
+        const heroLabel = document.getElementById("spHeroLabel");
+        if (!container || !hidden || !heroVideo) return;
+
+        let selectedPack = "lean_glass";
+        const swatchStyles = {};
+        container.querySelectorAll(".style-pack-btn").forEach(btn => {
+          const fb = btn.querySelector(".sp-fallback");
+          if (fb) swatchStyles[btn.dataset.pack] = fb.getAttribute("style") || "";
+        });
+
+        function showHero(packId) {
+          const btn = container.querySelector('[data-pack="' + packId + '"]');
+          heroVideo.src = "previews/" + packId + ".mp4";
+          heroVideo.removeAttribute("data-error");
+          heroVideo.style.display = "";
+          heroVideo.play().catch(() => {});
+          if (heroSwatch) heroSwatch.setAttribute("style", swatchStyles[packId] || "");
+          if (heroLabel && btn) heroLabel.textContent = btn.querySelector(".sp-name")?.textContent || "";
+        }
+
+        heroVideo.addEventListener("error", () => {
+          heroVideo.setAttribute("data-error", "1"); heroVideo.style.display = "none";
+        });
+
+        // Click = select
         container.addEventListener("click", (e) => {
           const btn = e.target.closest(".style-pack-btn");
           if (!btn) return;
           container.querySelectorAll(".style-pack-btn").forEach(b => b.classList.remove("active"));
           btn.classList.add("active");
-          hidden.value = btn.dataset.pack;
+          selectedPack = btn.dataset.pack;
+          hidden.value = selectedPack;
+          showHero(selectedPack);
         });
-        // Auto-play preview videos, fallback to swatch on error
+
+        // Hover = preview (desktop only)
+        container.querySelectorAll(".style-pack-btn").forEach(btn => {
+          btn.addEventListener("mouseenter", () => showHero(btn.dataset.pack));
+          btn.addEventListener("mouseleave", () => showHero(selectedPack));
+        });
+
+        // Auto-play small thumbnails, fallback on error
         container.querySelectorAll(".sp-video").forEach(v => {
           v.addEventListener("error", () => { v.setAttribute("data-error", "1"); v.style.display = "none"; });
           v.addEventListener("loadeddata", () => { v.play().catch(() => {}); });
           v.play().catch(() => {});
         });
+
+        // Init hero
+        showHero(selectedPack);
       })();
 
       // ── Notification bell ─────────────────────────────────────
