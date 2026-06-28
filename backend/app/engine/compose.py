@@ -273,13 +273,17 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None) -> str:
     parts.append(f'  mix-blend-mode: overlay; z-index: 2;')
     parts.append('}')
     content_style = hints.get("style", "")
-    # Comparison: two-column layout
+    # Comparison: two-column layout with text containment
     if content_style == "comparison":
+        lv = hints.get("left_value", "")
+        rv = hints.get("right_value", "")
+        max_val_len = max(len(str(lv)), len(str(rv)))
+        val_size = "36px" if max_val_len > 15 else "48px" if max_val_len > 8 else p["title_size"]
         parts.append(f'.card[data-card-id="{card_id}"] .cmp-row {{')
-        parts.append(f'  display: flex; gap: 24px; align-items: center; width: 100%;')
+        parts.append(f'  display: flex; gap: 24px; align-items: flex-start; width: 100%;')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .cmp-side {{')
-        parts.append(f'  flex: 1; text-align: center;')
+        parts.append(f'  flex: 1; text-align: center; min-width: 0; overflow-wrap: break-word;')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .cmp-label {{')
         parts.append(f'  font-family: {p["font"]}; font-size: {p["kicker_size"]};')
@@ -287,9 +291,10 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None) -> str:
         parts.append(f'  color: {p["text_secondary"]}; margin-bottom: 8px;')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .cmp-value {{')
-        parts.append(f'  font-family: {p["font"]}; font-size: {p["title_size"]};')
+        parts.append(f'  font-family: {p["font"]}; font-size: {val_size};')
         parts.append(f'  font-weight: {p["font_weight"]}; color: {p["text"]};')
         parts.append(f'  font-variant-numeric: tabular-nums;')
+        parts.append(f'  overflow-wrap: break-word; word-wrap: break-word;')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .cmp-sep {{')
         parts.append(f'  width: 2px; height: 0; background: {p["accent"]};')
@@ -297,24 +302,45 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None) -> str:
         if p["title_glow"]:
             parts.append(f'  box-shadow: {p["accent_line_glow"]};')
         parts.append('}')
-    # Timeline: full-screen overlay layout
+    # Timeline: adaptive layout (horizontal or vertical based on label length)
     if content_style == "timeline":
         is_paper_tl = p["id"] == "lean_paper"
-        parts.append(f'.card[data-card-id="{card_id}"] .tl-track {{')
-        parts.append(f'  display: flex; align-items: center; gap: 0; width: 100%;')
-        parts.append(f'  position: relative; padding: 32px 0;')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .tl-line {{')
-        parts.append(f'  position: absolute; top: 50%; left: 0; height: 3px; width: 0;')
-        parts.append(f'  background: {p["accent"]};')
-        if is_paper_tl:
-            parts.append(f'  border-top: 2px dashed {p["accent"]};')
-            parts.append(f'  background: transparent; height: 0;')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .tl-step {{')
-        parts.append(f'  display: flex; flex-direction: column; align-items: center;')
-        parts.append(f'  gap: 10px; flex: 1; z-index: 1;')
-        parts.append('}')
+        steps = hints.get("steps", [])
+        n_steps = min(len(steps), 6)
+        avg_label_len = sum(len(str(s)) for s in steps[:n_steps]) / max(n_steps, 1)
+        total_label_chars = sum(len(str(s)) for s in steps[:n_steps])
+        use_vertical = total_label_chars > 60 or avg_label_len > 18 or n_steps > 4
+        if use_vertical:
+            parts.append(f'.card[data-card-id="{card_id}"] .tl-track {{')
+            parts.append(f'  display: flex; flex-direction: column; gap: 20px; width: 100%;')
+            parts.append(f'  position: relative; padding: 16px 0;')
+            parts.append('}')
+            parts.append(f'.card[data-card-id="{card_id}"] .tl-line {{')
+            parts.append(f'  position: absolute; left: 9px; top: 0; width: 3px; height: 0;')
+            parts.append(f'  background: {p["accent"]};')
+            if is_paper_tl:
+                parts.append(f'  border-left: 2px dashed {p["accent"]};')
+                parts.append(f'  background: transparent; width: 0;')
+            parts.append('}')
+            parts.append(f'.card[data-card-id="{card_id}"] .tl-step {{')
+            parts.append(f'  display: flex; align-items: center; gap: 16px; z-index: 1;')
+            parts.append('}')
+        else:
+            parts.append(f'.card[data-card-id="{card_id}"] .tl-track {{')
+            parts.append(f'  display: flex; align-items: center; gap: 0;')
+            parts.append(f'  width: 100%; position: relative; padding: 32px 0;')
+            parts.append('}')
+            parts.append(f'.card[data-card-id="{card_id}"] .tl-line {{')
+            parts.append(f'  position: absolute; top: 50%; left: 0; height: 3px; width: 0;')
+            parts.append(f'  background: {p["accent"]};')
+            if is_paper_tl:
+                parts.append(f'  border-top: 2px dashed {p["accent"]};')
+                parts.append(f'  background: transparent; height: 0;')
+            parts.append('}')
+            parts.append(f'.card[data-card-id="{card_id}"] .tl-step {{')
+            parts.append(f'  display: flex; flex-direction: column; align-items: center;')
+            parts.append(f'  gap: 10px; flex: 1; z-index: 1;')
+            parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .tl-dot {{')
         parts.append(f'  width: 18px; height: 18px; border-radius: 50%;')
         parts.append(f'  background: {p["text_secondary"]}; flex-shrink: 0;')
@@ -322,7 +348,10 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None) -> str:
         parts.append(f'.card[data-card-id="{card_id}"] .tl-label {{')
         parts.append(f'  font-family: {p["font"]}; font-size: 20px;')
         parts.append(f'  font-weight: {p["font_weight"]}; color: {p["text"]};')
-        parts.append(f'  text-align: center; white-space: nowrap;')
+        if use_vertical:
+            parts.append(f'  text-align: left;')
+        else:
+            parts.append(f'  text-align: center; white-space: nowrap;')
         parts.append('}')
     # Dialogue: two-block exchange
     if content_style == "dialogue":
@@ -388,12 +417,16 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None) -> str:
     # Timeline: full-screen overlay, no card-panel wrapper
     if content_style == "timeline":
         steps = hints.get("steps", [])
+        n_steps = min(len(steps), 6)
+        avg_label_len = sum(len(str(s)) for s in steps[:n_steps]) / max(n_steps, 1)
+        total_label_chars = sum(len(str(s)) for s in steps[:n_steps])
+        use_vertical = total_label_chars > 60 or avg_label_len > 18 or n_steps > 4
         parts.append(f'<div class="root" style="padding:60px 80px;justify-content:center">')
         if kicker:
             parts.append(f'  <div class="kicker" id="{card_id}-kicker" style="margin-bottom:24px">{_esc(kicker)}</div>')
-        parts.append(f'  <div class="tl-track">')
+        parts.append(f'  <div class="tl-track" data-layout="{"vertical" if use_vertical else "horizontal"}">')
         parts.append(f'    <div class="tl-line" id="{card_id}-tl-line"></div>')
-        for i, step in enumerate(steps[:6]):
+        for i, step in enumerate(steps[:n_steps]):
             parts.append(f'    <div class="tl-step" id="{card_id}-step-{i}">')
             parts.append(f'      <div class="tl-dot" id="{card_id}-dot-{i}"></div>')
             parts.append(f'      <div class="tl-label">{_esc(str(step))}</div>')
@@ -861,11 +894,15 @@ def _build_timeline_js(
             elif content_style == "timeline":
                 steps = card.get("contentHints", {}).get("steps", [])
                 n_steps = min(len(steps), 6)
+                avg_ll = sum(len(str(s)) for s in steps[:n_steps]) / max(n_steps, 1)
+                total_ll = sum(len(str(s)) for s in steps[:n_steps])
+                tl_vertical = total_ll > 60 or avg_ll > 18 or n_steps > 4
                 tl_line_sel = f'.card[data-card-id="{card_id}"] #{card_id}-tl-line'
                 line_dur = min(1.5, max(0.4, n_steps * 0.25))
+                line_prop = "height" if tl_vertical else "width"
                 lines.append(
                     f'  tl.to(\'{tl_line_sel}\', '
-                    f'{{ width: "100%", duration: {line_dur:.3f}, ease: "power2.inOut" }}, '
+                    f'{{ {line_prop}: "100%", duration: {line_dur:.3f}, ease: "power2.inOut" }}, '
                     f'{t_in:.4f});'
                 )
                 dot_pop_scale = "1.5" if is_vibe else "1.3"
