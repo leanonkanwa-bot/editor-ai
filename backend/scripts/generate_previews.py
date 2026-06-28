@@ -149,19 +149,19 @@ def _render_preview(pack_id: str, project_dir: Path, output_path: Path) -> bool:
                 str(public_dir),
                 "-o", str(output_path),
                 "--fps", "24",
-                "--quality", "draft",
+                "--quality", "standard",
                 "--workers", "1",
                 "--protocol-timeout", "120000",
                 "--low-memory-mode",
             ],
-            capture_output=True, text=True, timeout=120, env=env,
+            capture_output=True, text=True, timeout=180, env=env,
         )
         if proc.returncode != 0:
             print(f"  [{pack_id}] Render FAILED (rc={proc.returncode})")
             print(f"  stderr: {proc.stderr[-500:]}")
             return False
     except subprocess.TimeoutExpired:
-        print(f"  [{pack_id}] Render TIMED OUT (120s)")
+        print(f"  [{pack_id}] Render TIMED OUT (180s)")
         return False
 
     if not output_path.exists():
@@ -175,8 +175,8 @@ def _render_preview(pack_id: str, project_dir: Path, output_path: Path) -> bool:
         subprocess.run([
             FFMPEG_PATH, "-y", "-i", str(output_path),
             "-an",
-            "-vf", "scale=360:640",
-            "-c:v", "libx264", "-crf", "30", "-preset", "fast",
+            "-vf", "scale=540:960",
+            "-c:v", "libx264", "-crf", "24", "-preset", "fast",
             "-movflags", "+faststart",
             str(compressed),
         ], capture_output=True, timeout=60)
