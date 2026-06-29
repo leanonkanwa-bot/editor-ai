@@ -19,9 +19,13 @@ class Settings(BaseSettings):
     # in your env to trade RAM for accuracy.
     whisper_model: str = "tiny"
 
-    storage_uploads: str = "storage/uploads"
-    storage_outputs: str = "storage/outputs"
-    storage_work: str = "storage/work"
+    # Base directory for all persistent data. Set DATA_DIR=/data on Railway
+    # (mounted volume). Defaults to storage/ for local development.
+    data_dir: str = "storage"
+
+    storage_uploads: str = "uploads"
+    storage_outputs: str = "outputs"
+    storage_work: str = "work"
 
     host: str = "0.0.0.0"
     port: int = 8000
@@ -64,16 +68,21 @@ class Settings(BaseSettings):
     style_pack: str = "lean_glass"
 
     @property
+    def _data_root(self) -> Path:
+        p = Path(self.data_dir)
+        return p if p.is_absolute() else (BACKEND_DIR / p).resolve()
+
+    @property
     def uploads_dir(self) -> Path:
-        return (BACKEND_DIR / self.storage_uploads).resolve()
+        return self._data_root / self.storage_uploads
 
     @property
     def outputs_dir(self) -> Path:
-        return (BACKEND_DIR / self.storage_outputs).resolve()
+        return self._data_root / self.storage_outputs
 
     @property
     def work_dir(self) -> Path:
-        return (BACKEND_DIR / self.storage_work).resolve()
+        return self._data_root / self.storage_work
 
 
 settings = Settings()

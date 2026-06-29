@@ -425,7 +425,7 @@ async def approve_job(
     return JSONResponse({"job_id": job_id, "status": "rendering"})
 
 
-_WAITLIST_FILE = Path(__file__).resolve().parents[2] / "storage" / "waitlist.json"
+_WAITLIST_FILE = settings._data_root / "waitlist.json"
 
 
 def _load_waitlist() -> list[dict]:
@@ -529,7 +529,7 @@ def waitlist_count() -> dict:
     return {"count": len(_load_waitlist())}
 
 
-_PROFILES_DIR = Path(__file__).resolve().parents[2] / "storage" / "profiles"
+_PROFILES_DIR = settings._data_root / "profiles"
 
 
 @app.post("/api/profile")
@@ -689,7 +689,7 @@ async def generate_hooks(payload: dict = Body(...)) -> dict:
 
 # ── Feature 6: Referral System ────────────────────────────────────────────────
 
-_REFERRALS_FILE = Path(__file__).resolve().parents[2] / "storage" / "referrals.json"
+_REFERRALS_FILE = settings._data_root / "referrals.json"
 
 
 def _load_referrals() -> dict:
@@ -915,7 +915,7 @@ async def edit_captions(
 
 # ── Feature 15: Activity Feed ─────────────────────────────────────────────────
 
-_ACTIVITY_FILE = Path(__file__).resolve().parents[2] / "storage" / "activity.json"
+_ACTIVITY_FILE = settings._data_root / "activity.json"
 _FIRST_NAMES = [
     "Marie", "Lucas", "Camille", "Thomas", "Emma", "Léo", "Sarah", "Antoine",
     "Clara", "Julien", "Manon", "Nicolas", "Inès", "Alexandre", "Chloé",
@@ -1093,7 +1093,7 @@ Respond ONLY with valid JSON in this exact format:
 
 
 # ── Feature 20 — Performance Storage ─────────────────────────────────────────
-_PERF_FILE = Path(__file__).resolve().parents[2] / "storage" / "performance.json"
+_PERF_FILE = settings._data_root / "performance.json"
 
 
 def _load_perf() -> dict:
@@ -1123,7 +1123,7 @@ def get_performance(job_id: str) -> dict:
 
 
 # ── Feature 21 — Team Collaboration ──────────────────────────────────────────
-_TEAM_FILE = Path(__file__).resolve().parents[2] / "storage" / "teams.json"
+_TEAM_FILE = settings._data_root / "teams.json"
 
 
 def _load_teams() -> dict:
@@ -1167,7 +1167,7 @@ def update_team(profile_id: str, payload: dict = Body(...)) -> dict:
 
 
 # ── Feature 23 — API Keys ─────────────────────────────────────────────────────
-_API_KEYS_FILE = Path(__file__).resolve().parents[2] / "storage" / "api_keys.json"
+_API_KEYS_FILE = settings._data_root / "api_keys.json"
 
 
 def _load_api_keys() -> dict:

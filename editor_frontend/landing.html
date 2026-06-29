@@ -803,14 +803,18 @@
       const email = document.getElementById(inputId)?.value?.trim();
       if (!email) return;
       try {
-        await fetch('/api/waitlist', {
+        const res = await fetch('/api/waitlist', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, timestamp: new Date().toISOString() }),
         });
-      } catch {}
-      document.getElementById(formId).style.display = 'none';
-      document.getElementById(successId).style.display = 'block';
+        if (!res.ok) throw new Error(res.status);
+        document.getElementById(formId).style.display = 'none';
+        document.getElementById(successId).style.display = 'block';
+      } catch {
+        const input = document.getElementById(inputId);
+        if (input) { input.style.borderColor = '#ff5c7a'; input.placeholder = 'Erreur — réessayez'; }
+      }
     }
 
     // ════════════════════════════════════════════════════════════════════

@@ -22,10 +22,10 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from app.core.config import BACKEND_DIR
+from app.core.config import settings
 
 
-JOBS_FILE = BACKEND_DIR / "storage" / "jobs.json"
+JOBS_FILE = settings._data_root / "jobs.json"
 TERMINAL_STATUSES = {"done", "error"}
 INTERRUPT_MESSAGE = "Serveur redémarré - veuillez re-uploader votre vidéo"
 
