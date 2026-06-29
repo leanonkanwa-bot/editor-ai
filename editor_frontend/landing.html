@@ -185,15 +185,6 @@
     .feature-card p { font-size: .825rem; color: var(--muted); line-height: 1.55; }
 
     /* ── TESTIMONIALS ────────────────────────────────────────────────── */
-    .testi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
-    .testi-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.75rem; transition: border-color .25s; }
-    .testi-card:hover { border-color: var(--salmon-border); }
-    .testi-stars { color: var(--salmon); font-size: .9rem; letter-spacing: .1em; margin-bottom: 1rem; }
-    .testi-quote { font-size: .875rem; color: var(--text); line-height: 1.65; margin-bottom: 1.25rem; font-style: italic; }
-    .testi-author { display: flex; align-items: center; gap: .75rem; }
-    .testi-avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--salmon), rgba(255,119,81,.4)); display: grid; place-items: center; font-weight: 700; font-size: .9rem; color: #fff; flex-shrink: 0; }
-    .testi-name { font-size: .875rem; font-weight: 600; }
-    .testi-role { font-size: .75rem; color: var(--muted); margin-top: .1rem; }
 
     /* ── FINAL CTA ───────────────────────────────────────────────────── */
     .cta-section { padding: 8rem 1.5rem; text-align: center; position: relative; overflow: hidden; }
@@ -313,12 +304,6 @@
     .ob-next-btn:hover { opacity: .9; box-shadow: 0 0 30px rgba(255,119,81,.45); }
 
     /* ── TESTIMONIAL CAROUSEL ───────────────────────────────────────── */
-    .testi-carousel { position: relative; overflow: hidden; }
-    .testi-track { display: flex; transition: transform .5s ease; }
-    .testi-slide { min-width: 100%; }
-    .testi-dots { display: flex; justify-content: center; gap: .5rem; margin-top: 1.5rem; }
-    .testi-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); cursor: pointer; transition: background .2s, transform .2s; border: none; }
-    .testi-dot.active { background: var(--salmon); transform: scale(1.2); }
     .testi-nav { display: flex; justify-content: center; gap: .75rem; margin-top: .75rem; }
     .testi-nav-btn { background: rgba(255,255,255,.06); border: 1px solid var(--border); color: var(--muted); width: 36px; height: 36px; border-radius: 50%; cursor: pointer; font-size: .85rem; transition: background .15s, color .15s; }
     .testi-nav-btn:hover { background: rgba(255,119,81,.15); color: var(--text); border-color: var(--salmon-border); }
@@ -430,18 +415,6 @@
     </div>
   </section>
 
-  <!-- STATS BAR (animated counters) -->
-  <div class="stats-section">
-    <div class="container">
-      <div class="stats-grid">
-        <div class="fade counter-item"><span class="stat-num" data-target="500" data-suffix="+">0+</span><span class="stat-label">Créateurs actifs</span></div>
-        <div class="fade counter-item"><span class="stat-num" data-target="4" data-suffix="h">0h</span><span class="stat-label">Économisées par semaine</span></div>
-        <div class="fade counter-item"><span class="stat-num" data-target="3" data-suffix="min">0min</span><span class="stat-label">Temps de traitement moyen</span></div>
-        <div class="fade counter-item"><span class="stat-num" data-target="10" data-suffix="x">0x</span><span class="stat-label">Plus de vues en moyenne</span></div>
-      </div>
-    </div>
-  </div>
-
   <!-- HOW IT WORKS -->
   <section class="section" id="how-it-works">
     <div class="container">
@@ -469,69 +442,6 @@
         <div class="feature-card fade"><div class="feature-icon">🎬</div><h3>Génération B-roll</h3><p>Crée des transitions, graphiques et animations contextuelles pour rendre votre contenu visuellement dynamique.</p></div>
         <div class="feature-card fade"><div class="feature-icon">🎨</div><h3>Brand Kit</h3><p>Définissez vos couleurs, watermark et lower-thirds une fois. Appliqués automatiquement à toutes vos vidéos.</p></div>
         <div class="feature-card fade"><div class="feature-icon">🚀</div><h3>Publication multi-plateformes</h3><p>Publiez directement sur YouTube, TikTok, Instagram Reels et LinkedIn depuis une seule interface.</p></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- TESTIMONIALS CAROUSEL -->
-  <section class="section" style="padding-top:0">
-    <div class="container">
-      <span class="section-tag">Témoignages</span>
-      <h2 class="section-title">Ce que disent nos créateurs</h2>
-      <p class="section-sub" style="margin-bottom:2rem">Des résultats concrets, pas des promesses.</p>
-
-      <div class="testi-carousel" id="testiCarousel">
-        <div class="testi-track" id="testiTrack">
-          <!-- Slide 1: 3 cards -->
-          <div class="testi-slide">
-            <div class="testi-grid">
-              <div class="testi-card">
-                <div class="testi-stars">★★★★★</div>
-                <p class="testi-quote">"J'éditais mes vidéos moi-même, ça prenait 4-5 heures chacune. Maintenant LeanRetention fait ça en 3 minutes. Mes vues ont triplé en 6 semaines."</p>
-                <div class="testi-author"><div class="testi-avatar">TK</div><div><div class="testi-name">Thomas K.</div><div class="testi-role">Coach business · 48k abonnés</div></div></div>
-              </div>
-              <div class="testi-card">
-                <div class="testi-stars">★★★★★</div>
-                <p class="testi-quote">"Le Hook Rewriter est incroyable. Mes premières secondes sont maintenant accrocheuses même quand j'ai mal démarré mon enregistrement."</p>
-                <div class="testi-author"><div class="testi-avatar">SA</div><div><div class="testi-name">Sarah A.</div><div class="testi-role">Créatrice lifestyle · 120k abonnés</div></div></div>
-              </div>
-              <div class="testi-card">
-                <div class="testi-stars">★★★★★</div>
-                <p class="testi-quote">"J'avais peur que l'IA ne comprenne pas mon style. Mais les résultats sont bluffants — on dirait qu'un vrai monteur professionnel a travaillé dessus."</p>
-                <div class="testi-author"><div class="testi-avatar">MR</div><div><div class="testi-name">Marc R.</div><div class="testi-role">Entrepreneur · 22k abonnés</div></div></div>
-              </div>
-            </div>
-          </div>
-          <!-- Slide 2: 3 more cards -->
-          <div class="testi-slide">
-            <div class="testi-grid">
-              <div class="testi-card">
-                <div class="testi-stars">★★★★★</div>
-                <p class="testi-quote">"LeanRetention m'a permis de passer de 2 vidéos par mois à 8. Le ROI est dingue — j'ai multiplié mes leads par 4 en 3 mois."</p>
-                <div class="testi-author"><div class="testi-avatar">JD</div><div><div class="testi-name">Julie D.</div><div class="testi-role">Consultante marketing · 35k abonnés</div></div></div>
-              </div>
-              <div class="testi-card">
-                <div class="testi-stars">★★★★★</div>
-                <p class="testi-quote">"La suppression auto des silences seule vaut l'abonnement. Mes vidéos semblent beaucoup plus dynamiques et professionnelles maintenant."</p>
-                <div class="testi-author"><div class="testi-avatar">AL</div><div><div class="testi-name">Alex L.</div><div class="testi-role">Développeur/Créateur tech · 90k</div></div></div>
-              </div>
-              <div class="testi-card">
-                <div class="testi-stars">★★★★★</div>
-                <p class="testi-quote">"Le Brand Kit est un game-changer. Toutes mes vidéos ont maintenant une identité cohérente sans que j'aie à y penser à chaque fois."</p>
-                <div class="testi-author"><div class="testi-avatar">CM</div><div><div class="testi-name">Camille M.</div><div class="testi-role">Coach bien-être · 67k abonnés</div></div></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <!-- Carousel controls -->
-      <div class="testi-nav">
-        <button class="testi-nav-btn" id="testiPrev">←</button>
-        <button class="testi-nav-btn" id="testiNext">→</button>
-      </div>
-      <div class="testi-dots" id="testiDots">
-        <button class="testi-dot active" data-slide="0"></button>
-        <button class="testi-dot" data-slide="1"></button>
       </div>
     </div>
   </section>
@@ -587,9 +497,8 @@
           </div>
           <ul class="pricing-features">
             <li><span class="pricing-check">✓</span> <strong>50 vidéos / mois</strong></li>
-            <li><span class="pricing-check">✓</span> Brand Kit complet</li>
-            <li><span class="pricing-check">✓</span> B-roll &amp; motion graphics</li>
-            <li><span class="pricing-check">✓</span> Publication multi-plateformes</li>
+            <li><span class="pricing-check">✓</span> Graphics IA</li>
+            <li><span class="pricing-check">✓</span> Captions + Hook Rewriter</li>
             <li><span class="pricing-check">✓</span> Support prioritaire</li>
           </ul>
           <button class="pricing-btn pricing-btn-salmon" onclick="openOnboarding()">Choisir Pro →</button>
@@ -604,9 +513,8 @@
           </div>
           <ul class="pricing-features">
             <li><span class="pricing-check">✓</span> <strong>150 vidéos / mois</strong></li>
-            <li><span class="pricing-check">✓</span> Multi-comptes &amp; white label</li>
-            <li><span class="pricing-check">✓</span> API access</li>
-            <li><span class="pricing-check">✓</span> Manager dédié</li>
+            <li><span class="pricing-check">✓</span> Graphics IA</li>
+            <li><span class="pricing-check">✓</span> Multi-comptes</li>
           </ul>
           <button class="pricing-btn pricing-btn-ghost" onclick="openOnboarding()">Contacter l'équipe →</button>
         </div>
@@ -1154,42 +1062,6 @@
 
     document.querySelectorAll('.counter-item').forEach(el => counterObserver.observe(el));
 
-    // ── Testimonial carousel ────────────────────────────────────────────
-    const track = document.getElementById('testiTrack');
-    const dots = document.querySelectorAll('.testi-dot');
-    let currentSlide = 0;
-    const totalSlides = document.querySelectorAll('.testi-slide').length;
-    let autoRotateTimer;
-
-    function goToSlide(n) {
-      currentSlide = (n + totalSlides) % totalSlides;
-      if (track) track.style.transform = `translateX(-${currentSlide * 100}%)`;
-      dots.forEach((d, i) => d.classList.toggle('active', i === currentSlide));
-    }
-
-    document.getElementById('testiNext')?.addEventListener('click', () => {
-      goToSlide(currentSlide + 1);
-      resetAutoRotate();
-    });
-    document.getElementById('testiPrev')?.addEventListener('click', () => {
-      goToSlide(currentSlide - 1);
-      resetAutoRotate();
-    });
-    dots.forEach(dot => {
-      dot.addEventListener('click', () => {
-        goToSlide(parseInt(dot.dataset.slide, 10));
-        resetAutoRotate();
-      });
-    });
-
-    function startAutoRotate() {
-      autoRotateTimer = setInterval(() => goToSlide(currentSlide + 1), 4000);
-    }
-    function resetAutoRotate() {
-      clearInterval(autoRotateTimer);
-      startAutoRotate();
-    }
-    startAutoRotate();
 
     // ── Waitlist live count ─────────────────────────────────────────────
     (async () => {

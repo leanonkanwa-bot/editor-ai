@@ -120,12 +120,6 @@ function updateDashboardStats() {
       return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
     }).length;
     if ($("dashViews")) $("dashViews").textContent = thisMonthCount;
-    const scores = videos.map(v => v.retention_score).filter(s => typeof s === "number");
-    if ($("dashScoreMoyen")) {
-      $("dashScoreMoyen").textContent = scores.length > 0
-        ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) + "%"
-        : "—";
-    }
   } catch {}
 }
 
@@ -2851,7 +2845,7 @@ document.addEventListener("DOMContentLoaded", function() {
               '<div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#FF7751">Pro</div>',
               '<div style="font-size:1.6rem;font-weight:800;letter-spacing:-.03em">€79<span style="font-size:.7rem;font-weight:500;color:var(--text-secondary)">/mo</span></div>',
               '<ul style="list-style:none;font-size:.78rem;color:var(--text-secondary);display:flex;flex-direction:column;gap:.25rem;flex:1;margin-top:.2rem">',
-                '<li>✓ 50 vidéos / mois</li><li>✓ Brand Kit complet</li><li>✓ B-roll + graphics</li><li>✓ Multi-plateformes</li>',
+                '<li>✓ 50 vidéos / mois</li><li>✓ Graphics IA</li><li>✓ Captions + Hook</li><li>✓ Support prioritaire</li>',
               '</ul>',
               '<button class="upgrade-plan-btn" style="margin-top:.5rem;width:100%;padding:.5rem;border-radius:8px;border:none;background:#FF7751;color:#fff;font-family:var(--font);font-size:.78rem;font-weight:600;cursor:pointer">Choisir ce plan</button>',
             '</div>',
@@ -2859,7 +2853,7 @@ document.addEventListener("DOMContentLoaded", function() {
               '<div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-secondary)">Agency</div>',
               '<div style="font-size:1.6rem;font-weight:800;letter-spacing:-.03em">€199<span style="font-size:.7rem;font-weight:500;color:var(--text-secondary)">/mo</span></div>',
               '<ul style="list-style:none;font-size:.78rem;color:var(--text-secondary);display:flex;flex-direction:column;gap:.25rem;flex:1;margin-top:.2rem">',
-                '<li>✓ 150 vidéos / mois</li><li>✓ White label + API</li><li>✓ Manager dédié</li>',
+                '<li>✓ 150 vidéos / mois</li><li>✓ Graphics IA</li><li>✓ Multi-comptes</li>',
               '</ul>',
               '<button class="upgrade-plan-btn" style="margin-top:.5rem;width:100%;padding:.5rem;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:var(--font);font-size:.78rem;font-weight:600;cursor:pointer">Choisir ce plan</button>',
             '</div>',

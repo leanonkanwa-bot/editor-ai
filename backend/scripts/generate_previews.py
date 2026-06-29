@@ -41,16 +41,11 @@ def _build_preview_composition(pack_id: str, work_dir: Path) -> Path:
     else:
         print(f"  WARNING: gsap.min.js not found for {pack_id}")
 
-    # Synthetic cards: one key_phrase + one stat
+    # Single clean key_phrase card — minimal text, max visual clarity at small size
     cards = [
-        {"id": "prev-kp", "type": "graphic", "startSec": 0.3, "endSec": 2.5,
+        {"id": "prev-kp", "type": "graphic", "startSec": 0.5, "endSec": 3.5,
          "zone": "video-overlay",
-         "contentHints": {"kicker": "KEY INSIGHT", "title": "Quality over quantity",
-                          "style": "key_phrase"}},
-        {"id": "prev-stat", "type": "graphic", "startSec": 2.0, "endSec": 4.0,
-         "zone": "video-overlay",
-         "contentHints": {"kicker": "GROWTH", "title": "2.4M", "number": "2,400,000",
-                          "style": "stat", "detail": "+340% this year"}},
+         "contentHints": {"title": "Impact", "style": "key_phrase"}},
     ]
 
     width, height = 1080, 1920
