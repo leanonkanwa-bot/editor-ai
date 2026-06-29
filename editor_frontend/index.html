@@ -274,19 +274,12 @@
       pre { margin-top: .5rem; font-family: var(--mono); font-size: .7rem; color: var(--text-secondary); overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto; }
 
       /* ── PREVIEW PANEL ─────────────────────────────────────── */
-      .preview-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.25rem; }
-      .preview-header h2 { font-size: 1.05rem; font-weight: 700; }
       .preview-actions { display: flex; gap: .6rem; }
       .btn-replan { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); padding: .45rem 1rem; border-radius: 8px; font-family: var(--font); font-size: .8rem; font-weight: 500; cursor: pointer; transition: color .15s, border-color .15s; }
       .btn-replan:hover { color: var(--text); border-color: rgba(0,0,0,.2); }
       .btn-render { background: var(--salmon); color: #fff; padding: .45rem 1.1rem; border-radius: 8px; font-family: var(--font); font-size: .8rem; font-weight: 600; cursor: pointer; border: none; transition: opacity .15s; }
       .btn-render:hover { opacity: .9; }
 
-      .preview-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; margin-bottom: 1.25rem; }
-      .preview-stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .65rem .85rem; }
-      .preview-stat-card .val { font-size: 1.2rem; font-weight: 700; letter-spacing: -.02em; }
-      .preview-stat-card .lbl { font-size: .68rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .04em; }
-      .preview-timeline { display: flex; flex-direction: column; gap: .35rem; margin-bottom: 1rem; }
       .tl-row { display: flex; align-items: baseline; gap: .6rem; padding: .45rem .75rem; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); font-size: .8rem; }
       .tl-num  { color: var(--salmon); font-weight: 700; min-width: 1.4rem; }
       .tl-role { color: var(--text-secondary); flex: 1; }
@@ -295,22 +288,12 @@
       .tl-crown { font-size: .85rem; flex-shrink: 0; }
       .tl-row { position: relative; }
       .score-badge { font-size: .63rem; font-weight: 700; padding: .1rem .38rem; border-radius: 99px; cursor: default; letter-spacing: .03em; flex-shrink: 0; }
-      .hook-rewrite { padding: .75rem 1rem; border-radius: 8px; border-left: 3px solid var(--salmon); background: var(--salmon-dim); margin-bottom: 1rem; font-size: .875rem; font-style: italic; }
 
       /* Retention prediction */
-      .ret-pred-wrap { display: flex; align-items: center; gap: .75rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .6rem .85rem; margin-bottom: 1rem; }
-      .ret-pred-label { font-size: .68rem; color: var(--text-secondary); white-space: nowrap; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
-      .ret-pred-bar-wrap { flex: 1; background: var(--border); border-radius: 99px; height: 6px; overflow: hidden; }
-      .ret-pred-bar-fill { height: 100%; border-radius: 99px; transition: width .9s cubic-bezier(.4,0,.2,1); background: var(--salmon); }
-      .ret-pred-pct { font-size: .95rem; font-weight: 700; min-width: 3rem; text-align: right; letter-spacing: -.02em; }
 
       /* Split compare */
-      .split-compare { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-top: .85rem; }
-      .split-ver { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: .85rem 1rem; text-align: center; }
-      .split-ver.winner { border-color: #22c55e; background: rgba(34,197,94,.05); }
       .sv-label { font-size: .63rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--text-secondary); margin-bottom: .4rem; }
       .sv-score { font-size: 2rem; font-weight: 800; letter-spacing: -.04em; margin-bottom: .25rem; }
-      .split-ver.winner .sv-score { color: #22c55e; }
       .sv-verdict { font-size: .7rem; color: var(--text-secondary); line-height: 1.4; }
       .sv-winner-pill { display: inline-block; font-size: .65rem; font-weight: 700; background: rgba(34,197,94,.12); color: #22c55e; border: 1px solid rgba(34,197,94,.25); border-radius: 99px; padding: .14rem .45rem; margin-top: .3rem; }
 
@@ -612,7 +595,6 @@
       @media (max-width: 540px) {
         .dash-stats { grid-template-columns: 1fr 1fr; }
         .nav-tab { font-size: .78rem; padding: 0 .6rem; }
-        .preview-stats { grid-template-columns: 1fr 1fr; }
         .video-library-grid { grid-template-columns: 1fr; }
         .btn-upgrade { display: none; }
       }
@@ -621,10 +603,10 @@
       /* ── STYLE PACK — grid layout ────────────────────────────── */
       .style-pack-grid {
         display: grid; grid-template-columns: repeat(3, 1fr);
-        gap: .65rem;
+        gap: .75rem;
       }
       .style-pack-btn {
-        display: flex; flex-direction: column; gap: 0;
+        display: flex; flex-direction: column;
         border-radius: 10px; border: 2px solid var(--border);
         background: var(--surface); cursor: pointer;
         font-family: var(--font); text-align: left;
@@ -634,17 +616,21 @@
       .style-pack-btn:hover { border-color: var(--salmon-border); transform: translateY(-2px); }
       .style-pack-btn.active { border-color: var(--salmon); background: var(--salmon-dim); }
       .style-pack-preview {
-        position: relative; width: 100%; aspect-ratio: 9/16;
-        overflow: hidden; background: var(--surface);
+        position: relative; width: 100%; aspect-ratio: 3/4;
+        overflow: hidden; background: #111;
+        flex-shrink: 0;
       }
       .sp-video { width: 100%; height: 100%; object-fit: cover; display: block; }
       .sp-fallback { position: absolute; inset: 0; }
       .sp-video:not([src=""]) + .sp-fallback { display: none; }
       .sp-video[data-error] + .sp-fallback { display: block; }
       .sp-swatch { width: 100%; height: 100%; }
-      .style-pack-info { padding: .5rem .6rem; }
-      .sp-name { font-size: .78rem; font-weight: 700; color: var(--text); }
-      .sp-desc { font-size: .62rem; color: var(--text-secondary); margin-top: .15rem; line-height: 1.35; }
+      .style-pack-info {
+        padding: .55rem .65rem; flex-shrink: 0;
+        border-top: 1px solid var(--border);
+      }
+      .sp-name { font-size: .8rem; font-weight: 700; color: var(--text); }
+      .sp-desc { font-size: .65rem; color: var(--text-secondary); margin-top: .15rem; line-height: 1.4; }
       .sp-check {
         position: absolute; top: .4rem; right: .4rem;
         font-size: .7rem; color: #fff; font-weight: 700;
@@ -866,49 +852,6 @@
           </div>
 
           <!-- ── PREVIEW (ready_for_review) ──────────────────────── -->
-          <div class="card hidden" id="previewCard" style="margin-top:1rem">
-            <div class="preview-header">
-              <h2>Plan de montage</h2>
-              <div class="preview-actions">
-                <button class="btn-replan" id="replanBtn">Re-planifier</button>
-                <button class="btn-render" id="renderBtn">Valider et rendre</button>
-              </div>
-            </div>
-
-            <div class="hook-rewrite hidden" id="hookRewrite">
-              <strong style="font-size:.72rem;color:var(--salmon);text-transform:uppercase;letter-spacing:.05em;font-style:normal">Hook suggéré</strong><br>
-              <span id="hookText"></span>
-            </div>
-
-            <div class="preview-stats">
-              <div class="preview-stat-card"><div class="val" id="prevOrigDur">—</div><div class="lbl">Durée originale</div></div>
-              <div class="preview-stat-card"><div class="val" id="prevEditDur">—</div><div class="lbl">Durée éditée</div></div>
-              <div class="preview-stat-card"><div class="val" id="prevSegments">—</div><div class="lbl">Segments</div></div>
-            </div>
-
-            <p id="prevContentType" style="font-size:.78rem;color:var(--text-secondary);margin-bottom:.25rem"></p>
-            <p id="prevSpeakers" style="font-size:.78rem;color:var(--text-secondary);margin-bottom:.25rem"></p>
-            <p id="prevGraphics" style="font-size:.78rem;color:var(--text-secondary);margin-bottom:.75rem"></p>
-
-            <div class="ret-pred-wrap" id="retentionPrediction" style="display:none">
-              <span class="ret-pred-label">Rétention prédite</span>
-              <div class="ret-pred-bar-wrap"><div class="ret-pred-bar-fill" id="retPredBar"></div></div>
-              <span class="ret-pred-pct" id="retPredPct">—</span>
-            </div>
-
-            <div class="preview-timeline" id="previewTimeline"></div>
-
-            <!-- Split compare -->
-            <div id="splitComparePanel" style="display:none">
-              <span class="section-label">Comparaison A/B</span>
-              <p id="splitWinnerLabel" style="font-size:.78rem;color:var(--text-secondary);margin-bottom:.5rem"></p>
-              <div class="split-compare" id="splitCompare"></div>
-            </div>
-
-            <button class="action-btn" id="versionBBtn" style="margin-top:.75rem">Générer Version B</button>
-
-          </div>
-
           <!-- ── RESULT ──────────────────────────────────────────── -->
           <div class="card hidden" id="resultCard" style="margin-top:1rem">
             <video id="player" controls playsinline></video>

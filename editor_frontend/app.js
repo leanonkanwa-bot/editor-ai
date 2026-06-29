@@ -224,7 +224,7 @@ function loadVideoLibrary() {
       const score = v.retention_score || Math.floor(Math.random() * 20) + 75;
       const title = v.title || `Vidéo #${i + 1}`;
       const scoreBg = score >= 85 ? "#22c55e" : score >= 70 ? "#f59e0b" : "#ef4444";
-      const thumbSrc = v.thumbnail_url || v.thumbnail || null;
+      const thumbSrc = v.thumbnail_url || v.thumbnail || (v.jobId ? `/api/thumbnail/${v.jobId}` : null);
       const thumbHtml = thumbSrc
         ? `<img src="${thumbSrc}" alt="${title}" style="width:100%;height:100%;object-fit:cover;display:block" />`
         : `<div class="video-lib-thumb-placeholder"><svg class="video-lib-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"/></svg></div>`;
@@ -1000,7 +1000,12 @@ async function poll(jobId) {
     const job = await res.json();
     setStatus(job.status, job.message || "", job.progress || 0);
     if (job.status === "done") return showResult(jobId, job.result);
-    if (job.status === "ready_for_review") return showPreview(jobId, job.preview);
+    if (job.status === "ready_for_review") {
+      // Auto-approve: skip the review screen, proceed directly to render
+      setStatus("rendering", "Lancement du rendu…", 70);
+      try { await apiFetch(`/api/jobs/${jobId}/approve`, { method: "POST" }); } catch (_) {}
+      continue;
+    }
     if (job.status === "error") return fail(job.error || "Erreur inconnue", jobId);
   }
 }
