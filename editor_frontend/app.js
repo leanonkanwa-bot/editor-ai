@@ -787,31 +787,39 @@ function _dropZoneAcceptFile(file) {
   // Update drop zone with thumbnail + file info
   const mb = (file.size / (1024 * 1024)).toFixed(1);
   drop?.classList.add("has-file");
-  if (drop) {
-    const thumbVideo = document.createElement("video");
-    thumbVideo.src = URL.createObjectURL(file);
-    thumbVideo.muted = true;
-    thumbVideo.playsInline = true;
-    thumbVideo.currentTime = 2;
-    thumbVideo.addEventListener("seeked", () => {
-      try {
-        const canvas = document.createElement("canvas");
-        canvas.width = thumbVideo.videoWidth;
-        canvas.height = thumbVideo.videoHeight;
-        canvas.getContext("2d").drawImage(thumbVideo, 0, 0);
-        const imgUrl = canvas.toDataURL("image/jpeg", 0.7);
-        drop.style.backgroundImage = `url(${imgUrl})`;
-        drop.style.backgroundSize = "cover";
-        drop.style.backgroundPosition = "center";
-        URL.revokeObjectURL(thumbVideo.src);
-      } catch (_) {}
-    }, { once: true });
-    thumbVideo.load();
-  }
   if (dropLabel) {
     dropLabel.textContent = `${file.name} — ${mb} MB`;
     dropLabel.style.color = "#fff";
     dropLabel.style.textShadow = "0 1px 4px rgba(0,0,0,0.8)";
+  }
+  // Best-effort client-side thumbnail (works for MP4, may fail for MOV/MKV)
+  if (drop) {
+    try {
+      const thumbVideo = document.createElement("video");
+      const objUrl = URL.createObjectURL(file);
+      thumbVideo.src = objUrl;
+      thumbVideo.muted = true;
+      thumbVideo.playsInline = true;
+      thumbVideo.addEventListener("loadedmetadata", () => {
+        thumbVideo.currentTime = Math.min(2, thumbVideo.duration * 0.1);
+      }, { once: true });
+      thumbVideo.addEventListener("seeked", () => {
+        try {
+          if (thumbVideo.videoWidth === 0) return;
+          const canvas = document.createElement("canvas");
+          canvas.width = thumbVideo.videoWidth;
+          canvas.height = thumbVideo.videoHeight;
+          canvas.getContext("2d").drawImage(thumbVideo, 0, 0);
+          const imgUrl = canvas.toDataURL("image/jpeg", 0.7);
+          drop.style.backgroundImage = `url(${imgUrl})`;
+          drop.style.backgroundSize = "cover";
+          drop.style.backgroundPosition = "center";
+        } catch (_) {}
+        URL.revokeObjectURL(objUrl);
+      }, { once: true });
+      thumbVideo.addEventListener("error", () => { URL.revokeObjectURL(objUrl); }, { once: true });
+      thumbVideo.load();
+    } catch (_) {}
   }
 }
 
@@ -885,6 +893,20 @@ async function chunkedUpload(file) {
     body: JSON.stringify({ filename: file.name }),
   });
   if (!asmRes.ok) throw new Error(`Assembly failed: ${asmRes.status}`);
+
+  // Server-side thumbnail (reliable for all formats including MOV/MKV)
+  try {
+    const thumbRes = await apiFetch(`/api/upload/preview/${upload_id}`);
+    if (thumbRes.ok) {
+      const blob = await thumbRes.blob();
+      const thumbUrl = URL.createObjectURL(blob);
+      if (drop) {
+        drop.style.backgroundImage = `url(${thumbUrl})`;
+        drop.style.backgroundSize = "cover";
+        drop.style.backgroundPosition = "center";
+      }
+    }
+  } catch (_) {}
 
   setStatus("queued", "Démarrage de l'édition IA…", 28);
   const fd = new FormData(form);
