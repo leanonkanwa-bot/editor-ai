@@ -31,6 +31,7 @@ from app.api.jobs import store
 from app.api.pipeline import run_job, run_render_phase
 from app.api.upload import assembled_path, router as upload_router
 from app.core.config import settings
+from app.core.plans import DEFAULT_PLAN, plan_info
 
 try:
     from app.api.templates import router as templates_router
@@ -300,6 +301,33 @@ async def submit_edit(
     if not settings.anthropic_api_key:
         raise HTTPException(500, "ANTHROPIC_API_KEY not set in backend/.env")
 
+    # Load coach profile + enforce the plan's video quota BEFORE touching the
+    # upload or creating a job — avoids spending Whisper/Claude costs on a
+    # video that will never be delivered, and avoids accepting an upload
+    # only to reject it afterwards.
+    coach_profile: dict | None = None
+    if profile_id:
+        try:
+            _profile_path = settings._data_root / "profiles" / f"{profile_id}.json"
+            if _profile_path.exists():
+                coach_profile = json.loads(_profile_path.read_text())
+        except Exception:
+            pass
+
+    plan = (coach_profile or {}).get("plan") or DEFAULT_PLAN
+    info = plan_info(plan)
+    used = store.count_for_profile(profile_id, info["period"])
+    if used >= info["limit"]:
+        period_label = "ce mois" if info["period"] == "monthly" else ""
+        message = f"Tu as atteint ta limite de {info['limit']} vidéos {period_label} ({info['label']}). Passe à un plan supérieur pour continuer.".replace("  ", " ")
+        raise HTTPException(403, {
+            "error": "quota_exceeded",
+            "message": message,
+            "plan": plan,
+            "used": used,
+            "limit": info["limit"],
+        })
+
     job = store.create()
 
     if upload_id:
@@ -316,18 +344,6 @@ async def submit_edit(
             shutil.copyfileobj(video.file, f)
     else:
         raise HTTPException(400, "Provide either a video file or an upload_id.")
-
-    # Load coach profile from disk if profile_id provided
-    coach_profile: dict | None = None
-    if profile_id:
-        try:
-            from app.core.config import settings as _settings
-            _profile_path = _settings.uploads_dir.parent / "profiles" / f"{profile_id}.json"
-            if _profile_path.exists():
-                import json as _json
-                coach_profile = _json.loads(_profile_path.read_text())
-        except Exception:
-            pass
 
     # Persist source path + run params so the job can be retried after a
     # server restart without the user having to re-upload the video.
@@ -350,7 +366,7 @@ async def submit_edit(
         style_pack=style_pack,
         coach_profile=coach_profile,
     )
-    store.update(job.id, source_path=str(dest), params=run_params)
+    store.update(job.id, source_path=str(dest), params=run_params, profile_id=profile_id)
 
     background.add_task(run_job, job.id, dest, **run_params)
 
@@ -391,7 +407,10 @@ async def retry_job(
 
     new_job = store.create()
     run_params = original.params or {}
-    store.update(new_job.id, source_path=str(src), params=run_params)
+    # is_retry=True so this doesn't consume another quota slot — the user
+    # already paid the cost of the original attempt.
+    store.update(new_job.id, source_path=str(src), params=run_params,
+                 profile_id=original.profile_id, is_retry=True)
     background.add_task(run_job, new_job.id, src, **run_params)
     return JSONResponse({"job_id": new_job.id})
 

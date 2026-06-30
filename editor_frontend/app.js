@@ -449,7 +449,29 @@ function loadProfileSection() {
       if ($("pillar3") && p.pillars[2]) $("pillar3").value = p.pillars[2];
     }
   } catch {}
+
+  loadPlanUsage();
 }
+
+async function loadPlanUsage() {
+  const profileId = localStorage.getItem("profile_id");
+  const nameEl = $("profilePlanName");
+  const usageEl = $("profilePlanUsage");
+  if (!profileId || !nameEl || !usageEl) return;
+  try {
+    const res = await apiFetch(`/api/billing/usage/${profileId}`);
+    if (!res.ok) return;
+    const u = await res.json();
+    nameEl.textContent = u.plan_label || u.plan;
+    const period = u.period === "monthly" ? " ce mois" : " (essai)";
+    usageEl.textContent = `${u.used}/${u.limit} vidéos${period}`;
+    usageEl.style.color = u.exceeded ? "#ff5c7a" : "var(--text-secondary)";
+  } catch {}
+}
+
+$("changePlanBtn")?.addEventListener("click", () => {
+  document.querySelector(".btn-upgrade")?.click();
+});
 
 // Edit profile → open onboarding on landing
 $("editProfileBtn")?.addEventListener("click", () => {
@@ -885,7 +907,7 @@ function _dropZoneAcceptFile(file) {
 // Guard: editor-only listeners
 if (videoInput && form && submitBtn) {
 
-form.addEventListener("submit", (e) => {
+form.addEventListener("submit", async (e) => {
   e.preventDefault();
   // Inject profile_id into form before submit
   const profileIdInput = form.querySelector('input[name="profile_id"]') || (() => {
@@ -893,7 +915,22 @@ form.addEventListener("submit", (e) => {
     inp.type = "hidden"; inp.name = "profile_id";
     form.appendChild(inp); return inp;
   })();
-  profileIdInput.value = localStorage.getItem("profile_id") || "";
+  const _profileId = localStorage.getItem("profile_id") || "";
+  profileIdInput.value = _profileId;
+
+  // Quota pre-check — block BEFORE starting the upload so we don't waste
+  // bandwidth or Whisper/Claude costs on a video that will be rejected.
+  // Fails open: if this check itself errors out, fall through and let the
+  // server-side check in /api/edit be the authoritative gate.
+  if (_profileId) {
+    try {
+      const usageRes = await apiFetch(`/api/billing/usage/${_profileId}`);
+      if (usageRes.ok) {
+        const usage = await usageRes.json();
+        if (usage.exceeded) { showQuotaExceeded(usage); return; }
+      }
+    } catch (_) {}
+  }
 
   // Request browser notification permission on first edit (BUILD 8)
   if (localStorage.getItem("notif_permission_asked") !== "1") {
@@ -908,6 +945,7 @@ form.addEventListener("submit", (e) => {
   resultCard?.classList.add("hidden");
   statusCard?.classList.remove("hidden");
   statusCard?.scrollIntoView({ behavior: "smooth", block: "center" });
+  document.getElementById("quotaUpgradeBtn")?.remove();
   setStatus("queued", "Démarrage de l'upload…", 0);
   submitBtn.disabled = true;
   submitBtn.querySelector(".btn-label").textContent = "Traitement…";
@@ -991,6 +1029,10 @@ async function chunkedUpload(file) {
 
   const editRes = await apiFetch("/api/edit", { method: "POST", body: fd });
   if (editRes.status === 401) { loginCard?.classList.remove("hidden"); appCard?.classList.add("hidden"); statusCard?.classList.add("hidden"); submitBtn.disabled = false; submitBtn.querySelector(".btn-label").textContent = "Éditer ma vidéo"; submitBtn.classList.remove("loading"); return; }
+  if (editRes.status === 403) {
+    const body = await editRes.json().catch(() => ({}));
+    if (body?.detail?.error === "quota_exceeded") return showQuotaExceeded(body.detail);
+  }
   if (!editRes.ok) throw new Error(`Edit start failed: ${editRes.status} ${await editRes.text()}`);
   const { job_id } = await editRes.json();
   poll(job_id).catch(e => { console.error("poll crashed:", e); fail("Erreur inattendue pendant le suivi du job."); });
@@ -1014,6 +1056,12 @@ function directUpload(file) {
 
   xhr.addEventListener("load", () => {
     if (xhr.status === 401) { loginCard?.classList.remove("hidden"); appCard?.classList.add("hidden"); statusCard?.classList.add("hidden"); submitBtn.disabled = false; submitBtn.querySelector(".btn-label").textContent = "Éditer ma vidéo"; submitBtn.classList.remove("loading"); return; }
+    if (xhr.status === 403) {
+      try {
+        const body = JSON.parse(xhr.responseText);
+        if (body?.detail?.error === "quota_exceeded") return showQuotaExceeded(body.detail);
+      } catch (_) {}
+    }
     if (xhr.status < 200 || xhr.status >= 300) return fail(`Serveur: ${xhr.status} ${xhr.responseText}`);
     try {
       const { job_id } = JSON.parse(xhr.responseText);
@@ -1087,6 +1135,26 @@ function setStatus(status, message, progress) {
 }
 
 let _retryJobId = null;
+
+function showQuotaExceeded(usage) {
+  resultCard?.classList.add("hidden");
+  statusCard?.classList.remove("hidden");
+  statusCard?.scrollIntoView({ behavior: "smooth", block: "center" });
+  const period = usage.period === "monthly" ? "ce mois" : "";
+  const msg = usage.message
+    || `Tu as atteint ta limite de ${usage.limit} vidéo${usage.limit > 1 ? "s" : ""} ${period} (${usage.plan_label || usage.plan}). Passe à un plan supérieur pour continuer.`.replace(/\s+/g, " ").trim();
+  fail(msg);
+  document.getElementById("quotaUpgradeBtn")?.remove();
+  if (statusMsg) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = "quotaUpgradeBtn";
+    btn.textContent = "Voir les plans";
+    btn.style.cssText = "display:block;margin-top:.6rem;padding:.45rem 1rem;border-radius:8px;border:none;background:#FF7751;color:#fff;font-family:var(--font);font-size:.8rem;font-weight:600;cursor:pointer";
+    btn.addEventListener("click", () => document.querySelector(".btn-upgrade")?.click());
+    statusMsg.after(btn);
+  }
+}
 
 function fail(msg, jobId) {
   if (submitBtn) { submitBtn.disabled = false; submitBtn.querySelector(".btn-label").textContent = "Éditer ma vidéo"; submitBtn.classList.remove("loading"); }

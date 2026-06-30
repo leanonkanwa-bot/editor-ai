@@ -19,6 +19,7 @@ import threading
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +49,9 @@ class Job:
     energy_profile: list | None = None           # EnergyPoint dicts
     hook_overlay: dict[str, Any] | None = None   # rewrite_hook result
     preview: dict[str, Any] | None = None        # structured preview sent to frontend
+    # Plan quota tracking
+    profile_id: str | None = None   # coach profile that submitted this job
+    is_retry: bool = False          # True if created via /api/retry — excluded from quota counting
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -121,6 +125,27 @@ class JobStore:
     def get(self, job_id: str) -> Job | None:
         with self._lock:
             return self._jobs.get(job_id)
+
+    def count_for_profile(self, profile_id: str, period: str) -> int:
+        """Count non-retry jobs submitted by this profile.
+
+        period="monthly" restricts to the current UTC calendar month;
+        period="lifetime" counts every job ever submitted by this profile.
+        """
+        if not profile_id:
+            return 0
+        now = datetime.now(timezone.utc)
+        with self._lock:
+            count = 0
+            for job in self._jobs.values():
+                if job.profile_id != profile_id or job.is_retry:
+                    continue
+                if period == "monthly":
+                    jd = datetime.fromtimestamp(job.created_at, tz=timezone.utc)
+                    if jd.year != now.year or jd.month != now.month:
+                        continue
+                count += 1
+            return count
 
 
 store = JobStore()
