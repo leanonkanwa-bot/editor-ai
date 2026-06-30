@@ -13,6 +13,7 @@ from pathlib import Path
 from app.agent.planner import FormatHint, analyze_subject_position, plan_edit, rewrite_hook
 from app.api.jobs import store
 from app.core.config import settings
+from app.core.plans import has_4k_access
 from app.engine.analytics_engine import build_insights_instructions, load_insights
 from app.engine.brand_engine import BrandEngine, load_brand
 from app.engine.broll_generator import BrollGenerator
@@ -473,6 +474,7 @@ def run_render_phase(job_id: str, src: Path) -> None:
             subject_position=subject_pos,
             graphic_specs=graphic_specs,
             content_type=content_type,
+            allow_4k=has_4k_access(params.get("coach_profile")),
         )
 
         # Post-render quality check — logs warnings so they surface in Railway logs.

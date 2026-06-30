@@ -24,7 +24,7 @@ from fastapi import APIRouter, Body, HTTPException, Request
 
 from app.api.jobs import store as job_store
 from app.core.config import settings
-from app.core.plans import DEFAULT_PLAN, plan_info
+from app.core.plans import DEFAULT_PLAN, effective_plan_info
 
 logger = logging.getLogger(__name__)
 
@@ -41,19 +41,18 @@ _TIER_PRICE_IDS = {
 
 @router.get("/usage/{profile_id}")
 def get_usage(profile_id: str) -> dict:
-    plan = DEFAULT_PLAN
+    profile: dict = {}
     profile_path = _PROFILES_DIR / f"{profile_id}.json"
     if profile_path.exists():
         try:
             profile = json.loads(profile_path.read_text(encoding="utf-8"))
-            plan = profile.get("plan") or DEFAULT_PLAN
         except Exception:
             pass
 
-    info = plan_info(plan)
+    info = effective_plan_info(profile)
     used = job_store.count_for_profile(profile_id, info["period"])
     return {
-        "plan": plan,
+        "plan": profile.get("plan") or DEFAULT_PLAN,
         "plan_label": info["label"],
         "used": used,
         "limit": info["limit"],

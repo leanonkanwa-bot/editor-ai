@@ -31,7 +31,7 @@ from app.api.jobs import store
 from app.api.pipeline import run_job, run_render_phase
 from app.api.upload import assembled_path, router as upload_router
 from app.core.config import settings
-from app.core.plans import DEFAULT_PLAN, plan_info
+from app.core.plans import DEFAULT_PLAN, effective_plan_info
 
 try:
     from app.api.templates import router as templates_router
@@ -314,8 +314,7 @@ async def submit_edit(
         except Exception:
             pass
 
-    plan = (coach_profile or {}).get("plan") or DEFAULT_PLAN
-    info = plan_info(plan)
+    info = effective_plan_info(coach_profile)
     used = store.count_for_profile(profile_id, info["period"])
     if used >= info["limit"]:
         period_label = "ce mois" if info["period"] == "monthly" else ""
@@ -323,7 +322,7 @@ async def submit_edit(
         raise HTTPException(403, {
             "error": "quota_exceeded",
             "message": message,
-            "plan": plan,
+            "plan": (coach_profile or {}).get("plan") or DEFAULT_PLAN,
             "used": used,
             "limit": info["limit"],
         })
@@ -564,8 +563,26 @@ async def save_profile(payload: dict = Body(...)) -> dict:
     _PROFILES_DIR.mkdir(parents=True, exist_ok=True)
     profile_id = payload.get("profile_id") or secrets.token_urlsafe(12)
     profile_path = _PROFILES_DIR / f"{profile_id}.json"
+
+    # is_founder is a privileged, server-only flag (unlimited quota + 4K
+    # access) -- never settable through this public endpoint. Strip any
+    # client-supplied value and preserve whatever is already on disk.
+    safe_payload = {k: v for k, v in payload.items() if k != "is_founder"}
+    existing_is_founder = False
+    if profile_path.exists():
+        try:
+            existing_is_founder = bool(
+                json.loads(profile_path.read_text(encoding="utf-8")).get("is_founder")
+            )
+        except Exception:
+            pass
+
+    data = {**safe_payload, "profile_id": profile_id}
+    if existing_is_founder:
+        data["is_founder"] = True
+
     profile_path.write_text(
-        json.dumps({**payload, "profile_id": profile_id}, ensure_ascii=False, indent=2),
+        json.dumps(data, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     return {"profile_id": profile_id}

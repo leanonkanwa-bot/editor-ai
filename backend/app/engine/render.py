@@ -1530,11 +1530,15 @@ def _round_even(x: float) -> int:
     return max(2, int(round(x / 2) * 2))
 
 
-def _upscale_to_source_resolution(output_path: Path, src: Path, short_form: bool) -> dict[str, Any]:
+def _upscale_to_source_resolution(output_path: Path, src: Path, short_form: bool, allow_4k: bool = False) -> dict[str, Any]:
     """Upscale a 1080p-class HyperFrames output to match the source video's
     resolution, capped at 4K. No-op (returns immediately) if the source isn't
-    meaningfully larger than 1080p — never downscales, never re-encodes for
-    nothing.
+    meaningfully larger than 1080p, or if the caller isn't entitled to 4K --
+    never downscales, never re-encodes for nothing.
+
+    4K is currently founder-exclusive (see plans.has_4k_access) while it's
+    not yet a real paid feature -- non-entitled callers stay at the
+    1080p-class composition output, matching pre-upscale behavior.
 
     The HyperFrames composition canvas is fixed at 1080x1920/1920x1080 (see
     storyboard.py) -- changing that would require rewriting every pixel-based
@@ -1543,11 +1547,14 @@ def _upscale_to_source_resolution(output_path: Path, src: Path, short_form: bool
     any of that, it just avoids visibly degrading a 4K source down to 1080p
     in the delivered file.
     """
+    base_w, base_h = (1080, 1920) if short_form else (1920, 1080)
+    if not allow_4k:
+        return {"upscaled": False, "output_resolution": f"{base_w}x{base_h}"}
+
     info = _probe_video_info(src)
     src_w, src_h = info.get("width", 0), info.get("height", 0)
     src_max = max(src_w, src_h)
 
-    base_w, base_h = (1080, 1920) if short_form else (1920, 1080)
     scale = max(1.0, min(src_max / 1920.0, 2.0))  # 1.0 = no-op, 2.0 = 4K cap
 
     if scale <= 1.0001:
@@ -1597,6 +1604,7 @@ def _render_hyperframes(
     editing_style: str = "viral",
     style_pack: str = "lean_glass",
     subject_position: dict | None = None,
+    allow_4k: bool = False,
 ) -> dict[str, Any]:
     """Full HyperFrames pipeline: pre-trim -> storyboard -> compose -> render."""
     from app.engine.pretrim import pretrim
@@ -1744,7 +1752,7 @@ def _render_hyperframes(
     # Stage 5: Upscale to source resolution (capped at 4K) — the HyperFrames
     # composition canvas is fixed 1080p-class; this avoids silently
     # delivering a 4K source back at 1080p without touching compose.py.
-    upscale_info = _upscale_to_source_resolution(output_path, src, short_form=plan.format == "short")
+    upscale_info = _upscale_to_source_resolution(output_path, src, short_form=plan.format == "short", allow_4k=allow_4k)
 
     return {
         "output": str(output_path),
@@ -1779,6 +1787,7 @@ def render(
     content_type: str = "coaching",
     editing_style: str = "viral",
     style_pack: str = "lean_glass",
+    allow_4k: bool = False,
 ) -> dict[str, Any]:
     work_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1792,6 +1801,7 @@ def render(
                 editing_style=editing_style,
                 style_pack=style_pack,
                 subject_position=subject_position,
+                allow_4k=allow_4k,
             )
         except Exception as _hf_err:
             import traceback as _tb
