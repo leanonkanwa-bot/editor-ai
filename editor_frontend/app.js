@@ -763,6 +763,44 @@ const downloadLink = $("downloadLink");
   }
 })();
 
+// ── Billing: start a Stripe Checkout session for a tier ─────────────────────────
+async function startCheckout(tier) {
+  const profile_id = localStorage.getItem("profile_id") || "";
+  const res = await apiFetch("/api/billing/checkout", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tier, profile_id }),
+  });
+  if (!res.ok) throw new Error(`checkout ${res.status}`);
+  const { url } = await res.json();
+  if (!url) throw new Error("no checkout url returned");
+  window.location.href = url;
+}
+
+// ── Billing: show a banner after returning from Stripe Checkout ─────────────────
+(function showBillingReturnBanner() {
+  const params = new URLSearchParams(window.location.search);
+  const billing = params.get("billing");
+  if (!billing) return;
+
+  const msg = billing === "success"
+    ? { text: "✓ Abonnement activé !", color: "#22c55e" }
+    : billing === "cancelled"
+    ? { text: "Paiement annulé — vous pouvez réessayer à tout moment.", color: "var(--text-secondary)" }
+    : null;
+
+  if (msg && appCard) {
+    const banner = document.createElement("p");
+    banner.style.cssText = `color:${msg.color};margin-bottom:1rem;font-size:.9rem;font-weight:600`;
+    banner.textContent = msg.text;
+    appCard.querySelector(".tool-head")?.after(banner);
+  }
+
+  params.delete("billing");
+  const cleanUrl = window.location.pathname + (params.toString() ? `?${params}` : "");
+  history.replaceState({}, "", cleanUrl);
+})();
+
 loginForm?.addEventListener("submit", async (e) => {
   e.preventDefault();
   if (loginErr) loginErr.textContent = "";
@@ -2832,7 +2870,7 @@ document.addEventListener("DOMContentLoaded", function() {
               '<ul style="list-style:none;font-size:.78rem;color:var(--text-secondary);display:flex;flex-direction:column;gap:.25rem;flex:1;margin-top:.2rem">',
                 '<li>✓ 1 vidéo (unique)</li><li>✓ Tous les styles</li><li>✓ Export 1080p</li>',
               '</ul>',
-              '<button class="upgrade-plan-btn" style="margin-top:.5rem;width:100%;padding:.5rem;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:var(--font);font-size:.78rem;font-weight:600;cursor:pointer">Plan actuel</button>',
+              '<button class="upgrade-plan-btn" data-tier="free" style="margin-top:.5rem;width:100%;padding:.5rem;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:var(--font);font-size:.78rem;font-weight:600;cursor:pointer">Plan actuel</button>',
             '</div>',
             '<div style="border:1px solid var(--border);border-radius:12px;padding:1.1rem;display:flex;flex-direction:column;gap:.4rem">',
               '<div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-secondary)">Starter</div>',
@@ -2840,7 +2878,7 @@ document.addEventListener("DOMContentLoaded", function() {
               '<ul style="list-style:none;font-size:.78rem;color:var(--text-secondary);display:flex;flex-direction:column;gap:.25rem;flex:1;margin-top:.2rem">',
                 '<li>✓ 15 vidéos / mois</li><li>✓ 6 styles visuels</li><li>✓ Captions + Hook</li>',
               '</ul>',
-              '<button class="upgrade-plan-btn" style="margin-top:.5rem;width:100%;padding:.5rem;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:var(--font);font-size:.78rem;font-weight:600;cursor:pointer">Choisir ce plan</button>',
+              '<button class="upgrade-plan-btn" data-tier="starter" style="margin-top:.5rem;width:100%;padding:.5rem;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:var(--font);font-size:.78rem;font-weight:600;cursor:pointer">Choisir ce plan</button>',
             '</div>',
             '<div style="border:2px solid #FF7751;border-radius:12px;padding:1.1rem;display:flex;flex-direction:column;gap:.4rem;position:relative;background:rgba(255,119,81,.04)">',
               '<div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:#FF7751;color:#fff;font-size:.6rem;font-weight:700;padding:.15rem .55rem;border-radius:99px;white-space:nowrap">POPULAIRE</div>',
@@ -2849,7 +2887,7 @@ document.addEventListener("DOMContentLoaded", function() {
               '<ul style="list-style:none;font-size:.78rem;color:var(--text-secondary);display:flex;flex-direction:column;gap:.25rem;flex:1;margin-top:.2rem">',
                 '<li>✓ 50 vidéos / mois</li><li>✓ Graphics IA</li><li>✓ Captions + Hook</li><li>✓ Support prioritaire</li>',
               '</ul>',
-              '<button class="upgrade-plan-btn" style="margin-top:.5rem;width:100%;padding:.5rem;border-radius:8px;border:none;background:#FF7751;color:#fff;font-family:var(--font);font-size:.78rem;font-weight:600;cursor:pointer">Choisir ce plan</button>',
+              '<button class="upgrade-plan-btn" data-tier="pro" style="margin-top:.5rem;width:100%;padding:.5rem;border-radius:8px;border:none;background:#FF7751;color:#fff;font-family:var(--font);font-size:.78rem;font-weight:600;cursor:pointer">Choisir ce plan</button>',
             '</div>',
             '<div style="border:1px solid var(--border);border-radius:12px;padding:1.1rem;display:flex;flex-direction:column;gap:.4rem">',
               '<div style="font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-secondary)">Agency</div>',
@@ -2857,7 +2895,7 @@ document.addEventListener("DOMContentLoaded", function() {
               '<ul style="list-style:none;font-size:.78rem;color:var(--text-secondary);display:flex;flex-direction:column;gap:.25rem;flex:1;margin-top:.2rem">',
                 '<li>✓ 150 vidéos / mois</li><li>✓ Graphics IA</li><li>✓ Multi-comptes</li>',
               '</ul>',
-              '<button class="upgrade-plan-btn" style="margin-top:.5rem;width:100%;padding:.5rem;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:var(--font);font-size:.78rem;font-weight:600;cursor:pointer">Choisir ce plan</button>',
+              '<button class="upgrade-plan-btn" data-tier="agency" style="margin-top:.5rem;width:100%;padding:.5rem;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);font-family:var(--font);font-size:.78rem;font-weight:600;cursor:pointer">Choisir ce plan</button>',
             '</div>',
           '</div>',
         '</div>'
@@ -2867,8 +2905,16 @@ document.addEventListener("DOMContentLoaded", function() {
       modal.addEventListener("click", function(e) { if (e.target === modal) modal.remove(); });
       modal.querySelectorAll(".upgrade-plan-btn").forEach(function(b) {
         b.addEventListener("click", function() {
-          modal.remove();
-          alert("Paiement à venir — contactez nous à hello@leanretention.com");
+          var tier = b.dataset.tier;
+          if (!tier || tier === "free") { modal.remove(); return; }
+          b.disabled = true;
+          b.textContent = "Redirection…";
+          startCheckout(tier).catch(function(err) {
+            console.error("checkout failed:", err);
+            b.disabled = false;
+            b.textContent = "Choisir ce plan";
+            alert("Impossible de démarrer le paiement. Réessayez ou contactez hello@leanretention.com");
+          });
         });
       });
     });

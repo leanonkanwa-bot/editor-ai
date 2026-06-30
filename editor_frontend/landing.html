@@ -1037,6 +1037,25 @@
         });
       } catch {}
 
+      // If a paid tier was selected, send the user to Stripe Checkout instead
+      // of straight to the editor — they only land in /app after paying
+      // (or if checkout fails to start, as a safe fallback).
+      const tier = localStorage.getItem('selected_tier');
+      if (tier && tier !== 'free') {
+        try {
+          const profileId = localStorage.getItem('profile_id') || '';
+          const res = await fetch('/api/billing/checkout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tier, profile_id: profileId }),
+          });
+          if (res.ok) {
+            const { url } = await res.json();
+            if (url) { window.location.href = url; return; }
+          }
+        } catch {}
+      }
+
       // Redirect to editor (dashboard will show automatically)
       window.location.href = '/app';
     });

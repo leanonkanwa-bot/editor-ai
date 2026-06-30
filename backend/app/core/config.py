@@ -67,6 +67,14 @@ class Settings(BaseSettings):
     # "lean_glass" = dark glass panels with cyan glow (LeanGlass).
     style_pack: str = "lean_glass"
 
+    # Stripe billing. Set on Railway; leave empty for local dev (checkout
+    # endpoint returns 503 instead of crashing if unset).
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_price_starter: str = ""
+    stripe_price_pro: str = ""
+    stripe_price_agency: str = ""
+
     @property
     def _data_root(self) -> Path:
         p = Path(self.data_dir)

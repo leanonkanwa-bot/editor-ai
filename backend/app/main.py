@@ -52,6 +52,11 @@ try:
 except Exception:
     analytics_router = None
 
+try:
+    from app.api.billing import router as billing_router
+except Exception:
+    billing_router = None
+
 
 def _cleanup_old_uploads() -> None:
     """Delete uploaded source videos older than upload_retention_hours."""
@@ -96,6 +101,8 @@ if publish_router:
     app.include_router(publish_router)
 if analytics_router:
     app.include_router(analytics_router)
+if billing_router:
+    app.include_router(billing_router)
 
 AUTH_COOKIE = "lle_token"
 
