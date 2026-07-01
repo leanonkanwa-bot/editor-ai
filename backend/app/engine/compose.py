@@ -53,11 +53,28 @@ def _zone_bounds(zone: str, layout: str) -> dict:
     return table.get(zone, table["lower-third"])
 
 
+def _enforce_track_gaps(cards: list[dict], min_gap: float = 0.01) -> list[dict]:
+    """Return copies of cards with timestamps rounded to 3dp and ≥min_gap between clips."""
+    if not cards:
+        return []
+    result = []
+    for c in sorted(cards, key=lambda x: round(float(x.get("startSec", 0)), 3)):
+        copy = dict(c)
+        copy["startSec"] = round(float(c.get("startSec", 0)), 3)
+        copy["endSec"] = round(float(c.get("endSec", copy["startSec"] + 3)), 3)
+        result.append(copy)
+    for i in range(len(result) - 1):
+        if result[i]["endSec"] >= result[i + 1]["startSec"]:
+            result[i]["endSec"] = round(result[i + 1]["startSec"] - min_gap, 3)
+    return result
+
+
 def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | None = None) -> str:
     """Build a card-host div with correct classes, data attributes, and inline bounds."""
     card_id = card["id"]
-    start = float(card.get("startSec", 0))
-    duration = float(card.get("endSec", start + 3)) - start
+    start = round(float(card.get("startSec", 0)), 3)
+    end = round(float(card.get("endSec", start + 3)), 3)
+    duration = round(end - start, 3)
     zone = card.get("zone", "lower-third")
 
     is_caption = card.get("type") == "caption"
@@ -74,7 +91,7 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
 
     return (
         f'<div class="card-host clip" data-card-id="{card_id}" '
-        f'data-start="{start:.4f}" data-duration="{duration:.4f}" '
+        f'data-start="{start:.3f}" data-duration="{duration:.3f}" '
         f'data-track-index="{track_index}" '
         f'style="left:{bounds["left"]}px;top:{bounds["top"]}px;'
         f'width:{bounds["width"]}px;height:{bounds["height"]}px;'
@@ -1706,10 +1723,13 @@ def compose(
     pack = _PACKS.get(style_pack, _LEAN_GLASS)
     print(f"[COMPOSE] Style pack: {pack['id']}")
 
-    # Separate cards by type for track assignment
+    # Separate cards by type, round timestamps, and enforce per-track gaps to
+    # prevent HyperFrames' overlapping_clips_same_track validation error caused
+    # by floating-point imprecision (e.g. 15.780000000000001 vs 15.780).
     all_cards = storyboard.get("cards", [])
-    graphic_cards = [c for c in all_cards if c.get("type") != "caption"]
-    caption_cards = [c for c in all_cards if c.get("type") == "caption"]
+    graphic_cards = _enforce_track_gaps([c for c in all_cards if c.get("type") != "caption"])
+    caption_cards = _enforce_track_gaps([c for c in all_cards if c.get("type") == "caption"])
+    fixed_all_cards = graphic_cards + caption_cards
 
     # Build card host divs
     card_hosts = []
@@ -1719,7 +1739,7 @@ def compose(
         card_hosts.append(_build_card_host(c, layout, track_index=3, pack=pack))
 
     # Build master timeline
-    timeline_js = _build_timeline_js(all_cards, zoom_entries=zoom_entries, subject_position=subject_position, pack=pack)
+    timeline_js = _build_timeline_js(fixed_all_cards, zoom_entries=zoom_entries, subject_position=subject_position, pack=pack)
 
     # CSS custom properties from theme
     accent_vars = "\n".join(
