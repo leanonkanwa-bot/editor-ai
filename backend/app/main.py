@@ -17,6 +17,7 @@ from typing import Literal
 from urllib.parse import urlencode
 
 import requests
+from app import emails as _emails
 from fastapi import (
     BackgroundTasks,
     Body,
@@ -116,6 +117,7 @@ def _on_startup() -> None:
     _cleanup_old_uploads()
     _purge_trash()
     asyncio.create_task(_purge_trash_loop())
+    asyncio.create_task(_reengagement_loop())
 
 app.add_middleware(
     CORSMiddleware,
@@ -383,6 +385,21 @@ async def submit_edit(
 
     info = effective_plan_info(coach_profile)
     used = store.count_for_profile(profile_id, info["period"])
+    # 80% quota warning — fire-and-forget, never blocks the request
+    if (
+        coach_profile
+        and not info.get("unlimited")
+        and 0 < info["limit"]
+        and used >= int(info["limit"] * 0.8)
+        and used < info["limit"]
+        and profile_id
+    ):
+        _prof_warn_path = settings._data_root / "profiles" / f"{profile_id}.json"
+        threading.Thread(
+            target=_emails.send_quota_warning,
+            args=(coach_profile, _prof_warn_path, used, info["limit"]),
+            daemon=True,
+        ).start()
     if used >= info["limit"]:
         period_label = "ce mois" if info["period"] == "monthly" else ""
         message = f"Tu as atteint ta limite de {info['limit']} vidéos {period_label} ({info['label']}). Passe à un plan supérieur pour continuer.".replace("  ", " ")
@@ -555,66 +572,8 @@ def _save_waitlist(entries: list[dict]) -> None:
 
 
 def _send_welcome_email(email: str) -> None:
-    """Fire-and-forget welcome email via Resend. Silently skips if key not set."""
-    import os
-    try:
-        import resend as _resend
-    except ImportError:
-        return
-    api_key = os.environ.get("RESEND_API_KEY", "")
-    if not api_key:
-        return
-    _resend.api_key = api_key
-    try:
-        _resend.Emails.send({
-            "from": "onboarding@resend.dev",
-            "to": [email],
-            "subject": "Bienvenue sur LeanRetention 🎬",
-            "html": """
-<!DOCTYPE html>
-<html lang="fr">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#080808">
-  <div style="font-family:'Helvetica Neue',Arial,sans-serif;background:#080808;color:#F5F5F6;
-              padding:48px 32px;max-width:560px;margin:0 auto">
-
-    <div style="margin-bottom:32px">
-      <span style="background:#FF7751;color:#080808;font-size:13px;font-weight:700;
-                   padding:6px 12px;border-radius:6px;letter-spacing:.04em">LEANRETENTION</span>
-    </div>
-
-    <h1 style="font-size:28px;font-weight:800;letter-spacing:-.02em;margin:0 0 12px;color:#F5F5F6">
-      Bienvenue&nbsp;! Votre&nbsp;première vidéo&nbsp;vous&nbsp;attend.&nbsp;🔥
-    </h1>
-
-    <p style="font-size:16px;color:rgba(245,245,246,.65);line-height:1.6;margin:0 0 32px">
-      LeanRetention analyse votre contenu, réécrit votre hook, supprime les
-      silences et ajoute des captions automatiquement.<br><br>
-      Première vidéo <strong style="color:#FF7751">offerte</strong> — aucune carte requise.
-    </p>
-
-    <a href="https://leanlead-production.up.railway.app/app"
-       style="display:inline-block;background:#FF7751;color:#fff;
-              padding:14px 28px;border-radius:8px;text-decoration:none;
-              font-weight:700;font-size:15px;
-              box-shadow:0 0 24px rgba(255,119,81,.35)">
-      Commencer l'édition →
-    </a>
-
-    <div style="margin-top:48px;padding-top:24px;border-top:1px solid rgba(255,255,255,.08)">
-      <p style="color:rgba(245,245,246,.35);font-size:12px;margin:0">
-        LeanRetention · Paris<br>
-        Vous recevez cet email car vous avez rejoint notre liste d'attente.<br>
-        <a href="#" style="color:#FF7751;text-decoration:none">Se désabonner</a>
-      </p>
-    </div>
-  </div>
-</body>
-</html>
-""",
-        })
-    except Exception as e:
-        print(f"[email] Failed to send welcome email to {email}: {e}")
+    """Thin wrapper used by the /api/waitlist endpoint."""
+    _emails.send_welcome({"email": email})
 
 
 @app.post("/api/waitlist")
@@ -644,6 +603,37 @@ def waitlist_count() -> dict:
 
 
 _PROFILES_DIR = settings._data_root / "profiles"
+
+
+# ── Re-engagement email loop (daily, mirrors the trash-purge pattern) ─────────
+
+def _check_reengagement() -> None:
+    """For each profile with at least one completed video, if the last completed
+    job is older than 7 days, queue a re-engagement email (throttled per profile)."""
+    try:
+        for profile_path in _PROFILES_DIR.glob("*.json"):
+            try:
+                profile = json.loads(profile_path.read_text(encoding="utf-8"))
+                pid = profile.get("profile_id") or profile_path.stem
+                done_times = [
+                    j.created_at for j in store._jobs.values()
+                    if j.profile_id == pid and j.status == "done" and not j.is_retry
+                ]
+                if not done_times:
+                    continue  # never edited — skip
+                if time.time() - max(done_times) < 7 * 24 * 3600:
+                    continue  # active in last 7 days — skip
+                _emails.send_reengagement(profile, profile_path)
+            except Exception as e:
+                print(f"[reengagement] profile {profile_path.stem}: {e}")
+    except Exception as e:
+        print(f"[reengagement] scan failed: {e}")
+
+
+async def _reengagement_loop() -> None:
+    while True:
+        await asyncio.sleep(24 * 3600)
+        _check_reengagement()
 
 
 @app.post("/api/profile")
@@ -797,13 +787,15 @@ def google_callback(
                 break
         if not profile_id:
             profile_id = secrets.token_urlsafe(12)
-            profile_path = _PROFILES_DIR / f"{profile_id}.json"
-            profile_path.write_text(json.dumps({
+            new_profile = {
                 "profile_id": profile_id,
                 "email": email,
                 "name": name,
                 "plan": DEFAULT_PLAN,
-            }, ensure_ascii=False, indent=2), encoding="utf-8")
+            }
+            profile_path = _PROFILES_DIR / f"{profile_id}.json"
+            profile_path.write_text(json.dumps(new_profile, ensure_ascii=False, indent=2), encoding="utf-8")
+            _emails.send_welcome(new_profile)
 
     resp = RedirectResponse(f"{base}/app?oauth=success")
     resp.delete_cookie(OAUTH_STATE_COOKIE)
@@ -1275,7 +1267,7 @@ def _send_weekly_digests() -> None:
         Les vidéos avec 3+ loops retiennent 40% de spectateurs supplémentaires à la marque.
       </p>
     </div>
-    <a href="https://leanlead-production.up.railway.app/app"
+    <a href="https://leanretention.com/app"
        style="display:inline-block;background:#FF7751;color:#fff;padding:12px 24px;
               border-radius:8px;text-decoration:none;font-weight:700;font-size:14px">
       Éditer une nouvelle vidéo →
@@ -1288,7 +1280,7 @@ def _send_weekly_digests() -> None:
   </div>
 </body></html>"""
                 _resend.Emails.send({
-                    "from": "digest@resend.dev",
+                    "from": "hello@leanretention.com",
                     "to": [email],
                     "subject": f"📊 Votre résumé LeanRetention — semaine du {datetime.utcnow().strftime('%d/%m')}",
                     "html": html,

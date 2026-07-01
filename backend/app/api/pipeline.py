@@ -518,6 +518,16 @@ def run_render_phase(job_id: str, src: Path) -> None:
                 "brand_applied": bool(brand_kit.get("name")),
             },
         )
+        # Video-ready email — fire-and-forget, never blocks render delivery
+        try:
+            import json as _json
+            from app import emails as _emails
+            if job.profile_id:
+                _prof_path = settings._data_root / "profiles" / f"{job.profile_id}.json"
+                if _prof_path.exists():
+                    _emails.send_video_ready(_json.loads(_prof_path.read_text(encoding="utf-8")))
+        except Exception as _email_exc:
+            print(f"[email] video_ready hook failed for job {job_id}: {_email_exc}")
     except Exception as e:
         store.update(
             job_id,

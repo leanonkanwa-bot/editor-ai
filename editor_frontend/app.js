@@ -63,6 +63,7 @@ $("dashEditBtn")?.addEventListener("click", () => switchSection("editorArea"));
   // (set by /api/auth/google/callback), restore localStorage from it even
   // if it was wiped entirely. Fails silently (401) when there's no session
   // cookie — this runs on every load, not just right after a fresh login.
+  let _hasOAuthSession = false;
   try {
     const meRes = await fetch("/api/auth/me");
     if (meRes.ok) {
@@ -70,6 +71,7 @@ $("dashEditBtn")?.addEventListener("click", () => switchSection("editorArea"));
       localStorage.setItem("coach_profile", JSON.stringify(profile));
       if (profile.profile_id) localStorage.setItem("profile_id", profile.profile_id);
       localStorage.setItem("onboarded", "true");
+      _hasOAuthSession = true;
     }
   } catch {}
 
@@ -104,7 +106,13 @@ $("dashEditBtn")?.addEventListener("click", () => switchSection("editorArea"));
       }
     }
 
-    if (!raw) { switchSection("editorArea"); return; }
+    if (!raw) {
+      // No profile in localStorage and no OAuth session cookie → send to
+      // landing so the user can sign in via Google (the only entry point).
+      if (!_hasOAuthSession) { window.location.href = "/"; return; }
+      switchSection("editorArea");
+      return;
+    }
     const p = JSON.parse(raw);
 
     // Update nav avatar with initials
