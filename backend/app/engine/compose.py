@@ -53,28 +53,11 @@ def _zone_bounds(zone: str, layout: str) -> dict:
     return table.get(zone, table["lower-third"])
 
 
-def _enforce_track_gaps(cards: list[dict], min_gap: float = 0.01) -> list[dict]:
-    """Return copies of cards with timestamps rounded to 3dp and ≥min_gap between clips."""
-    if not cards:
-        return []
-    result = []
-    for c in sorted(cards, key=lambda x: round(float(x.get("startSec", 0)), 3)):
-        copy = dict(c)
-        copy["startSec"] = round(float(c.get("startSec", 0)), 3)
-        copy["endSec"] = round(float(c.get("endSec", copy["startSec"] + 3)), 3)
-        result.append(copy)
-    for i in range(len(result) - 1):
-        if result[i]["endSec"] >= result[i + 1]["startSec"]:
-            result[i]["endSec"] = round(result[i + 1]["startSec"] - min_gap, 3)
-    return result
-
-
 def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | None = None) -> str:
     """Build a card-host div with correct classes, data attributes, and inline bounds."""
     card_id = card["id"]
-    start = round(float(card.get("startSec", 0)), 3)
-    end = round(float(card.get("endSec", start + 3)), 3)
-    duration = round(end - start, 3)
+    start = float(card.get("startSec", 0))
+    duration = float(card.get("endSec", start + 3)) - start
     zone = card.get("zone", "lower-third")
 
     is_caption = card.get("type") == "caption"
@@ -91,7 +74,7 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
 
     return (
         f'<div class="card-host clip" data-card-id="{card_id}" '
-        f'data-start="{start:.3f}" data-duration="{duration:.3f}" '
+        f'data-start="{start:.4f}" data-duration="{duration:.4f}" '
         f'data-track-index="{track_index}" '
         f'style="left:{bounds["left"]}px;top:{bounds["top"]}px;'
         f'width:{bounds["width"]}px;height:{bounds["height"]}px;'
@@ -112,7 +95,7 @@ _EASE_CINEMA_IN = "cubic-bezier(0.16, 0.60, 0.40, 1.00)"
 
 _LEAN_GLASS = {
     "id": "lean_glass",
-    "bg": "linear-gradient(160deg, rgba(18,18,28,0.88), rgba(8,8,16,0.95))",
+    "bg": "linear-gradient(160deg, rgba(18,18,28,0.85), rgba(8,8,16,0.92))",
     "text": "#F1F1F1",
     "text_secondary": "rgba(255,255,255,0.6)",
     "accent": "#4cc9f0",
@@ -122,11 +105,11 @@ _LEAN_GLASS = {
     "number_size": "96px",
     "kicker_size": "22px",
     "detail_size": "26px",
-    "border": "1px solid rgba(76,201,240,0.18)",
+    "border": "1px solid rgba(76,201,240,0.12)",
     "radius": "20px",
     "shadow": "0 0 60px rgba(76,201,240,0.15), 0 8px 32px rgba(0,0,0,0.4)",
     "shadow_inset": "inset 0 1px 0 rgba(255,255,255,0.06)",
-    "panel_filter": "",
+    "panel_filter": "blur(16px) saturate(1.4)",
     "title_glow": "0 0 40px rgba(76,201,240,0.25)",
     "title_glow_intense": "0 0 56px rgba(76,201,240,0.45)",
     "has_grain": True,
@@ -908,8 +891,8 @@ def _build_timeline_js(
             if not is_cinema:
                 lines.append(
                     f'  tl.fromTo(\'{panel_sel}\', '
-                    f'{{ scale: 1.04, y: 14 }}, '
-                    f'{{ scale: 1, y: 0, duration: 0.350, ease: _eIn }}, '
+                    f'{{ filter: "blur(12px)", scale: 1.02 }}, '
+                    f'{{ filter: "blur(0px)", scale: 1, duration: 0.350, ease: _eIn }}, '
                     f'{start:.4f});'
                 )
 
@@ -1363,12 +1346,12 @@ def _build_timeline_js(
                         else:
                             lines.append(
                                 f'  tl.fromTo(\'{sl_sel}\', '
-                                f'{{ opacity: 0, x: 16 }}, '
-                                f'{{ opacity: 1, x: 0, duration: 0.300, ease: _eIn }}, '
+                                f'{{ opacity: 0, filter: "blur(6px)" }}, '
+                                f'{{ opacity: 1, filter: "blur(0px)", duration: 0.300, ease: _eIn }}, '
                                 f'{sl_in:.4f});')
                             lines.append(
                                 f'  tl.to(\'{sl_sel}\', '
-                                f'{{ opacity: 0, x: -16, duration: 0.250, ease: _eOut }}, '
+                                f'{{ opacity: 0, filter: "blur(6px)", duration: 0.250, ease: _eOut }}, '
                                 f'{sl_out:.4f});')
             elif content_style == "definition":
                 term_sel = f'.card[data-card-id="{card_id}"] #{card_id}-term'
@@ -1482,8 +1465,8 @@ def _build_timeline_js(
                     else:
                         lines.append(
                             f'  tl.fromTo(\'{blbl_sel}\', '
-                            f'{{ opacity: 0, y: 8 }}, '
-                            f'{{ opacity: 1, y: 0, duration: 0.300, ease: _eIn }}, '
+                            f'{{ opacity: 0, filter: "blur(4px)" }}, '
+                            f'{{ opacity: 1, filter: "blur(0px)", duration: 0.300, ease: _eIn }}, '
                             f'{br_t + 0.30:.4f});')
             else:
                 if is_cinema:
@@ -1524,8 +1507,8 @@ def _build_timeline_js(
                 else:
                     lines.append(
                         f'  tl.fromTo(\'{title_sel}\', '
-                        f'{{ opacity: 0, y: 20 }}, '
-                        f'{{ opacity: 1, y: 0, duration: 0.400, ease: _eIn }}, '
+                        f'{{ opacity: 0, filter: "blur(8px)" }}, '
+                        f'{{ opacity: 1, filter: "blur(0px)", duration: 0.400, ease: _eIn }}, '
                         f'{t_in:.4f});'
                     )
 
@@ -1586,7 +1569,7 @@ def _build_timeline_js(
                 f'{{ scale: 0.97, duration: 0.180, ease: _eOut }}, '
                 f'{exit_start:.4f});'
             )
-        lines.append(f'  tl.set(\'{sel}\', {{ opacity: 0, visibility: "hidden" }}, {end:.3f});')
+        lines.append(f'  tl.set(\'{sel}\', {{ visibility: "hidden" }}, {end:.4f});')
 
         lines.append(f'  }} catch(_e) {{ console.warn("card {card_id} animation error:", _e); }}')
         lines.append("")
@@ -1701,15 +1684,13 @@ def compose(
     gsap_dst = vendor_dir / "gsap.min.js"
     if gsap_src.exists():
         shutil.copy2(gsap_src, gsap_dst)
-        print(f"[COMPOSE] GSAP loaded from .agents ({gsap_dst.stat().st_size // 1024}KB)", flush=True)
     else:
         # Fallback: try the engine's node_modules
         gsap_fallback = Path(__file__).resolve().parent / "node_modules" / "gsap" / "dist" / "gsap.min.js"
         if gsap_fallback.exists():
             shutil.copy2(gsap_fallback, gsap_dst)
-            print(f"[COMPOSE] GSAP loaded from node_modules ({gsap_dst.stat().st_size // 1024}KB)", flush=True)
         else:
-            print("[COMPOSE] WARNING: gsap.min.js not found — graphic cards will NOT animate", flush=True)
+            print("[COMPOSE] WARNING: gsap.min.js not found")
 
     # Copy the pre-trimmed video directly — pretrim.py already re-encoded
     # with dense keyframes (g=30, keyint_min=30). A second re-encode would
@@ -1723,13 +1704,10 @@ def compose(
     pack = _PACKS.get(style_pack, _LEAN_GLASS)
     print(f"[COMPOSE] Style pack: {pack['id']}")
 
-    # Separate cards by type, round timestamps, and enforce per-track gaps to
-    # prevent HyperFrames' overlapping_clips_same_track validation error caused
-    # by floating-point imprecision (e.g. 15.780000000000001 vs 15.780).
+    # Separate cards by type for track assignment
     all_cards = storyboard.get("cards", [])
-    graphic_cards = _enforce_track_gaps([c for c in all_cards if c.get("type") != "caption"])
-    caption_cards = _enforce_track_gaps([c for c in all_cards if c.get("type") == "caption"])
-    fixed_all_cards = graphic_cards + caption_cards
+    graphic_cards = [c for c in all_cards if c.get("type") != "caption"]
+    caption_cards = [c for c in all_cards if c.get("type") == "caption"]
 
     # Build card host divs
     card_hosts = []
@@ -1739,7 +1717,7 @@ def compose(
         card_hosts.append(_build_card_host(c, layout, track_index=3, pack=pack))
 
     # Build master timeline
-    timeline_js = _build_timeline_js(fixed_all_cards, zoom_entries=zoom_entries, subject_position=subject_position, pack=pack)
+    timeline_js = _build_timeline_js(all_cards, zoom_entries=zoom_entries, subject_position=subject_position, pack=pack)
 
     # CSS custom properties from theme
     accent_vars = "\n".join(
