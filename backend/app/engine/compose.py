@@ -109,15 +109,15 @@ _LEAN_GLASS = {
     "radius": "20px",
     "shadow": "0 0 60px rgba(76,201,240,0.15), 0 8px 32px rgba(0,0,0,0.4)",
     "shadow_inset": "inset 0 1px 0 rgba(255,255,255,0.06)",
-    "panel_filter": "blur(16px) saturate(1.4)",
+    "panel_filter": "",
     "title_glow": "0 0 40px rgba(76,201,240,0.25)",
     "title_glow_intense": "0 0 56px rgba(76,201,240,0.45)",
     "has_grain": True,
     "shimmer_color": "rgba(76,201,240,0.15)",
     "accent_line_glow": "0 0 12px #4cc9f0",
     "accent_line_glow_bright": "0 0 20px #4cc9f0",
-    "backdrop_dim": "brightness(0.25) blur(4px)",
-    "backdrop_restore": "brightness(1) blur(0px)",
+    "backdrop_dim": "brightness(0.25)",
+    "backdrop_restore": "brightness(1)",
 }
 
 _LEAN_PAPER = {
@@ -143,8 +143,8 @@ _LEAN_PAPER = {
     "shimmer_color": "rgba(79,107,255,0.10)",
     "accent_line_glow": "0 0 8px rgba(79,107,255,0.3)",
     "accent_line_glow_bright": "0 0 14px rgba(79,107,255,0.45)",
-    "backdrop_dim": "brightness(1.6) blur(6px) saturate(0.3)",
-    "backdrop_restore": "brightness(1) blur(0px) saturate(1)",
+    "backdrop_dim": "brightness(1.6) saturate(0.3)",
+    "backdrop_restore": "brightness(1) saturate(1)",
 }
 
 _LEAN_VIBE = {
@@ -171,8 +171,8 @@ _LEAN_VIBE = {
     "shimmer_color": "rgba(255,230,109,0.18)",
     "accent_line_glow": "0 0 10px rgba(255,230,109,0.4)",
     "accent_line_glow_bright": "0 0 18px rgba(255,230,109,0.6)",
-    "backdrop_dim": "brightness(0.35) blur(5px) saturate(1.3)",
-    "backdrop_restore": "brightness(1) blur(0px) saturate(1)",
+    "backdrop_dim": "brightness(0.35) saturate(1.3)",
+    "backdrop_restore": "brightness(1) saturate(1)",
 }
 
 _LEAN_LEDGER = {
@@ -199,8 +199,8 @@ _LEAN_LEDGER = {
     "shimmer_color": "rgba(0,200,150,0.08)",
     "accent_line_glow": "0 0 8px rgba(0,200,150,0.2)",
     "accent_line_glow_bright": "0 0 12px rgba(0,200,150,0.3)",
-    "backdrop_dim": "brightness(0.2) blur(3px)",
-    "backdrop_restore": "brightness(1) blur(0px)",
+    "backdrop_dim": "brightness(0.2)",
+    "backdrop_restore": "brightness(1)",
 }
 
 _LEAN_CRAFT = {
@@ -228,8 +228,8 @@ _LEAN_CRAFT = {
     "shimmer_color": "rgba(217,119,87,0.10)",
     "accent_line_glow": "0 0 6px rgba(217,119,87,0.25)",
     "accent_line_glow_bright": "0 0 10px rgba(217,119,87,0.35)",
-    "backdrop_dim": "brightness(0.3) blur(4px) sepia(0.2)",
-    "backdrop_restore": "brightness(1) blur(0px) sepia(0)",
+    "backdrop_dim": "brightness(0.3) sepia(0.2)",
+    "backdrop_restore": "brightness(1) sepia(0)",
 }
 
 _LEAN_CINEMA = {
@@ -257,8 +257,8 @@ _LEAN_CINEMA = {
     "shimmer_color": "rgba(201,168,106,0.06)",
     "accent_line_glow": "0 0 6px rgba(201,168,106,0.15)",
     "accent_line_glow_bright": "0 0 10px rgba(201,168,106,0.25)",
-    "backdrop_dim": "brightness(0.15) blur(3px)",
-    "backdrop_restore": "brightness(1) blur(0px)",
+    "backdrop_dim": "brightness(0.15)",
+    "backdrop_restore": "brightness(1)",
     "has_letterbox": True,
 }
 
@@ -332,9 +332,6 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None) -> str:
     parts.append(f'  display: flex; flex-direction: column; align-items: center;')
     parts.append(f'  gap: 14px; max-width: 85%; position: relative;')
     parts.append(f'  box-shadow: {shadow_val};')
-    if p["panel_filter"]:
-        parts.append(f'  backdrop-filter: {p["panel_filter"]};')
-        parts.append(f'  -webkit-backdrop-filter: {p["panel_filter"]};')
     parts.append('}')
     if p["has_grain"]:
         gt = p.get("grain_type", "")
@@ -891,8 +888,8 @@ def _build_timeline_js(
             if not is_cinema:
                 lines.append(
                     f'  tl.fromTo(\'{panel_sel}\', '
-                    f'{{ filter: "blur(12px)", scale: 1.02 }}, '
-                    f'{{ filter: "blur(0px)", scale: 1, duration: 0.350, ease: _eIn }}, '
+                    f'{{ scale: 1.04, y: 14 }}, '
+                    f'{{ scale: 1, y: 0, duration: 0.350, ease: _eIn }}, '
                     f'{start:.4f});'
                 )
 
@@ -1346,12 +1343,12 @@ def _build_timeline_js(
                         else:
                             lines.append(
                                 f'  tl.fromTo(\'{sl_sel}\', '
-                                f'{{ opacity: 0, filter: "blur(6px)" }}, '
-                                f'{{ opacity: 1, filter: "blur(0px)", duration: 0.300, ease: _eIn }}, '
+                                f'{{ opacity: 0, x: 16 }}, '
+                                f'{{ opacity: 1, x: 0, duration: 0.300, ease: _eIn }}, '
                                 f'{sl_in:.4f});')
                             lines.append(
                                 f'  tl.to(\'{sl_sel}\', '
-                                f'{{ opacity: 0, filter: "blur(6px)", duration: 0.250, ease: _eOut }}, '
+                                f'{{ opacity: 0, x: -16, duration: 0.250, ease: _eOut }}, '
                                 f'{sl_out:.4f});')
             elif content_style == "definition":
                 term_sel = f'.card[data-card-id="{card_id}"] #{card_id}-term'
@@ -1465,8 +1462,8 @@ def _build_timeline_js(
                     else:
                         lines.append(
                             f'  tl.fromTo(\'{blbl_sel}\', '
-                            f'{{ opacity: 0, filter: "blur(4px)" }}, '
-                            f'{{ opacity: 1, filter: "blur(0px)", duration: 0.300, ease: _eIn }}, '
+                            f'{{ opacity: 0, y: 8 }}, '
+                            f'{{ opacity: 1, y: 0, duration: 0.300, ease: _eIn }}, '
                             f'{br_t + 0.30:.4f});')
             else:
                 if is_cinema:
@@ -1507,8 +1504,8 @@ def _build_timeline_js(
                 else:
                     lines.append(
                         f'  tl.fromTo(\'{title_sel}\', '
-                        f'{{ opacity: 0, filter: "blur(8px)" }}, '
-                        f'{{ opacity: 1, filter: "blur(0px)", duration: 0.400, ease: _eIn }}, '
+                        f'{{ opacity: 0, y: 20 }}, '
+                        f'{{ opacity: 1, y: 0, duration: 0.400, ease: _eIn }}, '
                         f'{t_in:.4f});'
                     )
 
