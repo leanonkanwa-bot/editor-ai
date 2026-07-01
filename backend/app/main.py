@@ -723,7 +723,7 @@ def google_callback(
     state: str = Query(""),
     error: str = Query(""),
 ) -> Response:
-    base = str(request.base_url).rstrip("/")
+    base = settings.app_base_url.rstrip("/") if settings.app_base_url else str(request.base_url).rstrip("/")
     if error:
         return RedirectResponse(f"{base}/?login=error")
 
