@@ -1363,12 +1363,12 @@ def _build_timeline_js(
                         else:
                             lines.append(
                                 f'  tl.fromTo(\'{sl_sel}\', '
-                                f'{{ opacity: 0, filter: "blur(6px)" }}, '
-                                f'{{ opacity: 1, filter: "blur(0px)", duration: 0.300, ease: _eIn }}, '
+                                f'{{ opacity: 0, x: 16 }}, '
+                                f'{{ opacity: 1, x: 0, duration: 0.300, ease: _eIn }}, '
                                 f'{sl_in:.4f});')
                             lines.append(
                                 f'  tl.to(\'{sl_sel}\', '
-                                f'{{ opacity: 0, filter: "blur(6px)", duration: 0.250, ease: _eOut }}, '
+                                f'{{ opacity: 0, x: -16, duration: 0.250, ease: _eOut }}, '
                                 f'{sl_out:.4f});')
             elif content_style == "definition":
                 term_sel = f'.card[data-card-id="{card_id}"] #{card_id}-term'
@@ -1482,8 +1482,8 @@ def _build_timeline_js(
                     else:
                         lines.append(
                             f'  tl.fromTo(\'{blbl_sel}\', '
-                            f'{{ opacity: 0, filter: "blur(4px)" }}, '
-                            f'{{ opacity: 1, filter: "blur(0px)", duration: 0.300, ease: _eIn }}, '
+                            f'{{ opacity: 0, y: 8 }}, '
+                            f'{{ opacity: 1, y: 0, duration: 0.300, ease: _eIn }}, '
                             f'{br_t + 0.30:.4f});')
             else:
                 if is_cinema:
@@ -1524,8 +1524,8 @@ def _build_timeline_js(
                 else:
                     lines.append(
                         f'  tl.fromTo(\'{title_sel}\', '
-                        f'{{ opacity: 0, filter: "blur(8px)" }}, '
-                        f'{{ opacity: 1, filter: "blur(0px)", duration: 0.400, ease: _eIn }}, '
+                        f'{{ opacity: 0, y: 20 }}, '
+                        f'{{ opacity: 1, y: 0, duration: 0.400, ease: _eIn }}, '
                         f'{t_in:.4f});'
                     )
 

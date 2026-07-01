@@ -1731,6 +1731,7 @@ def _render_hyperframes(
             "--quality", "draft",
             "--workers", "2",
             "--protocol-timeout", "600000",
+            "--no-low-memory-mode",
         ],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, env=env,
