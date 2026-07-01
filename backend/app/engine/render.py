@@ -1690,6 +1690,7 @@ def _render_hyperframes(
     (work_dir / "storyboard.json").write_text(
         _json.dumps(storyboard, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    print("[HF] Storyboard saved to disk", flush=True)
 
     # Stage 3: Compose
     _t = time.perf_counter()
