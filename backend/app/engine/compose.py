@@ -1,4 +1,4 @@
-"""
+﻿"""
 Composition assembly: build a HyperFrames project directory from a storyboard.
 
 Stage 3 of the HyperFrames pipeline. Takes a storyboard JSON (from
@@ -103,7 +103,6 @@ _LEAN_GLASS = {
     "radius": "20px",
     "shadow": "0 0 60px rgba(76,201,240,0.15), 0 8px 32px rgba(0,0,0,0.4)",
     "shadow_inset": "inset 0 1px 0 rgba(255,255,255,0.06)",
-    "blur": "blur(16px) saturate(1.4)",
     "title_glow": "0 0 40px rgba(76,201,240,0.25)",
 }
 
@@ -144,8 +143,6 @@ def _build_graphic_card_html(card: dict) -> str:
     parts.append(f'  display: flex; flex-direction: column; align-items: center;')
     parts.append(f'  gap: 14px; max-width: 85%; position: relative;')
     parts.append(f'  box-shadow: {p["shadow"]}, {p["shadow_inset"]};')
-    parts.append(f'  backdrop-filter: {p["blur"]};')
-    parts.append(f'  -webkit-backdrop-filter: {p["blur"]};')
     parts.append('}')
     parts.append(f'.card[data-card-id="{card_id}"] .card-panel::after {{')
     parts.append(f'  content: ""; position: absolute; inset: 0;')
