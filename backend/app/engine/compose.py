@@ -53,24 +53,25 @@ def _zone_bounds(zone: str, layout: str) -> dict:
     return table.get(zone, table["lower-third"])
 
 
-def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | None = None) -> str:
+def _build_card_host(card: dict, layout: str, track_index: int) -> str:
     """Build a card-host div with correct classes, data attributes, and inline bounds."""
     card_id = card["id"]
-    start = round(float(card.get("startSec", 0)), 3)
-    duration = round(float(card.get("endSec", start + 3)) - start, 3)
+    start = float(card.get("startSec", 0))
+    duration = float(card.get("endSec", start + 3)) - start
     zone = card.get("zone", "lower-third")
 
     is_caption = card.get("type") == "caption"
 
+    # Graphic cards must NEVER use lower-third (reserved for captions)
     if not is_caption and zone == "lower-third":
         zone = "video-overlay"
 
     bounds = _zone_bounds(zone, layout)
 
     if is_caption:
-        inner = _build_caption_card_html(card, pack=pack)
+        inner = _build_caption_card_html(card)
     else:
-        inner = _build_graphic_card_html(card, pack=pack)
+        inner = _build_graphic_card_html(card)
 
     return (
         f'<div class="card-host clip" data-card-id="{card_id}" '
@@ -84,23 +85,16 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
     )
 
 
-# ── Style Packs ──────────────────────────────────────────────────────
-# Cross-pack constants (brand signature, not pack-specific)
-_EASE_IN = "cubic-bezier(0.22, 0.68, 0.35, 1.03)"
-_EASE_OUT_FAST = "cubic-bezier(0.55, 0, 0.85, 0.36)"
-_EASE_VIBE_IN = "cubic-bezier(0.18, 0.89, 0.32, 1.12)"
-_EASE_LEDGER_IN = "cubic-bezier(0.25, 0.1, 0.25, 1.0)"
-_EASE_CRAFT_IN = "cubic-bezier(0.34, 0.80, 0.44, 0.98)"
-_EASE_CINEMA_IN = "cubic-bezier(0.16, 0.60, 0.40, 1.00)"
+# ── LeanGlass Style Pack ─────────────────────────────────────────────
+# Dark glass panels with volumetric cyan glow, backdrop blur, subtle
+# grain texture. One consistent visual identity across every card.
 
 _LEAN_GLASS = {
-    "id": "lean_glass",
     "bg": "linear-gradient(160deg, rgba(18,18,28,0.85), rgba(8,8,16,0.92))",
     "text": "#F1F1F1",
     "text_secondary": "rgba(255,255,255,0.6)",
     "accent": "#4cc9f0",
     "font": '"Inter", ui-sans-serif, system-ui, sans-serif',
-    "font_weight": "800",
     "title_size": "64px",
     "number_size": "96px",
     "kicker_size": "22px",
@@ -109,214 +103,32 @@ _LEAN_GLASS = {
     "radius": "20px",
     "shadow": "0 0 60px rgba(76,201,240,0.15), 0 8px 32px rgba(0,0,0,0.4)",
     "shadow_inset": "inset 0 1px 0 rgba(255,255,255,0.06)",
-    "panel_filter": "",
+    "blur": "blur(16px) saturate(1.4)",
     "title_glow": "0 0 40px rgba(76,201,240,0.25)",
-    "title_glow_intense": "0 0 56px rgba(76,201,240,0.45)",
-    "has_grain": True,
-    "shimmer_color": "rgba(76,201,240,0.15)",
-    "accent_line_glow": "0 0 12px #4cc9f0",
-    "accent_line_glow_bright": "0 0 20px #4cc9f0",
-    "backdrop_dim": "brightness(0.25)",
-    "backdrop_restore": "brightness(1)",
 }
 
-_LEAN_PAPER = {
-    "id": "lean_paper",
-    "bg": "#FAFAF8",
-    "text": "#1A1A1A",
-    "text_secondary": "rgba(0,0,0,0.45)",
-    "accent": "#4F6BFF",
-    "font": '"Inter", ui-sans-serif, system-ui, sans-serif',
-    "font_weight": "600",
-    "title_size": "64px",
-    "number_size": "96px",
-    "kicker_size": "22px",
-    "detail_size": "26px",
-    "border": "1px solid rgba(0,0,0,0.06)",
-    "radius": "12px",
-    "shadow": "0 4px 24px rgba(0,0,0,0.06)",
-    "shadow_inset": "",
-    "panel_filter": "",
-    "title_glow": "",
-    "title_glow_intense": "",
-    "has_grain": False,
-    "shimmer_color": "rgba(79,107,255,0.10)",
-    "accent_line_glow": "0 0 8px rgba(79,107,255,0.3)",
-    "accent_line_glow_bright": "0 0 14px rgba(79,107,255,0.45)",
-    "backdrop_dim": "brightness(1.6) saturate(0.3)",
-    "backdrop_restore": "brightness(1) saturate(1)",
-}
-
-_LEAN_VIBE = {
-    "id": "lean_vibe",
-    "bg": "linear-gradient(135deg, #FF6B9D, #FFA94D)",
-    "text": "#FFFFFF",
-    "text_secondary": "rgba(255,255,255,0.75)",
-    "accent": "#FFE66D",
-    "font": '"Poppins", ui-sans-serif, system-ui, sans-serif',
-    "font_weight": "800",
-    "title_size": "64px",
-    "number_size": "96px",
-    "kicker_size": "22px",
-    "detail_size": "26px",
-    "border": "3px solid #FFFFFF",
-    "radius": "24px",
-    "shadow": "0 8px 32px rgba(255,107,157,0.3), 0 4px 16px rgba(0,0,0,0.15)",
-    "shadow_inset": "",
-    "panel_filter": "",
-    "title_glow": "0 0 24px rgba(255,230,109,0.3)",
-    "title_glow_intense": "0 0 40px rgba(255,230,109,0.5)",
-    "has_grain": True,
-    "grain_type": "confetti",
-    "shimmer_color": "rgba(255,230,109,0.18)",
-    "accent_line_glow": "0 0 10px rgba(255,230,109,0.4)",
-    "accent_line_glow_bright": "0 0 18px rgba(255,230,109,0.6)",
-    "backdrop_dim": "brightness(0.35) saturate(1.3)",
-    "backdrop_restore": "brightness(1) saturate(1)",
-}
-
-_LEAN_LEDGER = {
-    "id": "lean_ledger",
-    "bg": "#0A1628",
-    "text": "#E8EBF0",
-    "text_secondary": "rgba(232,235,240,0.5)",
-    "accent": "#00C896",
-    "font": '"IBM Plex Mono", "JetBrains Mono", "Courier New", monospace',
-    "font_weight": "600",
-    "title_size": "60px",
-    "number_size": "88px",
-    "kicker_size": "18px",
-    "detail_size": "22px",
-    "border": "1px solid rgba(0,200,150,0.2)",
-    "radius": "4px",
-    "shadow": "0 2px 12px rgba(0,0,0,0.3)",
-    "shadow_inset": "",
-    "panel_filter": "",
-    "title_glow": "",
-    "title_glow_intense": "",
-    "has_grain": True,
-    "grain_type": "grid",
-    "shimmer_color": "rgba(0,200,150,0.08)",
-    "accent_line_glow": "0 0 8px rgba(0,200,150,0.2)",
-    "accent_line_glow_bright": "0 0 12px rgba(0,200,150,0.3)",
-    "backdrop_dim": "brightness(0.2)",
-    "backdrop_restore": "brightness(1)",
-}
-
-_LEAN_CRAFT = {
-    "id": "lean_craft",
-    "bg": "#E8D9C5",
-    "text": "#3D2B1F",
-    "text_secondary": "rgba(61,43,31,0.55)",
-    "accent": "#D97757",
-    "font": '"Permanent Marker", cursive',
-    "font_detail": '"Inter", ui-sans-serif, system-ui, sans-serif',
-    "font_weight": "400",
-    "title_size": "56px",
-    "number_size": "80px",
-    "kicker_size": "20px",
-    "detail_size": "22px",
-    "border": "1.5px solid rgba(217,119,87,0.25)",
-    "radius": "12px 8px 10px 14px",
-    "shadow": "0 3px 16px rgba(61,43,31,0.1)",
-    "shadow_inset": "",
-    "panel_filter": "",
-    "title_glow": "",
-    "title_glow_intense": "",
-    "has_grain": True,
-    "grain_type": "paper",
-    "shimmer_color": "rgba(217,119,87,0.10)",
-    "accent_line_glow": "0 0 6px rgba(217,119,87,0.25)",
-    "accent_line_glow_bright": "0 0 10px rgba(217,119,87,0.35)",
-    "backdrop_dim": "brightness(0.3) sepia(0.2)",
-    "backdrop_restore": "brightness(1) sepia(0)",
-}
-
-_LEAN_CINEMA = {
-    "id": "lean_cinema",
-    "bg": "#0D0D0D",
-    "text": "#F5F0E8",
-    "text_secondary": "rgba(245,240,232,0.5)",
-    "accent": "#C9A86A",
-    "font": '"Playfair Display", Georgia, serif',
-    "font_detail": '"Inter", ui-sans-serif, system-ui, sans-serif',
-    "font_weight": "700",
-    "title_size": "60px",
-    "number_size": "88px",
-    "kicker_size": "18px",
-    "detail_size": "22px",
-    "border": "none",
-    "radius": "0px",
-    "shadow": "0 4px 24px rgba(0,0,0,0.5)",
-    "shadow_inset": "",
-    "panel_filter": "",
-    "title_glow": "",
-    "title_glow_intense": "",
-    "has_grain": True,
-    "grain_type": "film",
-    "shimmer_color": "rgba(201,168,106,0.06)",
-    "accent_line_glow": "0 0 6px rgba(201,168,106,0.15)",
-    "accent_line_glow_bright": "0 0 10px rgba(201,168,106,0.25)",
-    "backdrop_dim": "brightness(0.15)",
-    "backdrop_restore": "brightness(1)",
-    "has_letterbox": True,
-}
-
-_PACKS = {"lean_glass": _LEAN_GLASS, "lean_paper": _LEAN_PAPER, "lean_vibe": _LEAN_VIBE, "lean_ledger": _LEAN_LEDGER, "lean_craft": _LEAN_CRAFT, "lean_cinema": _LEAN_CINEMA}
-
-# Inline SVG textures
+# Inline SVG grain texture (deterministic, no external asset)
 _GRAIN_SVG = (
     "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E"
     "%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' "
     "numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E"
     "%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='0.04'/%3E%3C/svg%3E"
 )
-_CONFETTI_SVG = (
-    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E"
-    "%3Ccircle cx='25' cy='40' r='2' fill='%23fff' opacity='0.08'/%3E"
-    "%3Ccircle cx='80' cy='15' r='1.5' fill='%23FFE66D' opacity='0.1'/%3E"
-    "%3Ccircle cx='140' cy='65' r='2.5' fill='%23fff' opacity='0.06'/%3E"
-    "%3Ccircle cx='50' cy='130' r='1.5' fill='%23FFE66D' opacity='0.08'/%3E"
-    "%3Ccircle cx='170' cy='110' r='2' fill='%23fff' opacity='0.07'/%3E"
-    "%3Ccircle cx='110' cy='170' r='1.5' fill='%23FFE66D' opacity='0.09'/%3E"
-    "%3Ccircle cx='30' cy='180' r='2' fill='%23fff' opacity='0.05'/%3E"
-    "%3Ccircle cx='160' cy='30' r='1.5' fill='%23fff' opacity='0.07'/%3E"
-    "%3C/svg%3E"
-)
-_GRID_SVG = (
-    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E"
-    "%3Cline x1='0' y1='40' x2='40' y2='40' stroke='rgba(0,200,150,0.06)' stroke-width='1'/%3E"
-    "%3Cline x1='40' y1='0' x2='40' y2='40' stroke='rgba(0,200,150,0.06)' stroke-width='1'/%3E"
-    "%3C/svg%3E"
-)
-_PAPER_GRAIN_SVG = (
-    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E"
-    "%3Cfilter id='pg'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' "
-    "numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E"
-    "%3Crect width='100%25' height='100%25' filter='url(%23pg)' opacity='0.06'/%3E%3C/svg%3E"
-)
-_FILM_GRAIN_SVG = (
-    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E"
-    "%3Cfilter id='fg'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' "
-    "numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E"
-    "%3Crect width='100%25' height='100%25' filter='url(%23fg)' opacity='0.025'/%3E%3C/svg%3E"
-)
 
 
-def _build_graphic_card_html(card: dict, pack: dict | None = None) -> str:
-    """Build inner HTML for a graphic overlay card using the given style pack."""
+def _build_graphic_card_html(card: dict) -> str:
+    """Build inner HTML for a LeanGlass graphic overlay card."""
     card_id = card["id"]
     hints = card.get("contentHints", {})
     kicker = hints.get("kicker", "")
     title = hints.get("title", "")
     detail = hints.get("detail", "")
     number = hints.get("number", "")
-    p = pack or _LEAN_GLASS
+    p = _LEAN_GLASS
 
     display_text = number if number else title
     title_size = p["number_size"] if number else p["title_size"]
 
-    shadow_val = f'{p["shadow"]}, {p["shadow_inset"]}' if p["shadow_inset"] else p["shadow"]
     parts = [f'<div class="card" data-card-id="{card_id}">']
     parts.append('<style>')
     parts.append(f'.card[data-card-id="{card_id}"] .root {{')
@@ -331,413 +143,59 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None) -> str:
     parts.append(f'  padding: 44px 52px;')
     parts.append(f'  display: flex; flex-direction: column; align-items: center;')
     parts.append(f'  gap: 14px; max-width: 85%; position: relative;')
-    parts.append(f'  box-shadow: {shadow_val};')
+    parts.append(f'  box-shadow: {p["shadow"]}, {p["shadow_inset"]};')
+    parts.append(f'  backdrop-filter: {p["blur"]};')
+    parts.append(f'  -webkit-backdrop-filter: {p["blur"]};')
     parts.append('}')
-    if p["has_grain"]:
-        gt = p.get("grain_type", "")
-        tex_svg = {"confetti": _CONFETTI_SVG, "grid": _GRID_SVG, "paper": _PAPER_GRAIN_SVG, "film": _FILM_GRAIN_SVG}.get(gt, _GRAIN_SVG)
-        parts.append(f'.card[data-card-id="{card_id}"] .card-panel::after {{')
-        parts.append(f'  content: ""; position: absolute; inset: 0;')
-        parts.append(f'  border-radius: {p["radius"]};')
-        parts.append(f'  background-image: url("{tex_svg}");')
-        parts.append(f'  background-repeat: repeat; pointer-events: none;')
-        parts.append('}')
+    parts.append(f'.card[data-card-id="{card_id}"] .card-panel::after {{')
+    parts.append(f'  content: ""; position: absolute; inset: 0;')
+    parts.append(f'  border-radius: {p["radius"]};')
+    parts.append(f'  background-image: url("{_GRAIN_SVG}");')
+    parts.append(f'  background-repeat: repeat; pointer-events: none;')
+    parts.append('}')
     if kicker:
         parts.append(f'.card[data-card-id="{card_id}"] .kicker {{')
         parts.append(f'  font-family: {p["font"]}; font-size: {p["kicker_size"]};')
         parts.append(f'  font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase;')
         parts.append(f'  color: {p["accent"]};')
         parts.append('}')
-    glow_css = f'  text-shadow: {p["title_glow"]};' if p["title_glow"] else ''
     parts.append(f'.card[data-card-id="{card_id}"] .title {{')
     parts.append(f'  font-family: {p["font"]}; font-size: {title_size};')
-    parts.append(f'  font-weight: {p["font_weight"]}; line-height: 1.15; text-align: center;')
+    parts.append(f'  font-weight: 800; line-height: 1.15; text-align: center;')
     parts.append(f'  color: {p["text"]}; max-width: 100%;')
-    if glow_css:
-        parts.append(glow_css)
+    parts.append(f'  text-shadow: {p["title_glow"]};')
     parts.append(f'  font-variant-numeric: tabular-nums;')
     parts.append('}')
-    detail_font = p.get("font_detail", p["font"])
     if detail:
         parts.append(f'.card[data-card-id="{card_id}"] .detail {{')
-        parts.append(f'  font-family: {detail_font}; font-size: {p["detail_size"]};')
+        parts.append(f'  font-family: {p["font"]}; font-size: {p["detail_size"]};')
         parts.append(f'  font-weight: 400; text-align: center;')
         parts.append(f'  color: {p["text_secondary"]}; max-width: 90%;')
         parts.append('}')
     parts.append(f'.card[data-card-id="{card_id}"] .accent-line {{')
     parts.append(f'  width: 0; height: 3px; background: {p["accent"]};')
-    parts.append(f'  border-radius: 2px; box-shadow: {p["accent_line_glow"]};')
+    parts.append(f'  border-radius: 2px; box-shadow: 0 0 12px {p["accent"]};')
     parts.append('}')
+    # Shimmer sweep (registry component: shimmer-sweep)
     parts.append(f'.card[data-card-id="{card_id}"] .card-panel .shimmer-mask {{')
     parts.append(f'  position: absolute; top: 0; left: 0; width: 100%; height: 100%;')
     parts.append(f'  pointer-events: none; border-radius: {p["radius"]};')
     parts.append(f'  background: linear-gradient(120deg,')
     parts.append(f'    transparent 0%,')
     parts.append(f'    transparent calc(var(--shimmer-pos, -20%) - 10%),')
-    parts.append(f'    {p["shimmer_color"]} var(--shimmer-pos, -20%),')
+    parts.append(f'    rgba(76,201,240,0.15) var(--shimmer-pos, -20%),')
     parts.append(f'    transparent calc(var(--shimmer-pos, -20%) + 10%),')
     parts.append(f'    transparent 100%);')
     parts.append(f'  mix-blend-mode: overlay; z-index: 2;')
     parts.append('}')
-    content_style = hints.get("style", "")
-    # Comparison: two-column layout with text containment
-    if content_style == "comparison":
-        lv = hints.get("left_value", "")
-        rv = hints.get("right_value", "")
-        max_val_len = max(len(str(lv)), len(str(rv)))
-        val_size = "36px" if max_val_len > 15 else "48px" if max_val_len > 8 else p["title_size"]
-        parts.append(f'.card[data-card-id="{card_id}"] .cmp-row {{')
-        parts.append(f'  display: flex; gap: 24px; align-items: flex-start; width: 100%;')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .cmp-side {{')
-        parts.append(f'  flex: 1; text-align: center; min-width: 0; overflow-wrap: break-word;')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .cmp-label {{')
-        parts.append(f'  font-family: {p["font"]}; font-size: {p["kicker_size"]};')
-        parts.append(f'  font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;')
-        parts.append(f'  color: {p["text_secondary"]}; margin-bottom: 8px;')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .cmp-value {{')
-        parts.append(f'  font-family: {p["font"]}; font-size: {val_size};')
-        parts.append(f'  font-weight: {p["font_weight"]}; color: {p["text"]};')
-        parts.append(f'  font-variant-numeric: tabular-nums;')
-        parts.append(f'  overflow-wrap: break-word; word-wrap: break-word;')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .cmp-sep {{')
-        parts.append(f'  width: 2px; height: 0; background: {p["accent"]};')
-        parts.append(f'  border-radius: 1px; flex-shrink: 0;')
-        if p["title_glow"]:
-            parts.append(f'  box-shadow: {p["accent_line_glow"]};')
-        parts.append('}')
-    # Timeline: adaptive layout (horizontal or vertical based on label length)
-    if content_style == "timeline":
-        is_paper_tl = p["id"] == "lean_paper"
-        steps = hints.get("steps", [])
-        n_steps = min(len(steps), 6)
-        avg_label_len = sum(len(str(s)) for s in steps[:n_steps]) / max(n_steps, 1)
-        total_label_chars = sum(len(str(s)) for s in steps[:n_steps])
-        use_vertical = total_label_chars > 60 or avg_label_len > 18 or n_steps > 4
-        if use_vertical:
-            parts.append(f'.card[data-card-id="{card_id}"] .tl-track {{')
-            parts.append(f'  display: flex; flex-direction: column; gap: 20px; width: 100%;')
-            parts.append(f'  position: relative; padding: 16px 0;')
-            parts.append('}')
-            parts.append(f'.card[data-card-id="{card_id}"] .tl-line {{')
-            parts.append(f'  position: absolute; left: 9px; top: 0; width: 3px; height: 0;')
-            parts.append(f'  background: {p["accent"]};')
-            if is_paper_tl:
-                parts.append(f'  border-left: 2px dashed {p["accent"]};')
-                parts.append(f'  background: transparent; width: 0;')
-            parts.append('}')
-            parts.append(f'.card[data-card-id="{card_id}"] .tl-step {{')
-            parts.append(f'  display: flex; align-items: center; gap: 16px; z-index: 1;')
-            parts.append('}')
-        else:
-            parts.append(f'.card[data-card-id="{card_id}"] .tl-track {{')
-            parts.append(f'  display: flex; align-items: center; gap: 0;')
-            parts.append(f'  width: 100%; position: relative; padding: 32px 0;')
-            parts.append('}')
-            parts.append(f'.card[data-card-id="{card_id}"] .tl-line {{')
-            parts.append(f'  position: absolute; top: 50%; left: 0; height: 3px; width: 0;')
-            parts.append(f'  background: {p["accent"]};')
-            if is_paper_tl:
-                parts.append(f'  border-top: 2px dashed {p["accent"]};')
-                parts.append(f'  background: transparent; height: 0;')
-            parts.append('}')
-            parts.append(f'.card[data-card-id="{card_id}"] .tl-step {{')
-            parts.append(f'  display: flex; flex-direction: column; align-items: center;')
-            parts.append(f'  gap: 10px; flex: 1; z-index: 1;')
-            parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .tl-dot {{')
-        parts.append(f'  width: 18px; height: 18px; border-radius: 50%;')
-        parts.append(f'  background: {p["text_secondary"]}; flex-shrink: 0;')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .tl-label {{')
-        parts.append(f'  font-family: {p["font"]}; font-size: 20px;')
-        parts.append(f'  font-weight: {p["font_weight"]}; color: {p["text"]};')
-        if use_vertical:
-            parts.append(f'  text-align: left;')
-        else:
-            parts.append(f'  text-align: center; white-space: nowrap;')
-        parts.append('}')
-    # Dialogue: two-block exchange
-    if content_style == "dialogue":
-        parts.append(f'.card[data-card-id="{card_id}"] .dlg-exchange {{')
-        parts.append(f'  display: flex; flex-direction: column; gap: 16px; width: 100%;')
-        parts.append('}')
-        is_paper = p["id"] == "lean_paper"
-        for side in ("a", "b"):
-            align = "flex-start" if side == "a" else "flex-end"
-            if is_paper:
-                parts.append(f'.card[data-card-id="{card_id}"] .dlg-{side} {{')
-                parts.append(f'  align-self: {align}; max-width: 80%;')
-                parts.append(f'  border-left: 3px solid {p["accent"]}; padding-left: 16px;')
-                parts.append(f'  font-family: {p["font"]}; font-size: 24px; color: {p["text"]};')
-                parts.append('}')
-            else:
-                parts.append(f'.card[data-card-id="{card_id}"] .dlg-{side} {{')
-                parts.append(f'  align-self: {align}; max-width: 80%;')
-                parts.append(f'  background: rgba(255,255,255,0.04); border-radius: 16px;')
-                parts.append(f'  border: 1px solid {p["accent"]}20; padding: 16px 20px;')
-                parts.append(f'  font-family: {p["font"]}; font-size: 24px; color: {p["text"]};')
-                if p["title_glow"]:
-                    parts.append(f'  box-shadow: 0 0 20px {p["accent"]}15;')
-                parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .dlg-speaker {{')
-        parts.append(f'  font-size: {p["kicker_size"]}; font-weight: 700;')
-        parts.append(f'  color: {p["accent"]}; margin-bottom: 4px;')
-        parts.append('}')
-    # Trend: simple SVG line
-    if content_style == "trend":
-        parts.append(f'.card[data-card-id="{card_id}"] .trend-wrap {{')
-        parts.append(f'  position: relative; width: 100%; height: 120px;')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .trend-label {{')
-        parts.append(f'  font-family: {p["font"]}; font-size: {p["title_size"]};')
-        parts.append(f'  font-weight: {p["font_weight"]}; color: {p["text"]};')
-        parts.append(f'  text-align: center; margin-bottom: 12px;')
-        parts.append('}')
-    # Attributed quote: quote + attribution line
-    if content_style == "attributed_quote":
-        parts.append(f'.card[data-card-id="{card_id}"] .attr-line {{')
-        parts.append(f'  font-family: {p["font"]}; font-size: 20px;')
-        parts.append(f'  font-weight: 500; font-style: italic;')
-        parts.append(f'  color: {p["accent"]}; margin-top: 8px;')
-        parts.append('}')
-    # List: item rows
-    if content_style == "list":
-        parts.append(f'.card[data-card-id="{card_id}"] .list-items {{')
-        parts.append(f'  display: flex; flex-direction: column; gap: 12px; width: 100%;')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .list-item {{')
-        parts.append(f'  display: flex; align-items: center; gap: 14px;')
-        parts.append(f'  font-family: {p["font"]}; font-size: 28px;')
-        parts.append(f'  font-weight: {p["font_weight"]}; color: {p["text"]};')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .list-bullet {{')
-        parts.append(f'  width: 28px; height: 28px; border-radius: 50%;')
-        parts.append(f'  background: {p["accent"]}; color: #fff;')
-        parts.append(f'  display: flex; align-items: center; justify-content: center;')
-        parts.append(f'  font-size: 14px; font-weight: 800; flex-shrink: 0;')
-        parts.append('}')
-    # Carousel: cycling slides
-    if content_style == "carousel":
-        parts.append(f'.card[data-card-id="{card_id}"] .carousel-slide {{')
-        parts.append(f'  position: absolute; inset: 0; display: flex; align-items: center;')
-        parts.append(f'  justify-content: center; font-family: {p["font"]};')
-        parts.append(f'  font-size: 40px; font-weight: {p["font_weight"]};')
-        parts.append(f'  color: {p["text"]}; text-align: center; padding: 20px;')
-        parts.append(f'  opacity: 0;')
-        parts.append('}')
-    # Definition: term + explanation
-    if content_style == "definition":
-        parts.append(f'.card[data-card-id="{card_id}"] .def-term {{')
-        parts.append(f'  font-family: {p["font"]}; font-size: {p["title_size"]};')
-        parts.append(f'  font-weight: {p["font_weight"]}; color: {p["text"]};')
-        if p["title_glow"]:
-            parts.append(f'  text-shadow: {p["title_glow"]};')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .def-text {{')
-        parts.append(f'  font-family: {p["font"]}; font-size: {p["detail_size"]};')
-        parts.append(f'  font-weight: 400; color: {p["text_secondary"]};')
-        parts.append(f'  margin-top: 12px; text-align: center; max-width: 90%;')
-        parts.append(f'  line-height: 1.5;')
-        parts.append('}')
-    # Checklist: items with checkmarks
-    if content_style == "checklist":
-        parts.append(f'.card[data-card-id="{card_id}"] .chk-items {{')
-        parts.append(f'  display: flex; flex-direction: column; gap: 14px; width: 100%;')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .chk-item {{')
-        parts.append(f'  display: flex; align-items: center; gap: 14px;')
-        parts.append(f'  font-family: {p["font"]}; font-size: 26px;')
-        parts.append(f'  font-weight: {p["font_weight"]}; color: {p["text"]};')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .chk-mark {{')
-        parts.append(f'  width: 28px; height: 28px; flex-shrink: 0;')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .chk-mark path {{')
-        parts.append(f'  stroke: {p["accent"]}; stroke-width: 3; fill: none;')
-        parts.append(f'  stroke-dasharray: 30; stroke-dashoffset: 30;')
-        parts.append('}')
-    # Score: large impact score
-    if content_style == "score":
-        parts.append(f'.card[data-card-id="{card_id}"] .score-display {{')
-        parts.append(f'  font-family: {p["font"]}; font-size: {p["number_size"]};')
-        parts.append(f'  font-weight: {p["font_weight"]}; color: {p["text"]};')
-        parts.append(f'  text-align: center; font-variant-numeric: tabular-nums;')
-        if p["title_glow"]:
-            parts.append(f'  text-shadow: {p["title_glow"]};')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .score-label {{')
-        parts.append(f'  font-family: {p["font"]}; font-size: {p["detail_size"]};')
-        parts.append(f'  color: {p["text_secondary"]}; margin-top: 8px; text-align: center;')
-        parts.append('}')
-    # Mindmap: center + branches
-    if content_style == "mindmap":
-        parts.append(f'.card[data-card-id="{card_id}"] .mm-wrap {{')
-        parts.append(f'  position: relative; width: 100%; min-height: 200px;')
-        parts.append(f'  display: flex; align-items: center; justify-content: center;')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .mm-center {{')
-        parts.append(f'  font-family: {p["font"]}; font-size: 36px;')
-        parts.append(f'  font-weight: {p["font_weight"]}; color: {p["text"]};')
-        parts.append(f'  text-align: center; z-index: 2; position: relative;')
-        parts.append(f'  padding: 16px 24px; background: {p["bg"]};')
-        parts.append(f'  border-radius: {p["radius"]}; border: {p["border"]};')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .mm-branch {{')
-        parts.append(f'  position: absolute; display: flex; align-items: center;')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .mm-branch-line {{')
-        parts.append(f'  width: 0; height: 2px; background: {p["accent"]};')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .mm-branch-label {{')
-        parts.append(f'  font-family: {p["font"]}; font-size: 22px;')
-        parts.append(f'  font-weight: {p["font_weight"]}; color: {p["accent"]};')
-        parts.append(f'  white-space: nowrap; padding: 6px 12px;')
-        parts.append('}')
     parts.append('</style>')
-    # Timeline: full-screen overlay, no card-panel wrapper
-    if content_style == "timeline":
-        steps = hints.get("steps", [])
-        n_steps = min(len(steps), 6)
-        avg_label_len = sum(len(str(s)) for s in steps[:n_steps]) / max(n_steps, 1)
-        total_label_chars = sum(len(str(s)) for s in steps[:n_steps])
-        use_vertical = total_label_chars > 60 or avg_label_len > 18 or n_steps > 4
-        parts.append(f'<div class="root" style="padding:60px 80px;justify-content:center">')
-        if kicker:
-            parts.append(f'  <div class="kicker" id="{card_id}-kicker" style="margin-bottom:24px">{_esc(kicker)}</div>')
-        parts.append(f'  <div class="tl-track" data-layout="{"vertical" if use_vertical else "horizontal"}">')
-        parts.append(f'    <div class="tl-line" id="{card_id}-tl-line"></div>')
-        for i, step in enumerate(steps[:n_steps]):
-            parts.append(f'    <div class="tl-step" id="{card_id}-step-{i}">')
-            parts.append(f'      <div class="tl-dot" id="{card_id}-dot-{i}"></div>')
-            parts.append(f'      <div class="tl-label">{_esc(str(step))}</div>')
-            parts.append(f'    </div>')
-        parts.append(f'  </div>')
-        parts.append(f'  <div class="accent-line" id="{card_id}-line" style="margin-top:24px"></div>')
-        parts.append('</div>')
-        parts.append('</div>')
-        return "\n".join(parts)
     parts.append('<div class="root">')
-    if p.get("has_letterbox"):
-        parts.append('  <div style="position:absolute;top:0;left:0;right:0;height:60px;background:#000;z-index:3"></div>')
-        parts.append('  <div style="position:absolute;bottom:0;left:0;right:0;height:60px;background:#000;z-index:3"></div>')
     parts.append('  <div class="card-panel">')
     if kicker:
         parts.append(f'    <div class="kicker" id="{card_id}-kicker">{_esc(kicker)}</div>')
-    if content_style == "comparison":
-        ll = _esc(hints.get("left_label", ""))
-        lv = _esc(hints.get("left_value", ""))
-        rl = _esc(hints.get("right_label", ""))
-        rv = _esc(hints.get("right_value", ""))
-        parts.append(f'    <div class="cmp-row">')
-        parts.append(f'      <div class="cmp-side" id="{card_id}-left">')
-        parts.append(f'        <div class="cmp-label">{ll}</div>')
-        parts.append(f'        <div class="cmp-value">{lv}</div>')
-        parts.append(f'      </div>')
-        parts.append(f'      <div class="cmp-sep" id="{card_id}-sep"></div>')
-        parts.append(f'      <div class="cmp-side" id="{card_id}-right">')
-        parts.append(f'        <div class="cmp-label">{rl}</div>')
-        parts.append(f'        <div class="cmp-value">{rv}</div>')
-        parts.append(f'      </div>')
-        parts.append(f'    </div>')
-    elif content_style == "list":
-        items = hints.get("items", [])
-        parts.append(f'    <div class="list-items">')
-        for i, item in enumerate(items[:8]):
-            parts.append(f'      <div class="list-item" id="{card_id}-item-{i}">')
-            parts.append(f'        <div class="list-bullet">{i + 1}</div>')
-            parts.append(f'        <span>{_esc(str(item))}</span>')
-            parts.append(f'      </div>')
-        parts.append(f'    </div>')
-    elif content_style == "dialogue":
-        line_a = hints.get("line_a", "")
-        line_b = hints.get("line_b", "")
-        spk_a = hints.get("speaker_a", "")
-        spk_b = hints.get("speaker_b", "")
-        parts.append(f'    <div class="dlg-exchange">')
-        parts.append(f'      <div class="dlg-a" id="{card_id}-dlg-a">')
-        if spk_a:
-            parts.append(f'        <div class="dlg-speaker">{_esc(spk_a)}</div>')
-        parts.append(f'        <div>{_esc(line_a)}</div>')
-        parts.append(f'      </div>')
-        parts.append(f'      <div class="dlg-b" id="{card_id}-dlg-b">')
-        if spk_b:
-            parts.append(f'        <div class="dlg-speaker">{_esc(spk_b)}</div>')
-        parts.append(f'        <div>{_esc(line_b)}</div>')
-        parts.append(f'      </div>')
-        parts.append(f'    </div>')
-    elif content_style == "trend":
-        direction = hints.get("trend_direction", "up")
-        y1, y2 = ("100", "10") if direction == "up" else ("10", "100")
-        parts.append(f'    <div class="trend-label" id="{card_id}-title">{_esc(display_text)}</div>')
-        parts.append(f'    <div class="trend-wrap">')
-        parts.append(f'      <svg viewBox="0 0 400 120" width="100%" height="120" id="{card_id}-trend-svg">')
-        parts.append(f'        <path d="M 10 {y1} C 130 {y1}, 270 {y2}, 390 {y2}" '
-                     f'stroke="{p["accent"]}" stroke-width="3" fill="none" '
-                     f'stroke-dasharray="600" stroke-dashoffset="600" id="{card_id}-trend-path" />')
-        parts.append(f'        <circle cx="390" cy="{y2}" r="6" fill="{p["accent"]}" '
-                     f'opacity="0" id="{card_id}-trend-dot" />')
-        parts.append(f'      </svg>')
-        parts.append(f'    </div>')
-    elif content_style == "attributed_quote":
-        attribution = hints.get("attribution", "")
-        parts.append(f'    <div class="title" id="{card_id}-title">{_esc(display_text)}</div>')
-        if attribution:
-            parts.append(f'    <div class="attr-line" id="{card_id}-attr">{_esc(attribution)}</div>')
-        if detail:
-            parts.append(f'    <div class="detail" id="{card_id}-detail">{_esc(detail)}</div>')
-    elif content_style == "carousel":
-        slides = hints.get("slides", [])
-        parts.append(f'    <div style="position:relative;width:100%;min-height:80px">')
-        for i, slide in enumerate(slides[:4]):
-            parts.append(f'      <div class="carousel-slide" id="{card_id}-slide-{i}">{_esc(str(slide))}</div>')
-        parts.append(f'    </div>')
-    elif content_style == "definition":
-        term = hints.get("term", title)
-        defn = hints.get("definition", detail)
-        parts.append(f'    <div class="def-term" id="{card_id}-term">{_esc(term)}</div>')
-        if defn:
-            parts.append(f'    <div class="def-text" id="{card_id}-def">{_esc(defn)}</div>')
-    elif content_style == "checklist":
-        items = hints.get("items", [])
-        parts.append(f'    <div class="chk-items">')
-        for i, item in enumerate(items[:6]):
-            parts.append(f'      <div class="chk-item" id="{card_id}-chk-{i}">')
-            parts.append(f'        <svg class="chk-mark" viewBox="0 0 28 28" id="{card_id}-chk-svg-{i}"><path d="M6 14 L12 20 L22 8"/></svg>')
-            parts.append(f'        <span>{_esc(str(item))}</span>')
-            parts.append(f'      </div>')
-        parts.append(f'    </div>')
-    elif content_style == "score":
-        score_text = hints.get("score_text", display_text)
-        score_label = hints.get("label", "")
-        parts.append(f'    <div class="score-display" id="{card_id}-score">{_esc(score_text)}</div>')
-        if score_label:
-            parts.append(f'    <div class="score-label" id="{card_id}-score-label">{_esc(score_label)}</div>')
-    elif content_style == "mindmap":
-        center_text = hints.get("center", title)
-        branches = hints.get("branches", [])
-        n_br = min(len(branches), 3)
-        positions = [
-            ("top: 10%; left: 50%; transform: translateX(-50%)", "flex-direction: column-reverse"),
-            ("bottom: 10%; left: 15%", "flex-direction: row"),
-            ("bottom: 10%; right: 15%", "flex-direction: row-reverse"),
-        ]
-        parts.append(f'    <div class="mm-wrap">')
-        parts.append(f'      <div class="mm-center" id="{card_id}-mm-center">{_esc(center_text)}</div>')
-        for i, br in enumerate(branches[:n_br]):
-            pos_style, flex_dir = positions[i % len(positions)]
-            parts.append(f'      <div class="mm-branch" id="{card_id}-br-{i}" style="{pos_style};{flex_dir}">')
-            parts.append(f'        <div class="mm-branch-line" id="{card_id}-br-line-{i}"></div>')
-            parts.append(f'        <div class="mm-branch-label" id="{card_id}-br-label-{i}">{_esc(str(br))}</div>')
-            parts.append(f'      </div>')
-        parts.append(f'    </div>')
-    else:
-        parts.append(f'    <div class="title" id="{card_id}-title">{_esc(display_text)}</div>')
-        if detail:
-            parts.append(f'    <div class="detail" id="{card_id}-detail">{_esc(detail)}</div>')
+    parts.append(f'    <div class="title" id="{card_id}-title">{_esc(display_text)}</div>')
+    if detail:
+        parts.append(f'    <div class="detail" id="{card_id}-detail">{_esc(detail)}</div>')
     parts.append(f'    <div class="accent-line" id="{card_id}-line"></div>')
     parts.append(f'    <div class="shimmer-mask" id="{card_id}-shimmer"></div>')
     parts.append('  </div>')
@@ -746,11 +204,10 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None) -> str:
     return "\n".join(parts)
 
 
-def _build_caption_card_html(card: dict, pack: dict | None = None) -> str:
+def _build_caption_card_html(card: dict) -> str:
     """Build inner HTML for a caption card with per-word spans."""
     card_id = card["id"]
     words = card.get("words", [])
-    p = pack or _LEAN_GLASS
 
     word_spans = []
     for w in words:
@@ -765,13 +222,13 @@ def _build_caption_card_html(card: dict, pack: dict | None = None) -> str:
         f'.card[data-card-id="{card_id}"] .cap-line {{\n'
         f'  display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline;\n'
         f'  gap: 0.3em; padding: 16px 24px;\n'
-        f'  font-family: {p["font"]};\n'
+        f'  font-family: {_LEAN_GLASS["font"]};\n'
         f'  font-size: 48px; font-weight: 700; color: #FFFFFF;\n'
         f'  text-shadow: 0 2px 8px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9);\n'
         f'  text-align: center; line-height: 1.3;\n'
         f'}}\n'
         f'.card[data-card-id="{card_id}"] .cap-emphasis {{\n'
-        f'  color: {p["accent"]}; transform: scale(1.08);\n'
+        f'  color: {_LEAN_GLASS["accent"]}; transform: scale(1.08);\n'
         f'}}\n'
         f'</style>\n'
         f'<div class="cap-line" id="{card_id}-line">\n'
@@ -785,28 +242,16 @@ def _build_timeline_js(
     cards: list[dict],
     zoom_entries: list[dict] | None = None,
     subject_position: dict | None = None,
-    pack: dict | None = None,
 ) -> str:
     """Build the master GSAP timeline script including zoom/pan on the video wrapper."""
-    p = pack or _LEAN_GLASS
-    is_vibe = p["id"] == "lean_vibe"
-    is_ledger = p["id"] == "lean_ledger"
-    is_craft = p["id"] == "lean_craft"
-    is_cinema = p["id"] == "lean_cinema"
-    ease_in = (_EASE_CINEMA_IN if is_cinema else _EASE_LEDGER_IN if is_ledger
-               else _EASE_VIBE_IN if is_vibe else _EASE_CRAFT_IN if is_craft
-               else _EASE_IN)
     lines = [
         "(function () {",
         '  const tl = window.gsap.timeline({ paused: true });',
-        f'  var _eIn = "{ease_in}";',
-        f'  var _eOut = "{_EASE_OUT_FAST}";',
         "",
     ]
 
     # Face-aware transform origin for zoom (Phase D)
-    has_face_data = subject_position is not None
-    if has_face_data:
+    if subject_position:
         fl = float(subject_position.get("face_left_pct", 25.0))
         fr = float(subject_position.get("face_right_pct", 75.0))
         ft = float(subject_position.get("face_top_pct", 15.0))
@@ -867,7 +312,7 @@ def _build_timeline_js(
             lines.append(
                 f'  tl.fromTo(\'{sel}\', '
                 f'{{ opacity: 0 }}, '
-                f'{{ opacity: 1, duration: {fade_in_dur:.3f}, ease: _eIn }}, '
+                f'{{ opacity: 1, duration: {fade_in_dur:.3f}, ease: "power2.out" }}, '
                 f'{start:.4f});'
             )
             word_sel = f'.card[data-card-id="{card_id}"] .cap-word'
@@ -878,36 +323,18 @@ def _build_timeline_js(
                 )
         else:
             panel_sel = f'.card[data-card-id="{card_id}"] .card-panel'
-            ent_dur = 0.550 if is_cinema else 0.320
             lines.append(
                 f'  tl.fromTo(\'{sel}\', '
                 f'{{ opacity: 0 }}, '
-                f'{{ opacity: 1, duration: {ent_dur:.3f}, ease: _eIn }}, '
+                f'{{ opacity: 1, duration: 0.300, ease: "power2.out" }}, '
                 f'{start:.4f});'
             )
-            if not is_cinema:
-                lines.append(
-                    f'  tl.fromTo(\'{panel_sel}\', '
-                    f'{{ scale: 1.04, y: 14 }}, '
-                    f'{{ scale: 1, y: 0, duration: 0.350, ease: _eIn }}, '
-                    f'{start:.4f});'
-                )
-
-            # Dimmed backdrop for center-zone cards conflicting with speaker
-            card_zone = card.get("zone", "")
-            center_zone = card_zone in ("fullscreen", "video-overlay")
-            face_centered = has_face_data and 30.0 <= face_cx <= 70.0
-            if center_zone and face_centered:
-                lines.append(
-                    f'  tl.to("#video-wrap", '
-                    f'{{ filter: "{_esc_js(p["backdrop_dim"])}", '
-                    f'duration: 0.30, ease: _eIn }}, {start:.4f});'
-                )
-                lines.append(
-                    f'  tl.to("#video-wrap", '
-                    f'{{ filter: "{_esc_js(p["backdrop_restore"])}", '
-                    f'duration: 0.18, ease: _eOut }}, {end - 0.18:.4f});'
-                )
+            lines.append(
+                f'  tl.fromTo(\'{panel_sel}\', '
+                f'{{ filter: "blur(12px)", scale: 1.02 }}, '
+                f'{{ filter: "blur(0px)", scale: 1, duration: 0.350, ease: "power2.out" }}, '
+                f'{start:.4f});'
+            )
 
             content_style = card.get("contentHints", {}).get("style", "key_phrase")
             title_sel = f'.card[data-card-id="{card_id}"] #{card_id}-title'
@@ -915,623 +342,83 @@ def _build_timeline_js(
             line_sel = f'.card[data-card-id="{card_id}"] #{card_id}-line'
             t_in = start + 0.15
 
-            is_paper = p["id"] == "lean_paper"
-
             if content_style == "stat" and card.get("contentHints", {}).get("number"):
                 num_val, num_suffix = _safe_number(card["contentHints"]["number"])
                 if num_val is not None:
+                    # Count-up with color flash + scale pulse (apple-money-count pattern)
                     count_dur = min(1.5, max(0.6, dur * 0.25))
                     count_end = t_in + count_dur
-                    if is_craft:
-                        # Settle from 1.2x overshoot down to final value
-                        overshoot_val = round(num_val * 1.2, 1)
-                        lines.append(
-                            f'  (function(){{ var o={{v:{overshoot_val}}}; tl.to(o, {{v:{num_val}, '
-                            f'duration: {count_dur:.3f}, ease: _eIn, onUpdate: function(){{ '
-                            f'var el=document.querySelector(\'{title_sel}\'); '
-                            f'if(el) el.textContent=Math.round(o.v).toLocaleString()+\'{_esc_js(num_suffix)}\'; '
-                            f'}}}}, {t_in:.4f}); }})();'
-                        )
-                    elif is_ledger:
-                        lines.append(
-                            f'  (function(){{ var o={{v:0}}; tl.to(o, {{v:{num_val}, '
-                            f'duration: {count_dur:.3f}, ease: "none", onUpdate: function(){{ '
-                            f'var el=document.querySelector(\'{title_sel}\'); '
-                            f'if(el) el.textContent=Math.round(o.v).toLocaleString()+\'{_esc_js(num_suffix)}\'; '
-                            f'}}}}, {t_in:.4f}); }})();'
-                        )
-                    elif is_paper:
-                        lines.append(
-                            f'  (function(){{ var o={{v:0}}; tl.to(o, {{v:{num_val}, '
-                            f'duration: {count_dur:.3f}, ease: _eIn, onUpdate: function(){{ '
-                            f'var el=document.querySelector(\'{title_sel}\'); '
-                            f'if(el){{ el.textContent=Math.round(o.v).toLocaleString()+\'{_esc_js(num_suffix)}\'; '
-                            f'var r=1-o.v/{num_val}; '
-                            f'el.style.color="rgba(26,26,26,"+(0.3+0.7*r)+")"; '
-                            f'}} }}}}, {t_in:.4f}); }})();'
-                        )
-                    elif is_vibe:
-                        lines.append(
-                            f'  (function(){{ var o={{v:0}}; tl.to(o, {{v:{num_val}, '
-                            f'duration: {count_dur:.3f}, ease: _eIn, onUpdate: function(){{ '
-                            f'var el=document.querySelector(\'{title_sel}\'); '
-                            f'if(el){{ el.textContent=Math.round(o.v).toLocaleString()+\'{_esc_js(num_suffix)}\'; '
-                            f'el.style.opacity=0.7+0.3*(o.v/{num_val}); '
-                            f'}} }}}}, {t_in:.4f}); }})();'
-                        )
-                    else:
-                        lines.append(
-                            f'  (function(){{ var o={{v:0}}; tl.to(o, {{v:{num_val}, '
-                            f'duration: {count_dur:.3f}, ease: _eIn, onUpdate: function(){{ '
-                            f'var el=document.querySelector(\'{title_sel}\'); '
-                            f'if(el){{ el.textContent=Math.round(o.v).toLocaleString()+\'{_esc_js(num_suffix)}\'; '
-                            f'var r=o.v/{num_val}; '
-                            f'el.style.textShadow="0 0 "+(40+16*r)+"px rgba(76,201,240,"+(0.25+0.20*r)+")"; '
-                            f'}} }}}}, {t_in:.4f}); }})();'
-                        )
-                    if not is_ledger:
-                        pop_scale = "1.15" if is_vibe else "1.08"
-                        lines.append(
-                            f'  tl.to(\'{title_sel}\', '
-                            f'{{ scale: {pop_scale}, duration: 0.12, ease: _eIn }}, '
-                            f'{count_end:.4f});'
-                        )
-                        lines.append(
-                            f'  tl.to(\'{title_sel}\', '
-                            f'{{ scale: 1, duration: 0.20, ease: _eOut }}, '
-                            f'{count_end + 0.12:.4f});'
-                        )
+                    lines.append(
+                        f'  (function(){{ var o={{v:0}}; tl.to(o, {{v:{num_val}, '
+                        f'duration: {count_dur:.3f}, ease: "power2.out", onUpdate: function(){{ '
+                        f'var el=document.querySelector(\'{title_sel}\'); '
+                        f'if(el) el.textContent=Math.round(o.v).toLocaleString()+\'{_esc_js(num_suffix)}\'; '
+                        f'}}}}, {t_in:.4f}); }})();'
+                    )
+                    # Scale pulse on count completion
                     lines.append(
                         f'  tl.to(\'{title_sel}\', '
-                        f'{{ color: "{p["accent"]}", '
-                        + (f'textShadow: "{_esc_js(p["title_glow_intense"])}", ' if p["title_glow_intense"] else '')
-                        + f'duration: 0.15 }}, {count_end:.4f});'
+                        f'{{ scale: 1.08, duration: 0.12, ease: "back.out(2)" }}, '
+                        f'{count_end:.4f});'
                     )
                     lines.append(
                         f'  tl.to(\'{title_sel}\', '
-                        f'{{ color: "{p["text"]}", '
-                        + (f'textShadow: "{_esc_js(p["title_glow"])}", ' if p["title_glow"] else '')
-                        + f'duration: 0.6 }}, {count_end + 0.15:.4f});'
+                        f'{{ scale: 1, duration: 0.20, ease: "power2.out" }}, '
+                        f'{count_end + 0.12:.4f});'
+                    )
+                    # Accent color flash on count completion
+                    lines.append(
+                        f'  tl.to(\'{title_sel}\', '
+                        f'{{ color: "{_LEAN_GLASS["accent"]}", '
+                        f'textShadow: "0 0 48px rgba(76,201,240,0.4)", '
+                        f'duration: 0.15 }}, {count_end:.4f});'
+                    )
+                    lines.append(
+                        f'  tl.to(\'{title_sel}\', '
+                        f'{{ color: "{_LEAN_GLASS["text"]}", '
+                        f'textShadow: "{_esc_js(_LEAN_GLASS["title_glow"])}", '
+                        f'duration: 0.6 }}, {count_end + 0.15:.4f});'
                     )
                 else:
                     lines.append(
                         f'  tl.fromTo(\'{title_sel}\', '
-                        f'{{ opacity: 0 }}, '
-                        f'{{ opacity: 1, duration: 0.400, ease: _eIn }}, '
+                        f'{{ opacity: 0, filter: "blur(8px)" }}, '
+                        f'{{ opacity: 1, filter: "blur(0px)", duration: 0.400, ease: "power2.out" }}, '
                         f'{t_in:.4f});'
                     )
             elif content_style == "key_phrase":
-                if is_cinema:
-                    lines.append(
-                        f'  tl.fromTo(\'{title_sel}\', '
-                        f'{{ opacity: 0 }}, '
-                        f'{{ opacity: 1, duration: 0.600, ease: _eIn }}, '
-                        f'{t_in:.4f});'
-                    )
-                elif is_craft:
-                    lines.append(
-                        f'  tl.fromTo(\'{title_sel}\', '
-                        f'{{ opacity: 0, rotation: 2 }}, '
-                        f'{{ opacity: 1, rotation: 0, duration: 0.450, ease: _eIn }}, '
-                        f'{t_in:.4f});'
-                    )
-                elif is_paper:
-                    lines.append(
-                        f'  tl.fromTo(\'{title_sel}\', '
-                        f'{{ opacity: 0, scale: 0.7 }}, '
-                        f'{{ opacity: 1, scale: 1.05, duration: 0.350, ease: _eIn }}, '
-                        f'{t_in:.4f});'
-                    )
-                    lines.append(
-                        f'  tl.to(\'{title_sel}\', '
-                        f'{{ scale: 1, duration: 0.200, ease: _eOut }}, '
-                        f'{t_in + 0.35:.4f});'
-                    )
-                elif is_ledger:
-                    lines.append(
-                        f'  tl.fromTo(\'{title_sel}\', '
-                        f'{{ clipPath: "inset(0 100% 0 0)" }}, '
-                        f'{{ clipPath: "inset(0 0% 0 0)", duration: 0.500, ease: _eIn }}, '
-                        f'{t_in:.4f});'
-                    )
-                else:
-                    lines.append(
-                        f'  tl.fromTo(\'{title_sel}\', '
-                        f'{{ clipPath: "inset(0 100% 0 0)" }}, '
-                        f'{{ clipPath: "inset(0 0% 0 0)", duration: 0.500, ease: "power2.inOut" }}, '
-                        f'{t_in:.4f});'
-                    )
-            elif content_style == "quote":
-                if is_cinema:
-                    lines.append(
-                        f'  tl.fromTo(\'{title_sel}\', '
-                        f'{{ opacity: 0 }}, '
-                        f'{{ opacity: 1, duration: 0.600, ease: _eIn }}, '
-                        f'{t_in:.4f});'
-                    )
-                elif is_ledger:
-                    lines.append(
-                        f'  tl.fromTo(\'{title_sel}\', '
-                        f'{{ opacity: 0 }}, '
-                        f'{{ opacity: 1, duration: 0.200, ease: _eIn }}, '
-                        f'{t_in:.4f});'
-                    )
-                else:
-                    lines.append(
-                        f'  tl.fromTo(\'{title_sel}\', '
-                        f'{{ opacity: 0, y: 40 }}, '
-                        f'{{ opacity: 1, y: 0, duration: 0.500, ease: _eIn }}, '
-                        f'{t_in:.4f});'
-                    )
-            elif content_style == "comparison":
-                left_sel = f'.card[data-card-id="{card_id}"] #{card_id}-left'
-                right_sel = f'.card[data-card-id="{card_id}"] #{card_id}-right'
-                sep_sel = f'.card[data-card-id="{card_id}"] #{card_id}-sep'
-                lines.append(
-                    f'  tl.fromTo(\'{left_sel}\', '
-                    f'{{ opacity: 0, x: -60 }}, '
-                    f'{{ opacity: 1, x: 0, duration: 0.450, ease: _eIn }}, '
-                    f'{t_in:.4f});'
-                )
-                lines.append(
-                    f'  tl.fromTo(\'{right_sel}\', '
-                    f'{{ opacity: 0, x: 60 }}, '
-                    f'{{ opacity: 1, x: 0, duration: 0.450, ease: _eIn }}, '
-                    f'{t_in + 0.15:.4f});'
-                )
-                lines.append(
-                    f'  tl.fromTo(\'{sep_sel}\', '
-                    f'{{ height: 0 }}, '
-                    f'{{ height: 80, duration: 0.400, ease: _eIn }}, '
-                    f'{t_in + 0.20:.4f});'
-                )
-                if is_vibe:
-                    lines.append(
-                        f'  tl.to(\'{sep_sel}\', '
-                        f'{{ boxShadow: "0 0 16px {p["accent"]}", duration: 0.200 }}, '
-                        f'{t_in + 0.60:.4f});'
-                    )
-            elif content_style == "list":
-                items = card.get("contentHints", {}).get("items", [])
-                n_items = min(len(items), 8)
-                cascade_limit = min(n_items, 4)
-                for i in range(n_items):
-                    item_sel = f'.card[data-card-id="{card_id}"] #{card_id}-item-{i}'
-                    bullet_sel = f'{item_sel} .list-bullet'
-                    stagger = i * 0.12 if i < cascade_limit else cascade_limit * 0.12
-                    if is_paper:
-                        lines.append(
-                            f'  tl.fromTo(\'{item_sel}\', '
-                            f'{{ opacity: 0 }}, '
-                            f'{{ opacity: 1, duration: 0.300, ease: _eIn }}, '
-                            f'{t_in + stagger:.4f});'
-                        )
-                        lines.append(
-                            f'  tl.fromTo(\'{bullet_sel}\', '
-                            f'{{ scale: 0.6 }}, '
-                            f'{{ scale: 1, duration: 0.200, ease: _eIn }}, '
-                            f'{t_in + stagger:.4f});'
-                        )
-                    elif is_vibe:
-                        lines.append(
-                            f'  tl.fromTo(\'{item_sel}\', '
-                            f'{{ opacity: 0, scale: 0 }}, '
-                            f'{{ opacity: 1, scale: 1, duration: 0.300, ease: _eIn }}, '
-                            f'{t_in + stagger:.4f});'
-                        )
-                        lines.append(
-                            f'  tl.fromTo(\'{bullet_sel}\', '
-                            f'{{ scale: 0.2 }}, '
-                            f'{{ scale: 1.2, duration: 0.200, ease: _eIn }}, '
-                            f'{t_in + stagger - 0.05:.4f});'
-                        )
-                        lines.append(
-                            f'  tl.to(\'{bullet_sel}\', '
-                            f'{{ scale: 1, duration: 0.150, ease: _eOut }}, '
-                            f'{t_in + stagger + 0.15:.4f});'
-                        )
-                    else:
-                        lines.append(
-                            f'  tl.fromTo(\'{item_sel}\', '
-                            f'{{ opacity: 0, x: -12 }}, '
-                            f'{{ opacity: 1, x: 0, duration: 0.300, ease: _eIn }}, '
-                            f'{t_in + stagger:.4f});'
-                        )
-                        lines.append(
-                            f'  tl.fromTo(\'{bullet_sel}\', '
-                            f'{{ scale: 0.3 }}, '
-                            f'{{ scale: 1, duration: 0.250, ease: _eIn }}, '
-                            f'{t_in + stagger - 0.05:.4f});'
-                        )
-            elif content_style == "question":
-                if is_paper:
-                    lines.append(
-                        f'  tl.fromTo(\'{title_sel}\', '
-                        f'{{ opacity: 0 }}, '
-                        f'{{ opacity: 1, duration: 0.250, ease: _eIn }}, '
-                        f'{t_in:.4f});'
-                    )
-                elif is_vibe:
-                    lines.append(
-                        f'  tl.fromTo(\'{title_sel}\', '
-                        f'{{ opacity: 0, scale: 0.7 }}, '
-                        f'{{ opacity: 1, scale: 1.05, duration: 0.350, ease: _eIn }}, '
-                        f'{t_in:.4f});'
-                    )
-                    lines.append(
-                        f'  tl.to(\'{title_sel}\', '
-                        f'{{ scale: 1, duration: 0.200, ease: _eOut }}, '
-                        f'{t_in + 0.35:.4f});'
-                    )
-                else:
-                    lines.append(
-                        f'  tl.fromTo(\'{title_sel}\', '
-                        f'{{ clipPath: "inset(0 100% 0 0)" }}, '
-                        f'{{ clipPath: "inset(0 0% 0 0)", duration: 0.500, ease: "power2.inOut" }}, '
-                        f'{t_in:.4f});'
-                    )
-            elif content_style == "timeline":
-                steps = card.get("contentHints", {}).get("steps", [])
-                n_steps = min(len(steps), 6)
-                avg_ll = sum(len(str(s)) for s in steps[:n_steps]) / max(n_steps, 1)
-                total_ll = sum(len(str(s)) for s in steps[:n_steps])
-                tl_vertical = total_ll > 60 or avg_ll > 18 or n_steps > 4
-                tl_line_sel = f'.card[data-card-id="{card_id}"] #{card_id}-tl-line'
-                line_dur = min(1.5, max(0.4, n_steps * 0.25))
-                line_prop = "height" if tl_vertical else "width"
-                lines.append(
-                    f'  tl.to(\'{tl_line_sel}\', '
-                    f'{{ {line_prop}: "100%", duration: {line_dur:.3f}, ease: "power2.inOut" }}, '
-                    f'{t_in:.4f});'
-                )
-                dot_pop_scale = "1.5" if is_vibe else "1.3"
-                for si in range(n_steps):
-                    dot_sel = f'.card[data-card-id="{card_id}"] #{card_id}-dot-{si}'
-                    dot_t = t_in + (si + 1) * (line_dur / max(n_steps, 1))
-                    if is_paper:
-                        lines.append(
-                            f'  tl.to(\'{dot_sel}\', '
-                            f'{{ background: "{p["accent"]}", duration: 0.200, ease: _eIn }}, '
-                            f'{dot_t:.4f});'
-                        )
-                    else:
-                        lines.append(
-                            f'  tl.to(\'{dot_sel}\', '
-                            f'{{ background: "{p["accent"]}", scale: {dot_pop_scale}, '
-                            f'boxShadow: "0 0 14px {p["accent"]}", '
-                            f'duration: 0.200, ease: _eIn }}, {dot_t:.4f});'
-                        )
-                        lines.append(
-                            f'  tl.to(\'{dot_sel}\', '
-                            f'{{ scale: 1, duration: 0.150, ease: _eOut }}, '
-                            f'{dot_t + 0.20:.4f});'
-                        )
-            elif content_style == "dialogue":
-                dlg_a_sel = f'.card[data-card-id="{card_id}"] #{card_id}-dlg-a'
-                dlg_b_sel = f'.card[data-card-id="{card_id}"] #{card_id}-dlg-b'
-                if is_vibe:
-                    lines.append(
-                        f'  tl.fromTo(\'{dlg_a_sel}\', '
-                        f'{{ opacity: 0, scale: 0.8 }}, '
-                        f'{{ opacity: 1, scale: 1.05, duration: 0.400, ease: _eIn }}, '
-                        f'{t_in:.4f});'
-                    )
-                    lines.append(
-                        f'  tl.to(\'{dlg_a_sel}\', '
-                        f'{{ scale: 1, duration: 0.180, ease: _eOut }}, '
-                        f'{t_in + 0.40:.4f});'
-                    )
-                    lines.append(
-                        f'  tl.fromTo(\'{dlg_b_sel}\', '
-                        f'{{ opacity: 0, scale: 0.8 }}, '
-                        f'{{ opacity: 1, scale: 1.05, duration: 0.400, ease: _eIn }}, '
-                        f'{t_in + 0.25:.4f});'
-                    )
-                    lines.append(
-                        f'  tl.to(\'{dlg_b_sel}\', '
-                        f'{{ scale: 1, duration: 0.180, ease: _eOut }}, '
-                        f'{t_in + 0.65:.4f});'
-                    )
-                else:
-                    lines.append(
-                        f'  tl.fromTo(\'{dlg_a_sel}\', '
-                        f'{{ opacity: 0, x: -30 }}, '
-                        f'{{ opacity: 1, x: 0, duration: 0.400, ease: _eIn }}, '
-                        f'{t_in:.4f});'
-                    )
-                    lines.append(
-                        f'  tl.fromTo(\'{dlg_b_sel}\', '
-                        f'{{ opacity: 0, x: 30 }}, '
-                        f'{{ opacity: 1, x: 0, duration: 0.400, ease: _eIn }}, '
-                        f'{t_in + 0.25:.4f});'
-                    )
-            elif content_style == "trend":
-                path_sel = f'.card[data-card-id="{card_id}"] #{card_id}-trend-path'
-                dot_sel = f'.card[data-card-id="{card_id}"] #{card_id}-trend-dot'
                 lines.append(
                     f'  tl.fromTo(\'{title_sel}\', '
-                    f'{{ opacity: 0 }}, '
-                    f'{{ opacity: 1, duration: 0.300, ease: _eIn }}, '
+                    f'{{ clipPath: "inset(0 100% 0 0)" }}, '
+                    f'{{ clipPath: "inset(0 0% 0 0)", duration: 0.500, ease: "power2.inOut" }}, '
                     f'{t_in:.4f});'
                 )
-                lines.append(
-                    f'  tl.to(\'{path_sel}\', '
-                    f'{{ attr: {{ "stroke-dashoffset": 0 }}, '
-                    f'duration: 1.2, ease: "power2.inOut" }}, '
-                    f'{t_in + 0.15:.4f});'
-                )
-                if is_paper:
-                    lines.append(
-                        f'  tl.to(\'{dot_sel}\', '
-                        f'{{ opacity: 1, duration: 0.300, ease: _eIn }}, '
-                        f'{t_in + 1.35:.4f});'
-                    )
-                elif is_vibe:
-                    lines.append(
-                        f'  tl.to(\'{dot_sel}\', '
-                        f'{{ opacity: 1, scale: 2.0, '
-                        f'filter: "drop-shadow(0 0 12px {p["accent"]})", '
-                        f'duration: 0.250, ease: _eIn }}, {t_in + 1.20:.4f});'
-                    )
-                    lines.append(
-                        f'  tl.to(\'{dot_sel}\', '
-                        f'{{ scale: 1, duration: 0.200, ease: _eOut }}, '
-                        f'{t_in + 1.45:.4f});'
-                    )
-                else:
-                    lines.append(
-                        f'  tl.to(\'{dot_sel}\', '
-                        f'{{ opacity: 1, scale: 1.4, '
-                        f'filter: "drop-shadow(0 0 8px {p["accent"]})", '
-                        f'duration: 0.200, ease: _eIn }}, {t_in + 1.20:.4f});'
-                    )
-                    lines.append(
-                        f'  tl.to(\'{dot_sel}\', '
-                        f'{{ scale: 1, duration: 0.200, ease: _eOut }}, '
-                        f'{t_in + 1.40:.4f});'
-                    )
-            elif content_style == "attributed_quote":
+            elif content_style == "quote":
                 lines.append(
                     f'  tl.fromTo(\'{title_sel}\', '
                     f'{{ opacity: 0, y: 40 }}, '
-                    f'{{ opacity: 1, y: 0, duration: 0.500, ease: _eIn }}, '
+                    f'{{ opacity: 1, y: 0, duration: 0.500, ease: "power3.out" }}, '
                     f'{t_in:.4f});'
                 )
-                attr_sel = f'.card[data-card-id="{card_id}"] #{card_id}-attr'
-                if is_vibe:
-                    lines.append(
-                        f'  tl.fromTo(\'{attr_sel}\', '
-                        f'{{ opacity: 0, scale: 0.8 }}, '
-                        f'{{ opacity: 1, scale: 1, duration: 0.300, ease: _eIn }}, '
-                        f'{t_in + 0.20:.4f});'
-                    )
-                else:
-                    lines.append(
-                        f'  tl.fromTo(\'{attr_sel}\', '
-                        f'{{ opacity: 0 }}, '
-                        f'{{ opacity: 1, duration: 0.300, ease: _eIn }}, '
-                        f'{t_in + 0.20:.4f});'
-                    )
-            elif content_style == "carousel":
-                slides = card.get("contentHints", {}).get("slides", [])
-                n_slides = min(len(slides), 4)
-                if n_slides > 0:
-                    slide_dur = max(1.0, dur / n_slides)
-                    for si in range(n_slides):
-                        sl_sel = f'.card[data-card-id="{card_id}"] #{card_id}-slide-{si}'
-                        sl_in = start + si * slide_dur
-                        sl_out = sl_in + slide_dur - 0.3
-                        if is_paper:
-                            lines.append(
-                                f'  tl.to(\'{sl_sel}\', '
-                                f'{{ opacity: 1, duration: 0.300, ease: _eIn }}, '
-                                f'{sl_in:.4f});')
-                            lines.append(
-                                f'  tl.to(\'{sl_sel}\', '
-                                f'{{ opacity: 0, duration: 0.250, ease: _eOut }}, '
-                                f'{sl_out:.4f});')
-                        elif is_vibe:
-                            lines.append(
-                                f'  tl.fromTo(\'{sl_sel}\', '
-                                f'{{ opacity: 0, scale: 0.8 }}, '
-                                f'{{ opacity: 1, scale: 1, duration: 0.300, ease: _eIn }}, '
-                                f'{sl_in:.4f});')
-                            lines.append(
-                                f'  tl.to(\'{sl_sel}\', '
-                                f'{{ opacity: 0, scale: 1.1, duration: 0.200, ease: _eOut }}, '
-                                f'{sl_out:.4f});')
-                        else:
-                            lines.append(
-                                f'  tl.fromTo(\'{sl_sel}\', '
-                                f'{{ opacity: 0, x: 16 }}, '
-                                f'{{ opacity: 1, x: 0, duration: 0.300, ease: _eIn }}, '
-                                f'{sl_in:.4f});')
-                            lines.append(
-                                f'  tl.to(\'{sl_sel}\', '
-                                f'{{ opacity: 0, x: -16, duration: 0.250, ease: _eOut }}, '
-                                f'{sl_out:.4f});')
-            elif content_style == "definition":
-                term_sel = f'.card[data-card-id="{card_id}"] #{card_id}-term'
-                def_sel = f'.card[data-card-id="{card_id}"] #{card_id}-def'
-                if is_paper:
-                    lines.append(
-                        f'  tl.fromTo(\'{term_sel}\', '
-                        f'{{ opacity: 0 }}, {{ opacity: 1, duration: 0.300, ease: _eIn }}, '
-                        f'{t_in:.4f});')
-                elif is_vibe:
-                    lines.append(
-                        f'  tl.fromTo(\'{term_sel}\', '
-                        f'{{ opacity: 0, scale: 0.7 }}, '
-                        f'{{ opacity: 1, scale: 1.05, duration: 0.350, ease: _eIn }}, '
-                        f'{t_in:.4f});')
-                    lines.append(
-                        f'  tl.to(\'{term_sel}\', '
-                        f'{{ scale: 1, duration: 0.200, ease: _eOut }}, {t_in + 0.35:.4f});')
-                else:
-                    lines.append(
-                        f'  tl.fromTo(\'{term_sel}\', '
-                        f'{{ clipPath: "inset(0 100% 0 0)" }}, '
-                        f'{{ clipPath: "inset(0 0% 0 0)", duration: 0.500, ease: "power2.inOut" }}, '
-                        f'{t_in:.4f});')
-                lines.append(
-                    f'  tl.fromTo(\'{def_sel}\', '
-                    f'{{ opacity: 0 }}, {{ opacity: 1, duration: 0.300, ease: _eIn }}, '
-                    f'{t_in + 0.20:.4f});')
-            elif content_style == "checklist":
-                items = card.get("contentHints", {}).get("items", [])
-                n_items = min(len(items), 6)
-                cascade_limit = min(n_items, 4)
-                for i in range(n_items):
-                    item_sel = f'.card[data-card-id="{card_id}"] #{card_id}-chk-{i}'
-                    svg_sel = f'.card[data-card-id="{card_id}"] #{card_id}-chk-svg-{i} path'
-                    stagger = i * 0.12 if i < cascade_limit else cascade_limit * 0.12
-                    lines.append(
-                        f'  tl.fromTo(\'{item_sel}\', '
-                        f'{{ opacity: 0 }}, {{ opacity: 1, duration: 0.250, ease: _eIn }}, '
-                        f'{t_in + stagger:.4f});')
-                    lines.append(
-                        f'  tl.to(\'{svg_sel}\', '
-                        f'{{ strokeDashoffset: 0, duration: 0.300, ease: _eIn }}, '
-                        f'{t_in + stagger + 0.10:.4f});')
-                    if is_vibe:
-                        lines.append(
-                            f'  tl.fromTo(\'{svg_sel}\', '
-                            f'{{ scale: 1 }}, {{ scale: 1.3, duration: 0.150, ease: _eIn }}, '
-                            f'{t_in + stagger + 0.40:.4f});')
-                        lines.append(
-                            f'  tl.to(\'{svg_sel}\', '
-                            f'{{ scale: 1, duration: 0.120, ease: _eOut }}, '
-                            f'{t_in + stagger + 0.55:.4f});')
-            elif content_style == "score":
-                score_sel = f'.card[data-card-id="{card_id}"] #{card_id}-score'
-                label_sel = f'.card[data-card-id="{card_id}"] #{card_id}-score-label'
-                pop_scale = "1.15" if is_vibe else "1.08" if not is_paper else "1.04"
-                lines.append(
-                    f'  tl.fromTo(\'{score_sel}\', '
-                    f'{{ opacity: 0, scale: 0.5 }}, '
-                    f'{{ opacity: 1, scale: {pop_scale}, duration: 0.300, ease: _eIn }}, '
-                    f'{t_in:.4f});')
-                lines.append(
-                    f'  tl.to(\'{score_sel}\', '
-                    f'{{ scale: 1, duration: 0.200, ease: _eOut }}, '
-                    f'{t_in + 0.30:.4f});')
-                if not is_paper and p["title_glow"]:
-                    lines.append(
-                        f'  tl.to(\'{score_sel}\', '
-                        f'{{ color: "{p["accent"]}", '
-                        f'textShadow: "{_esc_js(p["title_glow_intense"])}", '
-                        f'duration: 0.15 }}, {t_in + 0.30:.4f});')
-                    lines.append(
-                        f'  tl.to(\'{score_sel}\', '
-                        f'{{ color: "{p["text"]}", '
-                        f'textShadow: "{_esc_js(p["title_glow"])}", '
-                        f'duration: 0.5 }}, {t_in + 0.45:.4f});')
-                lines.append(
-                    f'  tl.fromTo(\'{label_sel}\', '
-                    f'{{ opacity: 0 }}, {{ opacity: 1, duration: 0.250, ease: _eIn }}, '
-                    f'{t_in + 0.20:.4f});')
-            elif content_style == "mindmap":
-                center_sel = f'.card[data-card-id="{card_id}"] #{card_id}-mm-center'
-                lines.append(
-                    f'  tl.fromTo(\'{center_sel}\', '
-                    f'{{ opacity: 0, scale: 0.8 }}, '
-                    f'{{ opacity: 1, scale: 1, duration: 0.400, ease: _eIn }}, '
-                    f'{t_in:.4f});')
-                branches = card.get("contentHints", {}).get("branches", [])
-                n_br = min(len(branches), 3)
-                for bi in range(n_br):
-                    bl_sel = f'.card[data-card-id="{card_id}"] #{card_id}-br-line-{bi}'
-                    blbl_sel = f'.card[data-card-id="{card_id}"] #{card_id}-br-label-{bi}'
-                    br_t = t_in + 0.30 + bi * 0.20
-                    lines.append(
-                        f'  tl.to(\'{bl_sel}\', '
-                        f'{{ width: 100, duration: 0.400, ease: _eIn }}, '
-                        f'{br_t:.4f});')
-                    if is_vibe:
-                        lines.append(
-                            f'  tl.fromTo(\'{blbl_sel}\', '
-                            f'{{ opacity: 0, scale: 0.7 }}, '
-                            f'{{ opacity: 1, scale: 1, duration: 0.300, ease: _eIn }}, '
-                            f'{br_t + 0.30:.4f});')
-                    elif is_paper:
-                        lines.append(
-                            f'  tl.fromTo(\'{blbl_sel}\', '
-                            f'{{ opacity: 0 }}, '
-                            f'{{ opacity: 1, duration: 0.300, ease: _eIn }}, '
-                            f'{br_t + 0.35:.4f});')
-                    else:
-                        lines.append(
-                            f'  tl.fromTo(\'{blbl_sel}\', '
-                            f'{{ opacity: 0, y: 8 }}, '
-                            f'{{ opacity: 1, y: 0, duration: 0.300, ease: _eIn }}, '
-                            f'{br_t + 0.30:.4f});')
             else:
-                if is_cinema:
-                    lines.append(
-                        f'  tl.fromTo(\'{title_sel}\', '
-                        f'{{ opacity: 0 }}, '
-                        f'{{ opacity: 1, duration: 0.600, ease: _eIn }}, '
-                        f'{t_in:.4f});'
-                    )
-                elif is_craft:
-                    lines.append(
-                        f'  tl.fromTo(\'{title_sel}\', '
-                        f'{{ opacity: 0 }}, '
-                        f'{{ opacity: 1, duration: 0.350, ease: _eIn }}, '
-                        f'{t_in:.4f});'
-                    )
-                elif is_ledger:
-                    lines.append(
-                        f'  tl.fromTo(\'{title_sel}\', '
-                        f'{{ opacity: 0 }}, '
-                        f'{{ opacity: 1, duration: 0.200, ease: _eIn }}, '
-                        f'{t_in:.4f});'
-                    )
-                elif is_paper:
-                    lines.append(
-                        f'  tl.fromTo(\'{title_sel}\', '
-                        f'{{ opacity: 0, scale: 1.04 }}, '
-                        f'{{ opacity: 1, scale: 1, duration: 0.400, ease: _eIn }}, '
-                        f'{t_in:.4f});'
-                    )
-                elif is_vibe:
-                    lines.append(
-                        f'  tl.fromTo(\'{title_sel}\', '
-                        f'{{ opacity: 0, rotation: -3, scale: 0.95 }}, '
-                        f'{{ opacity: 1, rotation: 0, scale: 1, duration: 0.400, ease: _eIn }}, '
-                        f'{t_in:.4f});'
-                    )
-                else:
-                    lines.append(
-                        f'  tl.fromTo(\'{title_sel}\', '
-                        f'{{ opacity: 0, y: 20 }}, '
-                        f'{{ opacity: 1, y: 0, duration: 0.400, ease: _eIn }}, '
-                        f'{t_in:.4f});'
-                    )
+                lines.append(
+                    f'  tl.fromTo(\'{title_sel}\', '
+                    f'{{ opacity: 0, filter: "blur(8px)" }}, '
+                    f'{{ opacity: 1, filter: "blur(0px)", duration: 0.400, ease: "power2.out" }}, '
+                    f'{t_in:.4f});'
+                )
 
             lines.append(
                 f'  tl.fromTo(\'{kicker_sel}\', '
                 f'{{ opacity: 0, y: -8 }}, '
-                f'{{ opacity: 1, y: 0, duration: 0.250, ease: _eIn }}, '
+                f'{{ opacity: 1, y: 0, duration: 0.250, ease: "power2.out" }}, '
                 f'{start + 0.10:.4f});'
             )
             lines.append(
                 f'  tl.fromTo(\'{line_sel}\', '
                 f'{{ width: 0 }}, '
-                f'{{ width: 120, duration: 0.400, ease: _eIn }}, '
+                f'{{ width: 120, duration: 0.400, ease: "power2.out" }}, '
                 f'{t_in + 0.30:.4f});'
-            )
-            # Breathing underline — half speed for question cards
-            breath_period = 2.5 if content_style == "question" else 1.25
-            pulse_dur = max(0.5, dur - 1.0)
-            pulse_repeats = max(1, int(pulse_dur / (breath_period * 2)))
-            lines.append(
-                f'  tl.fromTo(\'{line_sel}\', '
-                f'{{ boxShadow: "{_esc_js(p["accent_line_glow"])}" }}, '
-                f'{{ boxShadow: "{_esc_js(p["accent_line_glow_bright"])}", '
-                f'duration: {breath_period:.2f}, ease: "sine.inOut", '
-                f'repeat: {pulse_repeats}, yoyo: true }}, '
-                f'{t_in + 0.70:.4f});'
             )
             # Shimmer sweep across glass panel after materialization
             shimmer_sel = f'.card[data-card-id="{card_id}"] #{card_id}-shimmer'
@@ -1543,30 +430,28 @@ def _build_timeline_js(
                 f'{shimmer_start:.4f});'
             )
 
-        # Exit — faster than entrance (asymmetric timing)
+        # Exit
         if is_caption:
             exit_start = end - fade_out_dur
             lines.append(
                 f'  tl.to(\'{sel}\', '
-                f'{{ opacity: 0, duration: {fade_out_dur:.3f}, ease: _eOut }}, '
+                f'{{ opacity: 0, duration: {fade_out_dur:.3f}, ease: "power2.in" }}, '
                 f'{exit_start:.4f});'
             )
         else:
-            exit_dur = 0.500 if is_cinema else 0.180
-            exit_ease = "_eIn" if is_cinema else "_eOut"
-            exit_start = end - exit_dur
+            exit_start = end - 0.30
             panel_sel = f'.card[data-card-id="{card_id}"] .card-panel'
             lines.append(
                 f'  tl.to(\'{sel}\', '
-                f'{{ opacity: 0, duration: {exit_dur:.3f}, ease: {exit_ease} }}, '
+                f'{{ opacity: 0, duration: 0.300, ease: "power2.in" }}, '
                 f'{exit_start:.4f});'
             )
             lines.append(
                 f'  tl.to(\'{panel_sel}\', '
-                f'{{ scale: 0.97, duration: 0.180, ease: _eOut }}, '
+                f'{{ scale: 0.97, duration: 0.300, ease: "power2.in" }}, '
                 f'{exit_start:.4f});'
             )
-        lines.append(f'  tl.set(\'{sel}\', {{ opacity: 0, visibility: "hidden" }}, {end:.4f});')
+        lines.append(f'  tl.set(\'{sel}\', {{ visibility: "hidden" }}, {end:.4f});')
 
         lines.append(f'  }} catch(_e) {{ console.warn("card {card_id} animation error:", _e); }}')
         lines.append("")
@@ -1697,10 +582,6 @@ def compose(
     print(f"[COMPOSE] Video copied: {video_dst} ({video_dst.stat().st_size // 1024}KB)")
     print(f"[COMPOSE] Storyboard duration: {duration:.3f}s")
 
-    # Resolve style pack
-    pack = _PACKS.get(style_pack, _LEAN_GLASS)
-    print(f"[COMPOSE] Style pack: {pack['id']}")
-
     # Separate cards by type for track assignment
     all_cards = storyboard.get("cards", [])
     graphic_cards = [c for c in all_cards if c.get("type") != "caption"]
@@ -1709,35 +590,22 @@ def compose(
     # Build card host divs
     card_hosts = []
     for c in graphic_cards:
-        card_hosts.append(_build_card_host(c, layout, track_index=2, pack=pack))
+        card_hosts.append(_build_card_host(c, layout, track_index=2))
     for c in caption_cards:
-        card_hosts.append(_build_card_host(c, layout, track_index=3, pack=pack))
+        card_hosts.append(_build_card_host(c, layout, track_index=3))
 
     # Build master timeline
-    timeline_js = _build_timeline_js(all_cards, zoom_entries=zoom_entries, subject_position=subject_position, pack=pack)
+    timeline_js = _build_timeline_js(all_cards, zoom_entries=zoom_entries, subject_position=subject_position)
 
     # CSS custom properties from theme
     accent_vars = "\n".join(
         f"    --accent-{i}: {color};" for i, color in enumerate(theme["accents"])
     )
 
-    # Build Google Fonts import for pack-specific fonts
-    _font_imports = {
-        "lean_vibe": "Poppins:wght@400;800",
-        "lean_craft": "Permanent+Marker",
-        "lean_cinema": "Playfair+Display:wght@400;700",
-        "lean_ledger": "IBM+Plex+Mono:wght@400;600",
-    }
-    font_link = ""
-    fi = _font_imports.get(pack["id"], "")
-    if fi:
-        font_link = f'<link href="https://fonts.googleapis.com/css2?family={fi}&display=block" rel="stylesheet" />'
-
     html = f"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-{font_link}
 <style>
   :root {{
     --bg: {theme["bg"]};
