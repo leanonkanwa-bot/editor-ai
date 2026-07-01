@@ -1727,11 +1727,10 @@ def _render_hyperframes(
             *_hf_cmd, "render",
             str(public_dir),
             "-o", str(output_path),
-            "--fps", str(fps),
-            "--quality", "standard",
-            "--workers", "1",
+            "--fps", "24",
+            "--quality", "draft",
+            "--workers", "2",
             "--protocol-timeout", "600000",
-            "--low-memory-mode",
         ],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, env=env,
@@ -1749,8 +1748,12 @@ def _render_hyperframes(
         _kill_orphan_chrome()
         raise RuntimeError("HyperFrames CLI render timed out")
 
+    if stdout.strip():
+        print(f"[HF] CLI stdout:\n{stdout[:3000]}", flush=True)
+    if stderr.strip():
+        print(f"[HF] CLI stderr:\n{stderr[:2000]}", flush=True)
+
     if proc.returncode != 0 or not output_path.exists():
-        print(f"[HF] Render failed (rc={proc.returncode}): {stderr[-500:]}", flush=True)
         _kill_orphan_chrome()
         raise RuntimeError("HyperFrames CLI render failed")
 

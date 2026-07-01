@@ -95,7 +95,7 @@ _EASE_CINEMA_IN = "cubic-bezier(0.16, 0.60, 0.40, 1.00)"
 
 _LEAN_GLASS = {
     "id": "lean_glass",
-    "bg": "linear-gradient(160deg, rgba(18,18,28,0.85), rgba(8,8,16,0.92))",
+    "bg": "linear-gradient(160deg, rgba(18,18,28,0.88), rgba(8,8,16,0.95))",
     "text": "#F1F1F1",
     "text_secondary": "rgba(255,255,255,0.6)",
     "accent": "#4cc9f0",
@@ -105,11 +105,11 @@ _LEAN_GLASS = {
     "number_size": "96px",
     "kicker_size": "22px",
     "detail_size": "26px",
-    "border": "1px solid rgba(76,201,240,0.12)",
+    "border": "1px solid rgba(76,201,240,0.18)",
     "radius": "20px",
     "shadow": "0 0 60px rgba(76,201,240,0.15), 0 8px 32px rgba(0,0,0,0.4)",
     "shadow_inset": "inset 0 1px 0 rgba(255,255,255,0.06)",
-    "panel_filter": "blur(16px) saturate(1.4)",
+    "panel_filter": "",
     "title_glow": "0 0 40px rgba(76,201,240,0.25)",
     "title_glow_intense": "0 0 56px rgba(76,201,240,0.45)",
     "has_grain": True,
@@ -891,8 +891,8 @@ def _build_timeline_js(
             if not is_cinema:
                 lines.append(
                     f'  tl.fromTo(\'{panel_sel}\', '
-                    f'{{ filter: "blur(12px)", scale: 1.02 }}, '
-                    f'{{ filter: "blur(0px)", scale: 1, duration: 0.350, ease: _eIn }}, '
+                    f'{{ scale: 1.04, y: 14 }}, '
+                    f'{{ scale: 1, y: 0, duration: 0.350, ease: _eIn }}, '
                     f'{start:.4f});'
                 )
 
@@ -1684,13 +1684,15 @@ def compose(
     gsap_dst = vendor_dir / "gsap.min.js"
     if gsap_src.exists():
         shutil.copy2(gsap_src, gsap_dst)
+        print(f"[COMPOSE] GSAP loaded from .agents ({gsap_dst.stat().st_size // 1024}KB)", flush=True)
     else:
         # Fallback: try the engine's node_modules
         gsap_fallback = Path(__file__).resolve().parent / "node_modules" / "gsap" / "dist" / "gsap.min.js"
         if gsap_fallback.exists():
             shutil.copy2(gsap_fallback, gsap_dst)
+            print(f"[COMPOSE] GSAP loaded from node_modules ({gsap_dst.stat().st_size // 1024}KB)", flush=True)
         else:
-            print("[COMPOSE] WARNING: gsap.min.js not found")
+            print("[COMPOSE] WARNING: gsap.min.js not found — graphic cards will NOT animate", flush=True)
 
     # Copy the pre-trimmed video directly — pretrim.py already re-encoded
     # with dense keyframes (g=30, keyint_min=30). A second re-encode would
