@@ -437,10 +437,10 @@ Design {target_cards} graphic overlay cards for this video."""
         for card in cards:
             card["startSec"] = max(0, min(float(card.get("startSec", 0)), trimmed_duration - 1))
             card["endSec"] = max(card["startSec"] + 1, min(float(card.get("endSec", 0)), trimmed_duration))
-        print(f"[STORYBOARD] Generated {len(cards)} graphic cards")
+        print(f"[STORYBOARD] Generated {len(cards)} graphic cards", flush=True)
         return cards
     except Exception as e:
-        print(f"[STORYBOARD] Claude API error: {e}")
+        print(f"[STORYBOARD] Claude API error: {e}", flush=True)
         return []
 
 
@@ -490,7 +490,7 @@ def generate_storyboard(
         word_categories=word_categories,
     )
 
-    print(f"[STORYBOARD] {len(graphic_cards)} graphic + {len(caption_cards)} caption cards")
+    print(f"[STORYBOARD] {len(graphic_cards)} graphic + {len(caption_cards)} caption cards", flush=True)
 
     storyboard = {
         "composition": {

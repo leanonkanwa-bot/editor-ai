@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -82,6 +83,7 @@ def run_job(
 ) -> None:
     """Phase 1: transcription, analysis, planning → status: ready_for_review."""
     try:
+        _t0 = time.perf_counter()
         # ── Step 1: Transcribe + Vision (concurrent) ──────────────────────
         store.update(job_id, status="transcribing", progress=10,
                      message="Transcribing audio + analysing subject position…")
@@ -90,8 +92,10 @@ def run_job(
             f_subject    = pool.submit(lambda: analyze_subject_position(src))
             transcript  = f_transcript.result()
             subject_pos = f_subject.result()
+        print(f"[TIMING] transcription+vision: {time.perf_counter()-_t0:.1f}s", flush=True)
 
         # ── Step 2: Silence removal (Feature 2) ───────────────────────────
+        _t = time.perf_counter()
         store.update(job_id, status="transcribing", progress=20,
                      message="Removing silences and filler words…")
         from app.core.config import settings as _cfg
@@ -101,7 +105,7 @@ def run_job(
             # drift (captions ahead of speech, gap growing toward the end).
             transcript_clean = transcript
             drops = []
-            print("[PIPELINE] DISABLE_CUTS=true — skipping silence removal timestamp shift")
+            print("[PIPELINE] DISABLE_CUTS=true — skipping silence removal timestamp shift", flush=True)
         else:
             try:
                 remover = RhythmAwareSilenceRemover()
@@ -114,8 +118,10 @@ def run_job(
             except Exception:
                 transcript_clean = transcript
                 drops = []
+        print(f"[TIMING] silence_removal: {time.perf_counter()-_t:.1f}s", flush=True)
 
         # ── Step 3: Energy detection (Feature 4) ──────────────────────────
+        _t = time.perf_counter()
         store.update(job_id, status="transcribing", progress=25,
                      message="Detecting speaker energy…")
         try:
@@ -133,8 +139,10 @@ def run_job(
             ]
         except Exception:
             energy_dicts = []
+        print(f"[TIMING] energy_detection: {time.perf_counter()-_t:.1f}s", flush=True)
 
         # ── Step 4: Multi-speaker detection (Feature 8) ───────────────────
+        _t = time.perf_counter()
         store.update(job_id, status="transcribing", progress=30,
                      message="Detecting speakers…")
         try:
@@ -147,6 +155,7 @@ def run_job(
             ]
         except Exception:
             speaker_dicts = []
+        print(f"[TIMING] speaker_detection: {time.perf_counter()-_t:.1f}s", flush=True)
 
         # ── Step 5a: Load template if specified (Feature 1) ───────────────
         template: dict = {}
@@ -225,6 +234,7 @@ def run_job(
         )
 
         # ── Step 6: Planning ───────────────────────────────────────────────
+        _t = time.perf_counter()
         store.update(job_id, status="planning", progress=40,
                      message="Asking the agent for an edit plan…")
         plan = plan_edit(
@@ -239,8 +249,10 @@ def run_job(
             coach_profile=coach_profile,
             editing_style=editing_style,
         )
+        print(f"[TIMING] planning: {time.perf_counter()-_t:.1f}s", flush=True)
 
         # ── Step 7: Hook rewrite (Feature 3) ──────────────────────────────
+        _t = time.perf_counter()
         store.update(job_id, status="planning", progress=50,
                      message="Rewriting hook for maximum retention…")
         hook_overlay: dict = {}
@@ -264,8 +276,10 @@ def run_job(
                     hook_overlay = hook_result
         except Exception:
             hook_overlay = {}
+        print(f"[TIMING] hook_rewrite: {time.perf_counter()-_t:.1f}s", flush=True)
 
         # ── Step 8: B-roll generation (Feature 1) ─────────────────────────
+        _t = time.perf_counter()
         store.update(job_id, status="planning", progress=55,
                      message="Generating b-roll overlays…")
         broll_specs_dicts: list[dict] = []
@@ -293,6 +307,7 @@ def run_job(
             ]
         except Exception:
             broll_specs_dicts = []
+        print(f"[TIMING] broll_generation: {time.perf_counter()-_t:.1f}s", flush=True)
 
         # ── Step 9: Detect content type for color grade ────────────────────
         detected_content_type = content_type_hint.lower() if content_type_hint else ""
@@ -324,6 +339,7 @@ def run_job(
         )
 
         # ── Persist everything; set status → ready_for_review ─────────────
+        print(f"[TIMING] phase1_total: {time.perf_counter()-_t0:.1f}s", flush=True)
         store.update(
             job_id,
             status="ready_for_review",
@@ -406,6 +422,7 @@ def run_render_phase(job_id: str, src: Path) -> None:
     if not job:
         return
     try:
+        _t_phase2 = time.perf_counter()
         plan_data   = job.plan_data or {}
         transcript  = job.transcript or {}
         subject_pos = job.subject_pos
@@ -457,6 +474,7 @@ def run_render_phase(job_id: str, src: Path) -> None:
         out_path = settings.outputs_dir / f"{job_id}.mp4"
         work_dir = settings.work_dir / job_id
 
+        _t = time.perf_counter()
         result = render(
             src,
             transcript,
@@ -477,6 +495,8 @@ def run_render_phase(job_id: str, src: Path) -> None:
             allow_4k=has_4k_access(params.get("coach_profile")),
         )
 
+        print(f"[TIMING] render: {time.perf_counter()-_t:.1f}s", flush=True)
+
         # Post-render quality check — logs warnings so they surface in Railway logs.
         import logging as _logging
         _qlog = _logging.getLogger(__name__)
@@ -485,6 +505,7 @@ def run_render_phase(job_id: str, src: Path) -> None:
             _qlog.warning("quality_check: %s", _issue)
 
         # ── Brand: apply intro/outro bumpers (Feature 2) ──────────────────
+        _t = time.perf_counter()
         brand_kit  = plan_data.get("brand_kit", {})
         final_path = out_path
         try:
@@ -498,6 +519,8 @@ def run_render_phase(job_id: str, src: Path) -> None:
                     final_path = out_path
         except Exception:
             final_path = out_path
+        print(f"[TIMING] brand_bumpers: {time.perf_counter()-_t:.1f}s", flush=True)
+        print(f"[TIMING] phase2_total: {time.perf_counter()-_t_phase2:.1f}s", flush=True)
 
         store.update(
             job_id,

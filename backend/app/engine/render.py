@@ -1613,19 +1613,21 @@ def _render_hyperframes(
     from app.engine.hyperframes_engine import _render_with_hyperframes_cli
 
     _health_check(src)
-    print("[RENDER] Using HyperFrames pipeline")
+    print("[RENDER] Using HyperFrames pipeline", flush=True)
+    _t_hf_start = time.perf_counter()
 
     # Dump plan diagnostics for debugging
     _n_keep = len(plan.keep_segments or [])
     _n_zoom = len(plan.zoom_plan or [])
     _n_words_src = sum(len(s.get("words", [])) for s in transcript.get("segments", []))
-    print(f"[HF] Plan: {_n_keep} keep_segments, {_n_zoom} zoom_plan entries, {_n_words_src} source words")
+    print(f"[HF] Plan: {_n_keep} keep_segments, {_n_zoom} zoom_plan entries, {_n_words_src} source words", flush=True)
 
     # Stage 1: Pre-trim
-    print("[HF] Stage 1: Pre-trimming source video...")
+    print("[HF] Stage 1: Pre-trimming source video...", flush=True)
     trimmed, timing_map = pretrim(src, transcript, plan, work_dir)
-    print(f"[HF] Trimmed: {timing_map.output_duration:.1f}s, {len(timing_map.remapped_words)} words")
-    print(f"[HF] Source intervals: {len(timing_map.source_intervals)}, compressed: {timing_map.compressed_intervals is not None}")
+    print(f"[HF] Trimmed: {timing_map.output_duration:.1f}s, {len(timing_map.remapped_words)} words", flush=True)
+    print(f"[HF] Source intervals: {len(timing_map.source_intervals)}, compressed: {timing_map.compressed_intervals is not None}", flush=True)
+    print(f"[TIMING] pretrim: {time.perf_counter()-_t_hf_start:.1f}s", flush=True)
 
     # Dump diagnostic data for coverage audit
     import json as _json
@@ -1662,7 +1664,8 @@ def _render_hyperframes(
     print(f"[HF] Remapped {len(remapped_zoom)} zoom entries to trimmed timeline")
 
     # Stage 2: Storyboard
-    print("[HF] Stage 2: Generating storyboard...")
+    _t = time.perf_counter()
+    print("[HF] Stage 2: Generating storyboard...", flush=True)
     storyboard = generate_storyboard(
         trimmed_duration=timing_map.output_duration,
         remapped_words=timing_map.remapped_words,
@@ -1681,10 +1684,12 @@ def _render_hyperframes(
     )
     n_graphic = sum(1 for c in storyboard.get("cards", []) if c.get("type") != "caption")
     n_caption = sum(1 for c in storyboard.get("cards", []) if c.get("type") == "caption")
-    print(f"[HF] Storyboard: {n_graphic} graphic + {n_caption} caption cards")
+    print(f"[HF] Storyboard: {n_graphic} graphic + {n_caption} caption cards", flush=True)
+    print(f"[TIMING] storyboard: {time.perf_counter()-_t:.1f}s", flush=True)
 
     # Stage 3: Compose
-    print("[HF] Stage 3: Assembling HyperFrames composition...")
+    _t = time.perf_counter()
+    print("[HF] Stage 3: Assembling HyperFrames composition...", flush=True)
     project_dir = compose(
         storyboard=storyboard,
         trimmed_video=trimmed,
@@ -1694,8 +1699,11 @@ def _render_hyperframes(
         subject_position=subject_position,
     )
 
+    print(f"[TIMING] compose: {time.perf_counter()-_t:.1f}s", flush=True)
+
     # Stage 4: Render via HyperFrames CLI
-    print("[HF] Stage 4: Rendering via HyperFrames CLI...")
+    _t_cli = time.perf_counter()
+    print("[HF] Stage 4: Rendering via HyperFrames CLI...", flush=True)
     import os as _os
     import signal as _signal
     env = _os.environ.copy()
@@ -1742,17 +1750,19 @@ def _render_hyperframes(
         raise RuntimeError("HyperFrames CLI render timed out")
 
     if proc.returncode != 0 or not output_path.exists():
-        print(f"[HF] Render failed (rc={proc.returncode}): {stderr[-500:]}")
+        print(f"[HF] Render failed (rc={proc.returncode}): {stderr[-500:]}", flush=True)
         _kill_orphan_chrome()
         raise RuntimeError("HyperFrames CLI render failed")
 
-    print(f"[HF] Done: {output_path}")
+    print(f"[TIMING] hyperframes_cli: {time.perf_counter()-_t_cli:.1f}s", flush=True)
+    print(f"[HF] Done: {output_path}", flush=True)
     _probe_av_durations(output_path, "hyperframes_output")
 
     # Stage 5: Upscale to source resolution (capped at 4K) — the HyperFrames
     # composition canvas is fixed 1080p-class; this avoids silently
     # delivering a 4K source back at 1080p without touching compose.py.
     upscale_info = _upscale_to_source_resolution(output_path, src, short_form=plan.format == "short", allow_4k=allow_4k)
+    print(f"[TIMING] render_hf_total: {time.perf_counter()-_t_hf_start:.1f}s", flush=True)
 
     return {
         "output": str(output_path),

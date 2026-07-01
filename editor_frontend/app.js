@@ -1187,8 +1187,11 @@ function directUpload(file) {
 
 async function poll(jobId) {
   let consecutive5xx = 0;
+  const _pollStart = Date.now();
   while (true) {
-    await new Promise(r => setTimeout(r, 1500));
+    const _elapsed = (Date.now() - _pollStart) / 1000;
+    const _delay = _elapsed < 120 ? 3000 : _elapsed < 300 ? 5000 : 10000;
+    await new Promise(r => setTimeout(r, _delay));
     try {
       let res;
       try { res = await apiFetch(`/api/jobs/${jobId}`); }
