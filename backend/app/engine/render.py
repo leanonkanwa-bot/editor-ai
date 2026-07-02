@@ -1706,58 +1706,78 @@ def _render_hyperframes(
 
     print(f"[TIMING] compose: {time.perf_counter()-_t:.1f}s", flush=True)
 
-    # Stage 4: Render via HyperFrames CLI
+    # Stage 4: Render (Modal A10G if configured, else local HyperFrames CLI)
     _t_cli = time.perf_counter()
-    print("[HF] Stage 4: Rendering via HyperFrames CLI...", flush=True)
     import os as _os
-    import signal as _signal
-    env = _os.environ.copy()
-    env["DISPLAY"] = env.get("DISPLAY", ":99")
     fps = storyboard["composition"]["fps"]
     public_dir = project_dir / "public"
     _timeout = max(600, int(timing_map.output_duration * 45))
 
-    # Use the LOCAL hyperframes CLI binary (not npx/global) so the
-    # manifest.json sibling resolution works correctly.
-    _hf_cli = Path(__file__).resolve().parent / "node_modules" / ".bin" / "hyperframes"
-    if not _hf_cli.exists():
-        _hf_cli = Path(__file__).resolve().parent / "node_modules" / "hyperframes" / "dist" / "cli.js"
-    _hf_cmd = ["node", str(_hf_cli)] if _hf_cli.suffix == ".js" else [str(_hf_cli)]
-    print(f"[HF] CLI path: {_hf_cli} (exists={_hf_cli.exists()})")
+    _modal_id = _os.environ.get("MODAL_TOKEN_ID")
+    _modal_secret = _os.environ.get("MODAL_TOKEN_SECRET")
 
-    # Launch in its own process group so we can kill the entire tree
-    # (npx + Chrome children) on timeout, preventing orphaned processes.
-    proc = subprocess.Popen(
-        [
-            *_hf_cmd, "render",
-            str(public_dir),
-            "-o", str(output_path),
-            "--fps", str(fps),
-            "--quality", "standard",
-            "--workers", "1",
-            "--protocol-timeout", "600000",
-            "--low-memory-mode",
-        ],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        text=True, env=env,
-        start_new_session=True,
-    )
-    try:
-        stdout, stderr = proc.communicate(timeout=_timeout)
-    except subprocess.TimeoutExpired:
-        print("[HF] Render timed out — killing process group")
+    if _modal_id and _modal_secret:
+        print("[HF] Stage 4: Rendering via Modal (A10G)...", flush=True)
+        import io as _io
+        import zipfile as _zipfile
+        from app.engine.modal_render import render_hf as _modal_render_hf
+        buf = _io.BytesIO()
+        with _zipfile.ZipFile(buf, "w", _zipfile.ZIP_DEFLATED) as zf:
+            for hf in public_dir.rglob("*"):
+                if hf.is_file():
+                    zf.write(hf, hf.relative_to(public_dir))
+        zip_bytes = buf.getvalue()
+        print(f"[HF] Modal: zipping {len(zip_bytes) // 1024} KB -> remote call", flush=True)
+        mp4_bytes = _modal_render_hf.remote(zip_bytes)
+        output_path.write_bytes(mp4_bytes)
+        print(f"[HF] Modal render complete: {len(mp4_bytes) // 1024} KB", flush=True)
+    else:
+        import signal as _signal
+        print("[HF] Stage 4: Rendering via HyperFrames CLI (local)...", flush=True)
+        env = _os.environ.copy()
+        env["DISPLAY"] = env.get("DISPLAY", ":99")
+
+        # Use the LOCAL hyperframes CLI binary (not npx/global) so the
+        # manifest.json sibling resolution works correctly.
+        _hf_cli = Path(__file__).resolve().parent / "node_modules" / ".bin" / "hyperframes"
+        if not _hf_cli.exists():
+            _hf_cli = Path(__file__).resolve().parent / "node_modules" / "hyperframes" / "dist" / "cli.js"
+        _hf_cmd = ["node", str(_hf_cli)] if _hf_cli.suffix == ".js" else [str(_hf_cli)]
+        print(f"[HF] CLI path: {_hf_cli} (exists={_hf_cli.exists()})")
+
+        # Launch in its own process group so we can kill the entire tree
+        # (npx + Chrome children) on timeout, preventing orphaned processes.
+        proc = subprocess.Popen(
+            [
+                *_hf_cmd, "render",
+                str(public_dir),
+                "-o", str(output_path),
+                "--fps", str(fps),
+                "--quality", "standard",
+                "--workers", "1",
+                "--protocol-timeout", "600000",
+                "--low-memory-mode",
+            ],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, env=env,
+            start_new_session=True,
+        )
         try:
-            _os.killpg(_os.getpgid(proc.pid), _signal.SIGKILL)
-        except Exception:
-            proc.kill()
-        proc.wait(timeout=10)
-        _kill_orphan_chrome()
-        raise RuntimeError("HyperFrames CLI render timed out")
+            stdout, stderr = proc.communicate(timeout=_timeout)
+        except subprocess.TimeoutExpired:
+            print("[HF] Render timed out — killing process group")
+            try:
+                _os.killpg(_os.getpgid(proc.pid), _signal.SIGKILL)
+            except Exception:
+                proc.kill()
+            proc.wait(timeout=10)
+            _kill_orphan_chrome()
+            raise RuntimeError("HyperFrames CLI render timed out")
 
-    if proc.returncode != 0 or not output_path.exists():
-        print(f"[HF] Render failed (rc={proc.returncode}): {stderr[-500:]}", flush=True)
-        _kill_orphan_chrome()
-        raise RuntimeError("HyperFrames CLI render failed")
+        if proc.returncode != 0 or not output_path.exists():
+            print(f"[HF] Render failed (rc={proc.returncode}): {stderr[-500:]}", flush=True)
+            _kill_orphan_chrome()
+            raise RuntimeError("HyperFrames CLI render failed")
 
     print(f"[TIMING] hyperframes_cli: {time.perf_counter()-_t_cli:.1f}s", flush=True)
     print(f"[HF] Done: {output_path}", flush=True)
