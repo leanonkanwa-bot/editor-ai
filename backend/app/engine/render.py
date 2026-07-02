@@ -1629,70 +1629,6 @@ def _render_hyperframes(
     print(f"[HF] Source intervals: {len(timing_map.source_intervals)}, compressed: {timing_map.compressed_intervals is not None}", flush=True)
     print(f"[TIMING] pretrim: {time.perf_counter()-_t_hf_start:.1f}s", flush=True)
 
-    # Detect HDR via ffprobe, tone-map to SDR BT.709 if needed.
-    # Primary: zscale + Reinhard tone mapping (actual pixel conversion).
-    # Fallback: metadata-only retag if zscale/libzimg not available.
-    _ct_probe = subprocess.run(
-        [
-            FFPROBE_PATH, "-v", "quiet",
-            "-select_streams", "v:0",
-            "-show_entries", "stream=color_transfer",
-            "-of", "default=nw=1",
-            str(trimmed),
-        ],
-        capture_output=True, text=True, timeout=20,
-    )
-    _is_hdr = any(x in _ct_probe.stdout for x in ("smpte2084", "arib-std-b67", "bt2020"))
-    print(f"[HF] HDR detection: {_is_hdr} (color_transfer={_ct_probe.stdout.strip()!r})", flush=True)
-
-    if _is_hdr:
-        print("[HF] HDR detected — tone-mapping HLG→SDR BT.709 (Reinhard)...", flush=True)
-        _hdr_stripped = work_dir / "trimmed_sdr.mp4"
-        _tonemap_result = subprocess.run(
-            [
-                FFMPEG_PATH, "-y", "-loglevel", "error",
-                "-i", str(trimmed),
-                "-vf", (
-                    "zscale=t=linear:npl=100,format=gbrpf32le,"
-                    "zscale=p=bt709,"
-                    "tonemap=hable:desat=0,"
-                    "zscale=t=bt709:m=bt709:r=tv,"
-                    "format=yuv420p"
-                ),
-                "-c:v", "libx264", "-crf", "18",
-                "-c:a", "copy",
-                str(_hdr_stripped),
-            ],
-            capture_output=True,
-            timeout=300,
-        )
-        if _hdr_stripped.exists() and _hdr_stripped.stat().st_size > 0:
-            print("[HF] Reinhard tone-map done: trimmed_sdr.mp4 ready", flush=True)
-            trimmed = _hdr_stripped
-        else:
-            # zscale not available — fall back to metadata-only retag
-            print(f"[HF] zscale failed (rc={_tonemap_result.returncode}) — falling back to metadata retag", flush=True)
-            print(f"[HF] zscale stderr: {_tonemap_result.stderr[-300:]!r}", flush=True)
-            _retag_result = subprocess.run(
-                [
-                    FFMPEG_PATH, "-y", "-loglevel", "error",
-                    "-i", str(trimmed),
-                    "-c:v", "copy", "-c:a", "copy",
-                    "-colorspace", "bt709",
-                    "-color_trc", "bt709",
-                    "-color_primaries", "bt709",
-                    str(_hdr_stripped),
-                ],
-                capture_output=True,
-                timeout=120,
-            )
-            if _hdr_stripped.exists() and _hdr_stripped.stat().st_size > 0:
-                print("[HF] Metadata retag done: trimmed_sdr.mp4 ready", flush=True)
-                trimmed = _hdr_stripped
-            else:
-                print("[HF] Retag also failed — continuing with original trimmed", flush=True)
-    else:
-        print("[HF] SDR source — skipping HDR conversion", flush=True)
 
     # Dump diagnostic data for coverage audit
     import json as _json
@@ -1832,6 +1768,7 @@ def _render_hyperframes(
                 "--protocol-timeout", "600000",
                 "--low-memory-mode",
                 "--debug",
+                "--video-frame-format", "jpg",
                 "--tmp-dir", str(_hf_tmp),
             ],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
