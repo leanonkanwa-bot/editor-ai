@@ -328,8 +328,8 @@ def _build_timeline_js(
             )
             lines.append(
                 f'  tl.fromTo(\'{panel_sel}\', '
-                f'{{ filter: "blur(12px)", scale: 1.02 }}, '
-                f'{{ filter: "blur(0px)", scale: 1, duration: 0.350, ease: "power2.out" }}, '
+                f'{{ scale: 1.04, y: 14 }}, '
+                f'{{ scale: 1, y: 0, duration: 0.350, ease: "power2.out" }}, '
                 f'{start:.4f});'
             )
 
@@ -379,8 +379,8 @@ def _build_timeline_js(
                 else:
                     lines.append(
                         f'  tl.fromTo(\'{title_sel}\', '
-                        f'{{ opacity: 0, filter: "blur(8px)" }}, '
-                        f'{{ opacity: 1, filter: "blur(0px)", duration: 0.400, ease: "power2.out" }}, '
+                        f'{{ opacity: 0, y: 20 }}, '
+                        f'{{ opacity: 1, y: 0, duration: 0.400, ease: "power2.out" }}, '
                         f'{t_in:.4f});'
                     )
             elif content_style == "key_phrase":
@@ -400,8 +400,8 @@ def _build_timeline_js(
             else:
                 lines.append(
                     f'  tl.fromTo(\'{title_sel}\', '
-                    f'{{ opacity: 0, filter: "blur(8px)" }}, '
-                    f'{{ opacity: 1, filter: "blur(0px)", duration: 0.400, ease: "power2.out" }}, '
+                    f'{{ opacity: 0, y: 20 }}, '
+                    f'{{ opacity: 1, y: 0, duration: 0.400, ease: "power2.out" }}, '
                     f'{t_in:.4f});'
                 )
 
