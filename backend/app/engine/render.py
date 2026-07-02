@@ -1766,7 +1766,6 @@ def _render_hyperframes(
                 "--quality", "standard",
                 "--workers", "8",
                 "--protocol-timeout", "600000",
-                "--low-memory-mode",
                 "--debug",
                 "--video-frame-format", "jpg",
                 "--tmp-dir", str(_hf_tmp),
