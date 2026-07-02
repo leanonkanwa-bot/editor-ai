@@ -1652,7 +1652,13 @@ def _render_hyperframes(
             [
                 FFMPEG_PATH, "-y", "-loglevel", "error",
                 "-i", str(trimmed),
-                "-vf", "zscale=transfer=bt709:matrix=bt709:primaries=bt709,tonemap=reinhard,format=yuv420p",
+                "-vf", (
+                    "zscale=t=linear:npl=100,format=gbrpf32le,"
+                    "zscale=p=bt709,"
+                    "tonemap=hable:desat=0,"
+                    "zscale=t=bt709:m=bt709:r=tv,"
+                    "format=yuv420p"
+                ),
                 "-c:v", "libx264", "-crf", "18",
                 "-c:a", "copy",
                 str(_hdr_stripped),
