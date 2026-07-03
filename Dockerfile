@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y ffmpeg fonts-open-sans curl unzip chrom
     && rm -rf /var/lib/apt/lists/*
 RUN npm install -g puppeteer --unsafe-perm 2>/dev/null || true
 RUN npx puppeteer browsers install chrome 2>/dev/null || true
-RUN npx @puppeteer/browsers install chrome-headless-shell@stable \
+RUN npx @puppeteer/browsers install chrome-headless-shell@131.0.6778.85 \
     --path /usr/local/lib/chrome && \
     test -n "$(find /usr/local/lib/chrome -name 'chrome-headless-shell' -type f | head -1)" \
     || (echo "ERROR: chrome-headless-shell binary not found after install" && exit 1)
