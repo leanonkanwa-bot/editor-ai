@@ -1657,7 +1657,7 @@ def _render_hyperframes(
                     "zscale=t=bt709:m=bt709:r=tv,"
                     "format=yuv420p"
                 ),
-                "-c:v", "libx264", "-crf", "18",
+                "-c:v", "libx264", "-crf", "18", "-g", "30", "-keyint_min", "30", "-movflags", "+faststart",
                 "-c:a", "copy",
                 str(_hdr_stripped),
             ],
