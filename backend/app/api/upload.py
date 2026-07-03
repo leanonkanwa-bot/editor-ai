@@ -19,7 +19,7 @@ import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from app.core.config import settings
 
@@ -114,3 +114,14 @@ async def upload_assemble(
         "size_bytes": size,
         "size_mb": round(size / (1024 * 1024), 1),
     })
+
+
+# TEMP DEBUG — remove once HDR tone-mapping is finalised
+@router.get("/api/debug/hdr-frame/{filename}")
+def get_hdr_test_frame(filename: str) -> FileResponse:
+    if "/" in filename or ".." in filename:
+        raise HTTPException(404)
+    path = Path("/data/hdr_test") / filename
+    if not path.exists():
+        raise HTTPException(404)
+    return FileResponse(path)
