@@ -1786,6 +1786,16 @@ def _render_hyperframes(
         env["PRODUCER_MAX_WORKERS"] = "24"
         env["PRODUCER_MIN_PARALLEL_FRAMES"] = "60"
 
+        import glob as _glob
+        _shell_candidates = _glob.glob(
+            "/usr/local/lib/chrome/chrome-headless-shell/linux-*/chrome-headless-shell"
+        )
+        if _shell_candidates:
+            env["PUPPETEER_HEADLESS_SHELL_PATH"] = _shell_candidates[0]
+            print(f"[HF] chrome-headless-shell: {_shell_candidates[0]}", flush=True)
+        else:
+            print("[HF] chrome-headless-shell: not found at /usr/local/lib/chrome", flush=True)
+
         # Use the LOCAL hyperframes CLI binary (not npx/global) so the
         # manifest.json sibling resolution works correctly.
         _hf_cli = Path(__file__).resolve().parent / "node_modules" / ".bin" / "hyperframes"
