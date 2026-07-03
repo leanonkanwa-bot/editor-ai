@@ -23,20 +23,23 @@ _COMP_ID = "graphic-overlays"
 
 # Zone → pixel bounds for landscape (1920×1080)
 _ZONE_BOUNDS_LANDSCAPE = {
-    "fullscreen":      {"left": 0, "top": 0, "width": 1920, "height": 1080},
-    "lower-third":     {"left": 0, "top": 756, "width": 1920, "height": 324},
-    "side-panel":      {"left": 0, "top": 0, "width": 806, "height": 1080},
-    "whiteboard-area": {"left": 40, "top": 40, "width": 1840, "height": 1000},
-    "video-overlay":   {"left": 0, "top": 0, "width": 1920, "height": 1080},
+    "fullscreen":       {"left": 0,    "top": 0, "width": 1920, "height": 1080},
+    "lower-third":      {"left": 0,    "top": 756, "width": 1920, "height": 324},
+    "side-panel":       {"left": 0,    "top": 0, "width": 806,  "height": 1080},
+    "side-panel-left":  {"left": 0,    "top": 0, "width": 806,  "height": 1080},
+    "side-panel-right": {"left": 1114, "top": 0, "width": 806,  "height": 1080},
+    "whiteboard-area":  {"left": 40,   "top": 40, "width": 1840, "height": 1000},
+    "video-overlay":    {"left": 0,    "top": 0, "width": 1920, "height": 1080},
 }
 
 # Zone → pixel bounds for portrait (1080×1920)
 _ZONE_BOUNDS_PORTRAIT = {
-    "fullscreen":      {"left": 0, "top": 0, "width": 1080, "height": 1920},
-    "lower-third":     {"left": 0, "top": 1344, "width": 1080, "height": 576},
-    "side-panel":      {"left": 0, "top": 1152, "width": 1080, "height": 768},
-    "whiteboard-area": {"left": 40, "top": 864, "width": 1000, "height": 1016},
-    "video-overlay":   {"left": 0, "top": 0, "width": 1080, "height": 1920},
+    "fullscreen":       {"left": 0, "top": 0,    "width": 1080, "height": 1920},
+    "lower-third":      {"left": 0, "top": 1344, "width": 1080, "height": 576},
+    "side-panel":       {"left": 0, "top": 1152, "width": 1080, "height": 768},
+    "side-panel-top":   {"left": 0, "top": 0,    "width": 1080, "height": 768},
+    "whiteboard-area":  {"left": 40, "top": 864, "width": 1000, "height": 1016},
+    "video-overlay":    {"left": 0, "top": 0,    "width": 1080, "height": 1920},
 }
 
 # Theme palettes from graphic-overlays SKILL.md
@@ -51,6 +54,15 @@ _THEMES = {
 def _zone_bounds(zone: str, layout: str) -> dict:
     table = _ZONE_BOUNDS_PORTRAIT if layout == "portrait" else _ZONE_BOUNDS_LANDSCAPE
     return table.get(zone, table["lower-third"])
+
+
+# Types that coexist with a visible speaker — must not sit center-frame.
+# Claude assigns these fullscreen/video-overlay; we remap them to a side panel.
+_FACE_SAFE_TYPES = {
+    "question", "dialogue", "carousel", "definition",
+    "key_phrase", "quote", "attributed_quote",
+}
+_CENTER_ZONES = {"fullscreen", "video-overlay"}
 
 
 def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | None = None) -> str:
@@ -901,20 +913,20 @@ def _build_timeline_js(
                     f'{start:.4f});'
                 )
 
-            # Dimmed backdrop for center-zone cards conflicting with speaker
+            # Dimmed backdrop for center-zone cards conflicting with speaker.
+            # Uses a separate overlay div (not CSS filter) — filter: brightness()
+            # is not composited by SwiftShader on Railway.
             card_zone = card.get("zone", "")
             center_zone = card_zone in ("fullscreen", "video-overlay")
             face_centered = has_face_data and 30.0 <= face_cx <= 70.0
             if center_zone and face_centered:
                 lines.append(
-                    f'  tl.to("#video-wrap", '
-                    f'{{ filter: "{_esc_js(p["backdrop_dim"])}", '
-                    f'duration: 0.30, ease: _eIn }}, {start:.4f});'
+                    f'  tl.to("#backdrop-dim", '
+                    f'{{ opacity: 1, duration: 0.30, ease: _eIn }}, {start:.4f});'
                 )
                 lines.append(
-                    f'  tl.to("#video-wrap", '
-                    f'{{ filter: "{_esc_js(p["backdrop_restore"])}", '
-                    f'duration: 0.18, ease: _eOut }}, {end - 0.18:.4f});'
+                    f'  tl.to("#backdrop-dim", '
+                    f'{{ opacity: 0, duration: 0.18, ease: _eOut }}, {end - 0.18:.4f});'
                 )
 
             content_style = card.get("contentHints", {}).get("style", "key_phrase")
@@ -1719,6 +1731,37 @@ def compose(
     graphic_cards = [c for c in all_cards if c.get("type") != "caption"]
     caption_cards = [c for c in all_cards if c.get("type") == "caption"]
 
+    # Speaker-aware zone remap — applied before _clamp_overlaps so the same
+    # zone value is seen by both _build_card_host (HTML) and _build_timeline_js (GSAP).
+    _has_face = subject_position is not None
+    if _has_face:
+        _fl = float(subject_position.get("face_left_pct", 25.0))
+        _fr = float(subject_position.get("face_right_pct", 75.0))
+        _ft = float(subject_position.get("face_top_pct", 15.0))
+        _fb = float(subject_position.get("face_bottom_pct", 65.0))
+        _face_cx = (_fl + _fr) / 2   # 0–100 percent, left→right
+        _face_cy = (_ft + _fb) / 2   # 0–100 percent, top→bottom
+    else:
+        _face_cx, _face_cy = 50.0, 50.0
+
+    def _remap_zone(card: dict) -> dict:
+        style = card.get("contentHints", {}).get("style", "")
+        zone = card.get("zone", "video-overlay")
+        if style not in _FACE_SAFE_TYPES or zone not in _CENTER_ZONES:
+            return card
+        if layout == "landscape":
+            new_zone = "side-panel-left" if _face_cx > 50.0 else "side-panel-right"
+        else:
+            # Portrait: speaker framed low (face centre > 60%) → panel at top
+            new_zone = "side-panel-top" if (_has_face and _face_cy > 60.0) else "side-panel"
+        print(
+            f"[COMPOSE] zone remap: {card.get('id', '?')} ({style}) {zone!r} → {new_zone!r}",
+            flush=True,
+        )
+        return {**card, "zone": new_zone}
+
+    graphic_cards = [_remap_zone(c) for c in graphic_cards]
+
     # Guard against overlapping clips on the same HyperFrames track.
     # Must run before _build_card_host AND _build_timeline_js so both
     # consume the clamped endSec (HTML attributes + GSAP exit keyframes).
@@ -1844,6 +1887,7 @@ def compose(
              data-start="0" data-duration="{duration:.3f}"
              data-track-index="1"></video>
     </div>
+    <div id="backdrop-dim" style="position:absolute;inset:0;background:rgba(0,0,0,0.45);z-index:5;opacity:0;pointer-events:none;"></div>
 
     <audio id="bg-audio" src="input-video.mp4"
            data-start="0" data-duration="{duration:.3f}"
