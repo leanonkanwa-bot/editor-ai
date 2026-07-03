@@ -1510,12 +1510,13 @@ def _build_timeline_js(
                         f'{t_in:.4f});'
                     )
 
-            lines.append(
-                f'  tl.fromTo(\'{kicker_sel}\', '
-                f'{{ opacity: 0, y: -8 }}, '
-                f'{{ opacity: 1, y: 0, duration: 0.250, ease: _eIn }}, '
-                f'{start + 0.10:.4f});'
-            )
+            if card.get("contentHints", {}).get("kicker"):
+                lines.append(
+                    f'  tl.fromTo(\'{kicker_sel}\', '
+                    f'{{ opacity: 0, y: -8 }}, '
+                    f'{{ opacity: 1, y: 0, duration: 0.250, ease: _eIn }}, '
+                    f'{start + 0.10:.4f});'
+                )
             lines.append(
                 f'  tl.fromTo(\'{line_sel}\', '
                 f'{{ width: 0 }}, '
@@ -1534,15 +1535,17 @@ def _build_timeline_js(
                 f'repeat: {pulse_repeats}, yoyo: true }}, '
                 f'{t_in + 0.70:.4f});'
             )
-            # Shimmer sweep across glass panel after materialization
-            shimmer_sel = f'.card[data-card-id="{card_id}"] #{card_id}-shimmer'
-            shimmer_start = start + 0.50
-            lines.append(
-                f'  tl.fromTo(\'{shimmer_sel}\', '
-                f'{{ "--shimmer-pos": "-20%" }}, '
-                f'{{ "--shimmer-pos": "120%", duration: 0.9, ease: "power2.inOut" }}, '
-                f'{shimmer_start:.4f});'
-            )
+            # Shimmer sweep — only for cards that have a shimmer-mask in DOM
+            # (timeline cards return early in _build_graphic_card_html, no shimmer-mask)
+            if content_style != "timeline":
+                shimmer_sel = f'.card[data-card-id="{card_id}"] #{card_id}-shimmer'
+                shimmer_start = start + 0.50
+                lines.append(
+                    f'  tl.fromTo(\'{shimmer_sel}\', '
+                    f'{{ "--shimmer-pos": "-20%" }}, '
+                    f'{{ "--shimmer-pos": "120%", duration: 0.9, ease: "power2.inOut" }}, '
+                    f'{shimmer_start:.4f});'
+                )
 
         # Exit — faster than entrance (asymmetric timing)
         if is_caption:
