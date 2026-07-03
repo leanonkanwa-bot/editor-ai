@@ -1798,6 +1798,8 @@ def _render_hyperframes(
         # (npx + Chrome children) on timeout, preventing orphaned processes.
         _hf_tmp = work_dir / "hf_tmp"
         _hf_tmp.mkdir(parents=True, exist_ok=True)
+        import threading as _threading
+
         proc = subprocess.Popen(
             [
                 *_hf_cmd, "render",
@@ -1811,12 +1813,25 @@ def _render_hyperframes(
                 "--video-frame-format", "jpg",
                 "--tmp-dir", str(_hf_tmp),
             ],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, env=env,
             start_new_session=True,
         )
+
+        _hf_log_lines: list[str] = []
+
+        def _stream_output() -> None:
+            for _line in proc.stdout:
+                _stripped = _line.rstrip()
+                _hf_log_lines.append(_stripped)
+                print(f"[HF] {_stripped}", flush=True)
+
+        _stream_thread = _threading.Thread(target=_stream_output, daemon=True)
+        _stream_thread.start()
+
         try:
-            stdout, stderr = proc.communicate(timeout=_timeout)
+            proc.wait(timeout=_timeout)
+            _stream_thread.join(timeout=5)
         except subprocess.TimeoutExpired:
             print("[HF] Render timed out — killing process group")
             try:
@@ -1828,7 +1843,8 @@ def _render_hyperframes(
             raise RuntimeError("HyperFrames CLI render timed out")
 
         if proc.returncode != 0 or not output_path.exists():
-            print(f"[HF] Render failed (rc={proc.returncode}): {stderr[-500:]}", flush=True)
+            _tail = "\n".join(_hf_log_lines[-30:])
+            print(f"[HF] Render failed (rc={proc.returncode}):\n{_tail}", flush=True)
             _kill_orphan_chrome()
             raise RuntimeError("HyperFrames CLI render failed")
 
