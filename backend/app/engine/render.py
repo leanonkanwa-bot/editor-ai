@@ -1742,7 +1742,7 @@ def _render_hyperframes(
         print("[HF] Stage 4: Rendering via HyperFrames CLI (local)...", flush=True)
         env = _os.environ.copy()
         env["DISPLAY"] = env.get("DISPLAY", ":99")
-        env["PRODUCER_MAX_WORKERS"] = "12"
+        env["PRODUCER_MAX_WORKERS"] = "8"
         env["PRODUCER_MIN_PARALLEL_FRAMES"] = "60"
 
         # Use the LOCAL hyperframes CLI binary (not npx/global) so the
@@ -1764,7 +1764,7 @@ def _render_hyperframes(
                 "-o", str(output_path),
                 "--fps", str(fps),
                 "--quality", "standard",
-                "--workers", "12",
+                "--workers", "8",
                 "--protocol-timeout", "600000",
                 "--debug",
                 "--video-frame-format", "jpg",
