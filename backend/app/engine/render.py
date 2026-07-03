@@ -1791,7 +1791,7 @@ def _render_hyperframes(
             if p.is_file()
         )
         if _shell_candidates:
-            env["PUPPETEER_HEADLESS_SHELL_PATH"] = str(_shell_candidates[0])
+            env["PRODUCER_HEADLESS_SHELL_PATH"] = str(_shell_candidates[0])
             print(f"[HF] chrome-headless-shell: {_shell_candidates[0]}", flush=True)
         else:
             print("[HF] WARNING: chrome-headless-shell NOT FOUND — beginFrame mode disabled, falling back to screenshot mode", flush=True)

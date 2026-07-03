@@ -58,7 +58,10 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
     card_id = card["id"]
     start = round(float(card.get("startSec", 0)), 3)
     _end_raw = float(card.get("endSec", start + 3))
-    duration = round(_end_raw - start, 3)
+    # Subtract 1ms: HyperFrames lint computes end = Number(data-start) + Number(data-duration)
+    # in float64 JS, so 12.760 + 3.020 = 15.780000000000001 > 15.780 → overlap error.
+    # 1ms gap is invisible at 30fps (one frame = 33ms).
+    duration = max(0.0, round(_end_raw - start, 3) - 0.001)
     zone = card.get("zone", "lower-third")
 
     is_caption = card.get("type") == "caption"
