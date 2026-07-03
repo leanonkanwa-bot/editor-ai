@@ -1752,6 +1752,10 @@ def _render_hyperframes(
     _t_cli = time.perf_counter()
     import os as _os
     fps = storyboard["composition"]["fps"]
+    _test_fps = _os.environ.get("RENDER_TEST_FPS")
+    if _test_fps:
+        fps = int(_test_fps)
+        print(f"[HF] RENDER_TEST_FPS={fps} — test mode, overrides composition fps ({storyboard['composition']['fps']})", flush=True)
     public_dir = project_dir / "public"
     _timeout = max(600, int(timing_map.output_duration * 45))
 
@@ -1801,6 +1805,7 @@ def _render_hyperframes(
 
         env["PRODUCER_MAX_WORKERS"] = str(_n_workers)
         env["PRODUCER_MIN_PARALLEL_FRAMES"] = "60"
+        env["PRODUCER_PUPPETEER_PROTOCOL_TIMEOUT_MS"] = "120000"  # 2 min — deadlock fails fast instead of 10 min
 
         _shell_candidates = sorted(
             p for p in Path("/usr/local/lib/chrome").rglob("chrome-headless-shell")
@@ -1834,7 +1839,7 @@ def _render_hyperframes(
                 "--fps", str(fps),
                 "--quality", "standard",
                 "--workers", str(_n_workers),
-                "--protocol-timeout", "600000",
+                "--protocol-timeout", "120000",
                 "--debug",
                 "--video-frame-format", "jpg",
                 "--tmp-dir", str(_hf_tmp),
