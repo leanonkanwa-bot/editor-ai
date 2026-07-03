@@ -1651,9 +1651,9 @@ def _render_hyperframes(
                 FFMPEG_PATH, "-y", "-loglevel", "error",
                 "-i", str(trimmed),
                 "-vf", (
-                    "zscale=t=linear:npl=203,format=gbrpf32le,"
+                    "zscale=t=linear:npl=150,format=gbrpf32le,"
                     "zscale=p=bt709,"
-                    "tonemap=mobius:desat=0,"
+                    "tonemap=hable:desat=0,"
                     "zscale=t=bt709:m=bt709:r=tv,"
                     "format=yuv420p"
                 ),
@@ -1838,6 +1838,7 @@ def _render_hyperframes(
                 "-o", str(output_path),
                 "--fps", str(fps),
                 "--quality", "standard",
+                "--crf", "18",
                 "--workers", str(_n_workers),
                 "--protocol-timeout", "120000",
                 "--debug",
