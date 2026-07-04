@@ -112,12 +112,13 @@ def run_job(
         store.update(job_id, status="transcribing", progress=20,
                      message="Removing silences and filler words…")
         from app.core.config import settings as _cfg
+        drops: list = []
+        filler_drops: list = []
         if _cfg.disable_cuts:
             # DISABLE_CUTS: skip timestamp adjustment — the video plays
             # uncut, so drop-shifted timestamps would cause progressive
             # drift (captions ahead of speech, gap growing toward the end).
             transcript_clean = transcript
-            drops = []
             print("[PIPELINE] DISABLE_CUTS=true — skipping silence removal timestamp shift", flush=True)
         else:
             try:
@@ -126,11 +127,12 @@ def run_job(
                     w for seg in transcript.get("segments", [])
                     for w in seg.get("words", [])
                 ]
-                drops = remover.process(word_timestamps, transcript.get("segments", []))
+                drops, filler_drops = remover.process(word_timestamps, transcript.get("segments", []))
                 transcript_clean = apply_drops_to_transcript(transcript, drops)
             except Exception:
                 transcript_clean = transcript
                 drops = []
+                filler_drops = []
         print(f"[TIMING] silence_removal: {time.perf_counter()-_t:.1f}s", flush=True)
 
         # ── Step 3: Energy detection (Feature 4) ──────────────────────────
@@ -370,6 +372,10 @@ def run_job(
                 "hook_overlay": hook_overlay,
                 "brand_kit": brand_kit,
                 "template": template,
+                "filler_drops": [
+                    {"start": d.start, "end": d.end, "reason": d.reason}
+                    for d in filler_drops
+                ],
             },
             transcript=transcript_clean,
             subject_pos=subject_pos,
@@ -456,6 +462,12 @@ def run_render_phase(job_id: str, src: Path) -> None:
         speaker_segs  = plan_data.get("speaker_segments", [])
         hook_overlay  = plan_data.get("hook_overlay", {})
 
+        from app.engine.silence_remover import DropSegment as _DropSegment
+        filler_drops = [
+            _DropSegment(start=d["start"], end=d["end"], reason=d["reason"])
+            for d in plan_data.get("filler_drops", [])
+        ]
+
         # Rebuild GraphicSpec objects from stored dicts.
         from app.engine.graphics_engine import GraphicSelector, build_video_context
         selector  = GraphicSelector()
@@ -513,6 +525,7 @@ def run_render_phase(job_id: str, src: Path) -> None:
             graphic_specs=graphic_specs,
             content_type=content_type,
             allow_4k=has_4k_access(params.get("coach_profile")),
+            filler_drops=filler_drops,
         )
 
         print(f"[TIMING] render: {time.perf_counter()-_t:.1f}s", flush=True)

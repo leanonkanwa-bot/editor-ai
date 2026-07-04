@@ -20,17 +20,39 @@ from dataclasses import dataclass
 from typing import Any
 
 
-_FILLER_WORDS = frozenset({
+# V1 safe list — very low false-positive risk in natural French speech.
+_FILLER_WORDS_FR_V1 = frozenset({
+    "euh", "euhh", "heu",      # vocalic hesitations
+    "bah", "ba",               # discourse fillers
+    "hein",                    # confirmation-seeking
+    "bref",                    # empty summary
+    "du coup",                 # empty connector
+    "tu vois", "t'vois",      # confirmation-seeking
+})
+# V2 candidates disabled — too much legitimate use in natural French:
+# "donc", "voilà", "genre", "en fait", "quoi", "bon", "ouais bon"
+
+_FILLER_WORDS_EN = frozenset({
     "um", "uh", "uhh", "umm", "hmm", "hm", "er", "erm",
     "like", "basically", "literally", "actually", "honestly",
     "you know", "i mean", "right", "okay", "so", "well",
     "kind of", "sort of", "you know what i mean",
+    "seriously", "obviously",
 })
+
+_FILLER_WORDS = _FILLER_WORDS_FR_V1 | _FILLER_WORDS_EN
 
 _FILLERS_RE = re.compile(
     r"^(" + "|".join(re.escape(f) for f in sorted(_FILLER_WORDS, key=len, reverse=True)) + r")$",
     re.IGNORECASE,
 )
+
+# Pause-isolation guard: a filler is only physically cut when it has a pause
+# on at least one side. Fillers embedded in normal speech flow are left in place —
+# a missed filler sounds natural; a spurious mid-word cut sounds broken.
+_FILLER_PAUSE_GUARD_PRE  = 0.20   # seconds gap required before the filler
+_FILLER_PAUSE_GUARD_POST = 0.15   # seconds gap required after the filler
+_FILLER_CUT_PAD          = 0.040  # seconds padding for Whisper ±50ms timing imprecision
 
 _PRINCIPLE_PAYOFF = re.compile(
     r"\b(the truth is|the key is|the secret is|the reason is|the point is|"
@@ -60,7 +82,7 @@ class RhythmAwareSilenceRemover:
         self,
         word_timestamps: list[dict[str, Any]],
         segments: list[dict[str, Any]],
-    ) -> list[DropSegment]:
+    ) -> tuple[list[DropSegment], list[DropSegment]]:
         """
         Returns a list of DropSegment objects representing time ranges to cut.
 
@@ -69,7 +91,9 @@ class RhythmAwareSilenceRemover:
             segments: list of {start, end, text, words} segment dicts
 
         Returns:
-            list of DropSegment in chronological order, non-overlapping
+            (all_drops, filler_drops) — all_drops is the merged list used for
+            timestamp shifting; filler_drops is the unmerged filler-word subset
+            passed to pretrim for physical cutting.
         """
         drops: list[DropSegment] = []
 
@@ -154,20 +178,24 @@ class RhythmAwareSilenceRemover:
 
         # Sort and merge overlapping drops.
         drops.sort(key=lambda d: d.start)
-        return _merge_drops(drops)
+        return _merge_drops(drops), filler_drops
 
     def _find_filler_word_drops(
         self,
         words: list[tuple[str, float, float]],
         segment_ends: set[float],
     ) -> list[DropSegment]:
-        """Drop standalone filler words that serve no semantic purpose."""
+        """Drop isolated filler words that serve no semantic purpose.
+
+        A filler is only cut when isolated by a pause on at least one side
+        (pre_gap > _FILLER_PAUSE_GUARD_PRE OR post_gap > _FILLER_PAUSE_GUARD_POST).
+        Fillers embedded in normal speech flow are left intact.
+        """
         drops: list[DropSegment] = []
         for i, (text, start, end) in enumerate(words):
             if not _FILLERS_RE.match(text):
                 continue
 
-            # Don't drop if it's the only word or surrounded by pauses.
             if i == 0 or i == len(words) - 1:
                 continue
 
@@ -175,21 +203,34 @@ class RhythmAwareSilenceRemover:
             if any(abs(end - se) < 0.1 for se in segment_ends):
                 continue
 
-            # Don't drop "like" if used as comparison (following by a noun/adjective).
+            # Don't drop "like" if used as comparison.
             if text.lower() == "like":
                 prev_text = words[i - 1][0] if i > 0 else ""
                 if _is_comparison_like(prev_text):
                     continue
 
-            # Don't drop "so" if it's a meaningful connector at sentence start.
+            # Don't drop "so" if it's a meaningful sentence-start connector.
             if text.lower() == "so":
-                if i == 0:
-                    continue
                 prev_end = words[i - 1][2]
-                if start - prev_end > 0.3:  # preceded by a pause → sentence starter
+                if start - prev_end > 0.3:
                     continue
 
-            drops.append(DropSegment(start, end, f"filler_word:{text}"))
+            # Pause-isolation guard: only cut if there's a pause on at least one side.
+            pre_gap  = start - words[i - 1][2]
+            post_gap = words[i + 1][1] - end
+            if not (pre_gap > _FILLER_PAUSE_GUARD_PRE or post_gap > _FILLER_PAUSE_GUARD_POST):
+                continue
+
+            # Apply padding to absorb Whisper timing imprecision; clamp to adjacent words.
+            cut_start = max(start - _FILLER_CUT_PAD, words[i - 1][2])
+            cut_end   = min(end   + _FILLER_CUT_PAD, words[i + 1][1])
+
+            print(
+                f"[FILLER] cut {text!r} at {start:.2f}s "
+                f"(pre_gap {pre_gap:.2f}s, post_gap {post_gap:.2f}s)",
+                flush=True,
+            )
+            drops.append(DropSegment(cut_start, cut_end, f"filler_word:{text}"))
 
         return drops
 

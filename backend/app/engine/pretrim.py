@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from app.agent.planner import EditPlan
+from app.engine.silence_remover import DropSegment
 from app.engine.render import (
     _dedup_segments,
     _merge_short_segments,
@@ -105,11 +106,38 @@ def _pretrim_passthrough(
     return final_path, timing_map
 
 
+def _subtract_fillers(
+    seg_start: float,
+    seg_end: float,
+    filler_drops: list[DropSegment],
+) -> list[tuple[float, float]]:
+    """Split source interval [seg_start, seg_end] into sub-intervals, excising filler drop ranges."""
+    within = sorted(
+        (d for d in filler_drops if d.start < seg_end and d.end > seg_start),
+        key=lambda d: d.start,
+    )
+    if not within:
+        return [(seg_start, seg_end)]
+    parts: list[tuple[float, float]] = []
+    cursor = seg_start
+    for d in within:
+        clip_s = max(seg_start, d.start)
+        clip_e = min(seg_end, d.end)
+        if cursor < clip_s - 0.001:
+            parts.append((cursor, clip_s))
+        cursor = max(cursor, clip_e)
+    if cursor < seg_end - 0.001:
+        parts.append((cursor, seg_end))
+    return parts
+
+
 def pretrim(
     src: Path,
     transcript: dict[str, Any],
     plan: EditPlan,
     work_dir: Path,
+    *,
+    filler_drops: list[DropSegment] | None = None,
 ) -> tuple[Path, TimingMap]:
     """Cut dead content from source, produce continuous trimmed video.
 
@@ -166,25 +194,69 @@ def pretrim(
         if e_padded - s_padded < 0.15:
             continue
 
+        # Split this segment around any filler drops that fall within it.
+        sub_intervals = _subtract_fillers(s_padded, e_padded, filler_drops or [])
+
+        # Cut each sub-interval with the same fast lossless encoding used for segments.
+        sub_parts: list[Path] = []
+        for j, (si_start, si_end) in enumerate(sub_intervals):
+            if si_end - si_start < 0.05:
+                continue
+            sub_part = work_dir / f"trim_{i:04d}_{j:02d}.mp4"
+            _run([
+                FFMPEG_PATH, "-y", "-loglevel", "error",
+                "-ss", f"{si_start:.6f}", "-accurate_seek",
+                "-i", str(src),
+                "-t", f"{si_end - si_start:.6f}",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
+                "-c:a", "aac", "-b:a", "192k",
+                "-avoid_negative_ts", "make_zero",
+                str(sub_part),
+            ])
+            if sub_part.exists():
+                sub_parts.append((sub_part, si_start, si_end))
+
+        if not sub_parts:
+            continue
+
+        # Concat sub-parts into a single segment file when fillers split the segment.
         part = work_dir / f"trim_{i:04d}.mp4"
-        _run([
-            FFMPEG_PATH, "-y", "-loglevel", "error",
-            "-ss", f"{s_padded:.6f}", "-accurate_seek",
-            "-i", str(src),
-            "-t", f"{e_padded - s_padded:.6f}",
-            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
-            "-c:a", "aac", "-b:a", "192k",
-            "-avoid_negative_ts", "make_zero",
-            str(part),
-        ])
+        if len(sub_parts) == 1:
+            sub_parts[0][0].rename(part)
+        else:
+            sub_concat = work_dir / f"sub_concat_{i:04d}.txt"
+            sub_concat.write_text(
+                "\n".join(f"file '{p.name}'" for p, _, _ in sub_parts),
+                encoding="utf-8",
+            )
+            _run([
+                FFMPEG_PATH, "-y", "-loglevel", "error",
+                "-f", "concat", "-safe", "0",
+                "-i", str(sub_concat),
+                "-c", "copy",
+                "-avoid_negative_ts", "make_zero",
+                str(part),
+            ])
+            sub_concat.unlink(missing_ok=True)
+            for sp, _, _ in sub_parts:
+                sp.unlink(missing_ok=True)
 
         if not part.exists():
             continue
 
         seg_offset = cum
-        seg_dur = e_padded - s_padded
 
-        # Remap words using direct offset (proven 0.0ms drift)
+        # Build (si_start, si_end, cumulative_offset) tuples for word assignment.
+        sub_cum = 0.0
+        sub_offsets: list[tuple[float, float, float]] = []
+        for _, si_start, si_end in sub_parts:
+            sub_offsets.append((si_start, si_end, sub_cum))
+            sub_cum += si_end - si_start
+
+        # Single pass over words: each word is assigned to exactly one
+        # sub-interval (by its start time), preventing double-counting at
+        # sub-interval boundaries. Words whose start falls in a filler gap
+        # are naturally skipped (no matching interval).
         words_in_range = [
             w for w in all_words
             if (s_raw - 0.05) <= float(w["start"]) < (e + 0.05)
@@ -192,15 +264,22 @@ def pretrim(
         for w in words_in_range:
             ws = float(w["start"])
             we = float(w["end"])
-            remapped_words.append(WordTiming(
-                text=w["text"].strip(),
-                start=max(0.0, seg_offset + (ws - s_padded)),
-                end=max(0.0, seg_offset + (we - s_padded)),
-            ))
+            for si_start, si_end, si_off in sub_offsets:
+                if si_start <= ws < si_end:
+                    remapped_words.append(WordTiming(
+                        text=w["text"].strip(),
+                        start=max(0.0, seg_offset + si_off + (ws - si_start)),
+                        end=max(0.0, seg_offset + si_off + (min(we, si_end) - si_start)),
+                    ))
+                    break  # each word belongs to at most one sub-interval
 
-        source_intervals.append((s_padded, e_padded))
+        # Record each sub-interval individually so source_to_output() correctly
+        # accounts for filler gaps when converting source timestamps (zoom_plan,
+        # keep_segments, script_structure) to output positions.
+        for _, si_start, si_end in sub_parts:
+            source_intervals.append((si_start, si_end))
         parts.append(part)
-        cum += seg_dur
+        cum += sub_cum
 
     if not parts:
         raise RuntimeError("No segments produced any clip.")
