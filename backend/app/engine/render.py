@@ -109,24 +109,55 @@ def _probe_duration(path: Path) -> float:
 
 
 def _probe_video_info(path: Path) -> dict[str, Any]:
-    """Return {width, height, codec_name} for the first video stream."""
+    """Return {width, height, codec} for the first video stream.
+
+    Uses JSON output so we can read side_data_list (e.g. displaymatrix rotation)
+    and swap coded width/height for 90°/270° rotated sources.  Without the swap,
+    a 1080×1920 portrait video shot on a phone reports as 1920×1080, causing
+    incorrect proxy/4K decisions and HyperFrames getting wrong canvas dimensions.
+    """
+    import json as _json
     try:
-        out = subprocess.check_output(
+        raw = subprocess.check_output(
             [
                 FFPROBE_PATH, "-v", "error",
                 "-select_streams", "v:0",
-                "-show_entries", "stream=width,height,codec_name",
-                "-of", "csv=p=0",
+                "-show_streams",
+                "-of", "json",
                 str(path),
             ],
             text=True,
-        ).strip()
-        parts = out.split(",")
-        return {
-            "width":  int(parts[0]) if len(parts) > 0 else 0,
-            "height": int(parts[1]) if len(parts) > 1 else 0,
-            "codec":  parts[2].strip() if len(parts) > 2 else "unknown",
-        }
+        )
+        data = _json.loads(raw)
+        streams = data.get("streams", [])
+        if not streams:
+            return {"width": 0, "height": 0, "codec": "unknown"}
+        s = streams[0]
+        w = int(s.get("width", 0))
+        h = int(s.get("height", 0))
+        codec = s.get("codec_name", "unknown")
+
+        # Detect display rotation from side_data_list (set by phone cameras).
+        # The displaymatrix side data encodes the rotation as a negative angle
+        # for clockwise turns: -90 means the image is rotated 90° CW, so the
+        # actual display dimensions are swapped.
+        rotation = 0
+        for sd in s.get("side_data_list", []):
+            if "rotation" in sd:
+                rotation = int(sd["rotation"])
+                break
+        # Fallback: some encoders write the angle in stream tags instead.
+        if rotation == 0:
+            tags = s.get("tags", {})
+            try:
+                rotation = int(tags.get("rotate", 0))
+            except (ValueError, TypeError):
+                rotation = 0
+
+        if abs(rotation) in (90, 270):
+            w, h = h, w
+
+        return {"width": w, "height": h, "codec": codec}
     except Exception:
         return {"width": 0, "height": 0, "codec": "unknown"}
 
