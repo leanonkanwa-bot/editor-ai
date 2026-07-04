@@ -1629,7 +1629,9 @@ def _render_hyperframes(
     print(f"[HF] Source intervals: {len(timing_map.source_intervals)}, compressed: {timing_map.compressed_intervals is not None}", flush=True)
     print(f"[TIMING] pretrim: {time.perf_counter()-_t_hf_start:.1f}s", flush=True)
 
-    # HDR detection and conversion (Mobius tone-map, npl=203)
+    # HDR detection — based on color_transfer only, never on primaries.
+    # "bt2020" primaries can appear on SDR wide-gamut Android videos; applying
+    # an HLG/PQ chain to those would produce washed colours.
     _ct_probe = subprocess.run(
         [
             FFPROBE_PATH, "-v", "quiet",
@@ -1640,23 +1642,34 @@ def _render_hyperframes(
         ],
         capture_output=True, text=True, timeout=30,
     )
-    _is_hdr = any(x in _ct_probe.stdout for x in ("smpte2084", "arib-std-b67", "bt2020"))
-    print(f"[HF] HDR detection: {_is_hdr} (color_transfer={_ct_probe.stdout.strip()!r})", flush=True)
+    _ct = _ct_probe.stdout
+    _is_hlg = "arib-std-b67" in _ct   # HLG — iPhone standard, peak ~1000 nits nominal
+    _is_pq  = "smpte2084"    in _ct   # PQ / HDR10 / Dolby Vision, peak up to 10000 nits
+    _is_hdr = _is_hlg or _is_pq
+    print(f"[HF] HDR detection: hlg={_is_hlg} pq={_is_pq} (color_transfer={_ct.strip()!r})", flush=True)
 
     if _is_hdr:
-        print("[HF] HDR detected — converting to SDR (Mobius npl=203)...", flush=True)
+        # HLG (arib-std-b67): npl=150 calibrated against CapCut reference output.
+        # PQ (smpte2084): npl=1000 = HDR10 standard mastering peak; using npl=150
+        #   would clip everything above 150 nits, producing an overexposed image.
+        _VF_HLG = (
+            "zscale=t=linear:npl=150,format=gbrpf32le,"
+            "zscale=p=bt709,tonemap=hable:desat=0,"
+            "zscale=t=bt709:m=bt709:r=tv,format=yuv420p"
+        )
+        _VF_PQ = (
+            "zscale=t=linear:npl=1000,format=gbrpf32le,"
+            "zscale=p=bt709,tonemap=hable:desat=0,"
+            "zscale=t=bt709:m=bt709:r=tv,format=yuv420p"
+        )
+        _vf = _VF_PQ if _is_pq else _VF_HLG
+        print(f"[HF] HDR→SDR: {'PQ npl=1000' if _is_pq else 'HLG npl=150'} hable", flush=True)
         _hdr_stripped = work_dir / "trimmed_sdr.mp4"
         subprocess.run(
             [
                 FFMPEG_PATH, "-y", "-loglevel", "error",
                 "-i", str(trimmed),
-                "-vf", (
-                    "zscale=t=linear:npl=150,format=gbrpf32le,"
-                    "zscale=p=bt709,"
-                    "tonemap=hable:desat=0,"
-                    "zscale=t=bt709:m=bt709:r=tv,"
-                    "format=yuv420p"
-                ),
+                "-vf", _vf,
                 "-c:v", "libx264", "-crf", "18", "-g", "30", "-keyint_min", "30", "-movflags", "+faststart",
                 "-c:a", "copy",
                 str(_hdr_stripped),
