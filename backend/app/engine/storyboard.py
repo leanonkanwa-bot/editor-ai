@@ -320,6 +320,7 @@ OUTPUT: a JSON array of card objects. Each card:
   "contentHints": {{
     "kicker": "<optional short label>",
     "title": "<main text>",
+    "accent_word": "<optional: one word/phrase from title to emphasize via highlight swipe>",
     "detail": "<optional supporting text>",
     "number": "<if a stat/number is featured>",
     "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap",

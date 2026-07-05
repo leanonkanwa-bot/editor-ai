@@ -280,6 +280,17 @@ _LEAN_CINEMA = {
 
 _PACKS = {"lean_glass": _LEAN_GLASS, "lean_paper": _LEAN_PAPER, "lean_vibe": _LEAN_VIBE, "lean_ledger": _LEAN_LEDGER, "lean_craft": _LEAN_CRAFT, "lean_cinema": _LEAN_CINEMA}
 
+# Per-pack hero punch-in parameters ({scale, in_dur, in_ease, out_dur, out_ease}).
+# lean_paper: None → no punch-in; clean/minimal aesthetic.
+_PUNCH_IN_PARAMS: dict = {
+    "lean_glass":  {"scale": 1.030, "in_dur": 0.40, "in_ease": "power2.in",          "out_dur": 0.40, "out_ease": "power2.out"},
+    "lean_paper":  None,
+    "lean_vibe":   {"scale": 1.060, "in_dur": 0.30, "in_ease": "back.out(1.7)",      "out_dur": 0.35, "out_ease": "power2.out"},
+    "lean_ledger": {"scale": 1.020, "in_dur": 0.25, "in_ease": "linear",              "out_dur": 0.20, "out_ease": "linear"},
+    "lean_craft":  {"scale": 1.040, "in_dur": 0.50, "in_ease": "elastic.out(1,0.3)", "out_dur": 0.60, "out_ease": "power2.out"},
+    "lean_cinema": {"scale": 1.025, "in_dur": 0.60, "in_ease": "power2.in",           "out_dur": 0.80, "out_ease": "power2.out"},
+}
+
 # Inline SVG textures
 _GRAIN_SVG = (
     "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E"
@@ -317,6 +328,130 @@ _FILM_GRAIN_SVG = (
     "numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E"
     "%3Crect width='100%25' height='100%25' filter='url(%23fg)' opacity='0.025'/%3E%3C/svg%3E"
 )
+
+
+def _accent_bg_css(p: dict) -> str:
+    """CSS property lines (no selector) that set up the background-based highlight swipe.
+
+    Sets background-size to 0 so GSAP can animate it to 100% on entry.
+    Returns '' for packs that use a non-background treatment or no swipe.
+    """
+    pid = p["id"]
+    acc = p["accent"]
+    if pid == "lean_paper":
+        return ""
+    if pid == "lean_cinema":
+        return ""  # uses letter-spacing expand instead
+    if pid == "lean_vibe":
+        return (
+            f"  background-image: linear-gradient({acc}55, {acc}55);\n"
+            f"  background-repeat: no-repeat; background-position: 0 0;\n"
+            f"  background-size: 0% 100%; padding: 0 3px; border-radius: 4px;\n"
+        )
+    if pid == "lean_ledger":
+        return (
+            f"  background-image: linear-gradient({acc}70, {acc}70);\n"
+            f"  background-repeat: no-repeat; background-position: 0 0;\n"
+            f"  background-size: 0% 100%;\n"
+        )
+    # lean_glass: 3px underline sweep; lean_craft: 4px brush stroke
+    h = "4px" if pid == "lean_craft" else "3px"
+    return (
+        f"  background-image: linear-gradient({acc}, {acc});\n"
+        f"  background-repeat: no-repeat; background-position: 0 100%;\n"
+        f"  background-size: 0% {h};\n"
+    )
+
+
+def _accent_treatment(p: dict, sel: str, t: float) -> list[str]:
+    """Return GSAP tween lines for the per-pack accent/highlight-swipe animation.
+
+    sel: full GSAP CSS selector string.
+    t:   timeline position (seconds) when the swipe fires.
+    """
+    pid = p["id"]
+    out: list[str] = []
+    if pid == "lean_paper":
+        pass  # CSS color only, no animation needed
+    elif pid == "lean_glass":
+        out.append(
+            f"  tl.fromTo('{sel}', "
+            f"{{ backgroundSize: '0% 3px' }}, "
+            f"{{ backgroundSize: '100% 3px', duration: 0.30, ease: 'power2.out' }}, "
+            f"{t:.4f});"
+        )
+        if p.get("title_glow"):
+            out.append(
+                f"  tl.to('{sel}', "
+                f"{{ textShadow: '{_esc_js(p['title_glow'])}', duration: 0.20 }}, "
+                f"{t + 0.10:.4f});"
+            )
+    elif pid == "lean_vibe":
+        out.append(
+            f"  tl.fromTo('{sel}', "
+            f"{{ backgroundSize: '0% 100%' }}, "
+            f"{{ backgroundSize: '100% 100%', duration: 0.22, ease: 'power2.out' }}, "
+            f"{t:.4f});"
+        )
+        out.append(
+            f"  tl.to('{sel}', "
+            f"{{ scale: 1.10, duration: 0.12, ease: 'power2.in' }}, "
+            f"{t + 0.08:.4f});"
+        )
+        out.append(
+            f"  tl.to('{sel}', "
+            f"{{ scale: 1, duration: 0.14, ease: 'power2.out' }}, "
+            f"{t + 0.20:.4f});"
+        )
+    elif pid == "lean_ledger":
+        # Two-phase: full-height scan (0.08s) collapses to 3px underline (0.15s)
+        out.append(
+            f"  tl.fromTo('{sel}', "
+            f"{{ backgroundSize: '0% 100%' }}, "
+            f"{{ backgroundSize: '100% 100%', duration: 0.08, ease: 'none' }}, "
+            f"{t:.4f});"
+        )
+        out.append(
+            f"  tl.to('{sel}', "
+            f"{{ backgroundSize: '100% 3px', duration: 0.15, ease: 'none' }}, "
+            f"{t + 0.10:.4f});"
+        )
+    elif pid == "lean_craft":
+        out.append(
+            f"  tl.fromTo('{sel}', "
+            f"{{ backgroundSize: '0% 4px' }}, "
+            f"{{ backgroundSize: '100% 4px', duration: 0.45, ease: 'elastic.out(1,0.4)' }}, "
+            f"{t:.4f});"
+        )
+    elif pid == "lean_cinema":
+        # Letter-spacing expands wide then collapses back to normal
+        out.append(
+            f"  tl.fromTo('{sel}', "
+            f"{{ letterSpacing: '0.12em' }}, "
+            f"{{ letterSpacing: '0em', duration: 0.60, ease: 'power2.out' }}, "
+            f"{t:.4f});"
+        )
+    return out
+
+
+def _split_title_accent(title: str, accent_word: str, card_id: str) -> str:
+    """Return title as HTML with accent_word wrapped in a GSAP-targetable span.
+
+    Falls back to plain escaped text if accent_word is absent or not found.
+    """
+    if not accent_word:
+        return _esc(title)
+    idx = title.lower().find(accent_word.lower())
+    if idx == -1:
+        return _esc(title)
+    before = title[:idx]
+    the_word = title[idx: idx + len(accent_word)]
+    after = title[idx + len(accent_word):]
+    return (
+        f"{_esc(before)}"
+        f'<span class="accent-word" id="{card_id}-accent">{_esc(the_word)}</span>'
+        f"{_esc(after)}"
+    )
 
 
 def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool = False) -> str:
@@ -402,6 +537,15 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(glow_css)
     parts.append(f'  font-variant-numeric: tabular-nums;')
     parts.append('}')
+    # accent-word span: inherits .title font/size; adds color + background for swipe
+    accent_word_hint = hints.get("accent_word", "")
+    if accent_word_hint:
+        _abg = _accent_bg_css(p)
+        parts.append(f'.card[data-card-id="{card_id}"] .accent-word {{')
+        parts.append(f'  color: {p["accent"]};')
+        if _abg:
+            parts.append(_abg.rstrip())
+        parts.append('}')
     detail_font = p.get("font_detail", p["font"])
     if detail:
         parts.append(f'.card[data-card-id="{card_id}"] .detail {{')
@@ -732,7 +876,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'    </div>')
     elif content_style == "attributed_quote":
         attribution = hints.get("attribution", "")
-        parts.append(f'    <div class="title" id="{card_id}-title">{_esc(display_text)}</div>')
+        parts.append(f'    <div class="title" id="{card_id}-title">{_split_title_accent(display_text, accent_word_hint, card_id)}</div>')
         if attribution:
             parts.append(f'    <div class="attr-line" id="{card_id}-attr">{_esc(attribution)}</div>')
         if detail:
@@ -783,7 +927,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'      </div>')
         parts.append(f'    </div>')
     else:
-        parts.append(f'    <div class="title" id="{card_id}-title">{_esc(display_text)}</div>')
+        # key_phrase, quote, callout and any unknown style
+        parts.append(f'    <div class="title" id="{card_id}-title">{_split_title_accent(display_text, accent_word_hint, card_id)}</div>')
         if detail:
             parts.append(f'    <div class="detail" id="{card_id}-detail">{_esc(detail)}</div>')
     parts.append(f'    <div class="accent-line" id="{card_id}-line"></div>')
@@ -807,6 +952,8 @@ def _build_caption_card_html(card: dict, pack: dict | None = None) -> str:
         cls = "cap-word cap-emphasis" if emphasis else "cap-word"
         word_spans.append(f'<span class="{cls}">{_esc(text)}</span>')
 
+    _emph_bg = _accent_bg_css(p)
+    _emph_bg_lines = _emph_bg.rstrip() if _emph_bg else ""
     return (
         f'<div class="card caption-card" data-card-id="{card_id}">\n'
         f'<style>\n'
@@ -819,7 +966,8 @@ def _build_caption_card_html(card: dict, pack: dict | None = None) -> str:
         f'  text-align: center; line-height: 1.3;\n'
         f'}}\n'
         f'.card[data-card-id="{card_id}"] .cap-emphasis {{\n'
-        f'  color: {p["accent"]}; transform: scale(1.08);\n'
+        f'  color: {p["accent"]};\n'
+        f'{_emph_bg_lines}\n'
         f'}}\n'
         f'</style>\n'
         f'<div class="cap-line" id="{card_id}-line">\n'
@@ -841,6 +989,7 @@ def _build_timeline_js(
     is_ledger = p["id"] == "lean_ledger"
     is_craft = p["id"] == "lean_craft"
     is_cinema = p["id"] == "lean_cinema"
+    is_paper = p["id"] == "lean_paper"
     ease_in = (_EASE_CINEMA_IN if is_cinema else _EASE_LEDGER_IN if is_ledger
                else _EASE_VIBE_IN if is_vibe else _EASE_CRAFT_IN if is_craft
                else _EASE_IN)
@@ -928,6 +1077,11 @@ def _build_timeline_js(
                 lines.append(
                     f'  tl.set(\'{word_sel}\', {{ opacity: 1, y: 0 }}, {start:.4f});'
                 )
+            # Per-pack highlight swipe on emphasis words (fires after fade-in)
+            _has_emph = any(w.get("emphasis", False) for w in card.get("words", []))
+            if _has_emph:
+                _emph_sel = f'.card[data-card-id="{card_id}"] .cap-emphasis'
+                lines.extend(_accent_treatment(p, _emph_sel, start + fade_in_dur))
         else:
             panel_sel = f'.card[data-card-id="{card_id}"] .card-panel'
             ent_dur = 0.550 if is_cinema else 0.320
@@ -1581,6 +1735,12 @@ def _build_timeline_js(
                         f'{{ opacity: 1, y: 0, duration: 0.400, ease: _eIn }}, '
                         f'{t_in:.4f});'
                     )
+
+            # Per-pack accent-word highlight swipe (fires 0.40s after title animates in)
+            _aw = card.get("contentHints", {}).get("accent_word", "")
+            if _aw:
+                _aw_sel = f'.card[data-card-id="{card_id}"] #{card_id}-accent'
+                lines.extend(_accent_treatment(p, _aw_sel, t_in + 0.40))
 
             if card.get("contentHints", {}).get("kicker"):
                 lines.append(
