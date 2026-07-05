@@ -132,7 +132,14 @@ class RhythmAwareSilenceRemover:
                 except (KeyError, TypeError, ValueError):
                     continue
 
+        print(
+            f"[SILENCE] process() vb590f87 — {len(words)} words, "
+            f"{len(segments)} segments",
+            flush=True,
+        )
+
         if len(words) < 2:
+            print("[SILENCE] process() aborted: fewer than 2 words", flush=True)
             return drops, []
 
         # Build segment end times for boundary detection.
@@ -205,6 +212,14 @@ class RhythmAwareSilenceRemover:
         drops.sort(key=lambda d: d.start)
 
         _log_false_start_candidates(words)
+
+        _n_pause = sum(1 for d in drops if d.reason.startswith("pause_"))
+        print(
+            f"[SILENCE] detected: {len(filler_drops)} fillers, "
+            f"{len(stutter_drops)} stutters, {_n_pause} pause-excess "
+            f"({len(drops)} raw drops total)",
+            flush=True,
+        )
 
         return _merge_drops(drops), physical_drops
 
