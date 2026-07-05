@@ -285,7 +285,7 @@ _PACKS = {"lean_glass": _LEAN_GLASS, "lean_paper": _LEAN_PAPER, "lean_vibe": _LE
 _PUNCH_IN_PARAMS: dict = {
     "lean_glass":  {"scale": 1.030, "in_dur": 0.40, "in_ease": "power2.in",          "out_dur": 0.40, "out_ease": "power2.out"},
     "lean_paper":  None,
-    "lean_vibe":   {"scale": 1.060, "in_dur": 0.30, "in_ease": "back.out(1.7)",      "out_dur": 0.35, "out_ease": "power2.out"},
+    "lean_vibe":   {"scale": 1.060, "in_dur": 0.50, "in_ease": "back.out(1.7)",      "out_dur": 0.35, "out_ease": "power2.out"},
     "lean_ledger": {"scale": 1.020, "in_dur": 0.25, "in_ease": "linear",              "out_dur": 0.20, "out_ease": "linear"},
     "lean_craft":  {"scale": 1.040, "in_dur": 0.50, "in_ease": "elastic.out(1,0.3)", "out_dur": 0.60, "out_ease": "power2.out"},
     "lean_cinema": {"scale": 1.025, "in_dur": 0.60, "in_ease": "power2.in",           "out_dur": 0.80, "out_ease": "power2.out"},
@@ -1163,7 +1163,8 @@ def _build_timeline_js(
                 )
                 if _pi and not _has_zoom_conflict:
                     lines.append(
-                        f'  tl.to("#video-wrap", '
+                        f'  tl.fromTo("#video-wrap", '
+                        f'{{ scale: 1.000 }}, '
                         f'{{ scale: {_pi["scale"]:.3f}, duration: {_pi["in_dur"]:.2f}, '
                         f'ease: "{_pi["in_ease"]}", '
                         f'overwrite: "auto", transformOrigin: "{transform_origin}" }}, '
@@ -1171,8 +1172,9 @@ def _build_timeline_js(
                     )
                     lines.append(
                         f'  tl.to("#video-wrap", '
-                        f'{{ scale: 1.00, duration: {_pi["out_dur"]:.2f}, '
-                        f'ease: "{_pi["out_ease"]}" }}, '
+                        f'{{ scale: 1.000, duration: {_pi["out_dur"]:.2f}, '
+                        f'ease: "{_pi["out_ease"]}", '
+                        f'overwrite: "auto", transformOrigin: "{transform_origin}" }}, '
                         f'{start + _pi["in_dur"]:.4f});'
                     )
 
