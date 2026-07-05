@@ -1019,22 +1019,33 @@ def _build_timeline_js(
             zfrom = float(ze.get("from", 1.0))
             zto = float(ze.get("to", zfrom))
             kind = ze.get("kind", "drift")
-            zdur = max(0.001, ze_end - zs)
 
             if kind == "jump_cut":
-                ease = '"none"'
-            elif kind == "punch_in" or kind == "pull_out":
-                ease = '"power2.in"'
+                # Instantaneous scale jump — gsap.set has no duration.
+                # transform-origin is always "center center" for cut jumps
+                # (face-aware origin would shift the subject laterally at the cut).
+                lines.append(
+                    f'  tl.set("#video-wrap", '
+                    f'{{ scale: {zto:.4f}, transformOrigin: "center center" }}, '
+                    f'{zs:.4f});'
+                )
             else:
-                ease = '"sine.inOut"'
-
-            lines.append(
-                f'  tl.fromTo("#video-wrap", '
-                f'{{ scale: {zfrom:.4f} }}, '
-                f'{{ scale: {zto:.4f}, duration: {zdur:.4f}, ease: {ease}, '
-                f'transformOrigin: "{transform_origin}", overwrite: "auto" }}, '
-                f'{zs:.4f});'
-            )
+                zdur = max(0.001, ze_end - zs)
+                # Per-entry ease takes precedence; fall back to kind-based defaults.
+                ze_ease_raw = ze.get("ease")
+                if ze_ease_raw:
+                    ease = f'"{ze_ease_raw}"'
+                elif kind in ("punch_in", "pull_out"):
+                    ease = '"power2.in"'
+                else:
+                    ease = '"sine.inOut"'
+                lines.append(
+                    f'  tl.fromTo("#video-wrap", '
+                    f'{{ scale: {zfrom:.4f} }}, '
+                    f'{{ scale: {zto:.4f}, duration: {zdur:.4f}, ease: {ease}, '
+                    f'transformOrigin: "{transform_origin}", overwrite: "auto" }}, '
+                    f'{zs:.4f});'
+                )
         lines.append("")
 
     for card in cards:
@@ -1145,34 +1156,8 @@ def _build_timeline_js(
                     f'  tl.to("#backdrop-dim", '
                     f'{{ opacity: 0, duration: 0.18, ease: _eOut }}, {end - 0.18:.4f});'
                 )
-                # Punch-in: per-pack micro-zoom on hero card entry.
-                # lean_paper → None: no punch-in (clean/minimal aesthetic).
-                # Guard: skip if a zoom_entry already animates #video-wrap
-                # in the punch window to avoid overlapping_gsap_tweens warning.
-                _pi = _PUNCH_IN_PARAMS.get(p["id"])
-                _punch_window = (_pi["in_dur"] + _pi["out_dur"] + 0.1) if _pi else 0.8
-                _punch_end = start + _punch_window
-                _has_zoom_conflict = any(
-                    float(ze.get("start", 0)) < _punch_end
-                    and float(ze.get("end", float(ze.get("start", 0)))) > start
-                    for ze in (zoom_entries or [])
-                )
-                if _pi and not _has_zoom_conflict:
-                    lines.append(
-                        f'  tl.fromTo("#video-wrap", '
-                        f'{{ scale: 1.000 }}, '
-                        f'{{ scale: {_pi["scale"]:.3f}, duration: {_pi["in_dur"]:.2f}, '
-                        f'ease: "{_pi["in_ease"]}", '
-                        f'overwrite: "auto", transformOrigin: "{transform_origin}" }}, '
-                        f'{start:.4f});'
-                    )
-                    lines.append(
-                        f'  tl.to("#video-wrap", '
-                        f'{{ scale: 1.000, duration: {_pi["out_dur"]:.2f}, '
-                        f'ease: "{_pi["out_ease"]}", '
-                        f'overwrite: "auto", transformOrigin: "{transform_origin}" }}, '
-                        f'{start + _pi["in_dur"]:.4f});'
-                    )
+                # Punch-in is handled as independent zoom entries via
+                # _build_punch_in_zoom_entries() — not wired to card entry events.
 
             content_style = card.get("contentHints", {}).get("style", "key_phrase")
             title_sel = f'.card[data-card-id="{card_id}"] #{card_id}-title'
