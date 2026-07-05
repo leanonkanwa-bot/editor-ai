@@ -121,18 +121,13 @@ def run_job(
             transcript_clean = transcript
             print("[PIPELINE] DISABLE_CUTS=true — skipping silence removal timestamp shift", flush=True)
         else:
-            try:
-                remover = RhythmAwareSilenceRemover()
-                word_timestamps = [
-                    w for seg in transcript.get("segments", [])
-                    for w in seg.get("words", [])
-                ]
-                drops, filler_drops = remover.process(word_timestamps, transcript.get("segments", []))
-                transcript_clean = apply_drops_to_transcript(transcript, drops)
-            except Exception:
-                transcript_clean = transcript
-                drops = []
-                filler_drops = []
+            remover = RhythmAwareSilenceRemover()
+            word_timestamps = [
+                w for seg in transcript.get("segments", [])
+                for w in seg.get("words", [])
+            ]
+            drops, filler_drops = remover.process(word_timestamps, transcript.get("segments", []))
+            transcript_clean = apply_drops_to_transcript(transcript, drops)
         print(f"[TIMING] silence_removal: {time.perf_counter()-_t:.1f}s", flush=True)
 
         # ── Step 3: Energy detection (Feature 4) ──────────────────────────

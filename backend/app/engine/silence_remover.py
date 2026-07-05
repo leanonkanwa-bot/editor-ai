@@ -312,7 +312,7 @@ def _find_stutter_drops(
 
         if run_len >= 3:
             print(
-                f"[STUTTER] rhetorical? {run_len}× '{cur_text}' at {cur_start:.2f}s — not cut",
+                f"[STUTTER] rhetorical? {run_len}x '{cur_text}' at {cur_start:.2f}s - not cut",
                 flush=True,
             )
             i = run_end
@@ -390,7 +390,7 @@ def _log_false_start_candidates(
                 )
                 print(
                     f"[FALSE-START] candidate: '{first_phrase}' at {words[i][1]:.2f}s"
-                    f" → restarts at {words[j][1]:.2f}s"
+                    f" -> restarts at {words[j][1]:.2f}s"
                     f" (bridge={bridge_gap:.2f}s{filler_note})",
                     flush=True,
                 )
