@@ -952,6 +952,126 @@ def _zoom_filter_for_level(zoom_level: int, target_w: int, target_h: int) -> str
     )
 
 
+# ── Speech-moment punch-in constants ──────────────────────────────────────────
+_PUNCH_IN_STRONG_BEATS    = frozenset({"realization", "payoff", "amplify", "principle"})
+_PUNCH_IN_SPEECH_SCALE    = 1.060   # 6% scale bump
+_PUNCH_IN_SPEECH_DUR      = 0.25    # seconds each for IN and OUT phases
+_PUNCH_IN_BUDGET_S        = 13.0   # minimum seconds between two punch-ins
+_PUNCH_IN_SEGMENT_MIN_DUR = 2.0    # source segment must be this long to qualify
+_PUNCH_IN_ENTRY_OFFSET    = 0.15   # fire this many seconds after segment start
+_PUNCH_IN_CENTER_ZONES    = frozenset({"fullscreen", "video-overlay", "lower-third"})
+_PUNCH_IN_DATA_TYPES      = frozenset({"stat", "list", "comparison", "checklist", "score", "trend"})
+
+
+def _compute_speech_punch_in_times(
+    script_structure: list[dict],
+    timing_map: object,
+    graphic_cards: list[dict],
+) -> list[float]:
+    """Return output-timeline timestamps for speech-moment punch-ins.
+
+    Selects strong-beat segments (realization/payoff/amplify/principle),
+    converts source start → output time via timing_map, applies budget of
+    1 punch per _PUNCH_IN_BUDGET_S, and excludes any window where a hero
+    graphic card is already displayed.
+    """
+    hero_intervals: list[tuple[float, float]] = []
+    for card in graphic_cards:
+        if card.get("type") in _PUNCH_IN_DATA_TYPES:
+            continue
+        zone = card.get("zone", "lower-third")
+        if zone not in _PUNCH_IN_CENTER_ZONES:
+            continue
+        cs = float(card.get("startSec", 0))
+        ce = float(card.get("endSec", cs))
+        hero_intervals.append((cs, ce))
+
+    candidates: list[tuple[float, str]] = []
+    for seg in script_structure:
+        beat = (seg.get("beat") or "").lower()
+        if beat not in _PUNCH_IN_STRONG_BEATS:
+            continue
+        src_s = float(seg.get("start", 0))
+        src_e = float(seg.get("end", 0))
+        if src_e - src_s < _PUNCH_IN_SEGMENT_MIN_DUR:
+            continue
+        out_t = round(timing_map.source_to_output(src_s + _PUNCH_IN_ENTRY_OFFSET), 4)
+        candidates.append((out_t, beat))
+
+    candidates.sort(key=lambda x: x[0])
+    last_at = -float("inf")
+    result: list[float] = []
+
+    for t, beat in candidates:
+        if t - last_at < _PUNCH_IN_BUDGET_S:
+            print(f"[HF] Punch-in {t:.2f}s ({beat}) skipped: budget", flush=True)
+            continue
+        if any(cs <= t <= ce for cs, ce in hero_intervals):
+            print(f"[HF] Punch-in {t:.2f}s ({beat}) skipped: hero card active", flush=True)
+            continue
+        result.append(t)
+        last_at = t
+        print(f"[HF] Punch-in queued {t:.2f}s ({beat})", flush=True)
+
+    return result
+
+
+def _inject_speech_punch_in_zooms(
+    zoom_entries: list[dict],
+    punch_times: list[float],
+) -> list[dict]:
+    """Inject 1.0->1.06->1.0 bumps at speech punch-in times, composited with drift.
+
+    Each event: IN 0.25s power2.out, OUT 0.25s power2.out.
+    Drift entries spanning the IN window are split at t_punch; the post-punch
+    portion resumes at t_end from the baseline scale.
+    """
+    result = list(zoom_entries)
+
+    for t_punch in sorted(punch_times):
+        baseline  = _interp_zoom_scale(t_punch, result)
+        scale_in  = round(baseline * _PUNCH_IN_SPEECH_SCALE, 4)
+        t_peak    = round(t_punch + _PUNCH_IN_SPEECH_DUR, 4)
+        t_end     = round(t_peak  + _PUNCH_IN_SPEECH_DUR, 4)
+
+        processed: list[dict] = []
+        for ze in result:
+            zs     = float(ze.get("start", 0))
+            ze_end = float(ze.get("end",   zs))
+            zfrom  = float(ze.get("from",  1.0))
+            zto    = float(ze.get("to",    zfrom))
+            kind   = ze.get("kind", "drift")
+
+            if kind in ("jump_cut", "punch_in"):
+                processed.append(ze)
+                continue
+
+            if zs < t_punch < ze_end:
+                dur = ze_end - zs
+                frac = (t_punch - zs) / dur
+                scale_at = round(zfrom + (zto - zfrom) * frac, 4)
+                processed.append({**ze, "end": round(t_punch, 4), "to": scale_at})
+                if ze_end > t_end:
+                    processed.append({
+                        **ze,
+                        "start": t_end,
+                        "from": round(baseline, 4),
+                        "to": zto,
+                    })
+            else:
+                processed.append(ze)
+
+        processed.append({"start": round(t_punch, 4), "end": t_peak,
+                           "from": round(baseline, 4), "to": scale_in,
+                           "kind": "punch_in", "ease": "power2.out"})
+        processed.append({"start": t_peak, "end": t_end,
+                           "from": scale_in, "to": round(baseline, 4),
+                           "kind": "punch_in", "ease": "power2.out"})
+        result = processed
+
+    return sorted(result, key=lambda e: float(e.get("start", 0)))
+
+
 def _interp_zoom_scale(t: float, zoom_entries: list[dict]) -> float:
     """Linear-interpolate the running zoom scale at output time t.
 
@@ -1889,6 +2009,21 @@ def _render_hyperframes(
         _json.dumps(storyboard, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     print("[HF] Storyboard saved to disk", flush=True)
+
+    # Inject speech-moment punch-ins (realization/payoff/amplify/principle beats).
+    # lean_paper skipped — its minimal aesthetic has no punch-ins.
+    # Exclusion: hero cards already on screen at the candidate moment.
+    if style_pack != "lean_paper":
+        _graphic_cards = [c for c in storyboard.get("cards", []) if c.get("type") != "caption"]
+        _punch_times = _compute_speech_punch_in_times(
+            plan.script_structure or [], timing_map, _graphic_cards
+        )
+        if _punch_times:
+            remapped_zoom = _inject_speech_punch_in_zooms(remapped_zoom, _punch_times)
+            print(
+                f"[HF] Speech punch-ins: {len(_punch_times)} -> {len(remapped_zoom)} zoom entries",
+                flush=True,
+            )
 
     # Stage 3: Compose
     _t = time.perf_counter()
