@@ -27,7 +27,6 @@ from app.engine.render import (
     _flat_words,
     _snap_to_word_boundary,
     _extend_for_semantic_completeness,
-    _find_long_pauses,
     _compress_pauses,
     _probe_duration,
     _probe_video_info,
@@ -35,6 +34,13 @@ from app.engine.render import (
     _remap_time,
     SHORT_PAD_S,
     LONG_PAD_S,
+)
+from app.engine.silence_remover import (
+    _PAUSE_TOUCH_THRESHOLD,
+    _PAUSE_LONG_THRESHOLD,
+    _PAUSE_MID_SHORT_KEEP,
+    _PAUSE_EOL_LONG_KEEP,
+    _PAUSE_MID_LONG_KEEP,
 )
 from app.engine.transcribe import FFMPEG_PATH
 from app.engine.captions import WordTiming
@@ -104,6 +110,46 @@ def _pretrim_passthrough(
 
     print(f"[PRETRIM] Passthrough: {output_duration:.1f}s, {len(remapped_words)} words (no cuts)")
     return final_path, timing_map
+
+
+def _smart_pause_cuts(
+    words: list[WordTiming],
+) -> list[tuple[float, float]]:
+    """Return (excess_start, excess_end) intervals for intelligent pause compression.
+
+    Each interval is the portion of a pause to physically cut. Pass the result to
+    _compress_pauses with max_silence_s=0.0 to remove exactly the excess.
+    Mirrors the virtual-drop logic in RhythmAwareSilenceRemover.process().
+    """
+    cuts: list[tuple[float, float]] = []
+    for i in range(len(words) - 1):
+        gap_start = words[i].end
+        gap_end   = words[i + 1].start
+        gap_dur   = gap_end - gap_start
+
+        if gap_dur < _PAUSE_TOUCH_THRESHOLD:
+            continue
+        if i == len(words) - 2:              # final gap before last word
+            continue
+
+        is_sentence_end = words[i].text.rstrip().endswith((".", "?", "!"))
+
+        if is_sentence_end:
+            if gap_dur <= _PAUSE_LONG_THRESHOLD:
+                continue                          # 0.70–2.00s EOS: untouched
+            keep_s = _PAUSE_EOL_LONG_KEEP         # >2.00s EOS: shorten to 0.80s
+        else:
+            keep_s = (
+                _PAUSE_MID_SHORT_KEEP             # 0.70–2.00s mid: shorten to 0.45s
+                if gap_dur <= _PAUSE_LONG_THRESHOLD
+                else _PAUSE_MID_LONG_KEEP          # >2.00s mid: shorten to 0.40s
+            )
+
+        excess_start = gap_start + keep_s
+        if excess_start < gap_end - 0.05:
+            cuts.append((excess_start, gap_end))
+
+    return cuts
 
 
 def _subtract_fillers(
@@ -308,19 +354,17 @@ def pretrim(
     for p in parts:
         p.unlink(missing_ok=True)
 
-    # ── Pause compression ────────────────────────────────────────────
-    sil_min = 0.50 if short_form else 0.80
-    sil_max = 0.30 if short_form else 0.50
+    # ── Intelligent pause compression ────────────────────────────────
     output_path = concat_path
     _compressed: list[tuple[float, float]] | None = None
 
     if remapped_words:
-        long_pauses = _find_long_pauses(remapped_words, min_gap_s=sil_min)
-        if long_pauses:
+        smart_cuts = _smart_pause_cuts(remapped_words)
+        if smart_cuts:
             compressed_path = work_dir / "trimmed_compressed.mp4"
             compressed_intervals = _compress_pauses(
                 concat_path, compressed_path, work_dir,
-                long_pauses, max_silence_s=sil_max,
+                smart_cuts, max_silence_s=0.0,
             )
             if compressed_path.exists():
                 output_path = compressed_path

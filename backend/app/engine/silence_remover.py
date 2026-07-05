@@ -62,9 +62,14 @@ _PRINCIPLE_PAYOFF = re.compile(
     re.IGNORECASE,
 )
 
-_PAUSE_MID_SENTENCE = 0.5   # seconds — remove pauses longer than this
-_PAUSE_AFTER_FILLER = 0.3   # seconds — remove pauses after fillers longer than this
-_KEEP_SEGMENT_TAIL  = 0.3   # seconds — always keep the last 0.3s of each segment
+_PAUSE_AFTER_FILLER    = 0.3    # remove pauses after filler words longer than this (s)
+
+# Intelligent pause shortening — calibrate after first production renders.
+_PAUSE_TOUCH_THRESHOLD = 0.70   # pauses shorter than this are never touched (s)
+_PAUSE_LONG_THRESHOLD  = 2.00   # above this: "long" category regardless of position (s)
+_PAUSE_MID_SHORT_KEEP  = 0.45   # mid-sentence, 0.70–2.00 s: shorten to this (s)
+_PAUSE_EOL_LONG_KEEP   = 0.80   # end-of-sentence, >2.00 s: shorten to this (s)
+_PAUSE_MID_LONG_KEEP   = 0.40   # mid-sentence, >2.00 s: shorten to this (s)
 
 
 @dataclass
@@ -123,7 +128,7 @@ class RhythmAwareSilenceRemover:
                     continue
 
         if len(words) < 2:
-            return drops
+            return drops, []
 
         # Build segment end times for boundary detection.
         segment_ends: set[float] = set()
@@ -144,33 +149,46 @@ class RhythmAwareSilenceRemover:
             if gap_dur <= 0:
                 continue
 
-            # Skip: end of segment tail — preserve rhythm.
-            # If this is the last word before a segment boundary, keep the gap.
-            if any(abs(cur_end - se) < 0.1 for se in segment_ends):
-                continue
-
-            # Skip: the gap is before a PRINCIPLE/PAYOFF keyword — keep it.
-            if _PRINCIPLE_PAYOFF.search(next_text):
-                continue
-
-            # Skip: gap before a question mark word (rhetorical question beat).
-            if next_text.rstrip().endswith("?"):
-                continue
-
-            # Remove: pause after a filler word.
+            # Remove: pause after a filler word (checked before touch threshold).
             if _FILLERS_RE.match(cur_text) and gap_dur > _PAUSE_AFTER_FILLER:
                 drops.append(DropSegment(gap_start, gap_end, f"pause_after_filler:{cur_text}"))
                 continue
 
-            # Remove: long mid-sentence pause.
-            if gap_dur > _PAUSE_MID_SENTENCE:
-                # But preserve if it's before an important transition word.
-                if not _PRINCIPLE_PAYOFF.search(next_text):
-                    # Keep up to 0.25s of the pause for natural breath.
-                    trimmed_start = gap_start + 0.25
-                    if trimmed_start < gap_end - 0.05:
-                        drops.append(DropSegment(trimmed_start, gap_end, "long_mid_sentence_pause"))
-                    continue
+            # Pauses below the touch threshold are never modified.
+            if gap_dur < _PAUSE_TOUCH_THRESHOLD:
+                continue
+
+            # Never touch the final gap before the last word (tail of recording).
+            if i == len(words) - 2:
+                continue
+
+            # Segment-boundary gaps preserve cross-cut rhythm.
+            if any(abs(cur_end - se) < 0.1 for se in segment_ends):
+                continue
+
+            # Preserve rhetorical beats before PRINCIPLE/PAYOFF keywords.
+            if _PRINCIPLE_PAYOFF.search(next_text):
+                continue
+
+            # End-of-sentence: punctuation attached to the word before the gap.
+            is_sentence_end = cur_text.rstrip().endswith((".", "?", "!"))
+
+            if is_sentence_end:
+                if gap_dur <= _PAUSE_LONG_THRESHOLD:
+                    continue                              # 0.70–2.00s EOS: untouched
+                keep_s = _PAUSE_EOL_LONG_KEEP             # >2.00s EOS: shorten to 0.80s
+            else:
+                if gap_dur <= _PAUSE_LONG_THRESHOLD:
+                    keep_s = _PAUSE_MID_SHORT_KEEP        # 0.70–2.00s mid: shorten to 0.45s
+                else:
+                    keep_s = _PAUSE_MID_LONG_KEEP         # >2.00s mid: shorten to 0.40s
+
+            cut_start = gap_start + keep_s
+            if cut_start < gap_end - 0.05:
+                drops.append(DropSegment(
+                    cut_start, gap_end,
+                    f"pause_shortened:{gap_dur:.2f}s→{keep_s:.2f}s",
+                ))
 
         # Remove standalone filler words (when confidence is implied by position).
         filler_drops = self._find_filler_word_drops(words, segment_ends)
