@@ -190,13 +190,15 @@ class RhythmAwareSilenceRemover:
                     f"pause_shortened:{gap_dur:.2f}s→{keep_s:.2f}s",
                 ))
 
-        # Remove standalone filler words (when confidence is implied by position).
+        # Remove standalone filler words.
         filler_drops = self._find_filler_word_drops(words, segment_ends)
-        drops.extend(filler_drops)
+        # Detect word-repetition stutters (physical cuts like fillers).
+        stutter_drops = _find_stutter_drops(words)
+        physical_drops = filler_drops + stutter_drops
 
-        # Sort and merge overlapping drops.
+        drops.extend(physical_drops)
         drops.sort(key=lambda d: d.start)
-        return _merge_drops(drops), filler_drops
+        return _merge_drops(drops), physical_drops
 
     def _find_filler_word_drops(
         self,
@@ -251,6 +253,71 @@ class RhythmAwareSilenceRemover:
             drops.append(DropSegment(cut_start, cut_end, f"filler_word:{text}"))
 
         return drops
+
+
+def _normalize_word(w: str) -> str:
+    """Normalize a word token for stutter comparison.
+
+    Converts typographic apostrophes to straight (Whisper uses U+2019 in FR),
+    strips edge punctuation, lowercases. Language-agnostic by construction.
+    """
+    w = re.sub(r"[‘’ʼ]", "'", w)
+    return w.strip(".,!?;:'\"").lower()
+
+
+def _find_stutter_drops(
+    words: list[tuple[str, float, float]],
+) -> list[DropSegment]:
+    """Detect adjacent repeated-word stutters and return them as physical drop segments.
+
+    A run of exactly 2 identical normalized words is a stutter — cut the gap
+    plus the second occurrence, keeping the first. A run of 3+ is treated as
+    intentional rhetorical repetition and logged but not cut.
+    """
+    drops: list[DropSegment] = []
+    i = 0
+    while i < len(words) - 1:
+        cur_text, cur_start, cur_end = words[i]
+        norm = _normalize_word(cur_text)
+        if len(norm) < 2:   # skip single-character tokens ("à", "a", etc.)
+            i += 1
+            continue
+
+        # Count consecutive identical normalized words starting at i.
+        run_end = i + 1
+        while run_end < len(words) and _normalize_word(words[run_end][0]) == norm:
+            run_end += 1
+        run_len = run_end - i
+
+        if run_len < 2:
+            i += 1
+            continue
+
+        if run_len >= 3:
+            print(
+                f"[STUTTER] rhetorical? {run_len}× '{cur_text}' at {cur_start:.2f}s — not cut",
+                flush=True,
+            )
+            i = run_end
+            continue
+
+        # run_len == 2: stutter — keep first occurrence, drop gap + second.
+        _, nxt_start, nxt_end = words[i + 1]
+        prev_end   = words[i - 1][2] if i > 0 else 0.0
+        next_start = words[run_end][1] if run_end < len(words) else nxt_end
+
+        cut_start = max(cur_end - _FILLER_CUT_PAD, prev_end)
+        cut_end   = min(nxt_end + _FILLER_CUT_PAD, next_start)
+
+        print(
+            f"[STUTTER] cut repeat '{cur_text}' at {nxt_start:.2f}s "
+            f"(gap={nxt_start - cur_end:.2f}s)",
+            flush=True,
+        )
+        drops.append(DropSegment(cut_start, cut_end, f"stutter:{cur_text}"))
+        i = run_end
+
+    return drops
 
 
 def _is_comparison_like(preceding_word: str) -> bool:
