@@ -982,6 +982,12 @@ def _guard_plan_inplace(plan: dict, transcript: dict, total_duration: float) -> 
     (a) Segments in drop_segments with score >= 7 are rescued to keep_segments.
     (b) The last spoken transcript segment must be in keep_segments.
     """
+    print(
+        f"[PLAN-GUARD] active va9773a8 — "
+        f"keep={len(plan.get('keep_segments') or [])} segs, "
+        f"drop_segments={'yes' if plan.get('drop_segments') else 'no'}",
+        flush=True,
+    )
     keep = plan.setdefault("keep_segments", [])
     drop = plan.get("drop_segments")
     if not isinstance(drop, list):

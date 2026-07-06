@@ -449,8 +449,32 @@ def run_render_phase(job_id: str, src: Path) -> None:
         subject_pos = job.subject_pos
         params      = job.params or {}
 
-        from app.agent.planner import EditPlan
-        plan = EditPlan(raw=plan_data.get("raw", {}))
+        from app.agent.planner import EditPlan, _guard_plan_inplace, _fallback_keep_all
+        _raw = plan_data.get("raw", {})
+        _src_duration = float((job.transcript or {}).get("duration", 0.0))
+
+        # Guard: also applied here in case Phase 2 replays a plan stored
+        # before the guard was deployed (plan_edit guards only at Phase 1 time).
+        _guard_plan_inplace(_raw, job.transcript or {}, _src_duration)
+        _kept_s = sum(
+            max(0.0, float(s.get("end", 0)) - float(s.get("start", 0)))
+            for s in _raw.get("keep_segments", [])
+            if isinstance(s, dict)
+        )
+        _drop_pct = 100.0 * (1.0 - _kept_s / max(_src_duration, 0.01))
+        print(
+            f"[PLAN-GUARD] phase2 ratio: kept={_kept_s:.1f}s / {_src_duration:.1f}s "
+            f"({100-_drop_pct:.0f}% kept, {_drop_pct:.0f}% dropped)",
+            flush=True,
+        )
+        if _drop_pct > 40.0 and _src_duration > 0:
+            print(
+                f"[PLAN-GUARD] phase2: {_drop_pct:.0f}% dropped > 40% — applying fallback (keep all)",
+                flush=True,
+            )
+            _raw = _fallback_keep_all(_raw, job.transcript or {})
+
+        plan = EditPlan(raw=_raw)
 
         content_type  = plan_data.get("content_type", "coaching")
         broll_specs_d = plan_data.get("broll_specs", [])
