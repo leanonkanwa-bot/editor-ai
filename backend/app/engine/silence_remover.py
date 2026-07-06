@@ -639,6 +639,18 @@ def word_safe_drops(
 
         new_start = float(before[-1]["end"]) + pad_s
         new_end   = float(after[0]["start"]) - pad_s
+        # If the computed silence window escapes the original drop interval the
+        # "silence" is outside [cs, ce] — the drop is sitting entirely over speech
+        # with no usable internal silence.  Cancel rather than relocate the cut.
+        if new_start >= ce - 0.005 or new_end <= cs + 0.005:
+            txt = " ".join(str(w.get("text", "")).strip() for w in overlapping[:5])
+            print(
+                f"[WORD-SAFE] cancelled drop {cs:.2f}-{ce:.2f}"
+                f" (silence {new_start:.2f}-{new_end:.2f} escapes drop bounds;"
+                f" overlaps: '{txt}')",
+                flush=True,
+            )
+            continue
         if new_end - new_start < min_cut_s:
             txt = " ".join(str(w.get("text", "")).strip() for w in overlapping[:5])
             print(

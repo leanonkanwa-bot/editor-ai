@@ -404,14 +404,15 @@ def run_job(
         _keep_raw = plan.raw.get("keep_segments", [])
         _vd_sorted = sorted(_effective_virtual_drops, key=lambda d: d.start)
 
-        def _c2s_diag(tc: float) -> float:
+        def _c2s_diag(tc: float) -> tuple[float, float]:
+            """Return (source_ts, accumulated_offset) for the given compressed ts."""
             offset = 0.0
             for _d in _vd_sorted:
                 c_ds = _d.start - offset
                 if tc <= c_ds:
                     break
                 offset += _d.end - _d.start
-            return tc + offset
+            return tc + offset, offset
 
         _gap_pairs: list[tuple[str, float, float]] = []
         if _keep_raw:
@@ -424,8 +425,15 @@ def run_job(
                     float(_keep_raw[_gi + 1].get("start", 0)),
                 ))
         for _gid, _gs, _ge in _gap_pairs:
-            _gs_src = _c2s_diag(_gs)
-            _ge_src = _c2s_diag(_ge)
+            _gs_src, _gs_offset = _c2s_diag(_gs)
+            _ge_src, _ge_offset = _c2s_diag(_ge)
+            # Always log the c2s offset so we can prove whether conversion fired
+            print(
+                f"[C2S] {_gid}: compressed {_gs:.3f}-{_ge:.3f}"
+                f" → source {_gs_src:.3f}-{_ge_src:.3f}"
+                f" (offset {_gs_offset:+.3f}s, {len(_vd_sorted)} virtual drops)",
+                flush=True,
+            )
             _gap_words = [
                 w for w in _source_words
                 if float(w.get("start", 0)) < _ge_src - 0.005
@@ -439,6 +447,57 @@ def run_job(
                     f" → source {_gs_src:.2f}-{_ge_src:.2f}: overlaps speech '{_wtxt}'",
                     flush=True,
                 )
+
+        # ── GAP-RESCUE: extend keep_segments to recover speech lost in gaps ─
+        # Any real word in a planner gap that is NOT covered by a validated
+        # filler drop is "lost by non-selection".  Extend the preceding segment
+        # to include it — after this point, a word can only vanish via an
+        # explicit, word-safe-validated drop, never by a silent planning hole.
+        _n_rescued = 0
+        for _gi in range(len(_keep_raw) - 1):
+            _gs_c = float(_keep_raw[_gi].get("end", 0))
+            _ge_c = float(_keep_raw[_gi + 1].get("start", 0))
+            if _ge_c <= _gs_c + 0.050:
+                continue  # gap too narrow to host real speech
+            _gs_src, _gs_off = _c2s_diag(_gs_c)
+            _ge_src, _ge_off = _c2s_diag(_ge_c)
+
+            # Words in source space that land in the gap and are not covered
+            # by any filler drop that passed word-safe validation.
+            _gap_uncov = [
+                w for w in _source_words
+                if float(w.get("start", 0)) < _ge_src - 0.005
+                and float(w.get("end", 0)) > _gs_src + 0.005
+                and (float(w.get("end", 0)) - float(w.get("start", 0))) >= 0.030
+                and not any(
+                    d.start < float(w.get("end", 0)) and d.end > float(w.get("start", 0))
+                    for d in filler_drops
+                )
+            ]
+            if not _gap_uncov:
+                continue
+
+            _wtxt = " ".join(str(w.get("text", "")).strip() for w in _gap_uncov[:8])
+            _last_w_end_src = float(_gap_uncov[-1].get("end", 0)) + 0.150
+            # In a gap (no virtual drops), compressed delta == source delta.
+            _new_end_c = _gs_c + (_last_w_end_src - _gs_src)
+            _new_end_c = min(_new_end_c, _ge_c - 0.010)  # don't overlap next segment
+            if _new_end_c <= _gs_c + 0.050:
+                continue
+
+            _keep_raw[_gi]["end"] = round(_new_end_c, 3)
+            _n_rescued += 1
+            print(
+                f"[GAP-RESCUE] gap-{_gi} extended seg[{_gi}].end"
+                f" {_gs_c:.2f}->{_new_end_c:.2f}"
+                f" (src {_gs_src:.2f}->{_last_w_end_src:.2f}): '{_wtxt}'",
+                flush=True,
+            )
+        if _n_rescued:
+            print(
+                f"[GAP-RESCUE] {_n_rescued} segment(s) extended to recover lost speech",
+                flush=True,
+            )
 
         # ── Step 7: Hook rewrite (Feature 3) ──────────────────────────────
         _t = time.perf_counter()
