@@ -720,28 +720,82 @@ def plan_edit(
         ],
     }
 
-    resp = _client().messages.create(
-        model=settings.anthropic_model,
-        max_tokens=16000,
-        system=system_prompt(
-            format_hint=fmt,
-            brand_color=brand_color or "#FF7751",
-            caption_color=caption_color or "white",
-            caption_position=caption_position or "center",
-            caption_font=caption_font or "Poppins Bold",
-            editing_style=editing_style,
-            source_duration=duration,
-        ),
-        messages=[user_msg],
+    sys_prompt = system_prompt(
+        format_hint=fmt,
+        brand_color=brand_color or "#FF7751",
+        caption_color=caption_color or "white",
+        caption_position=caption_position or "center",
+        caption_font=caption_font or "Poppins Bold",
+        editing_style=editing_style,
+        source_duration=duration,
     )
 
-    text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
-    print(f"[RAW MODEL RESPONSE LENGTH] {len(text)} chars")
-    print(f"[RAW MODEL RESPONSE] {text}")
-    plan = _extract_json(text)
-    _model_format = plan.get("format", "<missing>")
-    plan["format"] = fmt
-    print(f"[FORMAT] user_hint={fmt!r} model_originally_said={_model_format!r} final_format={fmt!r}")
+    def _call_api(extra_instruction: str = "") -> dict:
+        base_text = user_msg["content"][0]["text"]
+        if extra_instruction:
+            msg_text = base_text + f"\n\nCRITICAL CORRECTION: {extra_instruction}"
+        else:
+            msg_text = base_text
+        resp = _client().messages.create(
+            model=settings.anthropic_model,
+            max_tokens=16000,
+            system=sys_prompt,
+            messages=[{"role": "user", "content": [{"type": "text", "text": msg_text}]}],
+        )
+        raw_text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
+        print(f"[RAW MODEL RESPONSE LENGTH] {len(raw_text)} chars")
+        print(f"[RAW MODEL RESPONSE] {raw_text}")
+        p = _extract_json(raw_text)
+        _model_format = p.get("format", "<missing>")
+        p["format"] = fmt
+        print(f"[FORMAT] user_hint={fmt!r} model_originally_said={_model_format!r} final_format={fmt!r}")
+        return p
+
+    def _kept_duration(p: dict) -> float:
+        return sum(
+            max(0.0, float(s.get("end", 0)) - float(s.get("start", 0)))
+            for s in p.get("keep_segments", [])
+            if isinstance(s, dict)
+        )
+
+    # Initial call
+    plan = _call_api()
+    _guard_plan_inplace(plan, transcript, duration)
+
+    # Guard (d): log ratio
+    kept_s = _kept_duration(plan)
+    drop_pct = 100.0 * (1.0 - kept_s / max(duration, 0.01))
+    print(
+        f"[PLAN-GUARD] ratio: kept={kept_s:.1f}s / {duration:.1f}s "
+        f"({100-drop_pct:.0f}% kept, {drop_pct:.0f}% dropped)",
+        flush=True,
+    )
+
+    # Guard (c): retry if > 40% dropped
+    if drop_pct > 40.0 and duration > 0:
+        print(f"[PLAN-GUARD] {drop_pct:.0f}% dropped > 40% threshold — retrying", flush=True)
+        correction = (
+            f"Your previous plan kept only {kept_s:.1f}s of {duration:.1f}s "
+            f"({100-drop_pct:.0f}% kept, {drop_pct:.0f}% dropped). "
+            "This is too aggressive — it destroys narrative content. "
+            "REQUIREMENT: keep_segments must cover at least 60% of source duration. "
+            "Only drop segments with score ≤ 3. "
+            "Any segment with score ≥ 7 MUST be in keep_segments. "
+            "Do NOT emit a drop_segments key — keep_segments is the only output list. "
+            "Return a complete new JSON plan."
+        )
+        plan = _call_api(correction)
+        _guard_plan_inplace(plan, transcript, duration)
+        kept_s2 = _kept_duration(plan)
+        drop_pct2 = 100.0 * (1.0 - kept_s2 / max(duration, 0.01))
+        print(
+            f"[PLAN-GUARD] retry: kept={kept_s2:.1f}s dropped={drop_pct2:.0f}%",
+            flush=True,
+        )
+        if drop_pct2 > 40.0:
+            print("[PLAN-GUARD] retry still > 40% — applying fallback (keep all)", flush=True)
+            plan = _fallback_keep_all(plan, transcript)
+
     return EditPlan(raw=plan)
 
 
@@ -845,6 +899,40 @@ def _repair_json(raw: str) -> str:
     return "".join(out)
 
 
+def _detect_duplicate_keys(pairs: list) -> dict:
+    """object_pairs_hook for json.loads — logs and last-wins on duplicate keys."""
+    seen: set[str] = set()
+    result: dict = {}
+    for k, v in pairs:
+        if k in seen:
+            print(f"[PLAN-JSON] STRUCTURAL duplicate key '{k}' — last value wins", flush=True)
+        seen.add(k)
+        result[k] = v
+    return result
+
+
+def _log_plan_shape(plan: dict) -> None:
+    """Log top-level keys + array lengths for post-parse diagnosis."""
+    shape = {
+        k: (len(v) if isinstance(v, list) else type(v).__name__)
+        for k, v in plan.items()
+    }
+    print(f"[PLAN-JSON] shape: {shape}", flush=True)
+    if "drop_segments" in plan:
+        drop = plan["drop_segments"]
+        if isinstance(drop, list):
+            scores = [s.get("score", "?") for s in drop if isinstance(s, dict)]
+            reasons = [
+                s.get("reason") or s.get("retention_note", "")
+                for s in drop if isinstance(s, dict)
+            ]
+            print(
+                f"[PLAN-JSON] WARNING: Claude emitted drop_segments "
+                f"({len(drop)} items, scores={scores}, reasons={reasons})",
+                flush=True,
+            )
+
+
 def _extract_json(text: str) -> dict[str, Any]:
     text = text.strip()
     if text.startswith("```"):
@@ -856,9 +944,116 @@ def _extract_json(text: str) -> dict[str, Any]:
     end = text.rfind("}")
     if start == -1 or end == -1:
         raise ValueError(f"Agent did not return JSON. Got:\n{text[:500]}")
-    raw = text[start : end + 1]
+    raw = text[start: end + 1]
+    print(
+        f"[PLAN-JSON] raw JSON: {len(raw)} chars, {raw.count(chr(10))} lines",
+        flush=True,
+    )
     try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
+        parsed = json.loads(raw, object_pairs_hook=_detect_duplicate_keys)
+        _log_plan_shape(parsed)
+        return parsed
+    except json.JSONDecodeError as first_err:
+        print(
+            f"[PLAN-JSON] parse error ({first_err}) — invoking _repair_json",
+            flush=True,
+        )
+        _raw_counts = (raw.count("{"), raw.count("["), raw.count("]"), raw.count("}"))
         repaired = _repair_json(raw)
-        return json.loads(repaired)
+        _rep_counts = (repaired.count("{"), repaired.count("["), repaired.count("]"), repaired.count("}"))
+        if _raw_counts != _rep_counts:
+            print(
+                f"[PLAN-JSON] STRUCTURAL repair: {{: {_raw_counts[0]}→{_rep_counts[0]}, "
+                f"[: {_raw_counts[1]}→{_rep_counts[1]}, "
+                f"]: {_raw_counts[2]}→{_rep_counts[2]}, "
+                f"}}: {_raw_counts[3]}→{_rep_counts[3]}",
+                flush=True,
+            )
+        else:
+            print("[PLAN-JSON] repair: syntax-only (brace counts unchanged)", flush=True)
+        parsed = json.loads(repaired, object_pairs_hook=_detect_duplicate_keys)
+        _log_plan_shape(parsed)
+        return parsed
+
+
+def _guard_plan_inplace(plan: dict, transcript: dict, total_duration: float) -> None:
+    """Apply consistency guards to the plan dict in-place.
+
+    (a) Segments in drop_segments with score >= 7 are rescued to keep_segments.
+    (b) The last spoken transcript segment must be in keep_segments.
+    """
+    keep = plan.setdefault("keep_segments", [])
+    drop = plan.get("drop_segments")
+    if not isinstance(drop, list):
+        drop = []
+
+    # Guard (a): rescue high-score segments from drop_segments
+    still_drop = []
+    for seg in drop:
+        if not isinstance(seg, dict):
+            continue
+        try:
+            score = int(seg.get("score", 0))
+        except (ValueError, TypeError):
+            score = 0
+        if score >= 7:
+            reason = seg.get("reason") or seg.get("retention_note", "")
+            print(
+                f"[PLAN-GUARD] rescued segment (score {score}): "
+                f"{seg.get('start')}-{seg.get('end')}s "
+                f"reason={reason!r}",
+                flush=True,
+            )
+            keep.append(seg)
+        else:
+            still_drop.append(seg)
+    if drop != still_drop:
+        plan["drop_segments"] = still_drop
+
+    # Guard (b): last spoken segment must not be dropped
+    src_segs = transcript.get("segments", [])
+    if src_segs and keep:
+        last_src = src_segs[-1]
+        last_s = float(last_src.get("start", 0))
+        last_e = float(last_src.get("end", total_duration))
+        covered = any(
+            float(k.get("start", 0)) <= last_s + 0.5
+            and float(k.get("end", 0)) >= last_e - 0.5
+            for k in keep
+            if isinstance(k, dict)
+        )
+        if not covered:
+            print(
+                f"[PLAN-GUARD] last spoken segment ({last_s:.2f}-{last_e:.2f}s) "
+                f"not in keep_segments — adding",
+                flush=True,
+            )
+            keep.append({
+                "start": last_s,
+                "end": last_e,
+                "beat": "payoff",
+                "score": 0,
+                "retention_note": "[PLAN-GUARD] rescue: last segment",
+            })
+
+    keep.sort(key=lambda s: float(s.get("start", 0)) if isinstance(s, dict) else 0)
+
+
+def _fallback_keep_all(plan: dict, transcript: dict) -> dict:
+    """Fallback plan: keep every transcript segment, preserving other plan fields."""
+    src_segs = transcript.get("segments", [])
+    keep_all = [
+        {
+            "start": float(s.get("start", 0)),
+            "end": float(s.get("end", 0)),
+            "beat": "story",
+            "score": 0,
+            "retention_note": "[PLAN-GUARD] fallback: kept all",
+        }
+        for s in src_segs
+        if isinstance(s, dict) and float(s.get("end", 0)) > float(s.get("start", 0))
+    ]
+    result = dict(plan)
+    result["keep_segments"] = keep_all
+    print(f"[PLAN-GUARD] fallback applied: {len(keep_all)} segments from transcript", flush=True)
+    return result
