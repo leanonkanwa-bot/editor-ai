@@ -77,12 +77,23 @@ def _segment_captions(
             seg_tags.append((text, first_in_seg))
             first_in_seg = False
 
+    _MIN_ARTIFACT_DUR = 0.030  # Whisper artifacts: duration below this are noise
+
     # Walk remapped_words and seg_tags in lockstep by position
     tag_idx = 0
+    _skipped_short_dur = 0
     for w in remapped_words:
         text = w.text.strip()
         if not text:
             _skipped_empty += 1
+            continue
+
+        # Exclude Whisper artifacts (< 30ms).  Advance tag_idx to keep the
+        # seg_tags lockstep aligned — these words ARE in transcript_segments.
+        if w.end - w.start < _MIN_ARTIFACT_DUR:
+            _skipped_short_dur += 1
+            if tag_idx < len(seg_tags):
+                tag_idx += 1
             continue
 
         # Get seg_start from the parallel tag list
@@ -109,6 +120,7 @@ def _segment_captions(
 
     print(f"[CAPTION AUDIT] remapped_words: {len(remapped_words)} total, "
           f"{len(all_words)} kept, {_skipped_empty} empty, "
+          f"{_skipped_short_dur} short-dur (<{_MIN_ARTIFACT_DUR}s) filtered, "
           f"{len(_clamped_zero_dur)} zero-dur clamped to {_MIN_WORD_DUR}s")
     if _clamped_zero_dur:
         print(f"[CAPTION AUDIT] Clamped zero-dur words: {_clamped_zero_dur[:10]}")

@@ -464,12 +464,16 @@ def run_job(
             _gs_src, _gs_off = _c2s_diag(_gs_c)
             _ge_src, _ge_off = _c2s_diag(_ge_c)
 
-            # Words in source space that land in the gap and are not covered
-            # by any filler drop that passed word-safe validation.
+            # Words in source space that land FULLY inside the gap (start >= gap
+            # start, end <= gap end).  Straddling words are excluded: a word
+            # that starts in the gap but ends inside the next segment would be
+            # captured by two FFmpeg clips → audio duplicate.
             _gap_uncov = [
                 w for w in _source_words
-                if float(w.get("start", 0)) < _ge_src - 0.005
+                if float(w.get("start", 0)) >= _gs_src - 0.005
+                and float(w.get("start", 0)) < _ge_src - 0.005
                 and float(w.get("end", 0)) > _gs_src + 0.005
+                and float(w.get("end", 0)) <= _ge_src + 0.005
                 and (float(w.get("end", 0)) - float(w.get("start", 0))) >= 0.030
                 and not any(
                     d.start < float(w.get("end", 0)) and d.end > float(w.get("start", 0))
@@ -479,11 +483,24 @@ def run_job(
             if not _gap_uncov:
                 continue
 
+            # Clamp: 10ms before the first real word of the next segment
+            # (start >= _ge_src), so no word can belong to two segments.
+            _next_words_src = sorted(
+                [
+                    w for w in _source_words
+                    if float(w.get("start", 0)) >= _ge_src - 0.005
+                    and (float(w.get("end", 0)) - float(w.get("start", 0))) >= 0.030
+                ],
+                key=lambda w: float(w["start"]),
+            )
+            _next_first_src = float(_next_words_src[0]["start"]) if _next_words_src else _ge_src
+            # In a gap there are no virtual drops, so src delta == compressed delta.
+            _next_first_c = _gs_c + (_next_first_src - _gs_src)
+
             _wtxt = " ".join(str(w.get("text", "")).strip() for w in _gap_uncov[:8])
             _last_w_end_src = float(_gap_uncov[-1].get("end", 0)) + 0.150
-            # In a gap (no virtual drops), compressed delta == source delta.
             _new_end_c = _gs_c + (_last_w_end_src - _gs_src)
-            _new_end_c = min(_new_end_c, _ge_c - 0.010)  # don't overlap next segment
+            _new_end_c = min(_new_end_c, _ge_c - 0.010, _next_first_c - 0.010)
             if _new_end_c <= _gs_c + 0.050:
                 continue
 

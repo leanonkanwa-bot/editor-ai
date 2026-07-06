@@ -407,6 +407,24 @@ def pretrim(
             source_intervals.append((si_start, si_end))
         parts.append(part)
         cum += sub_cum
+        print(
+            f"[PRETRIM] seg[{i}] source {s_padded:.3f}-{e_padded:.3f}"
+            f" ({e_padded - s_padded:.3f}s, {len(sub_parts)} sub-part(s))",
+            flush=True,
+        )
+
+    # Overlap check: end of segment N must not exceed start of segment N+1.
+    _all_ints = source_intervals  # flat list of all sub-interval (start, end) tuples
+    for _oi in range(len(_all_ints) - 1):
+        _oi_end = _all_ints[_oi][1]
+        _oi1_start = _all_ints[_oi + 1][0]
+        if _oi_end > _oi1_start + 0.005:
+            print(
+                f"[PRETRIM-OVERLAP] interval[{_oi}].end={_oi_end:.3f}"
+                f" > interval[{_oi + 1}].start={_oi1_start:.3f}"
+                f" (overlap={_oi_end - _oi1_start:.3f}s)",
+                flush=True,
+            )
 
     if not parts:
         raise RuntimeError("No segments produced any clip.")
