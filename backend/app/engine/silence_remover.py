@@ -592,6 +592,74 @@ def _is_comparison_like(preceding_word: str) -> bool:
     return preceding_word.lower().rstrip(".,!?") in comparison_triggers
 
 
+def word_safe_drops(
+    drops: list[DropSegment],
+    source_words: list[dict],
+    pad_s: float = 0.060,
+    min_cut_s: float = 0.050,
+) -> list[DropSegment]:
+    """Shrink or cancel physical drops that overlap real speech words.
+
+    Operates in SOURCE space — both `drops` and `source_words` share the
+    same (original) coordinate system.
+
+    Algorithm per drop [cs, ce]:
+      • No real word (duration ≥ _MIN_WORD_DUR_S) overlaps → keep as-is.
+      • Overlap found → shrink to the true silence between the last word
+        ending before ce and the first word starting after cs, with pad_s
+        margin on each side.
+      • Shrunk width < min_cut_s (or no silence exists) → cancel.
+    """
+    real_words = sorted(
+        [w for w in source_words
+         if (float(w.get("end", 0)) - float(w.get("start", 0))) >= _MIN_WORD_DUR_S],
+        key=lambda w: float(w["start"]),
+    )
+    result: list[DropSegment] = []
+    for drop in drops:
+        cs, ce = drop.start, drop.end
+        overlapping = [
+            w for w in real_words
+            if float(w["start"]) < ce - 0.005 and float(w["end"]) > cs + 0.005
+        ]
+        if not overlapping:
+            result.append(drop)
+            continue
+
+        before = [w for w in real_words if float(w["end"]) <= ce - 0.005]
+        after  = [w for w in real_words if float(w["start"]) >= cs + 0.005]
+        if not before or not after:
+            txt = " ".join(str(w.get("text", "")).strip() for w in overlapping[:5])
+            print(
+                f"[WORD-SAFE] cancelled drop {cs:.2f}-{ce:.2f}"
+                f" (no real silence; overlaps speech: '{txt}')",
+                flush=True,
+            )
+            continue
+
+        new_start = float(before[-1]["end"]) + pad_s
+        new_end   = float(after[0]["start"]) - pad_s
+        if new_end - new_start < min_cut_s:
+            txt = " ".join(str(w.get("text", "")).strip() for w in overlapping[:5])
+            print(
+                f"[WORD-SAFE] cancelled drop {cs:.2f}-{ce:.2f}"
+                f" (silence {new_start:.2f}-{new_end:.2f} too short; overlaps: '{txt}')",
+                flush=True,
+            )
+            continue
+
+        if abs(new_start - cs) > 0.005 or abs(new_end - ce) > 0.005:
+            print(
+                f"[WORD-SAFE] shrunk drop {cs:.2f}-{ce:.2f}"
+                f" → {new_start:.2f}-{new_end:.2f}",
+                flush=True,
+            )
+            result.append(DropSegment(new_start, new_end, drop.reason))
+        else:
+            result.append(drop)
+    return result
+
+
 def _merge_drops(drops: list[DropSegment]) -> list[DropSegment]:
     """Merge overlapping or adjacent drop segments."""
     if not drops:

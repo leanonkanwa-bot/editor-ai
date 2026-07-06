@@ -207,6 +207,17 @@ def _subtract_fillers(
     return parts
 
 
+def _c2s(tc: float, virtual_drops_sorted: list) -> float:
+    """Convert compressed-space timestamp to source-space timestamp."""
+    offset = 0.0
+    for d in virtual_drops_sorted:
+        c_drop_start = d.start - offset
+        if tc <= c_drop_start:
+            break
+        offset += d.end - d.start
+    return tc + offset
+
+
 def pretrim(
     src: Path,
     transcript: dict[str, Any],
@@ -214,6 +225,8 @@ def pretrim(
     work_dir: Path,
     *,
     filler_drops: list[DropSegment] | None = None,
+    virtual_drops: list[DropSegment] | None = None,
+    source_words: list | None = None,
 ) -> tuple[Path, TimingMap]:
     """Cut dead content from source, produce continuous trimmed video.
 
@@ -231,6 +244,25 @@ def pretrim(
     ]
     words = _flat_words(transcript)
     src_duration = float(transcript.get("duration", 0.0)) or _probe_duration(src)
+
+    # Source-coordinate mode: use virtual_drops to convert compressed→source
+    use_source_coords = bool(virtual_drops and source_words)
+    if use_source_coords:
+        _vd_sorted = sorted(virtual_drops, key=lambda d: d.start)
+        source_duration = _probe_duration(src)
+        src_word_timings = [
+            WordTiming(
+                text=w.get("text", "").strip(),
+                start=float(w.get("start", 0)),
+                end=float(w.get("end", 0)),
+            )
+            for w in source_words
+            if w.get("text", "").strip()
+        ]
+    else:
+        _vd_sorted = []
+        source_duration = src_duration
+        src_word_timings = words
 
     # ── DISABLE_CUTS bypass: use full source as one segment ──────────
     if _cfg.disable_cuts:
@@ -258,15 +290,27 @@ def pretrim(
         if e_raw <= s_raw:
             continue
 
-        s = _snap_to_word_boundary(s_raw, words, edge="start")
-        e = _snap_to_word_boundary(e_raw, words, edge="end")
-        e = _extend_for_semantic_completeness(e, transcript, src_duration)
-        if i + 1 < len(keep):
-            next_s = float(keep[i + 1]["start"])
-            e = min(e, max(s + 0.15, next_s - 0.05))
-
-        s_padded = max(0.0, s - pad)
-        e_padded = min(src_duration, e + pad) if src_duration > 0 else e + pad
+        if use_source_coords:
+            # Convert compressed keep_segment boundaries → source space before seeking
+            s_src = _c2s(s_raw, _vd_sorted)
+            e_src = _c2s(e_raw, _vd_sorted)
+            s = _snap_to_word_boundary(s_src, src_word_timings, edge="start")
+            e = _snap_to_word_boundary(e_src, src_word_timings, edge="end")
+            if i + 1 < len(keep):
+                next_s = _c2s(float(keep[i + 1]["start"]), _vd_sorted)
+                e = min(e, max(s + 0.15, next_s - 0.05))
+            s_padded = max(0.0, s - pad)
+            e_padded = min(source_duration, e + pad) if source_duration > 0 else e + pad
+        else:
+            s_src = s_raw
+            s = _snap_to_word_boundary(s_raw, words, edge="start")
+            e = _snap_to_word_boundary(e_raw, words, edge="end")
+            e = _extend_for_semantic_completeness(e, transcript, src_duration)
+            if i + 1 < len(keep):
+                next_s = float(keep[i + 1]["start"])
+                e = min(e, max(s + 0.15, next_s - 0.05))
+            s_padded = max(0.0, s - pad)
+            e_padded = min(src_duration, e + pad) if src_duration > 0 else e + pad
         if e_padded - s_padded < 0.15:
             continue
 
@@ -339,9 +383,10 @@ def pretrim(
         # sub-interval (by its start time), preventing double-counting at
         # sub-interval boundaries. Words whose start falls in a filler gap
         # are naturally skipped (no matching interval).
+        _word_pool = source_words if use_source_coords else all_words
         words_in_range = [
-            w for w in all_words
-            if (s_raw - 0.05) <= float(w["start"]) < (e + 0.05)
+            w for w in _word_pool
+            if (s_src - 0.05) <= float(w["start"]) < (e + 0.05)
         ]
         for w in words_in_range:
             ws = float(w["start"])

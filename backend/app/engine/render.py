@@ -1863,6 +1863,8 @@ def _render_hyperframes(
     subject_position: dict | None = None,
     allow_4k: bool = False,
     filler_drops: list | None = None,
+    virtual_drops: list | None = None,
+    source_words: list | None = None,
 ) -> dict[str, Any]:
     """Full HyperFrames pipeline: pre-trim -> storyboard -> compose -> render."""
     from app.engine.pretrim import pretrim
@@ -1881,7 +1883,12 @@ def _render_hyperframes(
 
     # Stage 1: Pre-trim
     print("[HF] Stage 1: Pre-trimming source video...", flush=True)
-    trimmed, timing_map = pretrim(src, transcript, plan, work_dir, filler_drops=filler_drops)
+    trimmed, timing_map = pretrim(
+        src, transcript, plan, work_dir,
+        filler_drops=filler_drops,
+        virtual_drops=virtual_drops,
+        source_words=source_words,
+    )
     print(f"[HF] Trimmed: {timing_map.output_duration:.1f}s, {len(timing_map.remapped_words)} words", flush=True)
     print(f"[HF] Source intervals: {len(timing_map.source_intervals)}, compressed: {timing_map.compressed_intervals is not None}", flush=True)
     print(f"[TIMING] pretrim: {time.perf_counter()-_t_hf_start:.1f}s", flush=True)
@@ -2224,6 +2231,8 @@ def render(
     style_pack: str = "lean_glass",
     allow_4k: bool = False,
     filler_drops: list | None = None,
+    virtual_drops: list | None = None,
+    source_words: list | None = None,
 ) -> dict[str, Any]:
     work_dir.mkdir(parents=True, exist_ok=True)
 
@@ -2239,6 +2248,8 @@ def render(
                 subject_position=subject_position,
                 allow_4k=allow_4k,
                 filler_drops=filler_drops,
+                virtual_drops=virtual_drops,
+                source_words=source_words,
             )
         except Exception as _hf_err:
             import traceback as _tb

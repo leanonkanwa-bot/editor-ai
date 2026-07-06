@@ -389,6 +389,57 @@ def run_job(
                 flush=True,
             )
 
+        # ── Word-safe: ensure no physical drop overlaps real speech ──────
+        from app.engine.silence_remover import word_safe_drops as _word_safe_drops
+        _source_words = [
+            w for seg in transcript.get("segments", [])
+            for w in seg.get("words", [])
+        ]
+        filler_drops = _word_safe_drops(filler_drops, _source_words)
+
+        # Effective virtual drops (post-guard rebuild) for Phase 2 c2s mapping.
+        _effective_virtual_drops: list = drops_filtered if _rejected_ranges else drops  # type: ignore[name-defined]
+
+        # ── Diagnostic: log planner gaps that overlap speech ─────────────
+        _keep_raw = plan.raw.get("keep_segments", [])
+        _vd_sorted = sorted(_effective_virtual_drops, key=lambda d: d.start)
+
+        def _c2s_diag(tc: float) -> float:
+            offset = 0.0
+            for _d in _vd_sorted:
+                c_ds = _d.start - offset
+                if tc <= c_ds:
+                    break
+                offset += _d.end - _d.start
+            return tc + offset
+
+        _gap_pairs: list[tuple[str, float, float]] = []
+        if _keep_raw:
+            if float(_keep_raw[0].get("start", 0)) > 0.5:
+                _gap_pairs.append(("lead-in", 0.0, float(_keep_raw[0]["start"])))
+            for _gi in range(len(_keep_raw) - 1):
+                _gap_pairs.append((
+                    f"gap-{_gi}",
+                    float(_keep_raw[_gi].get("end", 0)),
+                    float(_keep_raw[_gi + 1].get("start", 0)),
+                ))
+        for _gid, _gs, _ge in _gap_pairs:
+            _gs_src = _c2s_diag(_gs)
+            _ge_src = _c2s_diag(_ge)
+            _gap_words = [
+                w for w in _source_words
+                if float(w.get("start", 0)) < _ge_src - 0.005
+                and float(w.get("end", 0)) > _gs_src + 0.005
+                and (float(w.get("end", 0)) - float(w.get("start", 0))) >= 0.030
+            ]
+            if _gap_words:
+                _wtxt = " ".join(str(w.get("text", "")).strip() for w in _gap_words[:8])
+                print(
+                    f"[PLAN-GAP] {_gid} compressed {_gs:.2f}-{_ge:.2f}"
+                    f" → source {_gs_src:.2f}-{_ge_src:.2f}: overlaps speech '{_wtxt}'",
+                    flush=True,
+                )
+
         # ── Step 7: Hook rewrite (Feature 3) ──────────────────────────────
         _t = time.perf_counter()
         store.update(job_id, status="planning", progress=50,
@@ -499,6 +550,11 @@ def run_job(
                     {"start": d.start, "end": d.end, "reason": d.reason}
                     for d in filler_drops
                 ],
+                "virtual_drops": [
+                    {"start": d.start, "end": d.end, "reason": d.reason}
+                    for d in _effective_virtual_drops
+                ],
+                "source_words": _source_words,
             },
             transcript=transcript_clean,
             subject_pos=subject_pos,
@@ -614,6 +670,11 @@ def run_render_phase(job_id: str, src: Path) -> None:
             _DropSegment(start=d["start"], end=d["end"], reason=d["reason"])
             for d in plan_data.get("filler_drops", [])
         ]
+        virtual_drops = [
+            _DropSegment(start=d["start"], end=d["end"], reason=d["reason"])
+            for d in plan_data.get("virtual_drops", [])
+        ]
+        source_words: list[dict] = plan_data.get("source_words", [])
 
         # Rebuild GraphicSpec objects from stored dicts.
         from app.engine.graphics_engine import GraphicSelector, build_video_context
@@ -673,6 +734,8 @@ def run_render_phase(job_id: str, src: Path) -> None:
             content_type=content_type,
             allow_4k=has_4k_access(params.get("coach_profile")),
             filler_drops=filler_drops,
+            virtual_drops=virtual_drops,
+            source_words=source_words,
         )
 
         print(f"[TIMING] render: {time.perf_counter()-_t:.1f}s", flush=True)
