@@ -250,19 +250,19 @@ def pretrim(
     if use_source_coords:
         _vd_sorted = sorted(virtual_drops, key=lambda d: d.start)
         source_duration = _probe_duration(src)
-        src_word_timings = [
-            WordTiming(
-                text=w.get("text", "").strip(),
-                start=float(w.get("start", 0)),
-                end=float(w.get("end", 0)),
-            )
-            for w in source_words
-            if w.get("text", "").strip()
-        ]
+        # _snap_to_word_boundary expects list[tuple[float, float]] — same as _flat_words()
+        src_word_timings: list[tuple[float, float]] = sorted(
+            [
+                (float(w.get("start", 0)), float(w.get("end", 0)))
+                for w in source_words
+                if w.get("text", "").strip()
+            ],
+            key=lambda t: t[0],
+        )
     else:
         _vd_sorted = []
         source_duration = src_duration
-        src_word_timings = words
+        src_word_timings = words  # already list[tuple[float, float]] from _flat_words()
 
     # ── DISABLE_CUTS bypass: use full source as one segment ──────────
     if _cfg.disable_cuts:
