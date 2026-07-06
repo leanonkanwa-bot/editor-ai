@@ -256,8 +256,9 @@ class RhythmAwareSilenceRemover:
                 if start - prev_end > 0.3:
                     continue
 
-            # Gap before the filler: beginning of recording counts as infinite pre-gap.
-            pre_gap = start - words[i - 1][2] if i > 0 else start
+            # Gap before the filler: beginning of recording counts as infinite pre-gap
+            # (not just word.start — a filler at t=0.05s would give pre_gap=0.05 < guard).
+            pre_gap = start - words[i - 1][2] if i > 0 else float("inf")
 
             # Gap after the filler: end of recording counts as infinite post-gap.
             post_gap = words[i + 1][1] - end if i < len(words) - 1 else float("inf")
