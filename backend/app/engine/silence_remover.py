@@ -58,6 +58,7 @@ def _is_filler(word: str) -> bool:
 _FILLER_PAUSE_GUARD_PRE  = 0.20   # seconds gap required before the filler
 _FILLER_PAUSE_GUARD_POST = 0.15   # seconds gap required after the filler
 _FILLER_CUT_PAD          = 0.040  # seconds padding for Whisper ±50ms timing imprecision
+_MIN_WORD_DUR_S          = 0.030  # words shorter than this are Whisper artifacts, not speech
 
 _PRINCIPLE_PAYOFF = re.compile(
     r"\b(the truth is|the key is|the secret is|the reason is|the point is|"
@@ -132,8 +133,24 @@ class RhythmAwareSilenceRemover:
                 except (KeyError, TypeError, ValueError):
                     continue
 
+        # Drop Whisper zero-duration artefacts before any detection.
+        # These arise when Whisper transcribes non-speech noise or reads
+        # instructions aloud (e.g. "pause courte") — the token gets a
+        # timestamp but no actual duration. They create phantom bigrams that
+        # fool the false-start and stutter detectors.
+        _n_before = len(words)
+        words = [(t, s, e) for t, s, e in words if e - s >= _MIN_WORD_DUR_S]
+        _n_artifacts = _n_before - len(words)
+        if _n_artifacts:
+            print(
+                f"[WHISPER-ARTIFACT] ignored {_n_artifacts} zero-duration words "
+                f"(duration < {_MIN_WORD_DUR_S}s)",
+                flush=True,
+            )
+
         print(
-            f"[SILENCE] process() vb590f87 — {len(words)} words, "
+            f"[SILENCE] process() vb590f87 — {len(words)} words "
+            f"({_n_before} raw, {_n_artifacts} artifacts removed), "
             f"{len(segments)} segments",
             flush=True,
         )

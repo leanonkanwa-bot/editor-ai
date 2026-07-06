@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 import time
 import traceback
@@ -63,6 +64,91 @@ def verify_caption_sync(remapped_words: list, edited_duration: float) -> list:
     if issues:
         log.warning("caption sync issues (%d): %s", len(issues), issues[:10])
     return valid
+
+
+def _guard_drops_against_key_content(
+    drops: list,
+    plan,
+    transcript: dict,
+) -> list:
+    """Remove any physical drop that would excise words belonging to key_lines.
+
+    Operates in SOURCE timestamp space: both `drops` (from silence_remover)
+    and `transcript` (original, pre-virtual-drop) share the same coordinate
+    system, so the overlap check is exact.
+
+    Only meaningful lexical words (length >= 3, not pure function words) are
+    used as anchors to avoid over-protecting common short tokens.
+    """
+    key_lines: list[str] = plan.key_lines or []
+    if not key_lines:
+        return drops
+
+    _FUNCTION_WORDS = frozenset({
+        "le", "la", "les", "de", "du", "des", "et", "est", "il", "elle",
+        "on", "un", "une", "ce", "se", "sa", "son", "leur", "pas", "ne",
+        "en", "au", "aux", "je", "tu", "nous", "vous", "ils", "elles",
+        "the", "a", "an", "of", "in", "is", "it", "to", "for", "and", "or",
+    })
+
+    def _norm(s: str) -> str:
+        return re.sub(r"[^a-z0-9àâäéèêëîïôùûüç]", "", s.lower())
+
+    # Build set of meaningful normalized words that appear in any key_line.
+    protected_norms: set[str] = set()
+    for line in key_lines:
+        for token in line.split():
+            n = _norm(token)
+            if len(n) >= 3 and n not in _FUNCTION_WORDS:
+                protected_norms.add(n)
+
+    if not protected_norms:
+        return drops
+
+    # Find source-space timestamps of real words that match protected_norms.
+    # "Real" = duration >= _MIN_WORD_DUR_S (same threshold as artifact filter).
+    from app.engine.silence_remover import _MIN_WORD_DUR_S
+    protected_intervals: list[tuple[float, float, str]] = []
+    for seg in transcript.get("segments", []):
+        for w in seg.get("words", []):
+            try:
+                ws = float(w["start"])
+                we = float(w["end"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if we - ws < _MIN_WORD_DUR_S:
+                continue
+            n = _norm(str(w.get("text", "")).strip())
+            if n in protected_norms:
+                protected_intervals.append((ws, we, str(w.get("text", "")).strip()))
+
+    if not protected_intervals:
+        return drops
+
+    # Reject any drop whose interval overlaps a protected word interval.
+    filtered: list = []
+    for drop in drops:
+        offenders = [
+            wtext for ws, we, wtext in protected_intervals
+            if drop.start < we and drop.end > ws
+        ]
+        if offenders:
+            print(
+                f"[CUT-GUARD] rejected {drop.reason} ({drop.start:.2f}-{drop.end:.2f}s): "
+                f"would remove key content {offenders}",
+                flush=True,
+            )
+        else:
+            filtered.append(drop)
+
+    n_rejected = len(drops) - len(filtered)
+    if n_rejected:
+        print(
+            f"[CUT-GUARD] {n_rejected} drop(s) rejected — key_line content protection "
+            f"(protected words: {sorted(protected_norms)[:8]}{'…' if len(protected_norms) > 8 else ''})",
+            flush=True,
+        )
+    return filtered
 
 
 def run_job(
@@ -260,6 +346,9 @@ def run_job(
             editing_style=editing_style,
         )
         print(f"[TIMING] planning: {time.perf_counter()-_t:.1f}s", flush=True)
+
+        # ── Semantic guard: reject drops that overlap key_line words ───────
+        filler_drops = _guard_drops_against_key_content(filler_drops, plan, transcript)
 
         # ── Step 7: Hook rewrite (Feature 3) ──────────────────────────────
         _t = time.perf_counter()
