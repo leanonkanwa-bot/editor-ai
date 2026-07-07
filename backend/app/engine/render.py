@@ -1672,7 +1672,7 @@ _BOUNDARY_COMMON_WORDS = {
 }
 
 
-def _fix_word_boundaries(segments: list[dict], all_words: list[dict]) -> list[dict]:
+def _fix_word_boundaries(segments: list[dict], all_words: list[dict], *, fail_loud: bool = False) -> list[dict]:
     """Trim a segment's end when it ends with a duplicate of how the next
     segment starts.
 
@@ -1712,7 +1712,13 @@ def _fix_word_boundaries(segments: list[dict], all_words: list[dict]) -> list[di
             and last_word_a == first_word_b
             and last_word_a not in _BOUNDARY_COMMON_WORDS
         ):
-            print(f"[BOUNDARY FIX] Single duplicate '{last_word_a}' seg {i}/{i+1}")
+            word = last_word_a
+            if fail_loud:
+                raise RuntimeError(
+                    f"[BOUNDARY FIX] BUG: single duplicate '{word}' at boundary seg {i}/{i+1}"
+                    f" — word-snap should have prevented this"
+                )
+            print(f"[BOUNDARY FIX] Single duplicate '{word}' seg {i}/{i+1}")
             if len(words_a) >= 2:
                 segments[i] = {**seg_a, "end": float(words_a[-2]["end"]) + 0.05}
             _n_fixed += 1
@@ -1723,6 +1729,11 @@ def _fix_word_boundaries(segments: list[dict], all_words: list[dict]) -> list[di
             last_two = " ".join(str(w["text"]).strip().lower().rstrip(".,!?;:") for w in words_a[-2:])
             first_two = " ".join(str(w["text"]).strip().lower().rstrip(".,!?;:") for w in words_b[:2])
             if last_two == first_two and len(last_two) > 3:
+                if fail_loud:
+                    raise RuntimeError(
+                        f"[BOUNDARY FIX] BUG: single duplicate '{last_two}' at boundary seg {i}/{i+1}"
+                        f" — word-snap should have prevented this"
+                    )
                 print(f"[BOUNDARY FIX] Two-word duplicate '{last_two}' seg {i}/{i+1}")
                 if len(words_a) >= 3:
                     segments[i] = {**seg_a, "end": float(words_a[-3]["end"]) + 0.05}

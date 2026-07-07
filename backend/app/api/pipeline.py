@@ -397,6 +397,33 @@ def run_job(
         ]
         filler_drops = _word_safe_drops(filler_drops, _source_words)
 
+        # ── Acoustic-stutter detection (logging only) ─────────────────────
+        _STUTTER_MAX_LEN = 4    # token chars — short function words only
+        _STUTTER_MIN_DUR = 0.55 # seconds — anomalously long for short tokens
+        _STUTTER_GAP_MIN = 0.08 # seconds — must be adjacent to a gap
+
+        for _si, _sw in enumerate(_source_words):
+            _sw_text = str(_sw.get("text", "")).strip().lower().rstrip(".,!?;:'\"")
+            if not _sw_text or len(_sw_text) > _STUTTER_MAX_LEN:
+                continue
+            _sw_dur = float(_sw.get("end", 0)) - float(_sw.get("start", 0))
+            if _sw_dur <= _STUTTER_MIN_DUR:
+                continue
+            _prev_end   = float(_source_words[_si - 1].get("end", 0)) if _si > 0 else 0.0
+            _next_start = float(_source_words[_si + 1].get("start", 0)) if _si < len(_source_words) - 1 else float("inf")
+            _gap_b = float(_sw.get("start", 0)) - _prev_end
+            _gap_a = _next_start - float(_sw.get("end", 0))
+            if _gap_b > _STUTTER_GAP_MIN or _gap_a > _STUTTER_GAP_MIN:
+                _ctx_b = str(_source_words[_si - 1].get("text", "")).strip() if _si > 0 else ""
+                _ctx_a = str(_source_words[_si + 1].get("text", "")).strip() if _si < len(_source_words) - 1 else ""
+                print(
+                    f"[ACOUSTIC-STUTTER] '{_sw_text}' dur={_sw_dur:.2f}s"
+                    f" at {float(_sw.get('start', 0)):.2f}s"
+                    f" | ctx: '{_ctx_b}' … '{_ctx_a}'"
+                    f" | gap_before={_gap_b:.2f}s gap_after={_gap_a:.2f}s",
+                    flush=True,
+                )
+
         # Effective virtual drops (post-guard rebuild) for Phase 2 c2s mapping.
         _effective_virtual_drops: list = drops_filtered if _rejected_ranges else drops  # type: ignore[name-defined]
 

@@ -126,6 +126,9 @@ def _smart_pause_cuts(
     Mirrors the virtual-drop logic in RhythmAwareSilenceRemover.process().
     """
     cuts: list[tuple[float, float]] = []
+    _n_below = 0
+    _n_eos_prot = 0
+    _n_final_prot = 0
 
     # Lead-in: if the first word starts after _LEAD_IN_THRESHOLD seconds in the
     # trimmed output, shorten the opening silence to _LEAD_IN_KEEP_S seconds.
@@ -146,14 +149,17 @@ def _smart_pause_cuts(
         gap_dur   = gap_end - gap_start
 
         if gap_dur < _PAUSE_TOUCH_THRESHOLD:
+            _n_below += 1
             continue
         if i == len(words) - 2:              # final gap before last word
+            _n_final_prot += 1
             continue
 
         is_sentence_end = words[i].text.rstrip().endswith((".", "?", "!"))
 
         if is_sentence_end:
             if gap_dur <= _PAUSE_LONG_THRESHOLD:
+                _n_eos_prot += 1
                 continue                          # 0.70–2.00s EOS: untouched
             keep_s = _PAUSE_EOL_LONG_KEEP         # >2.00s EOS: shorten to 0.80s
         else:
@@ -173,11 +179,14 @@ def _smart_pause_cuts(
                 flush=True,
             )
 
-    if not cuts:
-        print("[PRETRIM] pause cuts: none (all gaps below threshold or protected)", flush=True)
-    else:
-        total_cut = sum(e - s for s, e in cuts)
-        print(f"[PRETRIM] pause cuts: {len(cuts)} interval(s), {total_cut:.2f}s total", flush=True)
+    total_cut = sum(e - s for s, e in cuts) if cuts else 0.0
+    print(
+        f"[PRETRIM] smart-pause-cuts: {len(cuts)} cut(s) "
+        f"({total_cut if cuts else 0:.2f}s) | "
+        f"below-thresh={_n_below} eos-protected={_n_eos_prot} "
+        f"final-protected={_n_final_prot}",
+        flush=True,
+    )
 
     return cuts
 
@@ -239,6 +248,58 @@ def _c2s(tc: float, virtual_drops_sorted: list) -> float:
     return tc + offset
 
 
+def _output_verify(
+    video_path: Path,
+    expected_words: list,  # list[WordTiming]
+    work_dir: Path,
+) -> None:
+    """Re-transcribe video_path and compare to expected_words. Controlled by VERIFY_OUTPUT env var."""
+    import os, re, difflib
+    if os.environ.get("VERIFY_OUTPUT", "true").lower() in ("false", "0", "no"):
+        return
+
+    def _norm(t: str) -> str:
+        return re.sub(r"[^\w]", "", t.lower(), flags=re.UNICODE)
+
+    try:
+        from app.engine.transcribe import transcribe, unload_model
+        result = transcribe(video_path)
+        unload_model()
+
+        exp_toks = [_norm(w.text) for w in expected_words if _norm(w.text)]
+        act_toks = [
+            _norm(w.text)
+            for seg in result.segments
+            for w in seg.words
+            if _norm(w.text if isinstance(w.text, str) else getattr(w, "text", ""))
+        ]
+
+        matcher = difflib.SequenceMatcher(None, exp_toks, act_toks, autojunk=False)
+        missing, extra = [], []
+        for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+            if tag == "delete":
+                missing.extend(exp_toks[i1:i2])
+            elif tag == "insert":
+                extra.extend(act_toks[j1:j2])
+            elif tag == "replace":
+                missing.extend(exp_toks[i1:i2])
+                extra.extend(act_toks[j1:j2])
+
+        ratio = matcher.ratio()
+        if not missing and not extra:
+            print(f"[OUTPUT-VERIFY] PASS — {len(exp_toks)} words | ratio={ratio:.3f}", flush=True)
+        else:
+            sev = "CRITICAL" if (len(missing) > 3 or len(extra) > 3) else "WARNING"
+            print(
+                f"[OUTPUT-VERIFY] {sev} — ratio={ratio:.3f}"
+                f" | missing({len(missing)}): {missing[:10]}"
+                f" | extra({len(extra)}): {extra[:10]}",
+                flush=True,
+            )
+    except Exception as _e:
+        print(f"[OUTPUT-VERIFY] ERROR — {_e}", flush=True)
+
+
 def pretrim(
     src: Path,
     transcript: dict[str, Any],
@@ -296,7 +357,7 @@ def pretrim(
     ]
     keep = _dedup_segments(keep)
     keep = _merge_short_segments(keep)
-    keep = _fix_word_boundaries(keep, all_words)
+    keep = _fix_word_boundaries(keep, all_words, fail_loud=True)
     keep = _merge_short_segments(keep)
 
     # ── Merge keep_segments that are contiguous (end[i] == start[i+1]).
@@ -412,6 +473,8 @@ def pretrim(
                 f" > seg[{_j}].s={_s_j:.3f} — boundary word straddles"
                 f" the clip gap; check GAP-RESCUE containment filter"
             )
+
+    _planned_dur = sum(ep - sp for _, _, _, sp, ep in _planned)
 
     # ── Pass 2: FFmpeg cuts and word remapping ───────────────────────
     parts: list[Path] = []
@@ -553,6 +616,30 @@ def pretrim(
             str(concat_path),
         ])
         concat_list.unlink(missing_ok=True)
+
+    _concat_actual = _probe_duration(concat_path)
+    _source_dur_ref = source_duration if use_source_coords else src_duration
+    _filler_cut = _planned_dur - cum
+    _gap_excl    = _source_dur_ref - _planned_dur
+    _ecart       = _concat_actual - cum
+    print(
+        f"[PRETRIM-AUDIT] source={_source_dur_ref:.3f}s"
+        f" | kept(pad)={_planned_dur:.3f}s | gap(excl)={_gap_excl:.3f}s",
+        flush=True,
+    )
+    print(
+        f"[PRETRIM-AUDIT] filler-cut={_filler_cut:.3f}s"
+        f" | net-content={cum:.3f}s | concat-actual={_concat_actual:.3f}s"
+        f" | écart={_ecart:+.3f}s",
+        flush=True,
+    )
+    if abs(_ecart) > 0.3:
+        raise RuntimeError(
+            f"[PRETRIM-AUDIT] BUDGET ERROR: écart={_ecart:+.3f}s > 0.3s"
+            f" (net={cum:.3f}s actual={_concat_actual:.3f}s)"
+        )
+
+    _output_verify(concat_path, remapped_words, work_dir)
 
     # Clean up part files
     for p in parts:
