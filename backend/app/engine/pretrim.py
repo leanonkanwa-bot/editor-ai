@@ -207,6 +207,27 @@ def _subtract_fillers(
     return parts
 
 
+def _snap_boundary_out_of_word(
+    t: float,
+    word_timings: list[tuple[float, float]],
+    gap_s: float = 0.010,
+    min_dur_s: float = 0.030,
+) -> tuple[float, tuple[float, float] | None]:
+    """Push t to a clean word boundary if it falls inside a word.
+
+    Returns (adjusted_t, (ws, we)) or (t, None) if already clean.
+    The word goes entirely to the side that already contains the majority:
+    - majority before t → t moves to we + gap_s  (word stays in left clip)
+    - majority after  t → t moves to ws - gap_s  (word goes to right clip)
+    """
+    for ws, we in word_timings:
+        if we - ws < min_dur_s:
+            continue
+        if ws < t < we:
+            return (we + gap_s if t - ws >= we - t else ws - gap_s), (ws, we)
+    return t, None
+
+
 def _c2s(tc: float, virtual_drops_sorted: list) -> float:
     """Convert compressed-space timestamp to source-space timestamp."""
     offset = 0.0
@@ -350,6 +371,48 @@ def pretrim(
                 flush=True,
             )
 
+    # ── Word-aware boundary snap: no clip boundary may fall inside a word ──
+    # Applied after ALL other adjustments. Each (s_padded, e_padded) boundary
+    # is checked against source-space word timings; if it lands mid-word the
+    # word goes entirely to whichever clip already holds the majority.
+    _wt = src_word_timings if use_source_coords else words
+    for _pi in range(len(_planned)):
+        _i, _s_src_i, _e_i, _s_i, _e_i_pad = _planned[_pi]
+        _changed = False
+
+        _new_s, _word_s = _snap_boundary_out_of_word(_s_i, _wt)
+        if _word_s:
+            _new_s = max(0.0, _new_s)
+            print(
+                f"[PRETRIM] word-snap s[{_i}]: {_s_i:.3f}→{_new_s:.3f}"
+                f" (word {_word_s[0]:.3f}-{_word_s[1]:.3f})",
+                flush=True,
+            )
+            _s_i, _changed = _new_s, True
+
+        _new_e, _word_e = _snap_boundary_out_of_word(_e_i_pad, _wt)
+        if _word_e:
+            print(
+                f"[PRETRIM] word-snap e[{_i}]: {_e_i_pad:.3f}→{_new_e:.3f}"
+                f" (word {_word_e[0]:.3f}-{_word_e[1]:.3f})",
+                flush=True,
+            )
+            _e_i_pad, _changed = _new_e, True
+
+        if _changed:
+            _planned[_pi] = (_i, _s_src_i, _e_i, _s_i, _e_i_pad)
+
+    # Assert: word-snap must not have introduced new overlaps.
+    for _pi in range(len(_planned) - 1):
+        _i, _, _, _s_i, _e_i_pad = _planned[_pi]
+        _j, _, _, _s_j, _ = _planned[_pi + 1]
+        if _e_i_pad > _s_j - 0.010:
+            raise RuntimeError(
+                f"[PRETRIM] word-snap overlap: seg[{_i}].e={_e_i_pad:.3f}"
+                f" > seg[{_j}].s={_s_j:.3f} — boundary word straddles"
+                f" the clip gap; check GAP-RESCUE containment filter"
+            )
+
     # ── Pass 2: FFmpeg cuts and word remapping ───────────────────────
     parts: list[Path] = []
     source_intervals: list[tuple[float, float]] = []
@@ -429,7 +492,7 @@ def pretrim(
         _word_pool = source_words if use_source_coords else all_words
         words_in_range = [
             w for w in _word_pool
-            if (s_src - 0.05) <= float(w["start"]) < (e + 0.05)
+            if (s_padded - 0.05) <= float(w["start"]) < (e + 0.05)
         ]
         for w in words_in_range:
             ws = float(w["start"])

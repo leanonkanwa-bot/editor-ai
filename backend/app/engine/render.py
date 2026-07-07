@@ -1692,6 +1692,7 @@ def _fix_word_boundaries(segments: list[dict], all_words: list[dict]) -> list[di
          of an actual repeat even when the single-word check doesn't fire
          (e.g. last word of N is "wanted" but first word of N+1 is "I").
     """
+    _n_fixed = 0
     for i in range(len(segments) - 1):
         seg_a = segments[i]
         seg_b = segments[i + 1]
@@ -1714,6 +1715,7 @@ def _fix_word_boundaries(segments: list[dict], all_words: list[dict]) -> list[di
             print(f"[BOUNDARY FIX] Single duplicate '{last_word_a}' seg {i}/{i+1}")
             if len(words_a) >= 2:
                 segments[i] = {**seg_a, "end": float(words_a[-2]["end"]) + 0.05}
+            _n_fixed += 1
             continue
 
         # ── Two-word duplicate check ──────────────────────────────────────
@@ -1724,7 +1726,10 @@ def _fix_word_boundaries(segments: list[dict], all_words: list[dict]) -> list[di
                 print(f"[BOUNDARY FIX] Two-word duplicate '{last_two}' seg {i}/{i+1}")
                 if len(words_a) >= 3:
                     segments[i] = {**seg_a, "end": float(words_a[-3]["end"]) + 0.05}
+                _n_fixed += 1
 
+    if _n_fixed == 0:
+        print("[BOUNDARY FIX] ok — no duplicates", flush=True)
     return segments
 
 
