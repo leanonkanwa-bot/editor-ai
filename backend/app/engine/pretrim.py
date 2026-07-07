@@ -221,19 +221,42 @@ def _snap_boundary_out_of_word(
     word_timings: list[tuple[float, float]],
     gap_s: float = 0.010,
     min_dur_s: float = 0.030,
+    adjacent_gap_tol: float = 0.020,
 ) -> tuple[float, tuple[float, float] | None]:
     """Push t to a clean word boundary if it falls inside a word.
 
-    Returns (adjusted_t, (ws, we)) or (t, None) if already clean.
-    The word goes entirely to the side that already contains the majority:
-    - majority before t → t moves to we + gap_s  (word stays in left clip)
-    - majority after  t → t moves to ws - gap_s  (word goes to right clip)
+    Adjacent-word pre-check: if t sits in the gap between two consecutive words
+    whose inter-word gap is < adjacent_gap_tol, the boundary is already valid at
+    the contact point — return (t, None) immediately, no snap.
+
+    Normal snap: if t is strictly inside a word, move to the side determined by
+    majority. When the adjacent word on that side is within adjacent_gap_tol,
+    snap to the exact contact point (no extra gap_s) to prevent oscillation.
     """
-    for ws, we in word_timings:
-        if we - ws < min_dur_s:
+    valid = [(ws, we) for ws, we in word_timings if we - ws >= min_dur_s]
+
+    # Pre-check: t at or between two adjacent words → already a valid boundary
+    for idx in range(len(valid) - 1):
+        we_a = valid[idx][1]
+        ws_b = valid[idx + 1][0]
+        if ws_b - we_a < adjacent_gap_tol and we_a <= t <= ws_b:
+            return t, None
+
+    # Normal snap: only fires if t is strictly inside a word
+    for idx, (ws, we) in enumerate(valid):
+        if not (ws < t < we):
             continue
-        if ws < t < we:
-            return (we + gap_s if t - ws >= we - t else ws - gap_s), (ws, we)
+        majority_before = (t - ws >= we - t)
+        if majority_before:
+            # Word goes to left clip; next word adjacent → snap to contact point
+            if idx + 1 < len(valid) and valid[idx + 1][0] - we < adjacent_gap_tol:
+                return we, (ws, we)
+            return we + gap_s, (ws, we)
+        else:
+            # Word goes to right clip; prev word adjacent → snap to contact point
+            if idx > 0 and ws - valid[idx - 1][1] < adjacent_gap_tol:
+                return valid[idx - 1][1], (ws, we)
+            return ws - gap_s, (ws, we)
     return t, None
 
 
@@ -357,8 +380,6 @@ def pretrim(
     ]
     keep = _dedup_segments(keep)
     keep = _merge_short_segments(keep)
-    keep = _fix_word_boundaries(keep, all_words)
-    keep = _merge_short_segments(keep)
 
     # ── Merge keep_segments that are contiguous (end[i] == start[i+1]).
     # A cut into the middle of continuous speech produces an audible glitch.
@@ -425,6 +446,13 @@ def pretrim(
     _MAX_STAB = 5
     _resolved: set[int] = set()  # pairs resolved by fallback (0-gap allowed)
 
+    # Snapshot original padded boundaries before the loop touches them.
+    # Used by the gap-preserving fallback to restore s_padded for seg[j] when
+    # the clamp has incorrectly pulled it backward across a planned source gap.
+    _planned_padded_orig: list[tuple[float, float]] = [
+        (sp, ep) for _, _, _, sp, ep in _planned
+    ]
+
     # Diagnostic: dump initial boundary state for every adjacent pair
     for _pi in range(len(_planned) - 1):
         _i, _, _, _s_i, _e_i_pad = _planned[_pi]
@@ -489,8 +517,7 @@ def pretrim(
                 print(f"[PRETRIM] stabilized after {_pass + 1} pass(es)", flush=True)
             break
     else:
-        # No fixed point: force-assign — word wins over midpoint.
-        # Boundary is placed at the exact inter-word gap; edge-adjacent clips allowed.
+        # No fixed point: force-assign — word always wins over midpoint.
         print("[PRETRIM] stabilize: no fixed point — force-assigning words", flush=True)
         for _pi in range(len(_planned) - 1):
             _i, _s_src_i, _e_i, _s_i, _e_i_pad = _planned[_pi]
@@ -501,6 +528,24 @@ def pretrim(
             _s_clean = not any(ws < _s_j < we for ws, we in _wt if we - ws >= 0.030)
             if _clamp_ok and _e_clean and _s_clean:
                 continue
+            # If there is a real source-space gap between the two segments (> 300ms),
+            # the clamp has illegitimately pulled s[j] backward across the gap.
+            # Restore s[j] to its original padded start and trim e[i] to just past
+            # its last word. The gap stays excluded; do NOT add to _resolved.
+            _src_gap = _s_src_j - _e_i
+            if _src_gap > 0.300:
+                _e_new = _e_i + 0.010
+                _s_new = _planned_padded_orig[_pi + 1][0]
+                if _e_new <= _s_new - 0.010:
+                    _planned[_pi]     = (_i, _s_src_i, _e_i, _s_i, _e_new)
+                    _planned[_pi + 1] = (_j, _s_src_j, _e_j, _s_new, _e_j_pad)
+                    print(
+                        f"[PRETRIM] stabilize FALLBACK seg[{_i}]/seg[{_j}]: GAP-PRESERVED"
+                        f" e={_e_new:.3f} s={_s_new:.3f} (src gap={_src_gap:.3f}s)",
+                        flush=True,
+                    )
+                    continue  # 10ms gap required in final assert; don't add to _resolved
+            # Contiguous segments: place boundary at exact inter-word contact point.
             _bd_pt: float | None = None
             for ws, we in _wt:
                 if we - ws < 0.030:
@@ -519,7 +564,7 @@ def pretrim(
             _resolved.add(_pi)
             print(
                 f"[PRETRIM] stabilize FALLBACK seg[{_i}]/seg[{_j}]:"
-                f" e=s={_gap_pt:.3f} (edge-adjacent — word wins)",
+                f" e=s={_gap_pt:.3f} (contiguous — word wins)",
                 flush=True,
             )
 
