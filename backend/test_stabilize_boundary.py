@@ -139,6 +139,33 @@ def _simulate_stabilization(
             planned[pi]     = (i, s_src_i, e_i, s_i, e_pad_i)
             planned[pi + 1] = (j, s_src_j, e_j, s_j, e_pad_j)
 
+    # ④ Universal boundary snap: snap ALL boundaries (not just conflicting pairs)
+    _univ_changed = False
+    for pi in range(len(planned)):
+        i, s_src, e_i, s_i, e_pad_i = planned[pi]
+        updated = False
+        new_s, word_s = _snap_boundary_out_of_word(s_i, wt)
+        if word_s:
+            s_i = max(0.0, new_s)
+            updated = True
+        new_e, word_e = _snap_boundary_out_of_word(e_pad_i, wt)
+        if word_e:
+            e_pad_i = new_e
+            updated = True
+        if updated:
+            planned[pi] = (i, s_src, e_i, s_i, e_pad_i)
+            _univ_changed = True
+
+    # Re-verify pairwise after universal snap
+    if _univ_changed:
+        for pi in range(len(planned) - 1):
+            i, s_src_i, e_i, s_i, e_pad_i = planned[pi]
+            j, s_src_j, e_j, s_j, e_pad_j = planned[pi + 1]
+            if e_pad_i > s_j - gap_s and pi not in resolved:
+                mid = (e_pad_i + s_j) / 2.0
+                planned[pi]     = (i, s_src_i, e_i, s_i, mid - 0.005)
+                planned[pi + 1] = (j, s_src_j, e_j, mid + 0.005, e_pad_j)
+
     return planned, resolved, gap_preserved
 
 
@@ -430,6 +457,38 @@ def test_gap_fallback_snaps_restored_s():
     print("PASS  test_gap_fallback_snaps_restored_s")
 
 
+def test_universal_snap_non_conflicting():
+    """
+    Fix 1 (universal snap): a boundary that lands inside a word on a pair
+    with a large gap (no pairwise conflict) must still be snapped.
+
+    's[5]=27.640' scenario: seg[4].e_pad and seg[5].s are far apart (gap +1.38s),
+    so the stabilization loop never clamps them — but s[5]=27.640 is inside
+    'retiens' [27.40, 27.80]. Universal snap must move it to 27.39 (ws-gap_s).
+    """
+    wt = [
+        (26.00, 26.50),   # last word of seg[4]
+        (27.40, 27.80),   # 'retiens' — s[5] lands inside this
+        (28.10, 28.60),   # first word of seg[5]
+    ]
+    # gap between seg[4] end-pad and seg[5] start = 27.640 - 26.620 = +1.02s
+    # → no pairwise conflict, snap loop never fires on seg[5].s during stab
+    planned = [
+        (4, 25.00, 26.50, 25.20, 26.62),   # e_pad = 26.62 (clean)
+        (5, 27.50, 28.60, 27.64, 28.72),   # s = 27.64 (INSIDE 'retiens')
+    ]
+    result, resolved, gap_pres = _simulate_stabilization(list(planned), wt)
+    _assert_invariants(result, wt, resolved, gap_pres)
+
+    s_final = result[1][3]
+    print(f"      universal-snap: s_final={s_final:.3f}")
+    # s[5] must be snapped OUT of 'retiens' [27.40, 27.80]
+    assert not (27.40 < s_final < 27.80), (
+        f"s_final={s_final:.3f} still inside 'retiens' [27.40,27.80]"
+    )
+    print("PASS  test_universal_snap_non_conflicting")
+
+
 if __name__ == "__main__":
     test_word_snap_out_of_word()
     test_adjacent_word_contact_point()
@@ -439,4 +498,5 @@ if __name__ == "__main__":
     test_planned_gap_preserved_in_fallback()
     test_orphan_word_between_segments()
     test_gap_fallback_snaps_restored_s()
+    test_universal_snap_non_conflicting()
     print("\nAll tests passed.")

@@ -13,6 +13,7 @@ overlays/captions at the correct times.
 """
 from __future__ import annotations
 
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -114,6 +115,92 @@ def _pretrim_passthrough(
 
 _LEAD_IN_THRESHOLD = 1.0   # seconds: trigger lead-in cut if first word starts later than this
 _LEAD_IN_KEEP_S    = 0.5   # seconds: amount of lead-in to preserve before the first word
+
+
+def _acoustic_stutter_cuts(
+    video_path: Path,
+    words: list[WordTiming],
+    key_lines: list[str],
+    work_dir: Path,
+    max_cuts: int = 3,
+    min_word_dur: float = 0.55,
+    max_token_chars: int = 4,
+    noise_db: float = -30.0,
+    detect_min_s: float = 0.15,
+    act_min_s: float = 0.20,
+) -> list[tuple[float, float]]:
+    """Return physical-cut intervals (output-space) for intra-word hesitations.
+
+    For each short token (≤4 chars) that is suspiciously long (>0.55s) and
+    not in key_lines, run silencedetect on its interval. If an internal silence
+    ≥ act_min_s is found, schedule [word.start, word.start+sil_end_rel] for
+    removal, keeping only the final articulation (the cleaner, more assured one).
+    """
+    _key_tokens = {re.sub(r"[^\w]", "", kl.lower()) for kl in key_lines}
+    cuts: list[tuple[float, float]] = []
+
+    for w in words:
+        if len(cuts) >= max_cuts:
+            break
+        dur = w.end - w.start
+        if dur < min_word_dur:
+            continue
+        tok = re.sub(r"[^\w]", "", w.text.lower())
+        if not tok or len(tok) > max_token_chars:
+            continue
+        if tok in _key_tokens:
+            continue
+
+        # Run silencedetect directly on the word's interval in the output video.
+        # -vn skips video decoding — audio-only for fast probe.
+        try:
+            _sd = subprocess.run(
+                [
+                    FFMPEG_PATH, "-y", "-loglevel", "error",
+                    "-ss", f"{w.start:.6f}", "-accurate_seek",
+                    "-i", str(video_path),
+                    "-t", f"{dur:.6f}",
+                    "-vn",
+                    "-af", f"silencedetect=noise={noise_db}dB:d={detect_min_s}",
+                    "-f", "null", "-",
+                ],
+                capture_output=True, text=True,
+            )
+            _out = _sd.stderr
+        except Exception as _exc:
+            print(f"[ACOUSTIC-STUTTER] probe failed for '{w.text}': {_exc}", flush=True)
+            continue
+
+        # Parse all silence_start / silence_end pairs (relative to start of word clip)
+        _sil_starts = [float(m.group(1)) for m in re.finditer(r"silence_start: ([\d.]+)", _out)]
+        _sil_ends   = [float(m.group(1)) for m in re.finditer(r"silence_end: ([\d.]+)", _out)]
+        if not _sil_ends:
+            continue
+
+        # Use the LAST silence that is INTERNAL (not at the very end)
+        for sil_s, sil_e in reversed(list(zip(_sil_starts or [0.0]*len(_sil_ends), _sil_ends))):
+            sil_dur = sil_e - sil_s
+            if sil_dur < act_min_s:
+                continue
+            if sil_e >= dur - 0.05:  # silence at the tail — not a hesitation
+                continue
+            # Cut [word.start, word.start + sil_e] — removes the stutter + silence
+            cut_s = w.start
+            cut_e = w.start + sil_e
+            if cut_e - cut_s < 0.05:
+                continue
+            print(
+                f"[ACOUSTIC-STUTTER] '{w.text}' {w.start:.3f}-{w.end:.3f} ({dur:.2f}s)"
+                f" internal silence {sil_s:.3f}-{sil_e:.3f}s ({sil_dur:.2f}s)"
+                f" → cut {cut_s:.3f}-{cut_e:.3f}",
+                flush=True,
+            )
+            cuts.append((cut_s, cut_e))
+            break
+
+    if not cuts:
+        print("[ACOUSTIC-STUTTER] no stutter candidates found", flush=True)
+    return cuts
 
 
 def _smart_pause_cuts(
@@ -652,6 +739,53 @@ def pretrim(
             _planned[_pi]     = (_i, _s_src_i, _e_i, _s_i, _e_i_pad)
             _planned[_pi + 1] = (_j, _s_src_j, _e_j, _s_j, _e_j_pad)
 
+    # ── ④ Universal boundary snap ─────────────────────────────────────────────
+    # The stabilization loop only snaps pairs in clamp-conflict. Boundaries with
+    # large gaps (e.g. s[5] with +1.38s gap) never trigger clamp and may still
+    # land inside a word after padding or fallback restoration. One final sweep
+    # over ALL boundaries guarantees word-cleanliness before the assert.
+    _univ_changed = False
+    for _pi in range(len(_planned)):
+        _i, _s_src_i, _e_i, _s_i, _e_i_pad = _planned[_pi]
+        _updated = False
+        _new_s, _word_s = _snap_boundary_out_of_word(_s_i, _wt)
+        if _word_s:
+            _new_s = max(0.0, _new_s)
+            print(
+                f"[PRETRIM] universal-snap s[{_i}]: {_s_i:.3f}→{_new_s:.3f}"
+                f" (word {_word_s[0]:.3f}-{_word_s[1]:.3f})",
+                flush=True,
+            )
+            _s_i = _new_s
+            _updated = True
+        _new_e, _word_e = _snap_boundary_out_of_word(_e_i_pad, _wt)
+        if _word_e:
+            print(
+                f"[PRETRIM] universal-snap e[{_i}]: {_e_i_pad:.3f}→{_new_e:.3f}"
+                f" (word {_word_e[0]:.3f}-{_word_e[1]:.3f})",
+                flush=True,
+            )
+            _e_i_pad = _new_e
+            _updated = True
+        if _updated:
+            _planned[_pi] = (_i, _s_src_i, _e_i, _s_i, _e_i_pad)
+            _univ_changed = True
+
+    # Re-verify pairwise 10ms after universal snap (snap rarely creates conflict).
+    if _univ_changed:
+        for _pi in range(len(_planned) - 1):
+            _i, _s_src_i, _e_i, _s_i, _e_i_pad = _planned[_pi]
+            _j, _s_src_j, _e_j, _s_j, _e_j_pad = _planned[_pi + 1]
+            if _e_i_pad > _s_j - 0.010 and _pi not in _resolved:
+                _mid = (_e_i_pad + _s_j) / 2.0
+                _planned[_pi]     = (_i, _s_src_i, _e_i, _s_i, _mid - 0.005)
+                _planned[_pi + 1] = (_j, _s_src_j, _e_j, _mid + 0.005, _e_j_pad)
+                print(
+                    f"[PRETRIM] universal-snap reclamp seg[{_i}]/seg[{_j}]:"
+                    f" e→{_mid - 0.005:.3f} s→{_mid + 0.005:.3f}",
+                    flush=True,
+                )
+
     # ── Final assert: overlap, word-clean, and orphan invariants ─────────────
     for _pi in range(len(_planned) - 1):
         _i, _, _e_i, _s_i, _e_i_pad = _planned[_pi]
@@ -858,17 +992,31 @@ def pretrim(
     for p in parts:
         p.unlink(missing_ok=True)
 
-    # ── Intelligent pause compression ────────────────────────────────
+    # ── Intelligent pause compression + acoustic-stutter removal ────────────
     output_path = concat_path
     _compressed: list[tuple[float, float]] | None = None
 
     if remapped_words:
-        smart_cuts = _smart_pause_cuts(remapped_words)
-        if smart_cuts:
+        _smart_cuts   = _smart_pause_cuts(remapped_words)
+        _stutter_cuts = _acoustic_stutter_cuts(
+            concat_path, remapped_words, plan.key_lines or [], work_dir
+        )
+        # Merge and sort all micro-cuts; de-overlap adjacent/overlapping intervals.
+        _all_cuts: list[tuple[float, float]] = sorted(
+            _smart_cuts + _stutter_cuts, key=lambda c: c[0]
+        )
+        _merged_cuts: list[tuple[float, float]] = []
+        for _cs, _ce in _all_cuts:
+            if _merged_cuts and _cs < _merged_cuts[-1][1]:
+                _merged_cuts[-1] = (_merged_cuts[-1][0], max(_merged_cuts[-1][1], _ce))
+            else:
+                _merged_cuts.append((_cs, _ce))
+
+        if _merged_cuts:
             compressed_path = work_dir / "trimmed_compressed.mp4"
             compressed_intervals = _compress_pauses(
                 concat_path, compressed_path, work_dir,
-                smart_cuts, max_silence_s=0.0,
+                _merged_cuts, max_silence_s=0.0,
             )
             if compressed_path.exists():
                 output_path = compressed_path
