@@ -139,6 +139,20 @@ def _acoustic_stutter_cuts(
     _key_tokens = {re.sub(r"[^\w]", "", kl.lower()) for kl in key_lines}
     cuts: list[tuple[float, float]] = []
 
+    # ── Diagnostic header ─────────────────────────────────────────────────────
+    _n_dur_pass  = sum(1 for w in words if (w.end - w.start) >= min_word_dur)
+    _n_tok_pass  = sum(
+        1 for w in words
+        if (w.end - w.start) >= min_word_dur
+        and 1 <= len(re.sub(r"[^\w]", "", w.text.lower())) <= max_token_chars
+    )
+    print(
+        f"[ACOUSTIC-STUTTER] scanning {len(words)} words"
+        f" | dur≥{min_word_dur}s: {_n_dur_pass}"
+        f" | +tok≤{max_token_chars}: {_n_tok_pass}",
+        flush=True,
+    )
+
     for w in words:
         if len(cuts) >= max_cuts:
             break
@@ -149,7 +163,19 @@ def _acoustic_stutter_cuts(
         if not tok or len(tok) > max_token_chars:
             continue
         if tok in _key_tokens:
+            print(
+                f"[ACOUSTIC-STUTTER] skip '{w.text}' dur={dur:.3f}s"
+                f" tok='{tok}' — key_line protected",
+                flush=True,
+            )
             continue
+
+        # Candidate: log before probing so we see what reached silencedetect.
+        print(
+            f"[ACOUSTIC-STUTTER] candidate '{w.text}'"
+            f" {w.start:.3f}-{w.end:.3f} dur={dur:.3f}s tok='{tok}'",
+            flush=True,
+        )
 
         # Run silencedetect directly on the word's interval in the output video.
         # -vn skips video decoding — audio-only for fast probe.
@@ -174,15 +200,42 @@ def _acoustic_stutter_cuts(
         # Parse all silence_start / silence_end pairs (relative to start of word clip)
         _sil_starts = [float(m.group(1)) for m in re.finditer(r"silence_start: ([\d.]+)", _out)]
         _sil_ends   = [float(m.group(1)) for m in re.finditer(r"silence_end: ([\d.]+)", _out)]
+        print(
+            f"[ACOUSTIC-STUTTER] probe '{w.text}':"
+            f" sil_starts={[round(x, 3) for x in _sil_starts]}"
+            f" sil_ends={[round(x, 3) for x in _sil_ends]}",
+            flush=True,
+        )
         if not _sil_ends:
             continue
 
-        # Use the LAST silence that is INTERNAL (not at the very end)
+        # Use the LAST silence that is INTERNAL (has speech before AND after it).
+        # Tail-guard: reject only if the silence runs to the very end of the word
+        # (sil_e ≥ dur - 0.02). Previously used dur-0.05, which discarded the
+        # "il…il" pattern where the 2nd articulation is only ~30-50ms.
+        # Additional guard: sil_s must be ≥ 0.10 — there must be audible initial
+        # speech before the internal silence (the first hesitant articulation).
         for sil_s, sil_e in reversed(list(zip(_sil_starts or [0.0]*len(_sil_ends), _sil_ends))):
             sil_dur = sil_e - sil_s
             if sil_dur < act_min_s:
+                print(
+                    f"[ACOUSTIC-STUTTER] skip: sil_dur={sil_dur:.3f}s < {act_min_s}s",
+                    flush=True,
+                )
                 continue
-            if sil_e >= dur - 0.05:  # silence at the tail — not a hesitation
+            if sil_s < 0.10:
+                print(
+                    f"[ACOUSTIC-STUTTER] skip: sil_s={sil_s:.3f}s < 0.10"
+                    f" (no initial articulation)",
+                    flush=True,
+                )
+                continue
+            if sil_e >= dur - 0.02:
+                print(
+                    f"[ACOUSTIC-STUTTER] skip: sil_e={sil_e:.3f}s"
+                    f" ≥ dur-0.02={dur - 0.02:.3f}s (tail silence)",
+                    flush=True,
+                )
                 continue
             # Cut [word.start, word.start + sil_e] — removes the stutter + silence
             cut_s = w.start
@@ -309,6 +362,7 @@ def _snap_boundary_out_of_word(
     gap_s: float = 0.010,
     min_dur_s: float = 0.030,
     adjacent_gap_tol: float = 0.020,
+    debug_label: str = "",
 ) -> tuple[float, tuple[float, float] | None]:
     """Push t to a clean word boundary if it falls inside a word.
 
@@ -319,14 +373,44 @@ def _snap_boundary_out_of_word(
     Normal snap: if t is strictly inside a word, move to the side determined by
     majority. When the adjacent word on that side is within adjacent_gap_tol,
     snap to the exact contact point (no extra gap_s) to prevent oscillation.
+
+    debug_label: when non-empty, log every decision (pre-check, clean-gap, snap).
+    Used by the universal-snap sweep to make its reasoning visible.
     """
     valid = [(ws, we) for ws, we in word_timings if we - ws >= min_dur_s]
+
+    # Explicit exact-boundary: t == ws or t == we is always a valid cut point.
+    # The clip ending at t excludes (or completes) the word; the clip starting
+    # at t includes (or skips) it — both sides are word-clean.
+    for ws, we in valid:
+        if t == ws:
+            if debug_label:
+                print(
+                    f"[SNAP] {debug_label}={t:.3f} exact word-start"
+                    f" [{ws:.3f},{we:.3f}] → valid (no snap)",
+                    flush=True,
+                )
+            return t, None
+        if t == we:
+            if debug_label:
+                print(
+                    f"[SNAP] {debug_label}={t:.3f} exact word-end"
+                    f" [{ws:.3f},{we:.3f}] → valid (no snap)",
+                    flush=True,
+                )
+            return t, None
 
     # Pre-check: t at or between two adjacent words → already a valid boundary
     for idx in range(len(valid) - 1):
         we_a = valid[idx][1]
         ws_b = valid[idx + 1][0]
         if ws_b - we_a < adjacent_gap_tol and we_a <= t <= ws_b:
+            if debug_label:
+                print(
+                    f"[SNAP] {debug_label}={t:.3f} tight inter-word gap"
+                    f" [{we_a:.3f},{ws_b:.3f}] gap={ws_b - we_a:.3f}s → valid (no snap)",
+                    flush=True,
+                )
             return t, None
 
     # Normal snap: only fires if t is strictly inside a word
@@ -344,6 +428,15 @@ def _snap_boundary_out_of_word(
             if idx > 0 and ws - valid[idx - 1][1] < adjacent_gap_tol:
                 return valid[idx - 1][1], (ws, we)
             return ws - gap_s, (ws, we)
+
+    # t is in a wide inter-word gap (≥ adjacent_gap_tol), not inside any word.
+    if debug_label:
+        _near = [(ws, we) for ws, we in valid if abs(ws - t) < 0.35 or abs(we - t) < 0.35]
+        print(
+            f"[SNAP] {debug_label}={t:.3f} clean wide gap,"
+            f" nearest words={[(round(ws,3), round(we,3)) for ws, we in _near[:3]]}",
+            flush=True,
+        )
     return t, None
 
 
@@ -745,10 +838,13 @@ def pretrim(
     # land inside a word after padding or fallback restoration. One final sweep
     # over ALL boundaries guarantees word-cleanliness before the assert.
     _univ_changed = False
+    _univ_n_snapped = 0
     for _pi in range(len(_planned)):
         _i, _s_src_i, _e_i, _s_i, _e_i_pad = _planned[_pi]
         _updated = False
-        _new_s, _word_s = _snap_boundary_out_of_word(_s_i, _wt)
+        _new_s, _word_s = _snap_boundary_out_of_word(
+            _s_i, _wt, debug_label=f"s[{_i}]"
+        )
         if _word_s:
             _new_s = max(0.0, _new_s)
             print(
@@ -758,7 +854,10 @@ def pretrim(
             )
             _s_i = _new_s
             _updated = True
-        _new_e, _word_e = _snap_boundary_out_of_word(_e_i_pad, _wt)
+            _univ_n_snapped += 1
+        _new_e, _word_e = _snap_boundary_out_of_word(
+            _e_i_pad, _wt, debug_label=f"e[{_i}]"
+        )
         if _word_e:
             print(
                 f"[PRETRIM] universal-snap e[{_i}]: {_e_i_pad:.3f}→{_new_e:.3f}"
@@ -767,9 +866,15 @@ def pretrim(
             )
             _e_i_pad = _new_e
             _updated = True
+            _univ_n_snapped += 1
         if _updated:
             _planned[_pi] = (_i, _s_src_i, _e_i, _s_i, _e_i_pad)
             _univ_changed = True
+    print(
+        f"[PRETRIM] universal-snap sweep: {len(_planned)} segs,"
+        f" {len(_planned) * 2} boundaries checked, {_univ_n_snapped} snapped",
+        flush=True,
+    )
 
     # Re-verify pairwise 10ms after universal snap (snap rarely creates conflict).
     if _univ_changed:
