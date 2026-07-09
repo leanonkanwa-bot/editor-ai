@@ -301,6 +301,18 @@ class RhythmAwareSilenceRemover:
             if not (pre_gap > _FILLER_PAUSE_GUARD_PRE or post_gap > _FILLER_PAUSE_GUARD_POST):
                 continue
 
+            # Glued-to-next-word guard: when the next word starts within 100ms of the
+            # filler's end, cutting risks clipping it (Whisper ±50ms timestamp error).
+            # Keeping the filler is invisible compared to an amputated word.
+            if post_gap < 0.100 and i < len(words) - 1:
+                _next_txt = words[i + 1][0]
+                print(
+                    f"[FILLER] kept {text!r} — glued to next word {_next_txt!r},"
+                    f" cut would clip it (post_gap={post_gap * 1000:.0f}ms)",
+                    flush=True,
+                )
+                continue
+
             # Clamp cut boundaries to adjacent word edges (or recording start/end).
             cut_start = max(start - _FILLER_CUT_PAD, words[i - 1][2] if i > 0 else 0.0)
             cut_end   = min(end   + _FILLER_CUT_PAD, words[i + 1][1] if i < len(words) - 1 else end + _FILLER_CUT_PAD)
