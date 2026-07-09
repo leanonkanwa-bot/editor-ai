@@ -705,11 +705,22 @@ def word_safe_drops(
             f"word_safe: [{new_start:.3f},{new_end:.3f}] outside original [{cs:.3f},{ce:.3f}]"
         )
 
+        if new_end <= new_start:
+            txt = " ".join(str(w.get("text", "")).strip() for w in collateral[:5])
+            print(
+                f"[WORD-SAFE] cancelled drop {cs:.2f}-{ce:.2f}"
+                f" (interval inverted after shrink [{new_start:.2f},{new_end:.2f}];"
+                f" collateral: '{txt}')",
+                flush=True,
+            )
+            continue
+
         if new_end - new_start < min_cut_s:
             txt = " ".join(str(w.get("text", "")).strip() for w in collateral[:5])
             print(
                 f"[WORD-SAFE] cancelled drop {cs:.2f}-{ce:.2f}"
-                f" (silence {new_start:.2f}-{new_end:.2f} too short; collateral: '{txt}')",
+                f" (silence {new_start:.2f}-{new_end:.2f} = {new_end-new_start:.3f}s"
+                f" < min {min_cut_s:.3f}s; collateral: '{txt}')",
                 flush=True,
             )
             continue
@@ -721,7 +732,8 @@ def word_safe_drops(
                 f" -> {new_start:.2f}-{new_end:.2f} (collateral: '{txt}')",
                 flush=True,
             )
-            result.append(DropSegment(new_start, new_end, drop.reason))
+            result.append(DropSegment(new_start, new_end, drop.reason,
+                                       target_intervals=drop.target_intervals))
         else:
             result.append(drop)
     return result

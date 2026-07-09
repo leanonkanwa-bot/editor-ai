@@ -494,8 +494,26 @@ def generate_storyboard(
         language=language,
     )
 
-    # Fix 5: Timing audit — graphic card startSec must land near actual speech.
-    # A card that starts >1.0s before any word is spoken is spoiling speech.
+    # Fix 4/5: Snap graphic card startSec to the first spoken word at or after
+    # startSec — if the LLM placed the card >0.3s before any speech it references,
+    # pull it forward so it arrives synchronously with speech (not as a spoiler).
+    # Audit logs come after the snap so they reflect the corrected times.
+    for _gc in graphic_cards:
+        _start = float(_gc.get("startSec", 0))
+        _ahead = [w for w in remapped_words if _start <= w.start <= _start + 2.5]
+        if _ahead and _ahead[0].start - _start > 0.3:
+            _orig = _start
+            _gc["startSec"] = round(_ahead[0].start, 3)
+            # Keep endSec >= new startSec
+            if float(_gc.get("endSec", 0)) < _gc["startSec"]:
+                _gc["endSec"] = round(_gc["startSec"] + 3.0, 3)
+            print(
+                f"[STORYBOARD] card {_gc.get('id','?')} startSec snapped "
+                f"{_orig:.2f}→{_gc['startSec']:.2f}s (first word: '{_ahead[0].text}')",
+                flush=True,
+            )
+
+    # Timing audit — after snap, log CRITICAL if card still has no speech nearby.
     for _gc in graphic_cards:
         _start = float(_gc.get("startSec", 0))
         _near = [w for w in remapped_words if _start - 0.3 <= w.start <= _start + 1.0]

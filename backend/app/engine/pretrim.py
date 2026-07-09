@@ -503,6 +503,15 @@ def _output_verify(
     if os.environ.get("VERIFY_OUTPUT", "true").lower() in ("false", "0", "no"):
         return
 
+    # Hallucination patterns Whisper generates on silence (FR + EN).
+    # Token must match exactly after _norm() — add more as discovered.
+    _HALLUC_TOKS: frozenset[str] = frozenset({
+        "amara", "soustitres", "sous", "titres", "realises", "realisees",
+        "para", "communaute", "merci", "davoir", "regarde", "regarder",
+        "soustitresrealisesparalacommunautedamaraorg",
+        "transcriptbyamara",
+    })
+
     def _norm(t: str) -> str:
         return re.sub(r"[^\w]", "", t.lower(), flags=re.UNICODE)
 
@@ -521,12 +530,32 @@ def _output_verify(
 
         act_words_all = [w for seg in result.segments for w in (seg.words or [])]
 
-        exp_toks = [_norm(w.text) for w in expected_words if _norm(w.text)]
-        # Compare against ALL re-transcribed words; confidence filter causes false missing
-        act_toks = [_norm(_wtext(w)) for w in act_words_all if _norm(_wtext(w))]
+        # Bound comparison: ignore hallucinated words past last expected word + 1.0s.
+        # Whisper invents credits/Amara text on trailing silence — never in expected.
+        _last_exp_end = max((float(getattr(w, "end", 0)) for w in expected_words), default=0.0)
+        _act_cutoff   = _last_exp_end + 1.0
+        act_words_bounded = [
+            w for w in act_words_all
+            if float(getattr(w, "start", 0)) <= _act_cutoff
+        ]
+        _halluc_tail = len(act_words_all) - len(act_words_bounded)
+        if _halluc_tail:
+            _halluc_txts = [_wtext(w) for w in act_words_all[len(act_words_bounded):len(act_words_bounded)+5]]
+            print(f"[OUTPUT-VERIFY] trimmed {_halluc_tail} tail word(s) past {_act_cutoff:.1f}s: {_halluc_txts}", flush=True)
+
+        # Filter expected words in brackets (e.g. "[music]") — ASR never sees those.
+        exp_toks = [
+            _norm(w.text) for w in expected_words
+            if _norm(w.text) and not str(w.text).strip().startswith("[")
+        ]
+        # Filter known hallucination tokens from actual (they're not real speech).
+        act_toks = [
+            _norm(_wtext(w)) for w in act_words_bounded
+            if _norm(_wtext(w)) and _norm(_wtext(w)) not in _HALLUC_TOKS
+        ]
         # Low-conf tokens: may explain "missing" that are actually present but uncertain
         act_uncertain: set[str] = {
-            _norm(_wtext(w)) for w in act_words_all
+            _norm(_wtext(w)) for w in act_words_bounded
             if _wprob(w) < _LOW_CONF and _norm(_wtext(w))
         }
 
@@ -1189,6 +1218,40 @@ def pretrim(
         )
 
     _output_verify(concat_path, remapped_words, work_dir)
+
+    # Fix 2: Word-by-word accounting — every source word must be either KEPT
+    # (inside a source_interval) or explicitly DROPPED (inside a filler_drop).
+    # Any word that falls in neither is a planning hole and must be flagged.
+    if source_words:
+        _word_pool_check = source_words if use_source_coords else all_words
+        _n_lost = 0
+        for _sw in _word_pool_check:
+            _ws  = float(_sw.get("start", 0))
+            _we  = float(_sw.get("end", 0))
+            _txt = str(_sw.get("text", "")).strip()
+            if not _txt:
+                continue
+            _in_keep = any(
+                si[0] - 0.010 <= _ws and _we <= si[1] + 0.010
+                for si in source_intervals
+            )
+            if _in_keep:
+                continue
+            _in_drop = any(
+                d.start - 0.010 <= _ws and _we <= d.end + 0.010
+                for d in (filler_drops or [])
+            )
+            if not _in_drop:
+                _n_lost += 1
+                print(
+                    f"[WORD-LOST] '{_txt}' at {_ws:.2f}-{_we:.2f}s"
+                    f" — not in any keep interval or drop",
+                    flush=True,
+                )
+        if _n_lost == 0:
+            print(f"[WORD-LOST] PASS — all {len(_word_pool_check)} source words accounted for", flush=True)
+        else:
+            print(f"[WORD-LOST] TOTAL: {_n_lost} word(s) unaccounted for (see above)", flush=True)
 
     # Clean up part files
     for p in parts:

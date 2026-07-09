@@ -331,7 +331,14 @@ Si rien à couper : {{"cuts": [], "kept": []}}"""
             f"reason={reason} text={cut_text!r}",
             flush=True,
         )
-        drops.append(_DS(start=t_start, end=t_end, reason=f"llm_{reason}"))
+        # target_intervals: the exact word spans being cut so word_safe
+        # treats them as intentional targets, not collateral bystanders.
+        _target_ivs = tuple(
+            (float(words[k].get("start", 0)), float(words[k].get("end", 0)))
+            for k in range(i0, i1 + 1)
+        )
+        drops.append(_DS(start=t_start, end=t_end, reason=f"llm_{reason}",
+                         target_intervals=_target_ivs))
 
     print(
         f"[LLM-EDIT] {len(drops)} cut(s) from {len(data.get('cuts', []))} suggestion(s) "
