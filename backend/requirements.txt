@@ -13,3 +13,4 @@ resend>=2.0.0,<3
 stripe>=11,<12
 requests>=2.31,<3
 modal>=0.64
+stable-ts>=2.17
