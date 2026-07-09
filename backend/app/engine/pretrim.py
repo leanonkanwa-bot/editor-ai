@@ -1189,49 +1189,65 @@ def pretrim(
                     _wl_repaired_this += 1
 
                 elif _wl_strat == "merge":
-                    # Last resort: both sides saturated — gap contained live speech,
-                    # it should not exist. Merge only if pi_a and pi_b are adjacent.
-                    if (
-                        _wl_pi_a is not None
-                        and _wl_pi_b is not None
-                        and _wl_pi_b == _wl_pi_a + 1
-                    ):
-                        _wl_mi_a, _wl_ss_a, _wl_e_a, _wl_sp_a, _wl_ep_a = _planned[_wl_pi_a]
-                        _wl_mi_b, _wl_ss_b, _wl_e_b, _wl_sp_b2, _wl_ep_b = _planned[_wl_pi_b]
-                        _planned[_wl_pi_a] = (
-                            _wl_mi_a, _wl_ss_a, _wl_e_b, _wl_sp_a, _wl_ep_b
+                    # GUARANTEED BRACKETING MERGE — both extend (a) and retract (b)
+                    # failed because both neighbours are saturated.  Find the segments
+                    # that DEFINITIONALLY bracket the word (last segment ending at or
+                    # before word.start, first segment starting at or after word.end)
+                    # and fuse them into one interval.  The word lies in the gap between
+                    # them by construction, so [piL.s_padded, piR.e_padded] always
+                    # covers it.  This operation cannot fail mathematically.
+                    _wl_piL = None  # last segment whose e_padded ≤ word.start
+                    _wl_piR = None  # first segment whose s_padded ≥ word.end
+                    for _pi_g in range(len(_planned)):
+                        _ep_g = _planned[_pi_g][4]
+                        _sp_g = _planned[_pi_g][3]
+                        if _ep_g <= _wl_ws + 0.010:
+                            if _wl_piL is None or _ep_g > _planned[_wl_piL][4]:
+                                _wl_piL = _pi_g
+                        if _sp_g >= _wl_we - 0.010:
+                            if _wl_piR is None or _sp_g < _planned[_wl_piR][3]:
+                                _wl_piR = _pi_g
+
+                    if _wl_piL is not None and _wl_piR is not None and _wl_piL != _wl_piR:
+                        _wl_mi_L, _wl_ss_L, _wl_e_L, _wl_sp_L, _wl_ep_L = _planned[_wl_piL]
+                        _wl_mi_R, _wl_ss_R, _wl_e_R, _wl_sp_R, _wl_ep_R = _planned[_wl_piR]
+                        # Fuse: new segment spans piL.s_padded → piR.e_padded
+                        _planned[_wl_piL] = (
+                            _wl_mi_L, _wl_ss_L, _wl_e_R, _wl_sp_L, _wl_ep_R
                         )
-                        del _planned[_wl_pi_b]
-                        # Pair pi_a (= pi_b - 1) is now gone; shift all pair indices
-                        # that were > pi_a down by 1.
-                        _wl_del_pair = _wl_pi_a  # pair index of the merged junction
+                        # Delete all segments piL+1 through piR (inclusive)
+                        _n_del = _wl_piR - _wl_piL
+                        del _planned[_wl_piL + 1 : _wl_piR + 1]
+                        # Adjust pair indices: pairs piL..piR-1 are gone;
+                        # pairs ≥ piR shift down by n_del.
                         _wl_modified_pis = {
-                            p - 1 if p > _wl_del_pair else p
+                            p - _n_del if p >= _wl_piR else p
                             for p in _wl_modified_pis
-                            if p != _wl_del_pair
+                            if p < _wl_piL or p >= _wl_piR
                         }
                         _resolved = {
-                            r - 1 if r > _wl_del_pair else r
+                            r - _n_del if r >= _wl_piR else r
                             for r in _resolved
-                            if r != _wl_del_pair
+                            if r < _wl_piL or r >= _wl_piR
                         }
-                        if _wl_pi_a > 0:
-                            _wl_modified_pis.add(_wl_pi_a - 1)
-                        if _wl_pi_a + 1 < len(_planned):
-                            _wl_modified_pis.add(_wl_pi_a)
+                        if _wl_piL > 0:
+                            _wl_modified_pis.add(_wl_piL - 1)
+                        if _wl_piL + 1 < len(_planned):
+                            _wl_modified_pis.add(_wl_piL)
                         print(
-                            f"[WORD-LOST] REPAIRED(merge) '{_wl_txt}'"
-                            f" {_wl_ws:.2f}-{_wl_we:.2f}s"
-                            f" → merged seg[{_wl_pi_a}]+seg[{_wl_pi_b}]",
+                            f"[WORD-LOST] MERGED seg[{_wl_piL}]+seg[{_wl_piR}]"
+                            f" to absorb '{_wl_txt}' {_wl_ws:.2f}-{_wl_we:.2f}s",
                             flush=True,
                         )
                         _wl_repaired_this += 1
                     else:
+                        # No bracketing segments — word is before the first segment
+                        # or after the last (pre/post-plan exclusion). GAP-RESCUE
+                        # should have handled these; final assertion skips them too.
                         print(
                             f"[WORD-LOST] UNREPAIRABLE '{_wl_txt}'"
                             f" at {_wl_ws:.2f}-{_wl_we:.2f}s"
-                            f" — saturated on both sides, non-adjacent"
-                            f" (pi_a={_wl_pi_a}, pi_b={_wl_pi_b})",
+                            f" — no bracketing segments (pre/post-plan orphan)",
                             flush=True,
                         )
 
