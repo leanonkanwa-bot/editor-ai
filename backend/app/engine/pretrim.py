@@ -1006,6 +1006,137 @@ def pretrim(
                     f" between seg[{_i}].e={_e_i_pad:.3f} and seg[{_j}].s={_s_j:.3f}"
                 )
 
+    # ── WORD-LOST REPAIR: recover words expelled by snap, BEFORE FFmpeg render ──
+    # A snap may push e[i] backward past a word that belongs in segment i,
+    # orphaning it in a gap >300ms (below the orphan-invariant radar).
+    # Extend the nearest segment's e_padded to cover the word before cutting.
+    # Distinction: a word in a gap is ONLY acceptable if it's in a filler_drop.
+    # "Planned gap" is not an excuse — GAP-RESCUE handles those upstream;
+    # anything reaching here without drop coverage is always a snap artifact.
+    _wl_pool = (source_words if use_source_coords else all_words) or []
+    _wl_sig  = [
+        w for w in _wl_pool
+        if str(w.get("text", "")).strip()
+        and float(w.get("end", 0)) - float(w.get("start", 0)) >= 0.030
+    ]
+
+    if _wl_sig:
+        _wl_total_repaired = 0
+        _wl_pass_n = 0
+        for _wl_pass_n in range(5):  # up to 5 cascade iterations
+            _wl_repaired_this = 0
+            for _wl_w in _wl_sig:
+                _wl_ws  = float(_wl_w.get("start", 0))
+                _wl_we  = float(_wl_w.get("end", 0))
+                _wl_txt = str(_wl_w.get("text", "")).strip()
+
+                if any(
+                    _planned[_p2][3] - 0.010 <= _wl_ws and _wl_we <= _planned[_p2][4] + 0.010
+                    for _p2 in range(len(_planned))
+                ):
+                    continue  # covered by a planned interval
+                if any(
+                    d.start - 0.010 <= _wl_ws and _wl_we <= d.end + 0.010
+                    for d in (filler_drops or [])
+                ):
+                    continue  # explicitly dropped
+
+                # Find the nearest segment whose e_padded can be extended to cover word.
+                _wl_best_pi   = None
+                _wl_best_dist = float("inf")
+                for _wl_pi in range(len(_planned)):
+                    _wl_ep = _planned[_wl_pi][4]  # e_padded
+                    if _wl_ws < _wl_ep - 0.100:
+                        continue  # word starts inside/well-before this segment
+                    _ext_e = _wl_we + 0.010
+                    _max_e = (
+                        _planned[_wl_pi + 1][3] - 0.010
+                        if _wl_pi + 1 < len(_planned) else _ext_e + 9.0
+                    )
+                    if _ext_e <= _max_e + 0.001:  # extension fits
+                        _dist = max(0.0, _wl_ws - _wl_ep)
+                        if _dist < _wl_best_dist:
+                            _wl_best_dist = _dist
+                            _wl_best_pi   = _wl_pi
+
+                if _wl_best_pi is None:
+                    print(
+                        f"[WORD-LOST] UNREPAIRABLE '{_wl_txt}' at {_wl_ws:.2f}-{_wl_we:.2f}s"
+                        f" — no adjacent segment can extend to cover it",
+                        flush=True,
+                    )
+                    continue
+
+                _wl_i, _wl_ssrc, _wl_e_old, _wl_sp, _wl_ep_old = _planned[_wl_best_pi]
+                _wl_new_ep = _wl_we + 0.010
+                if _wl_best_pi + 1 < len(_planned):
+                    _wl_new_ep = min(_wl_new_ep, _planned[_wl_best_pi + 1][3] - 0.010)
+                _wl_new_e = max(_wl_e_old, _wl_we)
+                if _wl_best_pi + 1 < len(_planned):
+                    _wl_new_e = min(_wl_new_e, _planned[_wl_best_pi + 1][3] - 0.010)
+
+                _planned[_wl_best_pi] = (_wl_i, _wl_ssrc, _wl_new_e, _wl_sp, _wl_new_ep)
+                print(
+                    f"[WORD-LOST] REPAIRED '{_wl_txt}' {_wl_ws:.2f}-{_wl_we:.2f}s"
+                    f" → seg[{_wl_best_pi}].e {_wl_ep_old:.3f}→{_wl_new_ep:.3f}",
+                    flush=True,
+                )
+                _wl_repaired_this += 1
+
+            _wl_total_repaired += _wl_repaired_this
+            if _wl_repaired_this == 0:
+                break
+
+        if _wl_total_repaired:
+            print(
+                f"[WORD-LOST] {_wl_total_repaired} word(s) repaired in"
+                f" {_wl_pass_n + 1} pass(es)",
+                flush=True,
+            )
+
+        # Post-repair pairwise check — repairs must not create overlaps.
+        for _wl_pi2 in range(len(_planned) - 1):
+            _wl_chk_e = _planned[_wl_pi2][4]
+            _wl_chk_s = _planned[_wl_pi2 + 1][3]
+            if round(_wl_chk_e, 3) > round(_wl_chk_s - 0.010, 3):
+                raise RuntimeError(
+                    f"[WORD-LOST-REPAIR] overlap after repair:"
+                    f" seg[{_wl_pi2}].e_padded={_wl_chk_e:.3f}"
+                    f" > seg[{_wl_pi2+1}].s_padded-10ms={_wl_chk_s-0.010:.3f}"
+                )
+
+        # Final assertion — any word in an INTER-SEGMENT gap (has planned segments
+        # both before AND after it) is a snap artifact and must have been repaired.
+        # Words before the first segment or after the last segment are intentional
+        # plan exclusions (intro/outro/preamble) — skip those.
+        for _wl_w in _wl_sig:
+            _wl_ws  = float(_wl_w.get("start", 0))
+            _wl_we  = float(_wl_w.get("end", 0))
+            _wl_txt = str(_wl_w.get("text", "")).strip()
+            if any(
+                _planned[_p2][3] - 0.010 <= _wl_ws and _wl_we <= _planned[_p2][4] + 0.010
+                for _p2 in range(len(_planned))
+            ):
+                continue
+            if any(
+                d.start - 0.010 <= _wl_ws and _wl_we <= d.end + 0.010
+                for d in (filler_drops or [])
+            ):
+                continue
+            # Is this word in a true inter-segment gap?
+            # (at least one segment ends before the word AND one starts after)
+            _wl_has_before = any(_planned[_p2][4] <= _wl_ws + 0.010 for _p2 in range(len(_planned)))
+            _wl_has_after  = any(_planned[_p2][3] >= _wl_we - 0.010 for _p2 in range(len(_planned)))
+            if not (_wl_has_before and _wl_has_after):
+                continue  # pre-plan or post-plan word — intentional exclusion, skip
+            raise RuntimeError(
+                f"[WORD-LOST] '{_wl_txt}' at {_wl_ws:.2f}-{_wl_we:.2f}s"
+                f" still orphaned in inter-segment gap after {_wl_pass_n + 1} repair pass(es)"
+            )
+
+        if not _wl_total_repaired:
+            print(f"[WORD-LOST] PASS — all {len(_wl_sig)} words covered pre-render", flush=True)
+
     _planned_dur = sum(ep - sp for _, _, _, sp, ep in _planned)
 
     # ── Pass 2: FFmpeg cuts and word remapping ───────────────────────
@@ -1219,39 +1350,34 @@ def pretrim(
 
     _output_verify(concat_path, remapped_words, work_dir)
 
-    # Fix 2: Word-by-word accounting — every source word must be either KEPT
-    # (inside a source_interval) or explicitly DROPPED (inside a filler_drop).
-    # Any word that falls in neither is a planning hole and must be flagged.
-    if source_words:
-        _word_pool_check = source_words if use_source_coords else all_words
-        _n_lost = 0
-        for _sw in _word_pool_check:
-            _ws  = float(_sw.get("start", 0))
-            _we  = float(_sw.get("end", 0))
-            _txt = str(_sw.get("text", "")).strip()
-            if not _txt:
-                continue
-            _in_keep = any(
-                si[0] - 0.010 <= _ws and _we <= si[1] + 0.010
-                for si in source_intervals
-            )
-            if _in_keep:
-                continue
-            _in_drop = any(
-                d.start - 0.010 <= _ws and _we <= d.end + 0.010
-                for d in (filler_drops or [])
-            )
-            if not _in_drop:
-                _n_lost += 1
-                print(
-                    f"[WORD-LOST] '{_txt}' at {_ws:.2f}-{_we:.2f}s"
-                    f" — not in any keep interval or drop",
-                    flush=True,
-                )
-        if _n_lost == 0:
-            print(f"[WORD-LOST] PASS — all {len(_word_pool_check)} source words accounted for", flush=True)
-        else:
-            print(f"[WORD-LOST] TOTAL: {_n_lost} word(s) unaccounted for (see above)", flush=True)
+    # Post-render word accounting — belt-and-suspenders after pre-render repair.
+    # Only checks inter-segment gap words (pre/post-plan exclusions are OK).
+    _pr_pool = (source_words if use_source_coords else all_words) or []
+    _pr_lost = 0
+    for _sw in _pr_pool:
+        _ws  = float(_sw.get("start", 0))
+        _we  = float(_sw.get("end", 0))
+        _txt = str(_sw.get("text", "")).strip()
+        if not _txt or (_we - _ws) < 0.030:
+            continue
+        if any(si[0] - 0.010 <= _ws and _we <= si[1] + 0.010 for si in source_intervals):
+            continue
+        if any(d.start - 0.010 <= _ws and _we <= d.end + 0.010 for d in (filler_drops or [])):
+            continue
+        # Only flag inter-segment gaps (not pre/post-plan exclusions)
+        _pr_before = any(si[1] <= _ws + 0.010 for si in source_intervals)
+        _pr_after  = any(si[0] >= _we - 0.010 for si in source_intervals)
+        if not (_pr_before and _pr_after):
+            continue
+        _pr_lost += 1
+        print(f"[WORD-LOST] POST-RENDER '{_txt}' at {_ws:.2f}-{_we:.2f}s — unaccounted", flush=True)
+    if _pr_lost == 0:
+        print(f"[WORD-LOST] POST-RENDER PASS — {len(_pr_pool)} words all accounted for", flush=True)
+    else:
+        raise RuntimeError(
+            f"[WORD-LOST] POST-RENDER: {_pr_lost} inter-segment word(s) unaccounted"
+            f" — pre-render repair missed them"
+        )
 
     # Clean up part files
     for p in parts:
