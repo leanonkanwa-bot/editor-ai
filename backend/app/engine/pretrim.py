@@ -1056,55 +1056,168 @@ def pretrim(
                 ):
                     continue  # explicitly dropped
 
-                # Find the nearest segment whose e_padded can be extended to cover word.
-                _wl_best_pi   = None
-                _wl_best_dist = float("inf")
-                for _wl_pi in range(len(_planned)):
-                    _wl_ep = _planned[_wl_pi][4]  # e_padded
-                    if _wl_ws < _wl_ep - 0.100:
-                        continue  # word starts inside/well-before this segment
-                    # Gap required by the right-hand junction (0 if force-resolved).
-                    _wl_gap = 0.0 if _wl_pi in _resolved else 0.010
-                    _ext_e  = _wl_we + 0.010
-                    _max_e  = (
-                        _planned[_wl_pi + 1][3] - _wl_gap
-                        if _wl_pi + 1 < len(_planned) else _ext_e + 9.0
-                    )
-                    if _ext_e <= _max_e + 0.001:  # extension fits
-                        _dist = max(0.0, _wl_ws - _wl_ep)
-                        if _dist < _wl_best_dist:
-                            _wl_best_dist = _dist
-                            _wl_best_pi   = _wl_pi
+                # ── Bidirectional repair ─────────────────────────────────────────────
+                # (a) extend e[pi_a] rightward to cover word.end
+                # (b) retract s[pi_b] leftward to cover word.start
+                # Edge-adjacent (|word.end - s[pi_b]| ≤ 5ms): prefer (b) with 0-gap,
+                #     retract s[pi_b] to word.start and mark the pair as resolved.
+                # If both sides fail: merge adjacent pi_a and pi_b.
+                # ─────────────────────────────────────────────────────────────────
 
-                if _wl_best_pi is None:
+                # Option (a) candidate: last segment whose end is near word.start
+                _wl_pi_a     = None
+                _wl_new_ep_a = None
+                _wl_a_dist   = float("inf")
+                for _wl_pi in range(len(_planned)):
+                    _ep = _planned[_wl_pi][4]
+                    if _wl_ws < _ep - 0.100:       # word starts well before seg end
+                        continue
+                    _gap = 0.0 if _wl_pi in _resolved else 0.010
+                    _ne  = _wl_we + 0.010
+                    if _wl_pi + 1 < len(_planned):
+                        _ne = min(_ne, _planned[_wl_pi + 1][3] - _gap)
+                    if _ne < _wl_we - 0.001:       # clamped extension can't cover word.end
+                        continue
+                    _dist = max(0.0, _wl_ws - _ep)
+                    if _dist < _wl_a_dist:
+                        _wl_a_dist   = _dist
+                        _wl_pi_a     = _wl_pi
+                        _wl_new_ep_a = _ne
+
+                # Option (b) candidate: first segment whose start is near word.end
+                _wl_pi_b     = None
+                _wl_new_sp_b = None
+                _wl_b_dist   = float("inf")
+                for _wl_pi in range(len(_planned)):
+                    _sp = _planned[_wl_pi][3]
+                    if _wl_we > _sp + 0.100:       # word ends well after seg start
+                        continue
+                    _prev_pi = _wl_pi - 1
+                    _gap = 0.0 if _prev_pi in _resolved else 0.010
+                    _ns  = _wl_ws - 0.010
+                    if _prev_pi >= 0:
+                        _ns = max(_ns, _planned[_prev_pi][4] + _gap)
+                    if _ns > _wl_ws + 0.001:       # clamped retraction can't cover word.start
+                        continue
+                    _dist = max(0.0, _sp - _wl_we)
+                    if _dist < _wl_b_dist:
+                        _wl_b_dist   = _dist
+                        _wl_pi_b     = _wl_pi
+                        _wl_new_sp_b = _ns
+
+                # Edge-adjacent: word.end ≈ s[pi_b] within 5ms
+                # → retract s[pi_b] to word.start (0-gap), mark pair as resolved
+                _wl_edge_adj = (
+                    _wl_pi_b is not None
+                    and abs(_wl_we - _planned[_wl_pi_b][3]) <= 0.005
+                )
+                if _wl_edge_adj:
+                    _wl_new_sp_b = _wl_ws  # word opens the next segment with 0-gap
+
+                # Choose strategy
+                if _wl_edge_adj:
+                    _wl_strat = "b0"
+                elif _wl_pi_a is not None and _wl_pi_b is not None:
+                    _wl_strat = "b" if _wl_b_dist <= _wl_a_dist else "a"
+                elif _wl_pi_a is not None:
+                    _wl_strat = "a"
+                elif _wl_pi_b is not None:
+                    _wl_strat = "b"
+                else:
+                    _wl_strat = "merge"
+
+                # Apply
+                if _wl_strat == "a":
+                    _wl_mi, _wl_mss, _wl_me, _wl_msp, _wl_mep = _planned[_wl_pi_a]
+                    _planned[_wl_pi_a] = (
+                        _wl_mi, _wl_mss, max(_wl_me, _wl_we), _wl_msp, _wl_new_ep_a
+                    )
+                    if _wl_pi_a > 0:
+                        _wl_modified_pis.add(_wl_pi_a - 1)
+                    if _wl_pi_a + 1 < len(_planned):
+                        _wl_modified_pis.add(_wl_pi_a)
                     print(
-                        f"[WORD-LOST] UNREPAIRABLE '{_wl_txt}' at {_wl_ws:.2f}-{_wl_we:.2f}s"
-                        f" — no adjacent segment can extend to cover it",
+                        f"[WORD-LOST] REPAIRED(a) '{_wl_txt}' {_wl_ws:.2f}-{_wl_we:.2f}s"
+                        f" → seg[{_wl_pi_a}].e_padded {_wl_mep:.3f}→{_wl_new_ep_a:.3f}",
                         flush=True,
                     )
-                    continue
+                    _wl_repaired_this += 1
 
-                _wl_i, _wl_ssrc, _wl_e_old, _wl_sp, _wl_ep_old = _planned[_wl_best_pi]
-                _wl_gap2 = 0.0 if _wl_best_pi in _resolved else 0.010
-                _wl_new_ep = _wl_we + 0.010
-                if _wl_best_pi + 1 < len(_planned):
-                    _wl_new_ep = min(_wl_new_ep, _planned[_wl_best_pi + 1][3] - _wl_gap2)
-                _wl_new_e = max(_wl_e_old, _wl_we)
-                if _wl_best_pi + 1 < len(_planned):
-                    _wl_new_e = min(_wl_new_e, _planned[_wl_best_pi + 1][3] - _wl_gap2)
+                elif _wl_strat in ("b", "b0"):
+                    _wl_mi, _wl_mss, _wl_me, _wl_msp_old, _wl_mep = _planned[_wl_pi_b]
+                    _planned[_wl_pi_b] = (
+                        _wl_mi, _wl_mss, _wl_me, _wl_new_sp_b, _wl_mep
+                    )
+                    _wl_pair_b = _wl_pi_b - 1  # junction (pi_b-1, pi_b)
+                    if _wl_strat == "b0" and _wl_pair_b >= 0:
+                        _resolved.add(_wl_pair_b)
+                        print(
+                            f"[WORD-LOST] REPAIRED(b0-edge) '{_wl_txt}'"
+                            f" {_wl_ws:.2f}-{_wl_we:.2f}s"
+                            f" → seg[{_wl_pi_b}].s_padded"
+                            f" {_wl_msp_old:.3f}→{_wl_new_sp_b:.3f} (0-gap, resolved)",
+                            flush=True,
+                        )
+                    else:
+                        print(
+                            f"[WORD-LOST] REPAIRED(b) '{_wl_txt}'"
+                            f" {_wl_ws:.2f}-{_wl_we:.2f}s"
+                            f" → seg[{_wl_pi_b}].s_padded"
+                            f" {_wl_msp_old:.3f}→{_wl_new_sp_b:.3f}",
+                            flush=True,
+                        )
+                    if _wl_pair_b >= 0:
+                        _wl_modified_pis.add(_wl_pair_b)
+                    if _wl_pi_b + 1 < len(_planned):
+                        _wl_modified_pis.add(_wl_pi_b)
+                    _wl_repaired_this += 1
 
-                _planned[_wl_best_pi] = (_wl_i, _wl_ssrc, _wl_new_e, _wl_sp, _wl_new_ep)
-                # Track pairs adjacent to the modified segment (left and right junctions).
-                if _wl_best_pi > 0:
-                    _wl_modified_pis.add(_wl_best_pi - 1)
-                if _wl_best_pi + 1 < len(_planned):
-                    _wl_modified_pis.add(_wl_best_pi)
-                print(
-                    f"[WORD-LOST] REPAIRED '{_wl_txt}' {_wl_ws:.2f}-{_wl_we:.2f}s"
-                    f" → seg[{_wl_best_pi}].e {_wl_ep_old:.3f}→{_wl_new_ep:.3f}",
-                    flush=True,
-                )
-                _wl_repaired_this += 1
+                elif _wl_strat == "merge":
+                    # Last resort: both sides saturated — gap contained live speech,
+                    # it should not exist. Merge only if pi_a and pi_b are adjacent.
+                    if (
+                        _wl_pi_a is not None
+                        and _wl_pi_b is not None
+                        and _wl_pi_b == _wl_pi_a + 1
+                    ):
+                        _wl_mi_a, _wl_ss_a, _wl_e_a, _wl_sp_a, _wl_ep_a = _planned[_wl_pi_a]
+                        _wl_mi_b, _wl_ss_b, _wl_e_b, _wl_sp_b2, _wl_ep_b = _planned[_wl_pi_b]
+                        _planned[_wl_pi_a] = (
+                            _wl_mi_a, _wl_ss_a, _wl_e_b, _wl_sp_a, _wl_ep_b
+                        )
+                        del _planned[_wl_pi_b]
+                        # Pair pi_a (= pi_b - 1) is now gone; shift all pair indices
+                        # that were > pi_a down by 1.
+                        _wl_del_pair = _wl_pi_a  # pair index of the merged junction
+                        _wl_modified_pis = {
+                            p - 1 if p > _wl_del_pair else p
+                            for p in _wl_modified_pis
+                            if p != _wl_del_pair
+                        }
+                        _resolved = {
+                            r - 1 if r > _wl_del_pair else r
+                            for r in _resolved
+                            if r != _wl_del_pair
+                        }
+                        if _wl_pi_a > 0:
+                            _wl_modified_pis.add(_wl_pi_a - 1)
+                        if _wl_pi_a + 1 < len(_planned):
+                            _wl_modified_pis.add(_wl_pi_a)
+                        print(
+                            f"[WORD-LOST] REPAIRED(merge) '{_wl_txt}'"
+                            f" {_wl_ws:.2f}-{_wl_we:.2f}s"
+                            f" → merged seg[{_wl_pi_a}]+seg[{_wl_pi_b}]",
+                            flush=True,
+                        )
+                        _wl_repaired_this += 1
+                    else:
+                        print(
+                            f"[WORD-LOST] UNREPAIRABLE '{_wl_txt}'"
+                            f" at {_wl_ws:.2f}-{_wl_we:.2f}s"
+                            f" — saturated on both sides, non-adjacent"
+                            f" (pi_a={_wl_pi_a}, pi_b={_wl_pi_b})",
+                            flush=True,
+                        )
 
             _wl_total_repaired += _wl_repaired_this
             if _wl_repaired_this == 0:
