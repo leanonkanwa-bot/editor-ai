@@ -1021,8 +1021,23 @@ def pretrim(
     ]
 
     if _wl_sig:
+        # ONE definition of "valid junction" shared by repair + assert.
+        # Normal pairs need e ≤ s-10ms; force-resolved pairs (orphan-repair / fallback)
+        # allow e == s (0-gap).  Consulting _resolved is mandatory — without it,
+        # a 0-gap junction installed by orphan-repair looks like an overlap.
+        def _jv(_pi2: int) -> bool:
+            _R3 = 3
+            _ep = _planned[_pi2][4]
+            _sp = _planned[_pi2 + 1][3]
+            if round(_ep, _R3) <= round(_sp - 0.010, _R3):
+                return True   # standard 10ms gap — always valid
+            if _pi2 in _resolved and round(_ep, _R3) <= round(_sp, _R3):
+                return True   # force-resolved 0-gap — valid by prior decision
+            return False
+
         _wl_total_repaired = 0
         _wl_pass_n = 0
+        _wl_modified_pis: set[int] = set()  # pairs TOUCHED by this repair pass
         for _wl_pass_n in range(5):  # up to 5 cascade iterations
             _wl_repaired_this = 0
             for _wl_w in _wl_sig:
@@ -1048,9 +1063,11 @@ def pretrim(
                     _wl_ep = _planned[_wl_pi][4]  # e_padded
                     if _wl_ws < _wl_ep - 0.100:
                         continue  # word starts inside/well-before this segment
-                    _ext_e = _wl_we + 0.010
-                    _max_e = (
-                        _planned[_wl_pi + 1][3] - 0.010
+                    # Gap required by the right-hand junction (0 if force-resolved).
+                    _wl_gap = 0.0 if _wl_pi in _resolved else 0.010
+                    _ext_e  = _wl_we + 0.010
+                    _max_e  = (
+                        _planned[_wl_pi + 1][3] - _wl_gap
                         if _wl_pi + 1 < len(_planned) else _ext_e + 9.0
                     )
                     if _ext_e <= _max_e + 0.001:  # extension fits
@@ -1068,14 +1085,20 @@ def pretrim(
                     continue
 
                 _wl_i, _wl_ssrc, _wl_e_old, _wl_sp, _wl_ep_old = _planned[_wl_best_pi]
+                _wl_gap2 = 0.0 if _wl_best_pi in _resolved else 0.010
                 _wl_new_ep = _wl_we + 0.010
                 if _wl_best_pi + 1 < len(_planned):
-                    _wl_new_ep = min(_wl_new_ep, _planned[_wl_best_pi + 1][3] - 0.010)
+                    _wl_new_ep = min(_wl_new_ep, _planned[_wl_best_pi + 1][3] - _wl_gap2)
                 _wl_new_e = max(_wl_e_old, _wl_we)
                 if _wl_best_pi + 1 < len(_planned):
-                    _wl_new_e = min(_wl_new_e, _planned[_wl_best_pi + 1][3] - 0.010)
+                    _wl_new_e = min(_wl_new_e, _planned[_wl_best_pi + 1][3] - _wl_gap2)
 
                 _planned[_wl_best_pi] = (_wl_i, _wl_ssrc, _wl_new_e, _wl_sp, _wl_new_ep)
+                # Track pairs adjacent to the modified segment (left and right junctions).
+                if _wl_best_pi > 0:
+                    _wl_modified_pis.add(_wl_best_pi - 1)
+                if _wl_best_pi + 1 < len(_planned):
+                    _wl_modified_pis.add(_wl_best_pi)
                 print(
                     f"[WORD-LOST] REPAIRED '{_wl_txt}' {_wl_ws:.2f}-{_wl_we:.2f}s"
                     f" → seg[{_wl_best_pi}].e {_wl_ep_old:.3f}→{_wl_new_ep:.3f}",
@@ -1094,15 +1117,21 @@ def pretrim(
                 flush=True,
             )
 
-        # Post-repair pairwise check — repairs must not create overlaps.
-        for _wl_pi2 in range(len(_planned) - 1):
-            _wl_chk_e = _planned[_wl_pi2][4]
-            _wl_chk_s = _planned[_wl_pi2 + 1][3]
-            if round(_wl_chk_e, 3) > round(_wl_chk_s - 0.010, 3):
+        # Post-repair check — only verify pairs WE modified; untouched pairs were
+        # already validated by stabilization/universal-snap and must not be re-tested
+        # with different criteria (false positives guaranteed otherwise).
+        # Uses _jv so force-resolved 0-gap junctions are correctly accepted.
+        for _wl_pi2 in sorted(_wl_modified_pis):
+            if _wl_pi2 + 1 >= len(_planned):
+                continue
+            if not _jv(_wl_pi2):
+                _wl_ep2 = _planned[_wl_pi2][4]
+                _wl_sp2 = _planned[_wl_pi2 + 1][3]
                 raise RuntimeError(
                     f"[WORD-LOST-REPAIR] overlap after repair:"
-                    f" seg[{_wl_pi2}].e_padded={_wl_chk_e:.3f}"
-                    f" > seg[{_wl_pi2+1}].s_padded-10ms={_wl_chk_s-0.010:.3f}"
+                    f" seg[{_wl_pi2}].e_padded={_wl_ep2:.3f}"
+                    f" > seg[{_wl_pi2+1}].s_padded={_wl_sp2:.3f}"
+                    f" (resolved={_wl_pi2 in _resolved})"
                 )
 
         # Final assertion — any word in an INTER-SEGMENT gap (has planned segments
