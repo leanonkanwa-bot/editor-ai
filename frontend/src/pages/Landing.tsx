@@ -1,3 +1,4 @@
+import { useRef, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useLanguage } from "../lib/useLanguage";
 import { t as tr, type Lang } from "../lib/i18n";
@@ -79,67 +80,169 @@ function AvatarStack({ t }: { t: (k: Parameters<typeof tr>[1]) => string }) {
   );
 }
 
-// ── Before/After Demo ─────────────────────────────────────────────────────────
-function BeforeAfter({ t }: { t: (k: Parameters<typeof tr>[1]) => string }) {
+// ── Before/After Video Demo ───────────────────────────────────────────────────
+// Desktop: draggable slider revealing before/after over the same frame.
+// Mobile:  two 9:16 panels stacked side by side.
+// Drop /public/demo/before.mp4 and /public/demo/after.mp4 to activate.
+// While files are missing, gradient placeholders hold the layout.
+function BeforeAfterVideo({ t }: { t: (k: Parameters<typeof tr>[1]) => string }) {
+  // Desktop slider refs + sync
+  const beforeRef    = useRef<HTMLVideoElement>(null);
+  const afterRef     = useRef<HTMLVideoElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos]           = useState(50);       // 0-100 %
+  const [beforeErr, setBeforeErr] = useState(false);  // true when file is missing
+  const [afterErr,  setAfterErr]  = useState(false);
+  const dragging = useRef(false);
+
+  // Keep after.mp4 time-locked to before.mp4 on desktop
+  useEffect(() => {
+    const b = beforeRef.current;
+    const a = afterRef.current;
+    if (!b || !a) return;
+    const onPlay   = () => { a.currentTime = b.currentTime; a.play().catch(() => {}); };
+    const onPause  = () => a.pause();
+    const onSeeked = () => { a.currentTime = b.currentTime; };
+    b.addEventListener("play",   onPlay);
+    b.addEventListener("pause",  onPause);
+    b.addEventListener("seeked", onSeeked);
+    return () => {
+      b.removeEventListener("play",   onPlay);
+      b.removeEventListener("pause",  onPause);
+      b.removeEventListener("seeked", onSeeked);
+    };
+  }, []);
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    dragging.current = true;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragging.current || !containerRef.current) return;
+    const r = containerRef.current.getBoundingClientRect();
+    setPos(Math.min(95, Math.max(5, ((e.clientX - r.left) / r.width) * 100)));
+  };
+  const stopDrag = () => { dragging.current = false; };
+
+  // Shared placeholder shown when the video file is absent (404 / not yet dropped)
+  const Placeholder = ({ accent, label }: { accent: boolean; label: string }) => (
+    <div className={`absolute inset-0 flex items-end justify-start p-4 ${
+      accent
+        ? "bg-gradient-to-br from-[#1c0900] via-[#110800] to-[#0a0a0a]"
+        : "bg-gradient-to-br from-[#111] to-[#0a0a0a]"
+    }`}>
+      <span className={`text-[10px] font-black uppercase tracking-[0.18em] ${accent ? "text-brand-600" : "text-slate-700"}`}>
+        {label}
+      </span>
+    </div>
+  );
+
   return (
-    <div className="relative max-w-4xl mx-auto mt-16 grid grid-cols-2 gap-3">
-      {/* Raw */}
-      <div className="rounded-xl border border-white/[0.06] bg-[#111]/80 overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-white/[0.05] flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-rose-500/60" />
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.12em]">{t("before_label")}</span>
+    <div className="relative max-w-4xl mx-auto mt-16">
+
+      {/* ═══ DESKTOP — draggable slider ═══════════════════════════════════════ */}
+      <div
+        ref={containerRef}
+        className="relative hidden md:block aspect-video rounded-2xl overflow-hidden select-none border border-white/[0.07] shadow-[0_40px_80px_rgba(0,0,0,0.5)] cursor-col-resize"
+        onPointerMove={onPointerMove}
+        onPointerUp={stopDrag}
+        onPointerLeave={stopDrag}
+      >
+        {/* BEFORE (full frame) */}
+        <video
+          ref={beforeRef}
+          src="/demo/before.mp4"
+          className="absolute inset-0 w-full h-full object-cover"
+          autoPlay muted loop playsInline
+          onError={() => setBeforeErr(true)}
+        />
+        {beforeErr && <Placeholder accent={false} label={t("before_label")} />}
+
+        {/* AFTER (clipped to right of slider) */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ clipPath: `inset(0 0 0 ${pos}%)` }}
+        >
+          <video
+            ref={afterRef}
+            src="/demo/after.mp4"
+            className="absolute inset-0 w-full h-full object-cover"
+            autoPlay muted loop playsInline
+            onError={() => setAfterErr(true)}
+          />
+          {afterErr && <Placeholder accent={true} label={t("after_label")} />}
         </div>
-        <div className="p-5 space-y-3">
-          <div className="space-y-2">
-            <p className="text-xs text-slate-500 leading-relaxed font-mono">
-              "{t("ba_raw_hook")}"
-            </p>
+
+        {/* Draggable divider */}
+        <div
+          className="absolute top-0 bottom-0 z-20 flex items-center justify-center"
+          style={{ left: `${pos}%`, transform: "translateX(-50%)" }}
+          onPointerDown={onPointerDown}
+        >
+          <div className="absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-white/60 shadow-[0_0_10px_rgba(255,255,255,0.35)]" />
+          <button
+            className="relative z-10 w-10 h-10 rounded-full bg-white/95 shadow-2xl flex items-center justify-center cursor-ew-resize border-2 border-white/20 hover:scale-105 transition-transform"
+            aria-label="Drag to compare"
+          >
+            <svg width="18" height="12" viewBox="0 0 18 12" fill="none" aria-hidden="true">
+              <path d="M5.5 6L1.5 2v8l4-4zM12.5 6l4-4v8l-4-4z" fill="#1a1a1a" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Corner labels */}
+        <div className="absolute top-3 left-4 z-10 pointer-events-none">
+          <span className="text-[10px] font-black uppercase tracking-[0.18em] text-white/70 bg-black/50 backdrop-blur-sm px-2.5 py-1 rounded-md">
+            {t("ba_tag_before")}
+          </span>
+        </div>
+        <div className="absolute top-3 right-4 z-10 pointer-events-none">
+          <span className="text-[10px] font-black uppercase tracking-[0.18em] text-brand-300 bg-black/50 backdrop-blur-sm px-2.5 py-1 rounded-md">
+            {t("ba_tag_after")}
+          </span>
+        </div>
+
+        {/* Drag hint */}
+        <p className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 text-[9px] text-white/25 font-medium tracking-widest pointer-events-none uppercase">
+          ← {t("ba_drag_hint")} →
+        </p>
+      </div>
+
+      {/* ═══ MOBILE — two 9:16 panels side by side ═══════════════════════════ */}
+      <div className="grid grid-cols-2 gap-3 md:hidden">
+        {/* Before */}
+        <div className="relative rounded-xl overflow-hidden border border-white/[0.06]">
+          <div className="relative aspect-[9/16]">
+            <video
+              src="/demo/before.mp4"
+              className="absolute inset-0 w-full h-full object-cover"
+              autoPlay muted loop playsInline
+              onError={() => setBeforeErr(true)}
+            />
+            {beforeErr && <Placeholder accent={false} label={t("before_label")} />}
           </div>
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2">
-              <div className="flex-1 h-1.5 bg-[#1f1f1f] rounded-full overflow-hidden">
-                <div className="w-[37%] h-full bg-rose-500/60 rounded-full" />
-              </div>
-              <span className="text-[10px] text-rose-400 font-mono whitespace-nowrap">37%</span>
-            </div>
-            <p className="text-[10px] text-slate-600 font-medium">{t("ba_raw_tag")}</p>
+          <div className="py-2 text-center text-[9px] font-black uppercase tracking-[0.15em] text-slate-500 bg-[#0a0a0a]">
+            {t("ba_tag_before")} — {t("before_label")}
+          </div>
+        </div>
+
+        {/* After */}
+        <div className="relative rounded-xl overflow-hidden border border-brand-500/20 shadow-[0_0_20px_rgba(255,117,31,0.07)]">
+          <div className="relative aspect-[9/16]">
+            <video
+              src="/demo/after.mp4"
+              className="absolute inset-0 w-full h-full object-cover"
+              autoPlay muted loop playsInline
+              onError={() => setAfterErr(true)}
+            />
+            {afterErr && <Placeholder accent={true} label={t("after_label")} />}
+          </div>
+          <div className="py-2 text-center text-[9px] font-black uppercase tracking-[0.15em] text-brand-500 bg-[#0a0a0a]">
+            {t("ba_tag_after")} — {t("after_label")}
           </div>
         </div>
       </div>
 
-      {/* Edited */}
-      <div className="rounded-xl border border-brand-500/20 bg-[#111]/80 overflow-hidden shadow-[0_0_30px_rgba(255,117,31,0.06)]">
-        <div className="px-4 py-2.5 border-b border-brand-500/15 flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-brand-500" />
-          <span className="text-[10px] font-bold text-brand-400 uppercase tracking-[0.12em]">{t("after_label")}</span>
-        </div>
-        <div className="p-5 space-y-3">
-          <div className="space-y-2">
-            <p className="text-xs text-white leading-relaxed font-semibold">
-              "{t("ba_edited_hook")}"
-            </p>
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <div className="flex-1 h-1.5 bg-[#1f1f1f] rounded-full overflow-hidden">
-                <div className="w-[84%] h-full bg-brand-500/80 rounded-full" />
-              </div>
-              <span className="text-[10px] text-brand-400 font-mono whitespace-nowrap">84%</span>
-            </div>
-            <div className="flex gap-2">
-              <span className="text-[9px] font-semibold text-brand-400 bg-brand-500/10 border border-brand-500/20 px-2 py-0.5 rounded-full">{t("ba_edited_tag_1")}</span>
-              <span className="text-[9px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">{t("ba_edited_tag_2")}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Arrow between */}
-      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10">
-        <div className="w-8 h-8 rounded-full bg-brand-500 flex items-center justify-center shadow-glow-brand text-white text-sm font-black">
-          →
-        </div>
-      </div>
     </div>
   );
 }
@@ -198,7 +301,7 @@ function Hero({ t }: { t: (k: Parameters<typeof tr>[1]) => string }) {
       </div>
 
       <div id="before-after">
-        <BeforeAfter t={t} />
+        <BeforeAfterVideo t={t} />
       </div>
     </section>
   );

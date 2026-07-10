@@ -22,6 +22,9 @@ export const translations = {
     // Before/after
     before_label: "Vidéo brute",
     after_label: "Montée par LeanRetention",
+    ba_tag_before: "Avant",
+    ba_tag_after: "Après",
+    ba_drag_hint: "glisser",
     ba_raw_hook: "Donc euh... aujourd'hui je vais vous parler de, hm, la rétention sur TikTok. Alors voilà c'est un sujet qui, bah, qui est important...",
     ba_raw_tag: "❌ Hook faible — 63% drop à 3s",
     ba_edited_hook: "63% de tes viewers partent dans les 3 premières secondes. Voici pourquoi — et comment l'arrêter.",
@@ -163,6 +166,9 @@ export const translations = {
     // Before/after
     before_label: "Raw footage",
     after_label: "Edited by LeanRetention",
+    ba_tag_before: "Before",
+    ba_tag_after: "After",
+    ba_drag_hint: "drag",
     ba_raw_hook: "So uh... today I'm going to talk about, hmm, retention on TikTok. So like that's a topic that, you know, is pretty important...",
     ba_raw_tag: "❌ Weak hook — 63% drop at 3s",
     ba_edited_hook: "63% of your viewers leave in the first 3 seconds. Here's why — and how to stop it.",
