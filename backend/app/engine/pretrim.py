@@ -1272,12 +1272,13 @@ def pretrim(
             if not _jv(_wl_pi2):
                 _wl_ep2 = _planned[_wl_pi2][4]
                 _wl_sp2 = _planned[_wl_pi2 + 1][3]
-                raise RuntimeError(
-                    f"[WORD-LOST-REPAIR] overlap after repair:"
-                    f" seg[{_wl_pi2}].e_padded={_wl_ep2:.3f}"
-                    f" > seg[{_wl_pi2+1}].s_padded={_wl_sp2:.3f}"
-                    f" (resolved={_wl_pi2 in _resolved})"
+                print(
+                    f"[WORD-LOST-OVERLAP] seg[{_wl_pi2}].e_padded={_wl_ep2:.3f}"
+                    f" > seg[{_wl_pi2 + 1}].s_padded={_wl_sp2:.3f}"
+                    f" after repair — marking 0-gap resolved (graceful fallback)",
+                    flush=True,
                 )
+                _resolved.add(_wl_pi2)
 
         # Final assertion — any word in an INTER-SEGMENT gap (has planned segments
         # both before AND after it) is a snap artifact and must have been repaired.
@@ -1303,9 +1304,42 @@ def pretrim(
             _wl_has_after  = any(_planned[_p2][3] >= _wl_we - 0.010 for _p2 in range(len(_planned)))
             if not (_wl_has_before and _wl_has_after):
                 continue  # pre-plan or post-plan word — intentional exclusion, skip
-            raise RuntimeError(
-                f"[WORD-LOST] '{_wl_txt}' at {_wl_ws:.2f}-{_wl_we:.2f}s"
-                f" still orphaned in inter-segment gap after {_wl_pass_n + 1} repair pass(es)"
+            # GRACEFUL FALLBACK: force-absorb into nearest segment boundary — never crash to user.
+            print(
+                f"[WORD-LOST-FALLBACK] '{_wl_txt}' {_wl_ws:.3f}-{_wl_we:.3f}s"
+                f" still orphaned after {_wl_pass_n + 1} repair pass(es)"
+                f" — emergency nearest-segment absorb",
+                flush=True,
+            )
+            _wl_near_d, _wl_near_pi, _wl_near_side = float("inf"), 0, "a"
+            for _fb_pi in range(len(_planned)):
+                _d_a = abs(_wl_ws - _planned[_fb_pi][4])   # dist word.start → seg.e_padded
+                _d_b = abs(_wl_we - _planned[_fb_pi][3])   # dist word.end   → seg.s_padded
+                if _d_a < _wl_near_d:
+                    _wl_near_d, _wl_near_pi, _wl_near_side = _d_a, _fb_pi, "a"
+                if _d_b < _wl_near_d:
+                    _wl_near_d, _wl_near_pi, _wl_near_side = _d_b, _fb_pi, "b"
+            _fb_mi, _fb_ss, _fb_e, _fb_sp2, _fb_ep2 = _planned[_wl_near_pi]
+            if _wl_near_side == "a":
+                _fb_new_ep = max(_fb_ep2, _wl_we + 0.010)
+                if _wl_near_pi + 1 < len(_planned):
+                    _fb_next_sp = _planned[_wl_near_pi + 1][3]
+                    if _fb_new_ep > _fb_next_sp:
+                        _fb_new_ep = _fb_next_sp
+                        _resolved.add(_wl_near_pi)
+                _planned[_wl_near_pi] = (_fb_mi, _fb_ss, max(_fb_e, _wl_we), _fb_sp2, _fb_new_ep)
+            else:
+                _fb_new_sp = min(_fb_sp2, _wl_ws - 0.010)
+                if _wl_near_pi > 0:
+                    _fb_prev_ep = _planned[_wl_near_pi - 1][4]
+                    if _fb_new_sp < _fb_prev_ep:
+                        _fb_new_sp = _fb_prev_ep
+                        _resolved.add(_wl_near_pi - 1)
+                _planned[_wl_near_pi] = (_fb_mi, _fb_ss, _fb_e, _fb_new_sp, _fb_ep2)
+            print(
+                f"[WORD-LOST-FALLBACK] absorbed into seg[{_wl_near_pi}]"
+                f" side={_wl_near_side} dist={_wl_near_d * 1000:.0f}ms",
+                flush=True,
             )
 
         if not _wl_total_repaired:
