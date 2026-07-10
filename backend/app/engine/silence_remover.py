@@ -22,12 +22,13 @@ from typing import Any
 
 # V1 safe list — very low false-positive risk in natural French speech.
 _FILLER_WORDS_FR_V1 = frozenset({
-    "euh", "euhh", "heu",      # vocalic hesitations
-    "bah", "ba",               # discourse fillers
-    "hein",                    # confirmation-seeking
-    "bref",                    # empty summary
-    "du coup",                 # empty connector
-    "tu vois", "t'vois",      # confirmation-seeking
+    "euh", "euhh", "heu",           # vocalic hesitations
+    "hmm", "hm", "mmm", "mhm",     # humming hesitations (Whisper FR spelling variants)
+    "bah", "ba",                    # discourse fillers
+    "hein",                         # confirmation-seeking
+    "bref",                         # empty summary
+    "du coup",                      # empty connector
+    "tu vois", "t'vois",            # confirmation-seeking
 })
 # V2 candidates disabled — too much legitimate use in natural French:
 # "donc", "voilà", "genre", "en fait", "quoi", "bon", "ouais bon"
@@ -55,9 +56,10 @@ def _is_filler(word: str) -> bool:
 # Pause-isolation guard: a filler is only physically cut when it has a pause
 # on at least one side. Fillers embedded in normal speech flow are left in place —
 # a missed filler sounds natural; a spurious mid-word cut sounds broken.
-_FILLER_PAUSE_GUARD_PRE  = 0.20   # seconds gap required before the filler
-_FILLER_PAUSE_GUARD_POST = 0.15   # seconds gap required after the filler
-_FILLER_CUT_PAD          = 0.040  # seconds padding for Whisper ±50ms timing imprecision
+_FILLER_PAUSE_GUARD_PRE  = 0.08   # seconds gap required before the filler (down from 0.20)
+_FILLER_PAUSE_GUARD_POST = 0.08   # seconds gap required after the filler (down from 0.15)
+_FILLER_GLUED_GUARD      = 0.030  # minimum post_gap — below this, next word is too close to cut safely
+_FILLER_CUT_PAD          = 0.080  # seconds padding around filler cut (up from 0.040, covers Whisper ±50ms)
 _MIN_WORD_DUR_S          = 0.030  # words shorter than this are Whisper artifacts, not speech
 
 _PRINCIPLE_PAYOFF = re.compile(
@@ -278,61 +280,55 @@ class RhythmAwareSilenceRemover:
     ) -> list[DropSegment]:
         """Drop isolated filler words that serve no semantic purpose.
 
-        A filler is only cut when isolated by a pause on at least one side
-        (pre_gap > _FILLER_PAUSE_GUARD_PRE OR post_gap > _FILLER_PAUSE_GUARD_POST).
-        Fillers embedded in normal speech flow are left intact.
+        A filler is cut when it has at least one side gap >= _FILLER_PAUSE_GUARD
+        and is not dangerously glued to the next word (post_gap >= _FILLER_GLUED_GUARD).
+        Cut boundaries are padded by _FILLER_CUT_PAD and hard-clamped to adjacent
+        word edges so no neighbouring word is ever clipped.
         """
         drops: list[DropSegment] = []
         for i, (text, start, end) in enumerate(words):
             if not _is_filler(text):
                 continue
 
-            # Don't drop if it's at a segment boundary.
-            if any(abs(end - se) < 0.1 for se in segment_ends):
-                continue
+            # Compute gaps first — needed for audit log and all guards.
+            pre_gap  = start - words[i - 1][2] if i > 0 else float("inf")
+            post_gap = words[i + 1][1] - end   if i < len(words) - 1 else float("inf")
 
-            # Don't drop "like" if used as comparison.
-            if text.lower() == "like":
-                prev_text = words[i - 1][0] if i > 0 else ""
-                if _is_comparison_like(prev_text):
-                    continue
+            # Evaluate guard outcomes for audit log.
+            _at_seg_end     = any(abs(end - se) < 0.1 for se in segment_ends)
+            _passes_pause   = pre_gap > _FILLER_PAUSE_GUARD_PRE or post_gap > _FILLER_PAUSE_GUARD_POST
+            _glued          = post_gap < _FILLER_GLUED_GUARD and i < len(words) - 1
+            _like_comp      = text.lower() == "like" and _is_comparison_like(words[i - 1][0] if i > 0 else "")
+            _so_connector   = text.lower() == "so" and i > 0 and (start - words[i - 1][2]) > 0.3
 
-            # Don't drop "so" if it's a meaningful sentence-start connector.
-            if text.lower() == "so" and i > 0:
-                prev_end = words[i - 1][2]
-                if start - prev_end > 0.3:
-                    continue
-
-            # Gap before the filler: beginning of recording counts as infinite pre-gap
-            # (not just word.start — a filler at t=0.05s would give pre_gap=0.05 < guard).
-            pre_gap = start - words[i - 1][2] if i > 0 else float("inf")
-
-            # Gap after the filler: end of recording counts as infinite post-gap.
-            post_gap = words[i + 1][1] - end if i < len(words) - 1 else float("inf")
-
-            # Pause-isolation guard: only cut if there's a pause on at least one side.
-            if not (pre_gap > _FILLER_PAUSE_GUARD_PRE or post_gap > _FILLER_PAUSE_GUARD_POST):
-                continue
-
-            # Glued-to-next-word guard: when the next word starts within 100ms of the
-            # filler's end, cutting risks clipping it (Whisper ±50ms timestamp error).
-            # Keeping the filler is invisible compared to an amputated word.
-            if post_gap < 0.100 and i < len(words) - 1:
-                _next_txt = words[i + 1][0]
-                print(
-                    f"[FILLER] kept {text!r} — glued to next word {_next_txt!r},"
-                    f" cut would clip it (post_gap={post_gap * 1000:.0f}ms)",
-                    flush=True,
-                )
-                continue
-
-            # Clamp cut boundaries to adjacent word edges (or recording start/end).
-            cut_start = max(start - _FILLER_CUT_PAD, words[i - 1][2] if i > 0 else 0.0)
-            cut_end   = min(end   + _FILLER_CUT_PAD, words[i + 1][1] if i < len(words) - 1 else end + _FILLER_CUT_PAD)
+            _verdict = "CUT"
+            if _at_seg_end:       _verdict = "KEPT:seg_boundary"
+            elif _like_comp:      _verdict = "KEPT:comparison_like"
+            elif _so_connector:   _verdict = "KEPT:so_connector"
+            elif not _passes_pause: _verdict = f"KEPT:pause_guard(pre={pre_gap*1000:.0f}ms<{_FILLER_PAUSE_GUARD_PRE*1000:.0f} post={post_gap*1000:.0f}ms<{_FILLER_PAUSE_GUARD_POST*1000:.0f})"
+            elif _glued:          _verdict = f"KEPT:glued(post={post_gap*1000:.0f}ms<{_FILLER_GLUED_GUARD*1000:.0f})"
 
             print(
-                f"[FILLER] cut {text!r} at {start:.2f}s "
-                f"(pre_gap {pre_gap:.2f}s, post_gap {post_gap:.2f}s)",
+                f"[FILLER-AUDIT] {text!r} {start:.3f}-{end:.3f}s"
+                f" | pre={pre_gap*1000:.0f}ms post={post_gap*1000:.0f}ms"
+                f" → {_verdict}",
+                flush=True,
+            )
+
+            if _verdict != "CUT":
+                continue
+
+            # Clamp cut boundaries to adjacent word edges — never clip a real word.
+            cut_start = max(start - _FILLER_CUT_PAD, words[i - 1][2] if i > 0 else 0.0)
+            cut_end   = min(end   + _FILLER_CUT_PAD,
+                            words[i + 1][1] if i < len(words) - 1 else end + _FILLER_CUT_PAD)
+            _pre_pad  = start - cut_start
+            _post_pad = cut_end - end
+
+            print(
+                f"[FILLER] cut {text!r} {start:.3f}-{end:.3f}s"
+                f" → [{cut_start:.3f},{cut_end:.3f}]"
+                f" pad={_pre_pad*1000:.0f}ms/{_post_pad*1000:.0f}ms",
                 flush=True,
             )
             drops.append(DropSegment(
