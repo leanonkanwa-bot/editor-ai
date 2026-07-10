@@ -5,6 +5,10 @@ export const api = axios.create({ baseURL: import.meta.env.VITE_API_URL || "/api
 api.interceptors.request.use((cfg) => {
   const t = localStorage.getItem("ll_token");
   if (t) cfg.headers.Authorization = `Bearer ${t}`;
+  try {
+    const lang = localStorage.getItem("lr_lang");
+    if (lang) cfg.headers["X-User-Lang"] = lang;
+  } catch {}
   return cfg;
 });
 
