@@ -32,14 +32,26 @@ _ZONE_BOUNDS_LANDSCAPE = {
     "video-overlay":    {"left": 0,    "top": 0, "width": 1920, "height": 1080},
 }
 
-# Zone → pixel bounds for portrait (1080×1920)
+# Zone → pixel bounds for portrait 9:16 (1080×1920)
+#
+# Fixed vertical bands (% of 1920px):
+#   0–15%  (0–288)   : hook-title    — hook/titre overlay
+#   15–70% (288–1344): <subject zone> — visage, NEVER overlaid
+#   20–40% (384–768) : upper-data    — data cards (stat/list/timeline/etc.)
+#   70–85% (1344–1632): lower-third  — captions ONLY
+#   85–100%(1632–1920): <safe margin>
+#
+# Rule: caption band (lower-third) and data cards (upper-data) are in separate
+# vertical bands, eliminating all temporal collision without scheduling logic.
 _ZONE_BOUNDS_PORTRAIT = {
-    "fullscreen":       {"left": 0, "top": 0,    "width": 1080, "height": 1920},
-    "lower-third":      {"left": 0, "top": 1344, "width": 1080, "height": 576},
-    "side-panel":       {"left": 0, "top": 1152, "width": 1080, "height": 768},
-    "side-panel-top":   {"left": 0, "top": 0,    "width": 1080, "height": 768},
-    "whiteboard-area":  {"left": 40, "top": 864, "width": 1000, "height": 1016},
-    "video-overlay":    {"left": 0, "top": 0,    "width": 1080, "height": 1920},
+    "fullscreen":     {"left": 0,  "top": 0,    "width": 1080, "height": 1920},
+    "hook-title":     {"left": 0,  "top": 0,    "width": 1080, "height": 288},   # 0–15%
+    "upper-data":     {"left": 60, "top": 384,  "width": 960,  "height": 384},   # 20–40%
+    "lower-third":    {"left": 0,  "top": 1344, "width": 1080, "height": 288},   # 70–85% captions only
+    "side-panel":     {"left": 60, "top": 384,  "width": 960,  "height": 384},   # alias → upper-data band
+    "side-panel-top": {"left": 0,  "top": 0,    "width": 1080, "height": 288},   # 0–15%
+    "whiteboard-area":{"left": 60, "top": 384,  "width": 960,  "height": 384},   # 20–40%
+    "video-overlay":  {"left": 0,  "top": 0,    "width": 1080, "height": 1920},
 }
 
 # Theme palettes from graphic-overlays SKILL.md
@@ -61,7 +73,7 @@ def _zone_bounds(zone: str, layout: str) -> dict:
 # chosen zone — they carry the visual message and need the full canvas.
 _DATA_PANEL_TYPES = {"stat", "list", "comparison", "checklist", "score", "trend"}
 _CENTER_ZONES = {"fullscreen", "video-overlay"}
-_SIDE_PANEL_ZONES = {"side-panel", "side-panel-left", "side-panel-right", "side-panel-top"}
+_SIDE_PANEL_ZONES = {"side-panel", "side-panel-left", "side-panel-right", "side-panel-top", "upper-data"}
 
 
 def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | None = None) -> str:
@@ -1987,12 +1999,27 @@ def compose(
     def _remap_zone(card: dict) -> dict:
         style = card.get("contentHints", {}).get("style", "")
         zone = card.get("zone", "video-overlay")
+
+        # Portrait anti-collision: caption band is always 70–85%; data cards
+        # must never share that band.  Force all portrait data cards to upper-data
+        # (20–40%) regardless of what Claude requested — zone separation is the
+        # anti-collision mechanism, no temporal scheduling needed.
+        if layout == "portrait" and style in _DATA_PANEL_TYPES:
+            if zone != "upper-data":
+                print(
+                    f"[COMPOSE] portrait-zone: {card.get('id', '?')} ({style})"
+                    f" {zone!r} → 'upper-data' (anti-collision)",
+                    flush=True,
+                )
+                return {**card, "zone": "upper-data"}
+            return card
+
+        # Landscape: remap center-zone data cards to face-aware side panel.
         if style not in _DATA_PANEL_TYPES or zone not in _CENTER_ZONES:
             return card
         if layout == "landscape":
             new_zone = "side-panel-left" if _face_cx > 50.0 else "side-panel-right"
         else:
-            # Portrait: speaker framed low (face centre > 60%) → panel at top
             new_zone = "side-panel-top" if (_has_face and _face_cy > 60.0) else "side-panel"
         print(
             f"[COMPOSE] zone remap: {card.get('id', '?')} ({style}) {zone!r} → {new_zone!r}",
