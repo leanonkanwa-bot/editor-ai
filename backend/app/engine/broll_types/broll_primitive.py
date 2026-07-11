@@ -225,10 +225,11 @@ def _render_gsap(params: dict, pack: dict, card_id: str, start: float, end: floa
                 f"  tl.to('#{cid}-prim-shape',"
                 f"{{opacity:1,duration:0.10}},{t_shape:.4f});"
             )
+            _acc = _ej(pack.get("accent", "#4cc9f0"))
             lines.append(
                 f"  tl.fromTo('#{cid}-prim-shape',"
                 f"{{'box-shadow':'0 0 0 0px rgba(76,201,240,0)'}},"
-                f"{{'box-shadow':'0 0 0 3px {_ej(pack.get(\"accent\",\"#4cc9f0\"))}',duration:0.50,ease:'power2.out'}}"
+                f"{{'box-shadow':'0 0 0 3px {_acc}',duration:0.50,ease:'power2.out'}}"
                 f",{t_shape:.4f});"
             )
         elif entry == "slide_up":
