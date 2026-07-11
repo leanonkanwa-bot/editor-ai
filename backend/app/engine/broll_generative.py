@@ -244,20 +244,26 @@ RULES (strict):
   - icon_name: required when visual=icon. Must be from the list above. Otherwise omit.
   - n_bubbles: required when visual=chat_bubbles (default 2). Otherwise omit.
   - Do NOT output: label, kicker, colors, fonts, SVG, HTML, or any other field.
-  - visual guide:
-      icon           → emotional/realization/payoff/principle beats
-      number_counter → ONLY when context text contains a numeral
-      chart_trace    → growth/stat/amplify beats with upward trend
-      chat_bubbles   → DIALOGUE or alternating-speaker context ("il m'a dit / je lui ai répondu",
-                        "she said / he replied", "they told me / I answered", two distinct voices);
-                        MUST pair with frame=phone and entry=sequential
-      quote_mark     → principle/wisdom statements from a single voice; pair with text_slot=quote_text
+  - visual guide — evaluated in PRIORITY ORDER (first match wins, overrides beat role):
+      PRIORITY 1: chat_bubbles
+        Use whenever the scene involves two distinct people exchanging, even indirectly:
+        reported speech ("elle me disait que..."), narrative exchange ("on s'est parlé et il
+        a fini par avouer que..."), contrasted stances ("j'essayais d'expliquer / il ne voulait
+        pas comprendre"), confession, confrontation, revelation between two parties.
+        Does NOT require explicit speech verbs — two perspectives in tension = chat_bubbles.
+        ALWAYS pair with: frame=phone  entry=sequential
+      PRIORITY 2: number_counter
+        ONLY when ctx contains a digit (numeral). Not for vague amounts.
+      PRIORITY 3: chart_trace
+        Growth, stat, amplify beats with an upward trend in ctx.
+      PRIORITY 4: quote_mark
+        A single-voice principle or wisdom statement. Pair with text_slot=quote_text.
+      PRIORITY 5: icon  (default — use when none of the above match)
+        Emotional/realization/payoff/principle beats.
   - frame guide:
-      phone          → use ONLY with chat_bubbles (dialogue scenes); never with number_counter
-      card           → default for most visuals
-      none-fullbleed → climax/bold moments with large single visual
-  - DIALOGUE RULE: when ctx contains alternating speaker cues ("il m'a dit", "je lui ai répondu",
-    "said", "replied", "answered", "told me"), output frame=phone visual=chat_bubbles entry=sequential
+      phone          → ONLY with chat_bubbles (two-person exchange). Never with other visuals.
+      card           → default for all other visuals
+      none-fullbleed → climax/bold moments with one large visual (only when NOT a dialogue scene)
   - layout guide: stacked→default | side_by_side→icon+label | centered_overlay→fullbleed text
   - entry guide: sequential→chat_bubbles+phone only | trace→chart_trace | pop→icon/badge | fade→quote
   - icon_name guide: heart→emotion/climax | spark→realization/hook | star→payoff/success |
