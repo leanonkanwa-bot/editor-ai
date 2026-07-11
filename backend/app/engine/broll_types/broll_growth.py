@@ -37,7 +37,7 @@ _MULT_RE = re.compile(
     r"\b(?:"
     r"(?P<xn>\d+(?:[.,]\d+)?)\s*[xX×]"           # "10x", "2.5x", "3×"
     r"|[xX×]\s*(?P<nx>\d+(?:[.,]\d+)?)"           # "x10", "×3"
-    r"|(?P<kw>doubl|tripl|quadrupl|multipl)"       # "doublé", "tripled", "multiplié"
+    r"|(?P<kw>(?:doubl|tripl|quadrupl|multipl)(?:i?é[e]?s?|i?ed|i?ant|ing|ying))"  # "triplé/triplée/tripled/tripling/doublant/multiplié/multiplied/multiplying"
     r"|(?P<pct>\+?\d+(?:[.,]\d+)?\s*%)"           # "+300%", "150%"
     r")\b",
     re.IGNORECASE,

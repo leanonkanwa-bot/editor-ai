@@ -490,7 +490,7 @@ register(BRollType(
     extractor=_extractor,
     render_html=_render_html,
     render_gsap=_render_gsap,
-    default_duration=6.0,
+    default_duration=3.5,
     preferred_zone="upper-data",
     min_confidence=0.75,
 ))
