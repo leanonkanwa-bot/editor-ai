@@ -248,11 +248,18 @@ RULES (strict):
       icon           → emotional/realization/payoff/principle beats
       number_counter → ONLY when context text contains a numeral
       chart_trace    → growth/stat/amplify beats with upward trend
-      chat_bubbles   → testimonial/dialogue/message context; pair with frame=phone
-      quote_mark     → principle/wisdom statements; pair with text_slot=quote_text
-  - frame guide: phone→chat_bubbles only | card→default | none-fullbleed→climax/bold moments
+      chat_bubbles   → DIALOGUE or alternating-speaker context ("il m'a dit / je lui ai répondu",
+                        "she said / he replied", "they told me / I answered", two distinct voices);
+                        MUST pair with frame=phone and entry=sequential
+      quote_mark     → principle/wisdom statements from a single voice; pair with text_slot=quote_text
+  - frame guide:
+      phone          → use ONLY with chat_bubbles (dialogue scenes); never with number_counter
+      card           → default for most visuals
+      none-fullbleed → climax/bold moments with large single visual
+  - DIALOGUE RULE: when ctx contains alternating speaker cues ("il m'a dit", "je lui ai répondu",
+    "said", "replied", "answered", "told me"), output frame=phone visual=chat_bubbles entry=sequential
   - layout guide: stacked→default | side_by_side→icon+label | centered_overlay→fullbleed text
-  - entry guide: sequential→chat_bubbles only | trace→chart_trace | pop→icon/badge | fade→quote
+  - entry guide: sequential→chat_bubbles+phone only | trace→chart_trace | pop→icon/badge | fade→quote
   - icon_name guide: heart→emotion/climax | spark→realization/hook | star→payoff/success |
     stop→principle/boundary | growth→stat/amplify | alert→urgency | check→confirmation
   - Language of context: {language}
@@ -397,19 +404,32 @@ def _validate(obj: dict, idx: int) -> dict | None:
 def _compat_fix(params: dict, idx: int) -> dict:
     """Cross-axis compatibility pass — silent correction, never rejection.
 
-    Compatibility table (one rule per line — easy to extend):
-      frame=phone          → visual must be chat_bubbles
-      visual=chat_bubbles  → frame must be phone or card (not none/none-fullbleed)
-      visual=quote_mark    → text_slot must be quote_text
-      visual=number_counter→ frame must not be phone
-      entry=sequential     → only valid with chat_bubbles; else demote to fade
+    Rules are evaluated in declaration order. Order is intentional and encodes
+    priority when two rules could apply to the same input:
+
+      PRIORITY: frame wins over visual when they conflict.
+      Example: frame=phone + visual=number_counter
+        → Rule 1 fires first: visual forced to chat_bubbles.
+        → Rule 4 (number_counter excludes phone) then sees visual=chat_bubbles
+          and is a no-op. The phone-frame intent is preserved because a phone
+          frame showing chat bubbles is coherent; showing a number counter is not.
+        To add a new rule: append it here + document the priority interaction
+        with any existing rule it could conflict with.
+
+    Compatibility table:
+      Rule 1  frame=phone          → visual forced to chat_bubbles
+      Rule 2  visual=chat_bubbles  → frame must be phone or card
+      Rule 3  visual=quote_mark    → text_slot forced to quote_text
+      Rule 4  visual=number_counter→ frame must not be phone  [no-op if Rule 1 fired]
+      Rule 5  entry=sequential     → only valid with chat_bubbles; else demoted to fade
     """
     p = dict(params)
 
-    # Rule 1: frame=phone → visual must be chat_bubbles
+    # Rule 1 — PRIORITY: frame=phone preserves phone intent; visual is corrected to fit.
+    # When frame=phone + visual=number_counter, this fires before Rule 4, making Rule 4 a no-op.
     if p["frame"] == "phone" and p["visual"] != "chat_bubbles":
         print(
-            f"[BROLL-GENERATIVE] compat[{idx}]:"
+            f"[BROLL-GENERATIVE] compat[{idx}] Rule1:"
             f" frame=phone requires visual=chat_bubbles"
             f" (was {p['visual']!r}) — corrected",
             flush=True,
@@ -417,39 +437,39 @@ def _compat_fix(params: dict, idx: int) -> dict:
         p["visual"]    = "chat_bubbles"
         p["n_bubbles"] = p.get("n_bubbles", 2) or 2
 
-    # Rule 2: visual=chat_bubbles → frame must be phone or card
+    # Rule 2
     if p["visual"] == "chat_bubbles" and p["frame"] not in ("phone", "card"):
         print(
-            f"[BROLL-GENERATIVE] compat[{idx}]:"
+            f"[BROLL-GENERATIVE] compat[{idx}] Rule2:"
             f" visual=chat_bubbles requires frame=phone|card"
             f" (was {p['frame']!r}) — corrected to 'card'",
             flush=True,
         )
         p["frame"] = "card"
 
-    # Rule 3: visual=quote_mark → text_slot must be quote_text
+    # Rule 3
     if p["visual"] == "quote_mark" and p["text_slot"] != "quote_text":
         print(
-            f"[BROLL-GENERATIVE] compat[{idx}]:"
+            f"[BROLL-GENERATIVE] compat[{idx}] Rule3:"
             f" visual=quote_mark requires text_slot=quote_text"
             f" (was {p['text_slot']!r}) — corrected",
             flush=True,
         )
         p["text_slot"] = "quote_text"
 
-    # Rule 4: visual=number_counter → frame must not be phone
+    # Rule 4 — no-op when Rule 1 already changed visual away from number_counter
     if p["visual"] == "number_counter" and p["frame"] == "phone":
         print(
-            f"[BROLL-GENERATIVE] compat[{idx}]:"
+            f"[BROLL-GENERATIVE] compat[{idx}] Rule4:"
             f" visual=number_counter excludes frame=phone — corrected to 'card'",
             flush=True,
         )
         p["frame"] = "card"
 
-    # Rule 5: entry=sequential → only valid for chat_bubbles; else demote to fade
+    # Rule 5
     if p["entry"] == "sequential" and p["visual"] != "chat_bubbles":
         print(
-            f"[BROLL-GENERATIVE] compat[{idx}]:"
+            f"[BROLL-GENERATIVE] compat[{idx}] Rule5:"
             f" entry=sequential requires visual=chat_bubbles"
             f" (was {p['visual']!r}) — entry demoted to 'fade'",
             flush=True,
