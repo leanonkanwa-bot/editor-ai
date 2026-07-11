@@ -621,7 +621,15 @@ def pretrim(
 
     Returns (trimmed_path, timing_map).
     """
+    import os as _os
     from app.core.config import settings as _cfg
+
+    print(
+        f"[PRETRIM] config:"
+        f" disable_cuts={_cfg.disable_cuts!r} (env DISABLE_CUTS={_os.environ.get('DISABLE_CUTS', '<unset>')!r})"
+        f" cut_fillers={_cfg.cut_fillers!r} (env CUT_FILLERS={_os.environ.get('CUT_FILLERS', '<unset>')!r})",
+        flush=True,
+    )
 
     work_dir.mkdir(parents=True, exist_ok=True)
     short_form = plan.format == "short"
