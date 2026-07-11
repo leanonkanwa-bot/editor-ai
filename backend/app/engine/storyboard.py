@@ -529,6 +529,7 @@ def generate_storyboard(
     format_hint: str,
     timing_map: TimingMap,
     language: str = "en",
+    style_pack: str = "lean_glass",
 ) -> dict:
     """Generate a complete storyboard: graphic cards + caption cards.
 
@@ -626,6 +627,37 @@ def generate_storyboard(
         graphic_cards = _merge_cards(graphic_cards, _sem_cards)
     except Exception as _broll_exc:
         print(f"[BROLL-MERGE] non-fatal error in semantic scan/merge: {_broll_exc}", flush=True)
+
+    # Generative B-roll: gap-fill uncovered strong beats via Haiku
+    try:
+        from app.engine.broll_generative import generate_generative_broll
+        _style_packs = {
+            "lean_glass": {
+                "bg":             "#0f0f13",
+                "text":           "#f1f1f1",
+                "text_secondary": "rgba(241,241,241,0.45)",
+                "accent":         "#4cc9f0",
+                "font":           '"Inter", "Helvetica Neue", sans-serif',
+                "font_weight":    "800",
+                "radius":         "20px",
+                "shadow":         "0 8px 32px rgba(0,0,0,0.55)",
+                "shadow_inset":   "inset 0 1px 0 rgba(255,255,255,0.08)",
+            },
+        }
+        _pack = _style_packs.get(style_pack, _style_packs["lean_glass"])
+        _gen_cards = generate_generative_broll(
+            script_structure=script_structure,
+            accepted_cards=graphic_cards,
+            remapped_words=remapped_words,
+            timing_map=timing_map,
+            trimmed_duration=trimmed_duration,
+            pack=_pack,
+            language=language,
+            card_id_offset=len(graphic_cards),
+        )
+        graphic_cards = graphic_cards + _gen_cards
+    except Exception as _gen_exc:
+        print(f"[BROLL-GENERATIVE] non-fatal error: {_gen_exc}", flush=True)
 
     # Generate caption cards mechanically
     caption_cards = _segment_captions(

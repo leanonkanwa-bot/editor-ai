@@ -2022,6 +2022,7 @@ def _render_hyperframes(
         format_hint=plan.format,
         timing_map=timing_map,
         language=transcript.get("language", "en"),
+        style_pack=style_pack,
     )
     n_graphic = sum(1 for c in storyboard.get("cards", []) if c.get("type") != "caption")
     n_caption = sum(1 for c in storyboard.get("cards", []) if c.get("type") == "caption")
