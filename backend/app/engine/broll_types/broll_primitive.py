@@ -243,6 +243,257 @@ def _visual_html(params: dict, pack: dict, cid: str) -> tuple[str, str]:
 }}"""
         return html, css
 
+    if visual == "progress_bar":
+        raw = str(params.get("content_value", ""))
+        pct_str = raw.replace("%", "").strip()
+        try:
+            pct = max(0, min(100, int(float(pct_str))))
+        except ValueError:
+            pct = 50
+        label_v = _e(params.get("label", f"{pct}%"))
+        html = (
+            f'<div class="prim-visual prim-progress" id="{cid}-prim-visual">'
+            f'<div class="pb-header">'
+            f'<span class="pb-label">{label_v}</span>'
+            f'<span class="pb-pct">{pct}%</span>'
+            f'</div>'
+            f'<div class="pb-track"><div class="pb-fill" id="{cid}-pb-fill"'
+            f' data-target="{pct}"></div></div>'
+            f'</div>'
+        )
+        css = f"""\
+.card[data-card-id="{cid}"] .prim-progress {{
+  opacity:0; display:flex; flex-direction:column; gap:10px; width:100%;
+}}
+.card[data-card-id="{cid}"] .pb-header {{
+  display:flex; justify-content:space-between; align-items:baseline;
+}}
+.card[data-card-id="{cid}"] .pb-label {{
+  font-family:{font}; font-size:15px; font-weight:700; color:{text_c};
+}}
+.card[data-card-id="{cid}"] .pb-pct {{
+  font-family:{font}; font-size:22px; font-weight:{fw}; color:{accent};
+  font-variant-numeric:tabular-nums;
+}}
+.card[data-card-id="{cid}"] .pb-track {{
+  width:100%; height:8px; background:rgba(255,255,255,0.12);
+  border-radius:4px; overflow:hidden;
+}}
+.card[data-card-id="{cid}"] .pb-fill {{
+  height:100%; width:0%; background:{accent}; border-radius:4px;
+}}"""
+        return html, css
+
+    if visual == "checklist":
+        items_raw = params.get("label", "")
+        lines_raw = [l.strip() for l in items_raw.split("|") if l.strip()] if "|" in items_raw else [items_raw]
+        kicker_v  = params.get("kicker", "")
+        all_items = ([kicker_v] if kicker_v else []) + lines_raw
+        if len(all_items) < 2:
+            all_items = ["Étape précédente", "En cours"] + all_items
+        all_items = all_items[:4]
+        tick_svg = (
+            f'<svg viewBox="0 0 16 16" width="14" height="14"'
+            f' xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
+            f'<circle cx="8" cy="8" r="7" fill="{accent}" opacity="0.18"/>'
+            f'<polyline points="4,8 7,11 12,5" fill="none" stroke="{accent}"'
+            f' stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>'
+            f'</svg>'
+        )
+        items_html = "".join(
+            f'<div class="cl-item" id="{cid}-cl-{i}">'
+            f'{tick_svg}'
+            f'<span>{_e(t)}</span>'
+            f'</div>'
+            for i, t in enumerate(all_items)
+        )
+        html = f'<div class="prim-visual prim-checklist" id="{cid}-prim-visual">{items_html}</div>'
+        css = f"""\
+.card[data-card-id="{cid}"] .prim-checklist {{
+  display:flex; flex-direction:column; gap:9px; width:100%;
+}}
+.card[data-card-id="{cid}"] .cl-item {{
+  display:flex; align-items:center; gap:9px; opacity:0;
+  font-family:{font}; font-size:14px; font-weight:600; color:{text_c};
+}}
+.card[data-card-id="{cid}"] .cl-item:last-child {{
+  color:{accent};
+}}"""
+        return html, css
+
+    if visual == "countdown_ring":
+        dur_label = _e(params.get("content_value", params.get("label", "??")))
+        r   = 44
+        circ = round(2 * 3.14159 * r, 2)
+        html = (
+            f'<div class="prim-visual prim-ring" id="{cid}-prim-visual">'
+            f'<svg viewBox="0 0 100 100" width="110" height="110"'
+            f' xmlns="http://www.w3.org/2000/svg">'
+            f'<circle cx="50" cy="50" r="{r}" fill="none"'
+            f' stroke="rgba(255,255,255,0.10)" stroke-width="7"/>'
+            f'<circle cx="50" cy="50" r="{r}" fill="none" stroke="{accent}"'
+            f' stroke-width="7" stroke-linecap="round"'
+            f' stroke-dasharray="{circ}" stroke-dashoffset="{circ}"'
+            f' id="{cid}-ring-arc" transform="rotate(-90 50 50)"/>'
+            f'<text x="50" y="56" text-anchor="middle"'
+            f' font-family="{font}" font-weight="{fw}" font-size="14"'
+            f' fill="{text_c}">{dur_label}</text>'
+            f'</svg></div>'
+        )
+        css = f"""\
+.card[data-card-id="{cid}"] .prim-ring {{
+  opacity:0; display:flex; align-items:center; justify-content:center;
+}}"""
+        return html, css
+
+    if visual == "versus_meter":
+        left_label  = _e(params.get("kicker", "A"))
+        right_label = _e(params.get("label",  "B"))
+        html = (
+            f'<div class="prim-visual prim-versus" id="{cid}-prim-visual">'
+            f'<div class="vs-row">'
+            f'<span class="vs-name vs-left">{left_label}</span>'
+            f'<span class="vs-name vs-right">{right_label}</span>'
+            f'</div>'
+            f'<div class="vs-bars">'
+            f'<div class="vs-bar vs-bar-left" id="{cid}-vs-left"></div>'
+            f'<div class="vs-bar vs-bar-right" id="{cid}-vs-right"></div>'
+            f'</div>'
+            f'</div>'
+        )
+        css = f"""\
+.card[data-card-id="{cid}"] .prim-versus {{
+  opacity:0; display:flex; flex-direction:column; gap:10px; width:100%;
+}}
+.card[data-card-id="{cid}"] .vs-row {{
+  display:flex; justify-content:space-between;
+  font-family:{font}; font-size:13px; font-weight:700;
+}}
+.card[data-card-id="{cid}"] .vs-left {{ color:{accent}; }}
+.card[data-card-id="{cid}"] .vs-right {{ color:{text_c}; opacity:0.55; }}
+.card[data-card-id="{cid}"] .vs-bars {{
+  display:flex; gap:4px; height:10px;
+}}
+.card[data-card-id="{cid}"] .vs-bar {{
+  height:100%; border-radius:5px; width:0%;
+}}
+.card[data-card-id="{cid}"] .vs-bar-left {{
+  background:{accent}; flex:0 0 0%;
+}}
+.card[data-card-id="{cid}"] .vs-bar-right {{
+  background:rgba(255,255,255,0.20); flex:0 0 0%;
+}}"""
+        return html, css
+
+    if visual == "stat_grid":
+        val_raw  = _e(params.get("content_value", params.get("label", "×")))
+        sub_text = _e(params.get("kicker", ""))
+        html = (
+            f'<div class="prim-visual prim-stat-grid" id="{cid}-prim-visual">'
+            f'<div class="sg-big" id="{cid}-sg-val">{val_raw}</div>'
+            f'<div class="sg-sub">{sub_text}</div>'
+            f'</div>'
+        )
+        css = f"""\
+.card[data-card-id="{cid}"] .prim-stat-grid {{
+  opacity:0; display:flex; flex-direction:column; align-items:center; gap:4px;
+}}
+.card[data-card-id="{cid}"] .sg-big {{
+  font-family:{font}; font-size:72px; font-weight:{fw}; color:{accent};
+  font-variant-numeric:tabular-nums; line-height:1;
+}}
+.card[data-card-id="{cid}"] .sg-sub {{
+  font-family:{font}; font-size:14px; font-weight:600;
+  color:{text_c}; opacity:0.70; text-align:center;
+}}"""
+        return html, css
+
+    if visual == "timeline_dots":
+        label_v = _e(params.get("label", ""))
+        n_steps = 4
+        dots_html = ""
+        for i in range(n_steps):
+            is_last = i == n_steps - 1
+            color = accent if is_last else "rgba(255,255,255,0.25)"
+            size  = "14px" if is_last else "10px"
+            dots_html += (
+                f'<div class="td-dot" id="{cid}-td-{i}"'
+                f' style="background:{color};width:{size};height:{size}"></div>'
+            )
+            if i < n_steps - 1:
+                dots_html += f'<div class="td-line" id="{cid}-td-line-{i}"></div>'
+        html = (
+            f'<div class="prim-visual prim-timeline" id="{cid}-prim-visual">'
+            f'<div class="td-row">{dots_html}</div>'
+            f'<div class="td-label">{label_v}</div>'
+            f'</div>'
+        )
+        css = f"""\
+.card[data-card-id="{cid}"] .prim-timeline {{
+  opacity:0; display:flex; flex-direction:column; align-items:center; gap:10px;
+  width:100%;
+}}
+.card[data-card-id="{cid}"] .td-row {{
+  display:flex; align-items:center; gap:0; width:100%;
+  justify-content:center;
+}}
+.card[data-card-id="{cid}"] .td-dot {{
+  border-radius:50%; flex-shrink:0; opacity:0;
+}}
+.card[data-card-id="{cid}"] .td-line {{
+  flex:1; height:2px; background:rgba(255,255,255,0.18);
+  max-width:48px; opacity:0;
+}}
+.card[data-card-id="{cid}"] .td-label {{
+  font-family:{font}; font-size:13px; font-weight:700; color:{accent};
+  text-align:center; opacity:0;
+}}"""
+        return html, css
+
+    if visual == "macos_notification":
+        app_name = _e(params.get("kicker", "Notification"))
+        message  = _e(params.get("label",  "Nouveau message"))
+        html = (
+            f'<div class="prim-visual prim-notif" id="{cid}-prim-visual">'
+            f'<div class="notif-bar">'
+            f'<div class="notif-dot"></div>'
+            f'<span class="notif-app">{app_name}</span>'
+            f'<span class="notif-time">maintenant</span>'
+            f'</div>'
+            f'<div class="notif-msg">{message}</div>'
+            f'</div>'
+        )
+        css = f"""\
+.card[data-card-id="{cid}"] .prim-notif {{
+  opacity:0; transform:translateY(-12px) scale(0.96);
+  display:flex; flex-direction:column; gap:6px;
+  background:rgba(30,30,35,0.88); border-radius:14px;
+  padding:14px 18px; width:100%;
+  backdrop-filter:blur(12px);
+  border:1px solid rgba(255,255,255,0.10);
+  box-shadow:0 8px 32px rgba(0,0,0,0.35);
+}}
+.card[data-card-id="{cid}"] .notif-bar {{
+  display:flex; align-items:center; gap:6px;
+}}
+.card[data-card-id="{cid}"] .notif-dot {{
+  width:10px; height:10px; border-radius:50%;
+  background:{accent}; flex-shrink:0;
+}}
+.card[data-card-id="{cid}"] .notif-app {{
+  font-family:{font}; font-size:12px; font-weight:700;
+  color:rgba(255,255,255,0.55); letter-spacing:0.06em;
+  text-transform:uppercase; flex:1;
+}}
+.card[data-card-id="{cid}"] .notif-time {{
+  font-family:{font}; font-size:11px; color:rgba(255,255,255,0.35);
+}}
+.card[data-card-id="{cid}"] .notif-msg {{
+  font-family:{font}; font-size:15px; font-weight:600; color:{text_c};
+  line-height:1.35;
+}}"""
+        return html, css
+
     # quote_mark
     html = (
         f'<div class="prim-visual prim-quote-mark" id="{cid}-prim-visual">'
@@ -470,6 +721,104 @@ def _render_gsap(
         )
         t_text = round(t_vis + 0.30, 4)
 
+    elif visual == "progress_bar":
+        try:
+            pct = max(0, min(100, int(float(str(params.get("content_value", "50")).replace("%", "")))))
+        except ValueError:
+            pct = 50
+        lines += [
+            f"  tl.fromTo('#{cid}-prim-visual',"
+            f"{{opacity:0}},{{opacity:1,duration:0.20,ease:'power1.out'}},{t_vis:.4f});",
+            f"  tl.to('#{cid}-pb-fill',"
+            f"{{width:'{pct}%',duration:0.80,ease:'power2.out'}},{round(t_vis+0.15, 4):.4f});",
+        ]
+        t_text = round(t_vis + 0.90, 4)
+
+    elif visual == "checklist":
+        n_items = len([k for k in params.keys() if k == "label"])
+        all_items_raw = params.get("label", "")
+        kicker_v = params.get("kicker", "")
+        parts = ([kicker_v] if kicker_v else []) + \
+                ([l.strip() for l in all_items_raw.split("|") if l.strip()] if "|" in all_items_raw else [all_items_raw])
+        n_items = min(len(parts), 4)
+        if n_items == 0:
+            n_items = 2
+        lines.append(f"  gsap.set('#{cid}-prim-visual',{{opacity:1}});")
+        for i in range(n_items):
+            t_b = round(t_vis + i * 0.22, 4)
+            lines.append(
+                f"  tl.fromTo('#{cid}-cl-{i}',"
+                f"{{opacity:0,x:-10}},"
+                f"{{opacity:1,x:0,duration:0.25,ease:'power2.out'}},{t_b:.4f});"
+            )
+        t_text = round(t_vis + n_items * 0.22 + 0.10, 4)
+
+    elif visual == "countdown_ring":
+        import math
+        r    = 44
+        circ = round(2 * math.pi * r, 2)
+        lines += [
+            f"  tl.fromTo('#{cid}-prim-visual',"
+            f"{{opacity:0,scale:0.7}},"
+            f"{{opacity:1,scale:1,duration:0.30,ease:'back.out(1.4)'}},{t_vis:.4f});",
+            f"  tl.to('#{cid}-ring-arc',"
+            f"{{strokeDashoffset:0,duration:1.0,ease:'power2.out'}},{round(t_vis+0.25, 4):.4f});",
+        ]
+        t_text = round(t_vis + 1.2, 4)
+
+    elif visual == "versus_meter":
+        lines += [
+            f"  tl.fromTo('#{cid}-prim-visual',"
+            f"{{opacity:0}},{{opacity:1,duration:0.20,ease:'power1.out'}},{t_vis:.4f});",
+            f"  tl.to('#{cid}-vs-left',"
+            f"{{'flex':'0 0 60%',duration:0.70,ease:'power2.out'}},{round(t_vis+0.15, 4):.4f});",
+            f"  tl.to('#{cid}-vs-right',"
+            f"{{'flex':'0 0 40%',duration:0.70,ease:'power2.out'}},{round(t_vis+0.20, 4):.4f});",
+        ]
+        t_text = round(t_vis + 0.90, 4)
+
+    elif visual == "macos_notification":
+        lines += [
+            f"  tl.fromTo('#{cid}-prim-visual',"
+            f"{{opacity:0,y:-16,scale:0.94}},"
+            f"{{opacity:1,y:0,scale:1,duration:0.35,ease:'back.out(1.2)'}},{t_vis:.4f});",
+        ]
+        t_text = round(t_vis + 0.30, 4)
+
+    elif visual == "stat_grid":
+        lines += [
+            f"  tl.fromTo('#{cid}-prim-visual',"
+            f"{{opacity:0,scale:0.6}},"
+            f"{{opacity:1,scale:1,duration:0.40,ease:'back.out(1.7)'}},{t_vis:.4f});",
+        ]
+        t_text = round(t_vis + 0.35, 4)
+
+    elif visual == "timeline_dots":
+        n_steps = 4
+        lines.append(f"  gsap.set('#{cid}-prim-visual',{{opacity:1}});")
+        for i in range(n_steps):
+            t_d = round(t_vis + i * 0.18, 4)
+            lines.append(
+                f"  tl.fromTo('#{cid}-td-{i}',"
+                f"{{opacity:0,scale:0.3}},"
+                f"{{opacity:1,scale:1,duration:0.20,ease:'back.out(2)'}},{t_d:.4f});"
+            )
+            if i < n_steps - 1:
+                t_l = round(t_vis + i * 0.18 + 0.10, 4)
+                lines.append(
+                    f"  tl.fromTo('#{cid}-td-line-{i}',"
+                    f"{{opacity:0,scaleX:0}},"
+                    f"{{opacity:1,scaleX:1,transformOrigin:'left center',"
+                    f"duration:0.15,ease:'power1.out'}},{t_l:.4f});"
+                )
+        t_label_d = round(t_vis + (n_steps - 1) * 0.18 + 0.20, 4)
+        lines.append(
+            f"  tl.fromTo('.card[data-card-id=\"{cid}\"] .td-label',"
+            f"{{opacity:0,y:5}},"
+            f"{{opacity:1,y:0,duration:0.22,ease:'power1.out'}},{t_label_d:.4f});"
+        )
+        t_text = round(t_label_d + 0.25, 4)
+
     else:  # icon — dispatch on entry
         if entry == "pop":
             lines.append(
@@ -520,6 +869,6 @@ register(BRollType(
     render_html=_render_html,
     render_gsap=_render_gsap,
     default_duration=5.0,
-    preferred_zone="upper-data",
+    preferred_zone="upper-right",
     min_confidence=0.65,
 ))

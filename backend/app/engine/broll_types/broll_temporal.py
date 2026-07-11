@@ -491,6 +491,6 @@ register(BRollType(
     render_html=_render_html,
     render_gsap=_render_gsap,
     default_duration=3.5,
-    preferred_zone="upper-data",
+    preferred_zone="upper-right",
     min_confidence=0.75,
 ))

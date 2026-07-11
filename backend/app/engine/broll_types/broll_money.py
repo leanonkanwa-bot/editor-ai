@@ -158,6 +158,36 @@ def _extractor(match, words, word_idx: int) -> tuple[dict, float]:
     return params, 0.88
 
 
+# ── Apple-money-count per-pack helpers ────────────────────────────────────────
+
+def _counter_color(p: dict) -> str:
+    pid = p.get("id", "lean_glass")
+    return {
+        "lean_glass":  p.get("text", "#f1f1f1"),
+        "lean_paper":  p.get("text", "#1a1a1a"),
+        "lean_vibe":   p.get("accent", "#FFE66D"),
+        "lean_ledger": p.get("accent", "#00C896"),
+        "lean_craft":  p.get("text", "#3D2B1F"),
+        "lean_cinema": p.get("accent", "#C9A86A"),
+    }.get(pid, p.get("text", "#f1f1f1"))
+
+
+def _counter_shadow(p: dict) -> str:
+    pid = p.get("id", "lean_glass")
+    glow = p.get("title_glow_intense", "")
+    if pid in ("lean_glass", "lean_cinema") and glow:
+        return f"text-shadow:{glow};"
+    return ""
+
+
+def _unit_glow(p: dict) -> str:
+    pid = p.get("id", "lean_glass")
+    glow = p.get("accent_line_glow_bright", "")
+    if pid in ("lean_glass", "lean_cinema", "lean_vibe") and glow:
+        return f"filter:drop-shadow({glow});"
+    return ""
+
+
 # ── Render HTML ───────────────────────────────────────────────────────────────
 
 def _render_html(params: dict, pack: dict, card_id: str) -> str:
@@ -208,12 +238,15 @@ def _render_html(params: dict, pack: dict, card_id: str) -> str:
   display:flex; align-items:baseline; gap:4px;
 }}
 .card[data-card-id="{card_id}"] #{card_id}-mc-counter {{
-  font-family:{font}; font-size:96px; font-weight:{fw};
-  color:{text_c}; font-variant-numeric:tabular-nums; line-height:1;
+  font-family:{font}; font-size:88px; font-weight:{fw};
+  color:{_counter_color(p)}; font-variant-numeric:tabular-nums;
+  line-height:1; letter-spacing:-0.02em;
+  {_counter_shadow(p)}
 }}
 .card[data-card-id="{card_id}"] #{card_id}-mc-unit {{
-  font-family:{font}; font-size:54px; font-weight:{fw};
+  font-family:{font}; font-size:48px; font-weight:{fw};
   color:{accent}; opacity:0; display:inline-block; transform:scale(0.6);
+  {_unit_glow(p)}
 }}
 .card[data-card-id="{card_id}"] #{card_id}-mc-line {{
   width:0; height:3px; background:{accent}; border-radius:2px;
@@ -293,6 +326,29 @@ def _render_gsap(params: dict, pack: dict, card_id: str, start: float, end: floa
         f"{{width:'80%', duration:0.40, ease:'power2.out'}}, {t_line:.4f});"
     )
 
+    # Apple-style "lock" pulse: counter snaps to final size then settles
+    t_lock = round(t_count + count_dur, 4)
+    pop_scale = "1.06" if p_id == "lean_vibe" else "1.04"
+    lines.append(
+        f"  tl.to('#{_ej(card_id)}-mc-counter', "
+        f"{{scale:{pop_scale}, duration:0.10, ease:'power2.in'}}, {t_lock:.4f});"
+    )
+    lines.append(
+        f"  tl.to('#{_ej(card_id)}-mc-counter', "
+        f"{{scale:1, duration:0.20, ease:'elastic.out(1.2,0.5)'}}, {round(t_lock+0.10, 4):.4f});"
+    )
+    if p_id in ("lean_glass", "lean_cinema") and p.get("title_glow_intense"):
+        glow_i = _ej(p.get("title_glow_intense", ""))
+        glow_n = _ej(p.get("title_glow", ""))
+        lines.append(
+            f"  tl.to('#{_ej(card_id)}-mc-counter', "
+            f"{{textShadow:'{glow_i}', duration:0.12}}, {t_lock:.4f});"
+        )
+        lines.append(
+            f"  tl.to('#{_ej(card_id)}-mc-counter', "
+            f"{{textShadow:'{glow_n}', duration:0.50}}, {round(t_lock+0.25, 4):.4f});"
+        )
+
     return lines
 
 
@@ -305,6 +361,6 @@ register(BRollType(
     render_html=_render_html,
     render_gsap=_render_gsap,
     default_duration=5.5,
-    preferred_zone="upper-data",
+    preferred_zone="upper-right",
     min_confidence=0.80,
 ))

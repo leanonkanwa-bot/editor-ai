@@ -23,35 +23,41 @@ _COMP_ID = "graphic-overlays"
 
 # Zone → pixel bounds for landscape (1920×1080)
 _ZONE_BOUNDS_LANDSCAPE = {
-    "fullscreen":       {"left": 0,    "top": 0, "width": 1920, "height": 1080},
+    "fullscreen":       {"left": 0,    "top": 0,   "width": 1920, "height": 1080},
     "lower-third":      {"left": 0,    "top": 756, "width": 1920, "height": 324},
-    "side-panel":       {"left": 0,    "top": 0, "width": 806,  "height": 1080},
-    "side-panel-left":  {"left": 0,    "top": 0, "width": 806,  "height": 1080},
-    "side-panel-right": {"left": 1114, "top": 0, "width": 806,  "height": 1080},
-    "whiteboard-area":  {"left": 40,   "top": 40, "width": 1840, "height": 1000},
-    "video-overlay":    {"left": 0,    "top": 0, "width": 1920, "height": 1080},
+    "side-panel":       {"left": 0,    "top": 0,   "width": 806,  "height": 1080},
+    "side-panel-left":  {"left": 0,    "top": 0,   "width": 806,  "height": 1080},
+    "side-panel-right": {"left": 1114, "top": 0,   "width": 806,  "height": 1080},
+    "whiteboard-area":  {"left": 40,   "top": 40,  "width": 1840, "height": 1000},
+    "video-overlay":    {"left": 0,    "top": 0,   "width": 1920, "height": 1080},
+    # B-roll data cards — upper-right compact, above caption zone (top < 400, caption at 756+)
+    "upper-right":          {"left": 1300, "top": 80,  "width": 580,  "height": 320},
+    "upper-data":           {"left": 1300, "top": 80,  "width": 580,  "height": 320},  # alias
+    "lower-third-name":     {"left": 0,    "top": 620, "width": 1920, "height": 120},  # speaker ID above captions
 }
 
 # Zone → pixel bounds for portrait 9:16 (1080×1920)
 #
 # Fixed vertical bands (% of 1920px):
-#   0–15%  (0–288)   : hook-title    — hook/titre overlay
-#   15–70% (288–1344): <subject zone> — visage, NEVER overlaid
-#   20–40% (384–768) : upper-data    — data cards (stat/list/timeline/etc.)
-#   70–85% (1344–1632): lower-third  — captions ONLY
-#   85–100%(1632–1920): <safe margin>
+#   0–15%  (0–288)    : hook-title  — hook/titre overlay
+#   15–70% (288–1344) : subject     — visage, NEVER overlaid
+#   upper-right card  : top=100, bottom=420 — structurally above caption zone
+#   70–85% (1344–1632): lower-third — captions ONLY
+#   85–100%(1632–1920): safe margin
 #
-# Rule: caption band (lower-third) and data cards (upper-data) are in separate
-# vertical bands, eliminating all temporal collision without scheduling logic.
+# Rule: upper-right cards end at px 420. Caption zone starts at px 1344.
+# Gap = 924 px — zero structural overlap possible, by construction.
 _ZONE_BOUNDS_PORTRAIT = {
-    "fullscreen":     {"left": 0,  "top": 0,    "width": 1080, "height": 1920},
-    "hook-title":     {"left": 0,  "top": 0,    "width": 1080, "height": 288},   # 0–15%
-    "upper-data":     {"left": 60, "top": 384,  "width": 960,  "height": 384},   # 20–40%
-    "lower-third":    {"left": 0,  "top": 1344, "width": 1080, "height": 288},   # 70–85% captions only
-    "side-panel":     {"left": 60, "top": 384,  "width": 960,  "height": 384},   # alias → upper-data band
-    "side-panel-top": {"left": 0,  "top": 0,    "width": 1080, "height": 288},   # 0–15%
-    "whiteboard-area":{"left": 60, "top": 384,  "width": 960,  "height": 384},   # 20–40%
-    "video-overlay":  {"left": 0,  "top": 0,    "width": 1080, "height": 1920},
+    "fullscreen":     {"left": 0,   "top": 0,    "width": 1080, "height": 1920},
+    "hook-title":     {"left": 0,   "top": 0,    "width": 1080, "height": 288},
+    "upper-right":          {"left": 540, "top": 100,  "width": 500,  "height": 320},   # B-roll compact upper-right
+    "upper-data":           {"left": 540, "top": 100,  "width": 500,  "height": 320},   # alias
+    "lower-third":          {"left": 0,   "top": 1344, "width": 1080, "height": 288},   # captions ONLY
+    "lower-third-name":     {"left": 0,   "top": 1150, "width": 1080, "height": 140},   # speaker ID above captions
+    "side-panel":     {"left": 540, "top": 100,  "width": 500,  "height": 320},   # alias → upper-right
+    "side-panel-top": {"left": 0,   "top": 0,    "width": 1080, "height": 288},
+    "whiteboard-area":{"left": 60,  "top": 384,  "width": 960,  "height": 384},
+    "video-overlay":  {"left": 0,   "top": 0,    "width": 1080, "height": 1920},
 }
 
 # Theme palettes from graphic-overlays SKILL.md
@@ -73,7 +79,7 @@ def _zone_bounds(zone: str, layout: str) -> dict:
 # chosen zone — they carry the visual message and need the full canvas.
 _DATA_PANEL_TYPES = {"stat", "list", "comparison", "checklist", "score", "trend"}
 _CENTER_ZONES = {"fullscreen", "video-overlay"}
-_SIDE_PANEL_ZONES = {"side-panel", "side-panel-left", "side-panel-right", "side-panel-top", "upper-data"}
+_SIDE_PANEL_ZONES = {"side-panel", "side-panel-left", "side-panel-right", "side-panel-top", "upper-data", "upper-right"}
 
 
 def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | None = None) -> str:
@@ -790,28 +796,105 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  color: {p["text_secondary"]}; margin-top: 8px; text-align: center;')
         parts.append('}')
     # Mindmap: center + branches
+    # flowchart replaces mindmap — linear top→bottom with arrow connectors
     if content_style == "mindmap":
-        parts.append(f'.card[data-card-id="{card_id}"] .mm-wrap {{')
-        parts.append(f'  position: relative; width: 100%; min-height: 200px;')
-        parts.append(f'  display: flex; align-items: center; justify-content: center;')
+        parts.append(f'.card[data-card-id="{card_id}"] .fc-wrap {{')
+        parts.append(f'  display: flex; flex-direction: column; align-items: center;')
+        parts.append(f'  gap: 0; width: 100%;')
         parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .mm-center {{')
-        parts.append(f'  font-family: {p["font"]}; font-size: 36px;')
+        parts.append(f'.card[data-card-id="{card_id}"] .fc-node {{')
+        parts.append(f'  font-family: {p["font"]}; font-size: {("14px" if compact else "18px")};')
         parts.append(f'  font-weight: {p["font_weight"]}; color: {p["text"]};')
-        parts.append(f'  text-align: center; z-index: 2; position: relative;')
-        parts.append(f'  padding: 16px 24px; background: {p["bg"]};')
-        parts.append(f'  border-radius: {p["radius"]}; border: {p["border"]};')
+        parts.append(f'  padding: 8px 16px; border-radius: {p["radius"]};')
+        parts.append(f'  border: {p["border"]}; background: {p["bg"]};')
+        parts.append(f'  text-align: center; opacity: 0; white-space: nowrap;')
         parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .mm-branch {{')
-        parts.append(f'  position: absolute; display: flex; align-items: center;')
+        parts.append(f'.card[data-card-id="{card_id}"] .fc-node.fc-root {{')
+        parts.append(f'  color: {p["accent"]}; font-size: {("16px" if compact else "20px")};')
         parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .mm-branch-line {{')
-        parts.append(f'  width: 0; height: 2px; background: {p["accent"]};')
+        parts.append(f'.card[data-card-id="{card_id}"] .fc-arrow {{')
+        parts.append(f'  width: 2px; height: 0; background: {p["accent"]};')
+        parts.append(f'  opacity: 0.6; margin: 0 auto;')
         parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .mm-branch-label {{')
-        parts.append(f'  font-family: {p["font"]}; font-size: 22px;')
-        parts.append(f'  font-weight: {p["font_weight"]}; color: {p["accent"]};')
-        parts.append(f'  white-space: nowrap; padding: 6px 12px;')
+    # data_chart — animated bar chart (replaces trend for stat/score beats)
+    if content_style == "data_chart":
+        parts.append(f'.card[data-card-id="{card_id}"] .dc-wrap {{')
+        parts.append(f'  width: 100%; display: flex; flex-direction: column; gap: 8px;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .dc-row {{')
+        parts.append(f'  display: flex; align-items: center; gap: 10px; opacity: 0;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .dc-label {{')
+        parts.append(f'  font-family: {p["font"]}; font-size: {("12px" if compact else "14px")};')
+        parts.append(f'  font-weight: 600; color: {p["text_secondary"]}; width: 80px;')
+        parts.append(f'  flex-shrink: 0; text-align: right;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .dc-track {{')
+        parts.append(f'  flex: 1; height: 10px; background: rgba(255,255,255,0.08);')
+        parts.append(f'  border-radius: 5px; overflow: hidden;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .dc-fill {{')
+        parts.append(f'  height: 100%; width: 0%; background: {p["accent"]};')
+        parts.append(f'  border-radius: 5px;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .dc-val {{')
+        parts.append(f'  font-family: {p["font"]}; font-size: {("12px" if compact else "14px")};')
+        parts.append(f'  font-weight: 700; color: {p["accent"]}; width: 48px; flex-shrink: 0;')
+        parts.append('}')
+    # News-ticker: full-width horizontal crawl bar
+    if content_style == "news_ticker":
+        bg_solid = p.get("bg", "#0f0f13") if "gradient" not in p.get("bg","") else "#0f0f13"
+        parts.append(f'.card[data-card-id="{card_id}"] .ticker-wrap {{')
+        parts.append(f'  width:100%; height:100%; display:flex; align-items:center;')
+        parts.append(f'  background:{bg_solid}; overflow:hidden; position:relative;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .ticker-label {{')
+        parts.append(f'  flex-shrink:0; padding:0 20px; font-family:{p["font"]};')
+        parts.append(f'  font-size:{("14px" if compact else "16px")}; font-weight:800;')
+        parts.append(f'  color:{p["bg"] if "gradient" not in p.get("bg","") else "#0f0f13"};')
+        parts.append(f'  background:{p["accent"]}; height:100%;')
+        parts.append(f'  display:flex; align-items:center;')
+        parts.append(f'  white-space:nowrap; letter-spacing:0.10em; text-transform:uppercase;')
+        parts.append(f'  z-index:2;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .ticker-track {{')
+        parts.append(f'  display:flex; will-change:transform;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .ticker-item {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{("15px" if compact else "18px")};')
+        parts.append(f'  font-weight:700; color:{p["text"]}; white-space:nowrap;')
+        parts.append(f'  padding:0 40px; flex-shrink:0;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .ticker-sep {{')
+        parts.append(f'  color:{p["accent"]}; flex-shrink:0; font-size:20px;')
+        parts.append('}')
+    # Social overlay styles (instagram-follow, tiktok-follow, yt-lower-third)
+    if content_style in ("instagram-follow", "tiktok-follow", "yt-lower-third"):
+        parts.append(f'.card[data-card-id="{card_id}"] .so-wrap {{')
+        parts.append(f'  display: inline-flex; align-items: center; gap: 12px;')
+        parts.append(f'  padding: 12px 20px; border-radius: 40px;')
+        if content_style == "instagram-follow":
+            parts.append(f'  background: linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);')
+        elif content_style == "tiktok-follow":
+            parts.append(f'  background: #000000; border: 1.5px solid rgba(255,255,255,0.15);')
+        else:  # yt-lower-third
+            parts.append(f'  background: #FF0000;')
+        parts.append(f'  opacity: 0;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .so-icon {{')
+        parts.append(f'  width: 28px; height: 28px; flex-shrink: 0;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .so-text-col {{')
+        parts.append(f'  display: flex; flex-direction: column; gap: 2px;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .so-handle {{')
+        parts.append(f'  font-family: {p["font"]}; font-size: {("13px" if compact else "15px")};')
+        parts.append(f'  font-weight: 700; color: #FFFFFF; letter-spacing: 0.01em;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .so-cta {{')
+        parts.append(f'  font-family: {p["font"]}; font-size: {("10px" if compact else "11px")};')
+        parts.append(f'  font-weight: 600; color: rgba(255,255,255,0.8); letter-spacing: 0.08em;')
+        parts.append(f'  text-transform: uppercase;')
         parts.append('}')
     parts.append('</style>')
     # Timeline: full-screen overlay, no card-panel wrapper
@@ -836,6 +919,24 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('</div>')
         parts.append('</div>')
         return "\n".join(parts)
+    if content_style == "news_ticker":
+        ticker_text = _esc(title or kicker or "BREAKING")
+        label_text  = _esc(kicker or "LIVE")
+        # Repeat 4× so the CSS marquee always has content
+        items_html = "".join(
+            f'<span class="ticker-item">{ticker_text}</span>'
+            f'<span class="ticker-sep">●</span>'
+            for _ in range(4)
+        )
+        parts.append(f'<div class="root" style="padding:0;">')
+        parts.append(f'  <div class="ticker-wrap" id="{card_id}-ticker-wrap">')
+        parts.append(f'    <div class="ticker-label">{label_text}</div>')
+        parts.append(f'    <div class="ticker-track" id="{card_id}-track">{items_html}</div>')
+        parts.append(f'  </div>')
+        parts.append(f'</div>')
+        parts.append('</div>')
+        return "\n".join(parts)
+
     parts.append('<div class="root">')
     if p.get("has_letterbox"):
         parts.append('  <div style="position:absolute;top:0;left:0;right:0;height:60px;background:#000;z-index:3"></div>')
@@ -933,22 +1034,77 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         if score_label:
             parts.append(f'    <div class="score-label" id="{card_id}-score-label">{_esc(score_label)}</div>')
     elif content_style == "mindmap":
+        # Rendered as native flowchart: root → branches in linear vertical flow
         center_text = hints.get("center", title)
         branches = hints.get("branches", [])
-        n_br = min(len(branches), 3)
-        positions = [
-            ("top: 10%; left: 50%; transform: translateX(-50%)", "flex-direction: column-reverse"),
-            ("bottom: 10%; left: 15%", "flex-direction: row"),
-            ("bottom: 10%; right: 15%", "flex-direction: row-reverse"),
-        ]
-        parts.append(f'    <div class="mm-wrap">')
-        parts.append(f'      <div class="mm-center" id="{card_id}-mm-center">{_esc(center_text)}</div>')
+        n_br = min(len(branches), 4)
+        parts.append(f'    <div class="fc-wrap">')
+        parts.append(f'      <div class="fc-node fc-root" id="{card_id}-fc-root">{_esc(center_text)}</div>')
         for i, br in enumerate(branches[:n_br]):
-            pos_style, flex_dir = positions[i % len(positions)]
-            parts.append(f'      <div class="mm-branch" id="{card_id}-br-{i}" style="{pos_style};{flex_dir}">')
-            parts.append(f'        <div class="mm-branch-line" id="{card_id}-br-line-{i}"></div>')
-            parts.append(f'        <div class="mm-branch-label" id="{card_id}-br-label-{i}">{_esc(str(br))}</div>')
+            parts.append(f'      <div class="fc-arrow" id="{card_id}-fc-arrow-{i}" style="height:0"></div>')
+            parts.append(f'      <div class="fc-node" id="{card_id}-fc-{i}">{_esc(str(br))}</div>')
+        parts.append(f'    </div>')
+    elif content_style == "data_chart":
+        chart_items = hints.get("items", [])
+        if not chart_items and hints.get("branches"):
+            chart_items = hints.get("branches", [])
+        # items can be "Label: value" strings or plain strings
+        rows: list[tuple[str, float]] = []
+        max_v = 1.0
+        for raw in chart_items[:5]:
+            parts_split = str(raw).split(":", 1)
+            if len(parts_split) == 2:
+                lbl, val_s = parts_split
+                try:
+                    val = float(val_s.strip().replace("%", "").replace(",", "."))
+                except ValueError:
+                    val = float(len(rows) + 1)
+            else:
+                lbl, val = str(raw), float(len(rows) + 1)
+            rows.append((lbl.strip(), val))
+            if val > max_v:
+                max_v = val
+        parts.append(f'    <div class="dc-wrap">')
+        for i, (lbl, val) in enumerate(rows):
+            pct = round(val / max_v * 100, 1)
+            parts.append(f'      <div class="dc-row" id="{card_id}-dc-{i}">')
+            parts.append(f'        <div class="dc-label">{_esc(lbl)}</div>')
+            parts.append(f'        <div class="dc-track"><div class="dc-fill" id="{card_id}-dc-fill-{i}" data-pct="{pct}"></div></div>')
+            parts.append(f'        <div class="dc-val">{val:g}</div>')
             parts.append(f'      </div>')
+        parts.append(f'    </div>')
+    elif content_style in ("instagram-follow", "tiktok-follow", "yt-lower-third"):
+        handle = _esc(hints.get("title", kicker or "@handle"))
+        if content_style == "instagram-follow":
+            icon_svg = (
+                '<svg viewBox="0 0 24 24" width="28" height="28" fill="none" xmlns="http://www.w3.org/2000/svg">'
+                '<rect x="2" y="2" width="20" height="20" rx="5" stroke="#fff" stroke-width="1.8"/>'
+                '<circle cx="12" cy="12" r="4.5" stroke="#fff" stroke-width="1.8"/>'
+                '<circle cx="17.5" cy="6.5" r="1" fill="#fff"/>'
+                '</svg>'
+            )
+            cta = "Suivre"
+        elif content_style == "tiktok-follow":
+            icon_svg = (
+                '<svg viewBox="0 0 24 24" width="28" height="28" fill="white" xmlns="http://www.w3.org/2000/svg">'
+                '<path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.34 6.34 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.69a8.18 8.18 0 004.78 1.52V6.76a4.85 4.85 0 01-1.01-.07z"/>'
+                '</svg>'
+            )
+            cta = "Suivre"
+        else:  # yt-lower-third
+            icon_svg = (
+                '<svg viewBox="0 0 24 24" width="28" height="28" fill="white" xmlns="http://www.w3.org/2000/svg">'
+                '<path d="M10 15l5.19-3L10 9v6z"/>'
+                '<path d="M21.56 7.17a2.76 2.76 0 00-1.94-1.95C17.88 4.75 12 4.75 12 4.75s-5.88 0-7.62.47a2.76 2.76 0 00-1.94 1.95A28.6 28.6 0 002 12a28.6 28.6 0 00.44 4.83 2.76 2.76 0 001.94 1.95c1.74.47 7.62.47 7.62.47s5.88 0 7.62-.47a2.76 2.76 0 001.94-1.95A28.6 28.6 0 0022 12a28.6 28.6 0 00-.44-4.83z"/>'
+                '</svg>'
+            )
+            cta = "S'abonner"
+        parts.append(f'    <div class="so-wrap" id="{card_id}-so">')
+        parts.append(f'      <div class="so-icon">{icon_svg}</div>')
+        parts.append(f'      <div class="so-text-col">')
+        parts.append(f'        <div class="so-handle">{handle}</div>')
+        parts.append(f'        <div class="so-cta">{_esc(cta)}</div>')
+        parts.append(f'      </div>')
         parts.append(f'    </div>')
     else:
         # key_phrase, quote, callout and any unknown style
@@ -969,27 +1125,66 @@ def _build_caption_card_html(card: dict, pack: dict | None = None) -> str:
     words = card.get("words", [])
     p = pack or _LEAN_GLASS
 
+    # Per-pack caption style
+    _pill_packs    = {"lean_glass", "lean_vibe", "lean_cinema"}
+    _highlight_packs = {"lean_paper", "lean_ledger", "lean_craft"}
+    cap_style = (
+        "pill-karaoke" if p.get("id") in _pill_packs
+        else "highlight" if p.get("id") in _highlight_packs
+        else "default"
+    )
+
     word_spans = []
     for w in words:
         text = w.get("text", "")
         emphasis = w.get("emphasis", False)
-        cls = "cap-word cap-emphasis" if emphasis else "cap-word"
+        if cap_style == "pill-karaoke":
+            cls = "cap-word cap-pill cap-emphasis" if emphasis else "cap-word cap-pill"
+        elif cap_style == "highlight" and emphasis:
+            cls = "cap-word cap-hl"
+        else:
+            cls = "cap-word cap-emphasis" if emphasis else "cap-word"
         word_spans.append(f'<span class="{cls}">{_esc(text)}</span>')
+
+    if cap_style == "pill-karaoke":
+        style_extra = (
+            f'.card[data-card-id="{card_id}"] .cap-pill {{\n'
+            f'  padding: 4px 10px; border-radius: 20px;\n'
+            f'  background: rgba(0,0,0,0.55);\n'
+            f'  backdrop-filter: blur(4px);\n'
+            f'}}\n'
+            f'.card[data-card-id="{card_id}"] .cap-emphasis {{\n'
+            f'  color: {p["accent"]};\n'
+            f'  background: rgba(0,0,0,0.70);\n'
+            f'}}\n'
+        )
+    elif cap_style == "highlight":
+        style_extra = (
+            f'.card[data-card-id="{card_id}"] .cap-hl {{\n'
+            f'  color: {p["accent"]};\n'
+            f'  background: rgba(0,0,0,0.12);\n'
+            f'  border-radius: 4px; padding: 1px 4px;\n'
+            f'}}\n'
+        )
+    else:
+        style_extra = (
+            f'.card[data-card-id="{card_id}"] .cap-emphasis {{\n'
+            f'  color: {p["accent"]};\n'
+            f'}}\n'
+        )
 
     return (
         f'<div class="card caption-card" data-card-id="{card_id}">\n'
         f'<style>\n'
         f'.card[data-card-id="{card_id}"] .cap-line {{\n'
-        f'  display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline;\n'
+        f'  display: flex; flex-wrap: wrap; justify-content: center; align-items: center;\n'
         f'  gap: 0.3em; padding: 16px 24px;\n'
         f'  font-family: {p["font"]};\n'
         f'  font-size: 48px; font-weight: 700; color: #FFFFFF;\n'
         f'  text-shadow: 0 2px 8px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9);\n'
-        f'  text-align: center; line-height: 1.3;\n'
+        f'  text-align: center; line-height: 1.4;\n'
         f'}}\n'
-        f'.card[data-card-id="{card_id}"] .cap-emphasis {{\n'
-        f'  color: {p["accent"]};\n'
-        f'}}\n'
+        f'{style_extra}'
         f'</style>\n'
         f'<div class="cap-line" id="{card_id}-line">\n'
         f'  {" ".join(word_spans)}\n'
@@ -1727,40 +1922,59 @@ def _build_timeline_js(
                     f'{{ opacity: 0 }}, {{ opacity: 1, duration: 0.250, ease: _eIn }}, '
                     f'{t_in + 0.20:.4f});')
             elif content_style == "mindmap":
-                center_sel = f'.card[data-card-id="{card_id}"] #{card_id}-mm-center'
+                # Native flowchart: root node cascades to branch nodes
+                root_sel = f'.card[data-card-id="{card_id}"] #{card_id}-fc-root'
                 lines.append(
-                    f'  tl.fromTo(\'{center_sel}\', '
-                    f'{{ opacity: 0, scale: 0.8 }}, '
-                    f'{{ opacity: 1, scale: 1, duration: 0.400, ease: _eIn }}, '
+                    f'  tl.fromTo(\'{root_sel}\', '
+                    f'{{ opacity: 0, y: -8 }}, '
+                    f'{{ opacity: 1, y: 0, duration: 0.30, ease: _eIn }}, '
                     f'{t_in:.4f});')
                 branches = card.get("contentHints", {}).get("branches", [])
-                n_br = min(len(branches), 3)
+                n_br = min(len(branches), 4)
                 for bi in range(n_br):
-                    bl_sel = f'.card[data-card-id="{card_id}"] #{card_id}-br-line-{bi}'
-                    blbl_sel = f'.card[data-card-id="{card_id}"] #{card_id}-br-label-{bi}'
-                    br_t = t_in + 0.30 + bi * 0.20
+                    arrow_sel = f'.card[data-card-id="{card_id}"] #{card_id}-fc-arrow-{bi}'
+                    node_sel  = f'.card[data-card-id="{card_id}"] #{card_id}-fc-{bi}'
+                    br_t = round(t_in + 0.25 + bi * 0.18, 4)
                     lines.append(
-                        f'  tl.to(\'{bl_sel}\', '
-                        f'{{ width: 100, duration: 0.400, ease: _eIn }}, '
+                        f'  tl.to(\'{arrow_sel}\', '
+                        f'{{ height: 18, opacity: 0.6, duration: 0.12, ease: "none" }}, '
                         f'{br_t:.4f});')
-                    if is_vibe:
-                        lines.append(
-                            f'  tl.fromTo(\'{blbl_sel}\', '
-                            f'{{ opacity: 0, scale: 0.7 }}, '
-                            f'{{ opacity: 1, scale: 1, duration: 0.300, ease: _eIn }}, '
-                            f'{br_t + 0.30:.4f});')
-                    elif is_paper:
-                        lines.append(
-                            f'  tl.fromTo(\'{blbl_sel}\', '
-                            f'{{ opacity: 0 }}, '
-                            f'{{ opacity: 1, duration: 0.300, ease: _eIn }}, '
-                            f'{br_t + 0.35:.4f});')
-                    else:
-                        lines.append(
-                            f'  tl.fromTo(\'{blbl_sel}\', '
-                            f'{{ opacity: 0, y: 8 }}, '
-                            f'{{ opacity: 1, y: 0, duration: 0.300, ease: _eIn }}, '
-                            f'{br_t + 0.30:.4f});')
+                    lines.append(
+                        f'  tl.fromTo(\'{node_sel}\', '
+                        f'{{ opacity: 0, y: 6 }}, '
+                        f'{{ opacity: 1, y: 0, duration: 0.22, ease: _eIn }}, '
+                        f'{round(br_t + 0.10, 4):.4f});')
+            elif content_style == "data_chart":
+                chart_items = card.get("contentHints", {}).get("items",
+                              card.get("contentHints", {}).get("branches", []))
+                n_rows = min(len(chart_items), 5)
+                for ri in range(n_rows):
+                    row_sel  = f'.card[data-card-id="{card_id}"] #{card_id}-dc-{ri}'
+                    fill_sel = f'.card[data-card-id="{card_id}"] #{card_id}-dc-fill-{ri}'
+                    row_t = round(t_in + ri * 0.14, 4)
+                    lines.append(
+                        f'  tl.fromTo(\'{row_sel}\', '
+                        f'{{ opacity: 0, x: -8 }}, '
+                        f'{{ opacity: 1, x: 0, duration: 0.22, ease: _eIn }}, '
+                        f'{row_t:.4f});')
+                    lines.append(
+                        f'  tl.to(\'{fill_sel}\', '
+                        f'{{ width: "100%", duration: 0.50, ease: "power2.out" }}, '
+                        f'{round(row_t + 0.15, 4):.4f});')
+            elif content_style in ("instagram-follow", "tiktok-follow", "yt-lower-third"):
+                so_sel = f'.card[data-card-id="{card_id}"] #{card_id}-so'
+                lines.append(
+                    f'  tl.fromTo(\'{so_sel}\', '
+                    f'{{ opacity: 0, scale: 0.85, y: 12 }}, '
+                    f'{{ opacity: 1, scale: 1, y: 0, duration: 0.35, ease: "back.out(1.4)" }}, '
+                    f'{t_in:.4f});')
+            elif content_style == "news_ticker":
+                track_sel = f'.card[data-card-id="{card_id}"] #{card_id}-track'
+                scroll_dur = round(max(6.0, dur * 0.85), 3)
+                lines.append(
+                    f'  gsap.to(\'{track_sel}\', '
+                    f'{{ x: "-50%", duration: {scroll_dur:.3f}, ease: "none",'
+                    f' repeat: -1, delay: {t_in:.4f} }});')
             else:
                 if is_cinema:
                     lines.append(
@@ -1909,6 +2123,94 @@ def _build_timeline_js(
             )
         lines.append("")
 
+    # ── Per-pack scene transitions ───────────────────────────────────────────
+    # Fire at the start of every non-caption graphic card that is spaced >8s
+    # from the previous transition (prevents flash-spam on dense sequences).
+    _graphic_starts = sorted({
+        round(float(c.get("startSec", 0)), 3)
+        for c in cards
+        if c.get("type") != "caption"
+    })
+    _transition_times: list[float] = []
+    _last_tr = -999.0
+    for _ts in _graphic_starts:
+        if _ts - _last_tr >= 8.0:
+            _transition_times.append(_ts)
+            _last_tr = _ts
+
+    pack_id = p.get("id", "lean_glass")
+    if _transition_times:
+        lines.append("  // ── Scene transitions ──")
+        for _tt in _transition_times:
+            _t0 = round(_tt, 4)
+
+            if pack_id == "lean_paper":
+                # flash-through-white: white overlay flashes briefly
+                lines += [
+                    f"  tl.fromTo('#broll-transition-overlay',"
+                    f"{{opacity:0,background:'#ffffff'}},"
+                    f"{{opacity:0.85,duration:0.10,ease:'power2.in'}},"
+                    f"{_t0:.4f});",
+                    f"  tl.to('#broll-transition-overlay',"
+                    f"{{opacity:0,duration:0.25,ease:'power2.out'}},"
+                    f"{round(_t0+0.10,4):.4f});",
+                ]
+
+            elif pack_id == "lean_vibe":
+                # whip-pan: fast x-translate on video + motion blur hack
+                lines += [
+                    f"  tl.to('#video-wrap',"
+                    f"{{x:60,duration:0.08,ease:'power3.in',overwrite:'auto'}},"
+                    f"{_t0:.4f});",
+                    f"  tl.to('#video-wrap',"
+                    f"{{x:0,duration:0.14,ease:'power3.out',overwrite:'auto'}},"
+                    f"{round(_t0+0.08,4):.4f});",
+                ]
+
+            elif pack_id in ("lean_craft", "lean_cinema"):
+                # light-leak: warm amber overlay pulses
+                lines += [
+                    f"  tl.fromTo('#broll-transition-overlay',"
+                    f"{{opacity:0,background:'radial-gradient(ellipse at 30% 50%,"
+                    f"rgba(255,180,60,0.70) 0%,transparent 70%)'}},"
+                    f"{{opacity:1,duration:0.15,ease:'power1.in'}},"
+                    f"{_t0:.4f});",
+                    f"  tl.to('#broll-transition-overlay',"
+                    f"{{opacity:0,duration:0.35,ease:'power2.out'}},"
+                    f"{round(_t0+0.15,4):.4f});",
+                ]
+
+            elif pack_id == "lean_ledger":
+                # cross-warp-morph: horizontal scan line sweep
+                lines += [
+                    f"  tl.fromTo('#broll-transition-overlay',"
+                    f"{{opacity:0,"
+                    f"background:'linear-gradient(180deg,transparent 0%,"
+                    f"rgba(0,200,150,0.25) 50%,transparent 100%)',"
+                    f"backgroundSize:'100% 6px',backgroundRepeat:'repeat'}},"
+                    f"{{opacity:1,backgroundPositionY:'100%',"
+                    f"duration:0.30,ease:'none'}},"
+                    f"{_t0:.4f});",
+                    f"  tl.to('#broll-transition-overlay',"
+                    f"{{opacity:0,duration:0.20,ease:'power1.out'}},"
+                    f"{round(_t0+0.30,4):.4f});",
+                ]
+
+            else:
+                # lean_glass → sdf-iris: radial clip-path iris open
+                lines += [
+                    f"  tl.fromTo('#broll-transition-overlay',"
+                    f"{{opacity:1,background:'rgba(0,0,0,0.65)',"
+                    f"clipPath:'circle(0% at 50% 50%)'}},"
+                    f"{{clipPath:'circle(75% at 50% 50%)',"
+                    f"duration:0.35,ease:'power2.out'}},"
+                    f"{_t0:.4f});",
+                    f"  tl.to('#broll-transition-overlay',"
+                    f"{{opacity:0,duration:0.20,ease:'power1.out'}},"
+                    f"{round(_t0+0.35,4):.4f});",
+                ]
+        lines.append("")
+
     lines.append('  window.__timelines = window.__timelines || {};')
     lines.append(f'  window.__timelines["{_COMP_ID}"] = tl;')
     lines.append("})();")
@@ -1954,6 +2256,40 @@ def _safe_number(raw: str) -> tuple[float | None, str]:
 def _esc_js(s: str) -> str:
     """Escape a string for safe embedding inside a JS single-quoted string literal."""
     return s.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "")
+
+
+def _vignette_css(pack: dict) -> str:
+    """Per-pack radial vignette gradient (always-on, z-index:6)."""
+    pid = pack.get("id", "lean_glass")
+    if pid == "lean_cinema":
+        return "radial-gradient(ellipse at 50% 50%, transparent 50%, rgba(0,0,0,0.70) 100%)"
+    elif pid == "lean_glass":
+        return "radial-gradient(ellipse at 50% 50%, transparent 45%, rgba(0,0,0,0.55) 100%)"
+    elif pid == "lean_vibe":
+        return "radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(120,0,60,0.30) 100%)"
+    elif pid == "lean_ledger":
+        return "radial-gradient(ellipse at 50% 50%, transparent 50%, rgba(0,10,30,0.50) 100%)"
+    elif pid == "lean_craft":
+        return "radial-gradient(ellipse at 50% 50%, transparent 45%, rgba(61,43,31,0.35) 100%)"
+    else:  # lean_paper — very subtle
+        return "radial-gradient(ellipse at 50% 50%, transparent 60%, rgba(0,0,0,0.08) 100%)"
+
+
+def _grain_opacity(pack: dict) -> str:
+    pid = pack.get("id", "lean_glass")
+    return {"lean_cinema": "0.18", "lean_craft": "0.14", "lean_glass": "0.08",
+            "lean_vibe": "0.06", "lean_ledger": "0.07", "lean_paper": "0.0"}.get(pid, "0.07")
+
+
+def _grain_svg(pack: dict) -> str:
+    """Return the grain SVG data-URI already defined for this pack's grain_type."""
+    grain_type = pack.get("grain_type", "")
+    return {
+        "confetti": _CONFETTI_SVG,
+        "grid": _GRID_SVG,
+        "paper": _PAPER_GRAIN_SVG,
+        "film": _FILM_GRAIN_SVG,
+    }.get(grain_type, _GRAIN_SVG)
 
 
 def compose(
@@ -2189,6 +2525,9 @@ def compose(
              data-track-index="1"></video>
     </div>
     <div id="backdrop-dim" style="position:absolute;inset:0;background:rgba(0,0,0,0.45);z-index:5;opacity:0;pointer-events:none;"></div>
+    <div id="broll-transition-overlay" style="position:absolute;inset:0;z-index:18;pointer-events:none;opacity:0;"></div>
+    <div id="vignette-overlay" style="position:absolute;inset:0;z-index:6;pointer-events:none;background:{_vignette_css(pack)};"></div>
+    <div id="grain-overlay" style="position:absolute;inset:0;z-index:7;pointer-events:none;opacity:{_grain_opacity(pack)};background-image:url('{_grain_svg(pack)}');background-repeat:repeat;mix-blend-mode:overlay;"></div>
 
     <audio id="bg-audio" src="input-video.mp4"
            data-start="0" data-duration="{duration:.3f}"

@@ -28,13 +28,17 @@ if TYPE_CHECKING:
 # ── Composition vocabulary (each axis validated independently) ────────────────
 
 ALLOWED_FRAMES     = {"none", "phone", "card", "none-fullbleed"}
-ALLOWED_VISUALS    = {"icon", "chart_trace", "number_counter", "chat_bubbles", "quote_mark"}
+ALLOWED_VISUALS    = {
+    "icon", "chart_trace", "number_counter", "chat_bubbles", "quote_mark",
+    "progress_bar", "checklist", "countdown_ring", "versus_meter", "stat_grid", "timeline_dots",
+    "macos_notification",
+}
 ALLOWED_TEXT_SLOTS = {"kicker", "label", "quote_text", "none"}
 ALLOWED_LAYOUTS    = {"stacked", "side_by_side", "centered_overlay"}
 ALLOWED_ENTRIES    = {"pop", "trace", "fade", "slide_up", "sequential"}
 ALLOWED_ICONS      = {"spark", "stop", "growth", "alert", "heart", "star", "check"}
 ALLOWED_N_BUBBLES  = {1, 2, 3}
-ALLOWED_ZONES      = {"upper-data", "lower-third"}
+ALLOWED_ZONES      = {"upper-right"}
 
 STRONG_ROLES = {
     "payoff", "realization", "principle", "climax",
@@ -97,6 +101,40 @@ def _extract_number(remapped_words: list, beat_start: float,
         if m:
             return m.group().strip()
     return None
+
+
+# Typed value extractors for new visual bricks that need structured content_value
+
+_PCT_RE   = re.compile(r'\b(\d+(?:[.,]\d+)?)\s*%')
+_DELAY_RE = re.compile(
+    r'\b(\d+(?:[.,]\d+)?)\s*'
+    r'(jour(?:s)?|semaine(?:s)?|mois|heure(?:s)?|minute(?:s)?|day(?:s)?|week(?:s)?|hour(?:s)?|min(?:s)?)',
+    re.IGNORECASE,
+)
+
+def _extract_content_value(remapped_words: list, beat_start: float,
+                            beat_end: float, hint: str = "") -> str:
+    """Extract a typed value from the beat window for progress_bar / countdown_ring.
+
+    hint='pct'   → look for r'\\d+%' pattern first, fallback to bare number
+    hint='time'  → look for N jours/semaines/mois first, fallback to bare number
+    default      → return the first numeral found (same as _extract_number)
+    """
+    window = _words_in_window(remapped_words, beat_start, beat_end, pad=1.5)
+    text   = " ".join(getattr(w, "text", "") for w in sorted(
+        window, key=lambda w: float(getattr(w, "start", 0))
+    ))
+    if hint == "pct":
+        m = _PCT_RE.search(text)
+        if m:
+            return m.group(1) + "%"
+    elif hint == "time":
+        m = _DELAY_RE.search(text)
+        if m:
+            return m.group(0).strip()
+    # Fallback: first numeral
+    m2 = re.search(r'\b\d+(?:[.,]\d+)?(?:\s*[kKmM%])?\b', text)
+    return m2.group().strip() if m2 else ""
 
 
 # ── Gap helper ────────────────────────────────────────────────────────────────
@@ -178,19 +216,33 @@ def _find_candidates(
             ctx_words, key=lambda w: float(getattr(w, "start", 0))
         ))[:200]
 
+        # Extract typed content value: try % first, then duration, then bare number
+        _cv_pct  = _extract_content_value(remapped_words, out_s, out_e, hint="pct")
+        _cv_time = _extract_content_value(remapped_words, out_s, out_e, hint="time")
+        if _cv_pct:
+            content_value, content_value_kind = _cv_pct, "percent"
+        elif _cv_time:
+            content_value, content_value_kind = _cv_time, "duration"
+        else:
+            _cv_num = _extract_content_value(remapped_words, out_s, out_e, hint="")
+            content_value      = _cv_num
+            content_value_kind = "number" if _cv_num else ""
+
         print(
             f"[BROLL-GENERATIVE] beat role={role} score={score}"
             f" t={out_s:.1f}s → UNCOVERED — queued for LLM",
             flush=True,
         )
         candidates.append({
-            "beat_role": role,
-            "score":     score,
-            "out_start": round(out_s, 3),
-            "out_end":   min(round(out_e, 3), trimmed_duration),
-            "label":     label,
-            "kicker":    kicker,
-            "ctx_text":  ctx_text,
+            "beat_role":          role,
+            "score":              score,
+            "out_start":          round(out_s, 3),
+            "out_end":            min(round(out_e, 3), trimmed_duration),
+            "label":              label,
+            "kicker":             kicker,
+            "ctx_text":           ctx_text,
+            "content_value":      content_value,
+            "content_value_kind": content_value_kind,
         })
 
     print(
@@ -214,10 +266,13 @@ def _build_prompt(candidates: list[dict], pack: dict, language: str) -> str:
 
     items = []
     for i, c in enumerate(candidates):
+        cv_tag = ""
+        if c.get("content_value"):
+            cv_tag = f' cv={c["content_value"]}({c["content_value_kind"]})'
         items.append(
             f'  [{i}] role={c["beat_role"]} score={c["score"]}'
             f' t={c["out_start"]:.1f}-{c["out_end"]:.1f}s'
-            f' ctx="{c["ctx_text"][:120]}"'
+            f'{cv_tag} ctx="{c["ctx_text"][:120]}"'
         )
     items_str = "\n".join(items)
 
@@ -230,12 +285,13 @@ STYLE PACK (do NOT output these — the renderer injects them automatically):
 VOCABULARY — each axis is independent, validate individually:
   frame:     none | phone | card | none-fullbleed
   visual:    icon | chart_trace | number_counter | chat_bubbles | quote_mark
+             | progress_bar | checklist | countdown_ring | versus_meter | stat_grid | timeline_dots
   icon_name: (when visual=icon only) spark | stop | growth | alert | heart | star | check
   n_bubbles: (when visual=chat_bubbles only) 1 | 2 | 3
   text_slot: kicker | label | quote_text | none
   layout:    stacked | side_by_side | centered_overlay
   entry:     pop | trace | fade | slide_up | sequential
-  zone:      upper-data | lower-third
+  zone:      upper-right
 
 RULES (strict):
   - Output ONLY the JSON array. No prose, no explanation.
@@ -252,13 +308,36 @@ RULES (strict):
         pas comprendre"), confession, confrontation, revelation between two parties.
         Does NOT require explicit speech verbs — two perspectives in tension = chat_bubbles.
         ALWAYS pair with: frame=phone  entry=sequential
-      PRIORITY 2: number_counter
-        ONLY when ctx contains a digit (numeral). Not for vague amounts.
-      PRIORITY 3: chart_trace
+      PRIORITY 2: progress_bar
+        ONLY when candidate has cv=...% (percent type). Shows a progress fill bar.
+        Pair with: frame=card  entry=fade  text_slot=label
+      PRIORITY 3: countdown_ring
+        ONLY when candidate has cv=...(duration) — e.g. "3 jours", "2 semaines".
+        Pair with: frame=card  entry=pop  text_slot=label
+      PRIORITY 4: versus_meter
+        When ctx shows a direct contrast between two things ("vs", "contre", "before/after").
+        Pair with: frame=card  entry=slide_up  text_slot=none
+      PRIORITY 5: checklist
+        Process or step-by-step beats — "étapes", "checklist", "voici comment".
+        Pair with: frame=card  entry=slide_up  text_slot=none
+      PRIORITY 6: timeline_dots
+        Temporal sequence beats — phases, months, milestones in order.
+        Pair with: frame=card  entry=pop  text_slot=label
+      PRIORITY 7: stat_grid
+        Single key metric — big number that stands alone (revenue, score, rank).
+        Use instead of number_counter when cv=(number) without a counter animation context.
+        Pair with: frame=card  entry=pop  text_slot=kicker
+      PRIORITY 8: number_counter
+        When ctx contains a digit that benefits from animated counting animation.
+        Not for vague amounts.
+      PRIORITY 9: chart_trace
         Growth, stat, amplify beats with an upward trend in ctx.
-      PRIORITY 4: quote_mark
+      PRIORITY 10: quote_mark
         A single-voice principle or wisdom statement. Pair with text_slot=quote_text.
-      PRIORITY 5: icon  (default — use when none of the above match)
+      PRIORITY 11: macos_notification
+        A concrete external trigger — someone messaged, signed up, bought.
+        Pair with: frame=card  entry=slide_up  text_slot=label
+      PRIORITY 12: icon  (default — use when none of the above match)
         Emotional/realization/payoff/principle beats.
   - frame guide:
       phone          → ONLY with chat_bubbles (two-person exchange). Never with other visuals.
@@ -274,7 +353,7 @@ CANDIDATES:
 {items_str}
 
 OUTPUT FORMAT (array, exactly {len(candidates)} objects):
-[{{"frame":"card","visual":"icon","icon_name":"spark","text_slot":"label","layout":"stacked","entry":"pop","zone":"upper-data"}},...]"""
+[{{"frame":"card","visual":"icon","icon_name":"spark","text_slot":"label","layout":"stacked","entry":"pop","zone":"upper-right"}},...]"""
 
 
 def _call_haiku(candidates: list[dict], pack: dict, language: str) -> list[dict] | None:
@@ -344,7 +423,7 @@ def _validate(obj: dict, idx: int) -> dict | None:
     text_slot = obj.get("text_slot", "label")
     layout    = obj.get("layout",    "stacked")
     entry     = obj.get("entry",     "pop")
-    zone      = obj.get("zone",      "upper-data")
+    zone      = obj.get("zone",      "upper-right")
 
     # Hard reject: unknown visual (the primary semantic choice)
     if visual not in ALLOWED_VISUALS:
@@ -372,7 +451,7 @@ def _validate(obj: dict, idx: int) -> dict | None:
     if entry not in ALLOWED_ENTRIES:
         entry = "pop"
     if zone not in ALLOWED_ZONES:
-        zone = "upper-data"
+        zone = "upper-right"
 
     # Visual sub-fields
     icon_name = ""
@@ -482,6 +561,19 @@ def _compat_fix(params: dict, idx: int) -> dict:
         )
         p["entry"] = "fade"
 
+    # Rule 6 — new data/layout visuals are incompatible with phone frame
+    _DATA_VISUALS = {
+        "progress_bar", "checklist", "countdown_ring",
+        "versus_meter", "stat_grid", "timeline_dots", "macos_notification",
+    }
+    if p["visual"] in _DATA_VISUALS and p["frame"] == "phone":
+        print(
+            f"[BROLL-GENERATIVE] compat[{idx}] Rule6:"
+            f" visual={p['visual']!r} incompatible with frame=phone — corrected to 'card'",
+            flush=True,
+        )
+        p["frame"] = "card"
+
     return p
 
 
@@ -551,14 +643,13 @@ def generate_generative_broll(
             )
             continue
 
-        # Resolve number content deterministically for number_counter visual
-        content_value = ""
+        # Resolve content_value deterministically per visual type
+        content_value = cand.get("content_value", "")
         if validated["visual"] == "number_counter":
             num = _extract_number(remapped_words, out_s, out_e)
             if num:
                 content_value = num
             else:
-                # No numeral in transcript — demote to icon:spark
                 print(
                     f"[BROLL-GENERATIVE] candidate[{idx}]"
                     f" visual=number_counter but no numeral found"
@@ -566,6 +657,19 @@ def generate_generative_broll(
                     flush=True,
                 )
                 validated = dict(validated, visual="icon", icon_name="spark")
+                content_value = ""
+        elif validated["visual"] == "progress_bar":
+            # Need a percent value — if not already a pct, demote to stat_grid
+            if cand.get("content_value_kind") != "percent":
+                pct_raw = _extract_content_value(remapped_words, out_s, out_e, hint="pct")
+                if pct_raw:
+                    content_value = pct_raw
+                else:
+                    validated = dict(validated, visual="stat_grid")
+        elif validated["visual"] == "countdown_ring":
+            if cand.get("content_value_kind") != "duration":
+                dur_raw = _extract_content_value(remapped_words, out_s, out_e, hint="time")
+                content_value = dur_raw if dur_raw else content_value
 
         cid = f"gen-{card_id_offset + idx + 1:03d}"
 

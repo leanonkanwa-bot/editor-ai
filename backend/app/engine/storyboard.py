@@ -335,7 +335,7 @@ OUTPUT: a JSON array of card objects. Each card:
     "accent_word": "<optional: one word/phrase from title to emphasize via highlight swipe>",
     "detail": "<optional supporting text>",
     "number": "<if a stat/number is featured>",
-    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap",
+    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"data_chart"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker",
     "left_label": "<comparison: left side label>",
     "left_value": "<comparison: left side value>",
     "right_label": "<comparison: right side label>",
@@ -457,10 +457,13 @@ Design {target_cards} graphic overlay cards for this video."""
         return []
 
 
+_MAX_BROLL_PER_MINUTE = 3   # hard cap: no more than 3 B-roll cards per 60s
+
 def _merge_cards(
     llm_cards: list[dict],
     semantic_cards: list[dict],
     min_gap_s: float = 4.5,
+    video_duration_s: float = 0.0,
 ) -> list[dict]:
     """Greedy-by-confidence merge of LLM graphic cards + semantic B-roll cards.
 
@@ -469,7 +472,16 @@ def _merge_cards(
     All cards are sorted descending by confidence; we walk in that order,
     accept a card, and immediately suppress any remaining card whose window
     overlaps within min_gap_s (both directions).
+
+    Density cap: _MAX_BROLL_PER_MINUTE (default 3) — prevents overlay saturation
+    on content-rich videos. Cap is proportional to video duration.
     """
+    max_cards = (
+        max(1, int(_MAX_BROLL_PER_MINUTE * video_duration_s / 60.0))
+        if video_duration_s > 0
+        else 999
+    )
+
     # Attach confidence to LLM cards (implicit 0.70)
     annotated: list[tuple[float, dict]] = []
     for c in llm_cards:
@@ -478,10 +490,6 @@ def _merge_cards(
         annotated.append((float(c.get("_confidence", 0.88)), c))
 
     # Sort descending by confidence; ties broken by earliest timestamp.
-    # key=(confidence, -startSec) with reverse=True puts highest confidence
-    # first, and among equal-confidence cards the one with the smallest
-    # startSec (earliest in the video) wins. Explicit and stable regardless
-    # of insertion order or scan_words output ordering.
     annotated.sort(
         key=lambda t: (t[0], -float(t[1].get("startSec", 0))),
         reverse=True,
@@ -494,6 +502,13 @@ def _merge_cards(
         return max(0.0, max(s1, s2) - min(e1, e2))
 
     for conf, card in annotated:
+        if len(accepted) >= max_cards:
+            print(
+                f"[BROLL-MERGE] density cap reached ({max_cards} cards"
+                f" for {video_duration_s:.0f}s video) — dropping remaining",
+                flush=True,
+            )
+            break
         cstart = float(card.get("startSec", 0))
         cend   = float(card.get("endSec", cstart + 5.0))
         suppressed = any(
@@ -514,7 +529,7 @@ def _merge_cards(
     accepted.sort(key=lambda c: float(c.get("startSec", 0)))
     print(
         f"[BROLL-MERGE] {len(llm_cards)} LLM + {len(semantic_cards)} semantic → "
-        f"{len(accepted)} accepted after merge",
+        f"{len(accepted)} accepted after merge (cap={max_cards})",
         flush=True,
     )
     return accepted
@@ -630,7 +645,7 @@ def generate_storyboard(
                 f"'{_hit.text_span}' @{_hit.start_sec:.2f}s conf={_hit.confidence:.2f}",
                 flush=True,
             )
-        graphic_cards = _merge_cards(graphic_cards, _sem_cards)
+        graphic_cards = _merge_cards(graphic_cards, _sem_cards, video_duration_s=trimmed_duration)
     except Exception as _broll_exc:
         print(f"[BROLL-MERGE] non-fatal error in semantic scan/merge: {_broll_exc}", flush=True)
 
@@ -664,6 +679,55 @@ def generate_storyboard(
         graphic_cards = graphic_cards + _gen_cards
     except Exception as _gen_exc:
         print(f"[BROLL-GENERATIVE] non-fatal error: {_gen_exc}", flush=True)
+
+    # Lower-third name overlays: inject at HOOK beats (max 2 per video, 4s display)
+    try:
+        _lt_count = 0
+        _lt_used_times: list[float] = []
+        for _beat in script_structure:
+            if _lt_count >= 2:
+                break
+            if str(_beat.get("beat", "")).lower() not in ("hook", "intro", "payoff"):
+                continue
+            _src_s = float(_beat.get("start", 0))
+            _src_e = float(_beat.get("end", _src_s + 3.0))
+            _out_s = timing_map.source_to_output(_src_s)
+            _out_e = timing_map.source_to_output(_src_e)
+            if _out_s >= trimmed_duration or _out_e <= _out_s:
+                continue
+            # Skip if too close to another lower-third
+            if any(abs(_out_s - t) < 10.0 for t in _lt_used_times):
+                continue
+            # Skip if already covered by a graphic card
+            _covered = any(
+                abs(float(_gc.get("startSec", 0)) - _out_s) < 5.0
+                for _gc in graphic_cards
+                if _gc.get("zone") == "lower-third-name"
+            )
+            if _covered:
+                continue
+            _lt_lines = _beat.get("lines", [])
+            _lt_kicker = (_lt_lines[0][:30] if _lt_lines else "").strip()
+            _lt_id = f"lt-{_lt_count + 1:02d}"
+            _lt_end = min(round(_out_s + 4.0, 3), trimmed_duration)
+            graphic_cards.append({
+                "id":           _lt_id,
+                "startSec":     round(_out_s, 3),
+                "endSec":       _lt_end,
+                "zone":         "lower-third-name",
+                "contentHints": {"style": "__broll__"},
+                "_broll_type":  "lower_third",
+                "_broll_params": {
+                    "name":  _lt_kicker or "Coach",
+                    "title": str(_beat.get("beat", "hook")).capitalize(),
+                },
+                "_confidence": 0.80,
+            })
+            _lt_used_times.append(_out_s)
+            _lt_count += 1
+            print(f"[LOWER-THIRD] injected {_lt_id} at {_out_s:.2f}s '{_lt_kicker}'", flush=True)
+    except Exception as _lt_exc:
+        print(f"[LOWER-THIRD] non-fatal error: {_lt_exc}", flush=True)
 
     # Generate caption cards mechanically
     caption_cards = _segment_captions(
