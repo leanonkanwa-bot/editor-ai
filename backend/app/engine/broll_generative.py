@@ -136,7 +136,7 @@ def _find_candidates(
     n_weak = n_range = n_covered = 0
 
     for beat in script_structure:
-        role  = beat.get("beat", "")
+        role  = beat.get("beat", "").lower()   # planner emits UPPERCASE ("HOOK") — normalise
         score = int(beat.get("score", 0))
 
         if role not in STRONG_ROLES and score < score_min:
