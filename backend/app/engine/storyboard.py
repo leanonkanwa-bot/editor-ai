@@ -488,12 +488,18 @@ def _merge_cards(
     )
 
     accepted: list[dict] = []
-    rejected_starts: list[float] = []
+    accepted_ivs: list[tuple[float, float]] = []
+
+    def _iv_gap(s1: float, e1: float, s2: float, e2: float) -> float:
+        return max(0.0, max(s1, s2) - min(e1, e2))
 
     for conf, card in annotated:
         cstart = float(card.get("startSec", 0))
-        # Check if this card falls in any rejected window
-        suppressed = any(abs(cstart - rs) < min_gap_s for rs in rejected_starts)
+        cend   = float(card.get("endSec", cstart + 5.0))
+        suppressed = any(
+            _iv_gap(cstart, cend, a_s, a_e) < min_gap_s
+            for a_s, a_e in accepted_ivs
+        )
         if suppressed:
             print(
                 f"[BROLL-MERGE] suppressed card {card.get('id','?')} "
@@ -502,7 +508,7 @@ def _merge_cards(
             )
             continue
         accepted.append(card)
-        rejected_starts.append(cstart)
+        accepted_ivs.append((cstart, cend))
 
     # Restore display order (chronological)
     accepted.sort(key=lambda c: float(c.get("startSec", 0)))

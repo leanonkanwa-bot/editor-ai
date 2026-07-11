@@ -95,6 +95,20 @@ def _extract_number(remapped_words: list, beat_start: float,
     return None
 
 
+# ── Gap helper ────────────────────────────────────────────────────────────────
+
+def _interval_gap(s1: float, e1: float, s2: float, e2: float) -> float:
+    """Time gap between two [s, e] intervals. Returns 0.0 if they overlap."""
+    return max(0.0, max(s1, s2) - min(e1, e2))
+
+
+def _card_intervals(cards: list[dict]) -> list[tuple[float, float]]:
+    return [
+        (float(c.get("startSec", 0)), float(c.get("endSec", c.get("startSec", 0) + DEFAULT_DURATION)))
+        for c in cards
+    ]
+
+
 # ── Candidate identification ──────────────────────────────────────────────────
 
 def _find_candidates(
@@ -105,7 +119,7 @@ def _find_candidates(
     trimmed_duration: float,
 ) -> list[dict]:
     """Return beats that are strong but have no accepted card within MIN_GAP_S."""
-    accepted_starts = [float(c.get("startSec", 0)) for c in accepted_cards]
+    accepted_ivs = _card_intervals(accepted_cards)
 
     candidates = []
     for beat in script_structure:
@@ -122,8 +136,8 @@ def _find_candidates(
         if out_e <= out_s or out_s >= trimmed_duration:
             continue
 
-        mid   = (out_s + out_e) / 2.0
-        if any(abs(mid - a) < MIN_GAP_S for a in accepted_starts):
+        new_end = min(out_s + DEFAULT_DURATION, trimmed_duration)
+        if any(_interval_gap(out_s, new_end, a_s, a_e) < MIN_GAP_S for a_s, a_e in accepted_ivs):
             continue
 
         label  = _extract_label(remapped_words, out_s, out_e)
@@ -345,20 +359,21 @@ def generate_generative_broll(
         return []
 
     new_cards: list[dict] = []
-    accepted_starts = [float(c.get("startSec", 0)) for c in accepted_cards]
+    accepted_ivs = _card_intervals(accepted_cards)
 
     for idx, (cand, raw_out) in enumerate(zip(candidates, llm_outputs)):
         validated = _validate(raw_out, idx)
         if validated is None:
             continue
 
-        out_s  = cand["out_start"]
-        out_e  = cand["out_end"]
-        end_s  = min(round(out_s + DEFAULT_DURATION, 3), trimmed_duration)
+        out_s = cand["out_start"]
+        out_e = cand["out_end"]
+        end_s = min(round(out_s + DEFAULT_DURATION, 3), trimmed_duration)
 
-        # Final gap check (accepted_cards may have grown during this loop)
-        all_starts = accepted_starts + [float(c.get("startSec", 0)) for c in new_cards]
-        if any(abs(out_s - a) < MIN_GAP_S for a in all_starts):
+        # Final gap check — compare full intervals, not just start times.
+        # new_cards may have grown during this loop so rebuild each iteration.
+        all_ivs = accepted_ivs + _card_intervals(new_cards)
+        if any(_interval_gap(out_s, end_s, a_s, a_e) < MIN_GAP_S for a_s, a_e in all_ivs):
             print(
                 f"[BROLL-GENERATIVE] skip candidate[{idx}] at {out_s:.2f}s"
                 f" — gap closed before insertion",
