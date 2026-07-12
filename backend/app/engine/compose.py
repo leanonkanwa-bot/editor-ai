@@ -1031,7 +1031,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'    <div class="detail" id="{card_id}-detail">{_esc(detail)}</div>')
     elif content_style == "carousel":
         slides = hints.get("slides", [])
-        parts.append(f'    <div style="position:relative;width:100%;min-height:80px">')
+        parts.append(f'    <div style="position:relative;width:100%;min-height:130px;flex:1">')
         for i, slide in enumerate(slides[:4]):
             parts.append(f'      <div class="carousel-slide" id="{card_id}-slide-{i}">{_esc(str(slide))}</div>')
         parts.append(f'    </div>')
@@ -1803,39 +1803,47 @@ def _build_timeline_js(
                 slides = card.get("contentHints", {}).get("slides", [])
                 n_slides = min(len(slides), 4)
                 if n_slides > 0:
-                    slide_dur = max(1.0, dur / n_slides)
+                    # Distribute available card time evenly from t_in.
+                    # tl.set pins every slide's initial state explicitly so GSAP
+                    # doesn't rely on CSS alone — fixes the "first slide frozen"
+                    # symptom where fromTo failed to re-apply from-state on slides 1+.
+                    avail = max(0.1, end - t_in)
+                    each_dur = round(avail / n_slides, 3)
                     for si in range(n_slides):
                         sl_sel = f'.card[data-card-id="{card_id}"] #{card_id}-slide-{si}'
-                        sl_in = start + si * slide_dur
-                        sl_out = sl_in + slide_dur - 0.3
+                        sl_in  = round(t_in + si * each_dur, 4)
+                        if sl_in >= end:
+                            break
+                        sl_out = round(min(sl_in + each_dur - 0.22, end - 0.06), 4)
                         if is_paper:
+                            lines.append(f'  tl.set(\'{sl_sel}\', {{ opacity: 0 }}, {t_in:.4f});')
                             lines.append(
                                 f'  tl.to(\'{sl_sel}\', '
-                                f'{{ opacity: 1, duration: 0.300, ease: _eIn }}, '
+                                f'{{ opacity: 1, duration: 0.25, ease: _eIn }}, '
                                 f'{sl_in:.4f});')
                             lines.append(
                                 f'  tl.to(\'{sl_sel}\', '
-                                f'{{ opacity: 0, duration: 0.250, ease: _eOut }}, '
+                                f'{{ opacity: 0, duration: 0.20, ease: _eOut }}, '
                                 f'{sl_out:.4f});')
                         elif is_vibe:
+                            lines.append(f'  tl.set(\'{sl_sel}\', {{ opacity: 0, y: 10 }}, {t_in:.4f});')
                             lines.append(
-                                f'  tl.fromTo(\'{sl_sel}\', '
-                                f'{{ opacity: 0, scale: 0.8 }}, '
-                                f'{{ opacity: 1, scale: 1, duration: 0.300, ease: _eIn }}, '
+                                f'  tl.to(\'{sl_sel}\', '
+                                f'{{ opacity: 1, y: 0, duration: 0.25, ease: _eIn }}, '
                                 f'{sl_in:.4f});')
                             lines.append(
                                 f'  tl.to(\'{sl_sel}\', '
-                                f'{{ opacity: 0, scale: 1.1, duration: 0.200, ease: _eOut }}, '
+                                f'{{ opacity: 0, y: -10, duration: 0.20, ease: _eOut }}, '
                                 f'{sl_out:.4f});')
                         else:
+                            lines.append(f'  tl.set(\'{sl_sel}\', {{ opacity: 0, x: 12 }}, {t_in:.4f});')
                             lines.append(
-                                f'  tl.fromTo(\'{sl_sel}\', '
-                                f'{{ opacity: 0, x: 16 }}, '
-                                f'{{ opacity: 1, x: 0, duration: 0.300, ease: _eIn }}, '
+                                f'  tl.to(\'{sl_sel}\', '
+                                f'{{ opacity: 1, x: 0, duration: 0.25, ease: _eIn }}, '
                                 f'{sl_in:.4f});')
                             lines.append(
                                 f'  tl.to(\'{sl_sel}\', '
-                                f'{{ opacity: 0, x: -16, duration: 0.250, ease: _eOut }}, '
+                                f'{{ opacity: 0, x: -12, duration: 0.20, ease: _eOut }}, '
                                 f'{sl_out:.4f});')
             elif content_style == "definition":
                 term_sel = f'.card[data-card-id="{card_id}"] #{card_id}-term'
