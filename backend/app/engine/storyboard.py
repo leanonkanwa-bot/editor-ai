@@ -701,14 +701,30 @@ def generate_storyboard(
             # Skip if too close to another lower-third
             if any(abs(_out_s - t) < 10.0 for t in _lt_used_times):
                 continue
-            # Skip if already covered by a graphic card
-            _covered = any(
-                abs(float(_gc.get("startSec", 0)) - _out_s) < 5.0
-                for _gc in graphic_cards
-                if _gc.get("zone") == "lower-third-name"
+            # Collision avoidance: check ALL graphic cards (any zone).
+            # If blocked, shift the lt to just after the blocking card ends.
+            _lt_end_proposed = min(round(_out_s + 4.0, 3), trimmed_duration)
+            _blocking = next(
+                (
+                    _gc for _gc in sorted(graphic_cards, key=lambda c: float(c.get("startSec", 0)))
+                    if float(_gc.get("startSec", 0)) < _lt_end_proposed
+                    and float(_gc.get("endSec", float(_gc.get("startSec", 0)) + 3.5)) > _out_s
+                ),
+                None,
             )
-            if _covered:
-                continue
+            if _blocking:
+                _shifted = round(float(_blocking.get("endSec", _out_s + 4.0)) + 0.1, 3)
+                _shifted_end = min(_shifted + 4.0, trimmed_duration)
+                if _shifted >= trimmed_duration or _shifted_end - _shifted < 1.5:
+                    continue
+                _still_blocked = any(
+                    float(_gc.get("startSec", 0)) < _shifted_end
+                    and float(_gc.get("endSec", float(_gc.get("startSec", 0)) + 3.5)) > _shifted
+                    for _gc in graphic_cards
+                )
+                if _still_blocked:
+                    continue
+                _out_s = _shifted
             _lt_lines = _beat.get("lines", [])
             _lt_kicker = (_lt_lines[0][:30] if _lt_lines else "").strip()
             _lt_id = f"lt-{_lt_count + 1:02d}"
