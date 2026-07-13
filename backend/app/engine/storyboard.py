@@ -335,7 +335,7 @@ OUTPUT: a JSON array of card objects. Each card:
     "accent_word": "<optional: one word/phrase from title to emphasize via highlight swipe>",
     "detail": "<optional supporting text>",
     "number": "<if a stat/number is featured>",
-    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"data_chart"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking",
+    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"data_chart"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking"|"hand_written_note"|"speech_bubble_thought"|"calendar_date_highlight"|"percentage_split"|"red_flag_list"|"success_metric_badge"|"client_avatar_persona",
     "left_label": "<comparison: left side label>",
     "left_value": "<comparison: left side value>",
     "right_label": "<comparison: right side label>",
@@ -371,8 +371,7 @@ OUTPUT: a JSON array of card objects. Each card:
     "step_num": "<step_number: the step number or label, e.g. '01', '3', 'Étape 2'>",
     "step_label": "<step_number: short description of this step>",
     "quotes": ["<quote_carousel: quote 1>", "<quote_carousel: quote 2>", "<quote_carousel: quote 3>"],
-    "emoji": "<emoji_reaction: single emoji character>",
-    "emoji_label": "<emoji_reaction: short label or reaction text>",
+    "emoji_label": "<emoji_reaction: the reaction as a short punchy phrase, e.g. 'On s\'emballe !', 'C\'est impressionnant', 'Voilà le résultat'>",
     "price": "<price_tag: price string, e.g. '29€', '$199/mo', 'Gratuit'>",
     "price_context": "<price_tag: optional context, e.g. 'par mois', 'one-time', 'paiement unique'>",
     "warning_text": "<warning_soft: the warning message text>",
@@ -404,7 +403,18 @@ OUTPUT: a JSON array of card objects. Each card:
     "bar_values": [0.0, 0.0],
     "cause_text": "<cause_effect: the cause or trigger>",
     "effect_text": "<cause_effect: the resulting effect or outcome>",
-    "rankings": ["<number_ranking: first place label>", "<second place label>", "<third place label>"]
+    "rankings": ["<number_ranking: first place label>", "<second place label>", "<third place label>"],
+    "note_text": "<hand_written_note: the aside or note text to display>",
+    "thought_text": "<speech_bubble_thought: the internal thought or reflection text>",
+    "date_value": "<calendar_date_highlight: the date or period to highlight, e.g. 'Lundi 14 Jan', '2025', 'Semaine 3'>",
+    "date_context": "<calendar_date_highlight: short context label for the date, e.g. 'Lancement officiel', 'Objectif atteint'>",
+    "split_labels": ["<percentage_split: label for segment 1>", "<label for segment 2>"],
+    "split_values": [0.0, 0.0],
+    "flags": ["<red_flag_list: warning signal 1>", "<signal 2>", "<signal 3>"],
+    "badge_label": "<success_metric_badge: the achievement or metric headline, e.g. '10 000 abonnés', '+47% de CA'>",
+    "badge_context": "<success_metric_badge: brief supporting context, e.g. 'en 90 jours', 'objectif Q1 atteint'>",
+    "persona_name": "<client_avatar_persona: the persona or client archetype name, e.g. 'Sophie, 34 ans'>",
+    "persona_traits": ["<client_avatar_persona: trait or pain point 1>", "<trait 2>", "<trait 3>"]
   }}
 }}
 
@@ -499,10 +509,13 @@ RULES:
     (carousel is for varied tips/content); use quote_carousel only for
     multiple pure quotes. Distinct from attributed_quote (attributed_quote
     is one quote + source). Provide "quotes" array.
-  "emoji_reaction" — speaker expresses a reaction, emotion, or tone best
-    captured with a single emoji. Provide "emoji" (MUST be chosen ONLY from
-    this confirmed-safe set: 🔥 💡 ✅ ❌ 🎯 💪 🚀 🏆 📈 📉 💰 🙌 👀 ⭐ ⚠️
-    — do NOT use any other emoji) + optional "emoji_label".
+  "emoji_reaction" — speaker expresses a strong reaction, emotion, or
+    exclamation (hype, celebration, surprise, emphasis). Shows as a large
+    bold callout — no emoji glyph, text only. Provide "emoji_label" (a
+    short punchy phrase capturing the reaction, e.g. "On s'emballe !",
+    "C'est incroyable", "Voilà le résultat"). Do NOT provide an "emoji"
+    field. Distinct from key_phrase (key_phrase is a neutral statement;
+    emoji_reaction is an exclamatory reaction moment).
   "price_tag" — speaker mentions a specific price point or cost. Provide
     "price" string + optional "price_context".
   "warning_soft" — speaker flags a caution, common mistake, or risk (soft
@@ -600,6 +613,52 @@ RULES:
     rank positions). Distinct from score (score is a competitive result;
     number_ranking is an ordered catalog). Provide "rankings" list (2-5 items,
     ordered 1st to last).
+  "hand_written_note" — speaker shares a personal aside, a quick side note, a
+    parenthetical remark, or a "pro tip" that feels informal and spontaneous.
+    Renders as a sticky-note or handwritten-style card. Distinct from callout
+    (callout is a formal highlight; hand_written_note is an informal aside).
+    Distinct from key_phrase (key_phrase is a main statement; hand_written_note
+    is a margin note). Provide "note_text".
+  "speech_bubble_thought" — speaker voices an internal thought, rhetorical
+    inner monologue, or imagined audience reaction ("you're probably thinking…",
+    "in your head right now…"). Renders as a thought-bubble. Distinct from
+    dialogue (dialogue is two people talking; speech_bubble_thought is one
+    person's internal monologue). Distinct from question (question is posed
+    outward to the audience; speech_bubble_thought is a voiced inner thought).
+    Provide "thought_text".
+  "calendar_date_highlight" — speaker references a specific date, deadline,
+    launch, or milestone moment ("le 14 janvier", "en 2025", "dans 90 jours").
+    Renders as a calendar cell or date badge. Distinct from countdown (countdown
+    is a timer running down; calendar_date_highlight is a fixed date reference).
+    Distinct from roadmap_milestone (roadmap_milestone is a progress point;
+    calendar_date_highlight is just the date itself). Provide "date_value" +
+    "date_context".
+  "percentage_split" — speaker describes how a total is divided proportionally
+    ("60% de mon temps va à X, 40% à Y"). REQUIRES two or more segments that
+    sum to 100%. Distinct from comparison (comparison is qualitative A vs B;
+    percentage_split is a proportional numeric division). Distinct from
+    data_bar_chart (data_bar_chart compares absolute values; percentage_split
+    shows shares of a whole). Provide "split_labels" list + "split_values" list
+    of floats (same length; values should sum to ~100).
+  "red_flag_list" — speaker enumerates warning signs, mistakes to avoid, or
+    danger signals ("les red flags à surveiller", "les erreurs classiques").
+    REQUIRES at least 2 negative/warning items. Distinct from checklist
+    (checklist is positive to-dos; red_flag_list is warnings). Distinct from
+    warning_soft (warning_soft is one single caution; red_flag_list is a
+    multi-item danger list). Provide "flags" list (2-5 items).
+  "success_metric_badge" — speaker calls out a concrete achievement, a result
+    milestone, or a proof-of-success number ("j'ai atteint 10 000 abonnés",
+    "on a fait +47% de CA"). Renders as a badge or medal. Distinct from stat
+    (stat is a raw number; success_metric_badge frames it as an achievement).
+    Distinct from income_reveal (income_reveal is specifically about earnings;
+    success_metric_badge is any success metric). Provide "badge_label" +
+    "badge_context".
+  "client_avatar_persona" — speaker describes a target client, customer
+    archetype, or ideal buyer persona ("mon client idéal, c'est Sophie, 34 ans…").
+    Renders as an avatar with traits pills. Distinct from testimonial (testimonial
+    is a real person's review; client_avatar_persona is a composite archetype).
+    Distinct from versus_battle (versus contrasts two options; client_avatar_persona
+    profiles one person). Provide "persona_name" + "persona_traits" list (2-4 items).
 - TIMING: startSec should match when the speaker BEGINS saying the
   words the card references — synchronous with speech, like captions.
 - Place cards at NARRATIVELY IMPORTANT moments — not evenly spaced
