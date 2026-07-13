@@ -77,7 +77,7 @@ def _zone_bounds(zone: str, layout: str) -> dict:
 # Data cards are remapped to a side panel when Claude places them in a center zone.
 # Hero cards (key_phrase, quote, question, definition, etc.) remain in Claude's
 # chosen zone — they carry the visual message and need the full canvas.
-_DATA_PANEL_TYPES = {"stat", "list", "comparison", "checklist", "score", "trend", "rating", "progress_bar", "countdown"}
+_DATA_PANEL_TYPES = {"stat", "list", "comparison", "checklist", "score", "trend", "rating", "progress_bar", "countdown", "step_number", "price_tag"}
 _CENTER_ZONES = {"fullscreen", "video-overlay"}
 _SIDE_PANEL_ZONES = {"side-panel", "side-panel-left", "side-panel-right", "side-panel-top", "upper-data", "upper-right"}
 
@@ -1074,6 +1074,124 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         if p["title_glow"]:
             parts.append(f'  text-shadow:{p["title_glow"]};')
         parts.append('}')
+    # ── Wave 2 content types CSS ───────────────────────────────────────────
+    if content_style == "step_number":
+        parts.append(f'.card[data-card-id="{card_id}"] .sn-wrap {{')
+        parts.append('  display:flex; flex-direction:column; align-items:center; gap:12px;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .sn-num {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{number_size_eff};')
+        parts.append(f'  font-weight:{p["font_weight"]}; color:{p["accent"]}; line-height:1;')
+        parts.append('  font-variant-numeric:tabular-nums;')
+        if p["title_glow"]:
+            parts.append(f'  text-shadow:{p["title_glow"]};')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .sn-label {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{detail_size_eff};')
+        parts.append(f'  font-weight:600; color:{p["text_secondary"]}; text-align:center;')
+        parts.append('}')
+    if content_style == "quote_carousel":
+        parts.append(f'.card[data-card-id="{card_id}"] .qc-wrap {{')
+        parts.append('  position:relative; width:100%; min-height:120px;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .qc-item {{')
+        parts.append('  position:absolute; top:0; left:0; right:0; opacity:0;')
+        parts.append(f'  font-family:{p["font"]}; font-size:{title_size_eff};')
+        parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]}; text-align:center;')
+        if p["title_glow"]:
+            parts.append(f'  text-shadow:{p["title_glow"]};')
+        parts.append('}')
+    if content_style == "emoji_reaction":
+        _w2_em_sz = "56px" if compact else "72px"
+        parts.append(f'.card[data-card-id="{card_id}"] .er-wrap {{')
+        parts.append('  display:flex; flex-direction:column; align-items:center; gap:12px;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .er-emoji {{')
+        parts.append(f'  font-size:{_w2_em_sz}; line-height:1; text-align:center;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .er-label {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{detail_size_eff};')
+        parts.append(f'  font-weight:600; color:{p["text"]}; text-align:center;')
+        parts.append('}')
+    if content_style == "price_tag":
+        parts.append(f'.card[data-card-id="{card_id}"] .pt-wrap {{')
+        parts.append('  display:flex; flex-direction:column; align-items:center; gap:8px;')
+        if p["id"] == "lean_paper":
+            parts.append(f'  border:2px solid {p["accent"]}66; border-radius:{p["radius"]}; padding:20px 28px;')
+        elif p["id"] == "lean_craft":
+            parts.append(f'  border:2px solid {p["accent"]}; border-radius:4px 12px 10px 6px; padding:18px 24px;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .pt-price {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{number_size_eff};')
+        parts.append(f'  font-weight:{p["font_weight"]}; color:{p["accent"]}; line-height:1;')
+        parts.append('  font-variant-numeric:tabular-nums;')
+        if p["title_glow"]:
+            parts.append(f'  text-shadow:{p["title_glow"]};')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .pt-ctx {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{detail_size_eff};')
+        parts.append(f'  color:{p["text_secondary"]}; text-align:center;')
+        parts.append('}')
+    if content_style == "warning_soft":
+        parts.append(f'.card[data-card-id="{card_id}"] .ws-wrap {{')
+        parts.append('  display:flex; flex-direction:column; align-items:center; gap:16px;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .ws-text {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{title_size_eff};')
+        parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]}; text-align:center;')
+        if p["title_glow"]:
+            parts.append(f'  text-shadow:{p["title_glow"]};')
+        parts.append('}')
+    if content_style == "testimonial":
+        parts.append(f'.card[data-card-id="{card_id}"] .tm-wrap {{')
+        parts.append('  display:flex; flex-direction:column; align-items:center; gap:16px; width:100%;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .tm-qmark {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:60px; line-height:0.6;')
+        parts.append(f'  color:{p["accent"]}; opacity:0.6;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .tm-text {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{title_size_eff};')
+        parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]}; text-align:center;')
+        if p["title_glow"]:
+            parts.append(f'  text-shadow:{p["title_glow"]};')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .tm-person {{')
+        parts.append('  display:flex; align-items:center; gap:8px;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .tm-name {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{kicker_size_eff};')
+        parts.append(f'  font-weight:800; color:{p["accent"]}; letter-spacing:0.05em;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .tm-sep {{')
+        parts.append(f'  color:{p["text_secondary"]}; font-size:{kicker_size_eff};')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .tm-role {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{kicker_size_eff};')
+        parts.append(f'  color:{p["text_secondary"]};')
+        parts.append('}')
+    if content_style == "versus_battle":
+        _vb_vs_br = "50%" if p["id"] not in ("lean_craft", "lean_ledger") else "4px"
+        parts.append(f'.card[data-card-id="{card_id}"] .vb-wrap {{')
+        parts.append('  display:flex; flex-direction:row; align-items:center; gap:12px; width:100%;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .vb-side {{')
+        parts.append('  flex:1; display:flex; align-items:center; justify-content:center; opacity:0;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .vb-text {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{title_size_eff};')
+        parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]}; text-align:center;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .vb-vs {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{kicker_size_eff};')
+        parts.append(f'  font-weight:900; color:{p["accent"]};')
+        parts.append(f'  border:3px solid {p["accent"]}; border-radius:{_vb_vs_br};')
+        parts.append('  width:52px; height:52px; flex-shrink:0; opacity:0;')
+        parts.append('  display:flex; align-items:center; justify-content:center;')
+        parts.append('  letter-spacing:0.05em;')
+        if p["accent_line_glow"]:
+            parts.append(f'  box-shadow:{p["accent_line_glow"]};')
+        parts.append('}')
     parts.append('</style>')
     # Timeline: full-screen overlay, no card-panel wrapper
     if content_style == "timeline":
@@ -1407,6 +1525,87 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'        <div class="mvf-badge">FAIT</div>')
         parts.append(f'        <div class="mvf-fact" id="{card_id}-mvf-fact">{_fact}</div>')
         parts.append(f'      </div>')
+        parts.append(f'    </div>')
+    elif content_style == "step_number":
+        _sn_num = _esc(hints.get("step_num", "1"))
+        _sn_label = _esc(hints.get("step_label", ""))
+        parts.append(f'    <div class="sn-wrap">')
+        parts.append(f'      <div class="sn-num" id="{card_id}-sn-num">{_sn_num}</div>')
+        if _sn_label:
+            parts.append(f'      <div class="sn-label" id="{card_id}-sn-label">{_sn_label}</div>')
+        parts.append(f'    </div>')
+    elif content_style == "quote_carousel":
+        _qc_quotes = hints.get("quotes", [])
+        parts.append(f'    <div class="qc-wrap">')
+        for _qi, _q in enumerate(_qc_quotes[:5]):
+            parts.append(f'      <div class="qc-item" id="{card_id}-qc-{_qi}">{_esc(str(_q))}</div>')
+        parts.append(f'    </div>')
+    elif content_style == "emoji_reaction":
+        _er_emoji = _esc(hints.get("emoji", "⭐"))
+        _er_label = _esc(hints.get("emoji_label", ""))
+        parts.append(f'    <div class="er-wrap">')
+        parts.append(f'      <div class="er-emoji" id="{card_id}-er-emoji">{_er_emoji}</div>')
+        if _er_label:
+            parts.append(f'      <div class="er-label" id="{card_id}-er-label">{_er_label}</div>')
+        parts.append(f'    </div>')
+    elif content_style == "price_tag":
+        _pt_price = _esc(hints.get("price", ""))
+        _pt_ctx = _esc(hints.get("price_context", ""))
+        parts.append(f'    <div class="pt-wrap">')
+        parts.append(f'      <div class="pt-price" id="{card_id}-pt-price">{_pt_price}</div>')
+        if _pt_ctx:
+            parts.append(f'      <div class="pt-ctx" id="{card_id}-pt-ctx">{_pt_ctx}</div>')
+        parts.append(f'    </div>')
+    elif content_style == "warning_soft":
+        _ws_text = _esc(hints.get("warning_text", ""))
+        _ws_acc = p["accent"]
+        if p["id"] == "lean_craft":
+            _ws_svg = (
+                f'<svg viewBox="0 0 48 48" width="44" height="44">'
+                f'<path d="M24 5 L43 41 H5 Z" fill="none" stroke="{_ws_acc}" stroke-width="2.5"'
+                f' stroke-linejoin="round" stroke-linecap="round"/>'
+                f'<path d="M24 19 L24 30" stroke="{_ws_acc}" stroke-width="2.5" stroke-linecap="round"/>'
+                f'<circle cx="24" cy="35.5" r="1.8" fill="{_ws_acc}"/>'
+                f'</svg>'
+            )
+        else:
+            _ws_svg = (
+                f'<svg viewBox="0 0 48 48" width="44" height="44">'
+                f'<path d="M24 6L44 42H4L24 6Z" fill="none" stroke="{_ws_acc}" stroke-width="3"'
+                f' stroke-linejoin="round"/>'
+                f'<line x1="24" y1="19" x2="24" y2="31" stroke="{_ws_acc}" stroke-width="3"'
+                f' stroke-linecap="round"/>'
+                f'<circle cx="24" cy="36" r="2.5" fill="{_ws_acc}"/>'
+                f'</svg>'
+            )
+        parts.append(f'    <div class="ws-wrap">')
+        parts.append(f'      <div class="ws-icon" id="{card_id}-ws-icon" style="opacity:0">{_ws_svg}</div>')
+        parts.append(f'      <div class="ws-text" id="{card_id}-ws-text" style="opacity:0">{_ws_text}</div>')
+        parts.append(f'    </div>')
+    elif content_style == "testimonial":
+        _tm_text = _esc(hints.get("testimonial_text", ""))
+        _tm_name = _esc(hints.get("person_name", ""))
+        _tm_role = _esc(hints.get("person_role", ""))
+        parts.append(f'    <div class="tm-wrap">')
+        parts.append(f'      <div class="tm-qmark">“</div>')
+        parts.append(f'      <div class="tm-text" id="{card_id}-tm-text" style="opacity:0">{_tm_text}</div>')
+        if _tm_name or _tm_role:
+            parts.append(f'      <div class="tm-person" id="{card_id}-tm-person" style="opacity:0">')
+            if _tm_name:
+                parts.append(f'        <span class="tm-name">{_tm_name}</span>')
+            if _tm_name and _tm_role:
+                parts.append(f'        <span class="tm-sep">·</span>')
+            if _tm_role:
+                parts.append(f'        <span class="tm-role">{_tm_role}</span>')
+            parts.append(f'      </div>')
+        parts.append(f'    </div>')
+    elif content_style == "versus_battle":
+        _vb_a = _esc(hints.get("side_a", ""))
+        _vb_b = _esc(hints.get("side_b", ""))
+        parts.append(f'    <div class="vb-wrap">')
+        parts.append(f'      <div class="vb-side" id="{card_id}-vb-a"><div class="vb-text">{_vb_a}</div></div>')
+        parts.append(f'      <div class="vb-vs" id="{card_id}-vb-vs">VS</div>')
+        parts.append(f'      <div class="vb-side" id="{card_id}-vb-b"><div class="vb-text">{_vb_b}</div></div>')
         parts.append(f'    </div>')
     else:
         # key_phrase, quote and any unknown style
@@ -2482,6 +2681,184 @@ def _build_timeline_js(
                     lines.append(f'  tl.to(\'{_w1_myth_sel}\', {{ opacity: 0.4, duration: 0.15 }}, {_w1_t_sk:.4f});')
                     lines.append(f'  tl.to(\'{_w1_strike_sel}\', {{ width: "100%", duration: 0.35, ease: "power2.inOut" }}, {_w1_t_sk:.4f});')
                     lines.append(f'  tl.fromTo(\'{_w1_fw_sel}\', {{ opacity: 0, y: 10 }}, {{ opacity: 1, y: 0, duration: 0.35, ease: _eIn }}, {_w1_t_fact:.4f});')
+            elif content_style == "step_number":
+                _w2_sn_sel = f'.card[data-card-id="{card_id}"] #{card_id}-sn-num'
+                _w2_sl_sel = f'.card[data-card-id="{card_id}"] #{card_id}-sn-label'
+                if is_ledger:
+                    lines.append(f'  tl.set(\'{_w2_sn_sel}\', {{ opacity: 1 }}, {t_in:.4f});')
+                    lines.append(f'  tl.set(\'{_w2_sl_sel}\', {{ opacity: 1 }}, {t_in:.4f});')
+                elif is_vibe:
+                    lines.append(f'  tl.fromTo(\'{_w2_sn_sel}\', {{ opacity: 0, scale: 0.5 }}, {{ opacity: 1, scale: 1.1, duration: 0.30, ease: "back.out(2)" }}, {t_in:.4f});')
+                    lines.append(f'  tl.to(\'{_w2_sn_sel}\', {{ scale: 1, duration: 0.15, ease: "power2.out" }}, {t_in + 0.30:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_sl_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.25, ease: _eIn }}, {t_in + 0.35:.4f});')
+                elif is_cinema:
+                    lines.append(f'  tl.fromTo(\'{_w2_sn_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.70, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_sl_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.50, ease: _eIn }}, {t_in + 0.40:.4f});')
+                elif is_paper:
+                    lines.append(f'  tl.fromTo(\'{_w2_sn_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.30, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_sl_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.25, ease: _eIn }}, {t_in + 0.25:.4f});')
+                elif is_craft:
+                    lines.append(f'  tl.fromTo(\'{_w2_sn_sel}\', {{ opacity: 0, scale: 1.4 }}, {{ opacity: 1, scale: 1, duration: 0.35, ease: "power3.out" }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_sl_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.25, ease: _eIn }}, {t_in + 0.25:.4f});')
+                else:  # glass
+                    lines.append(f'  tl.fromTo(\'{_w2_sn_sel}\', {{ opacity: 0, scale: 0.7 }}, {{ opacity: 1, scale: 1, duration: 0.35, ease: _eIn }}, {t_in:.4f});')
+                    if p["title_glow"]:
+                        lines.append(f'  tl.to(\'{_w2_sn_sel}\', {{ textShadow: "{_esc_js(p["title_glow"])}", duration: 0.20 }}, {t_in + 0.35:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_sl_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.30, ease: _eIn }}, {t_in + 0.30:.4f});')
+            elif content_style == "quote_carousel":
+                _w2_qc_h = card.get("contentHints", {})
+                _w2_qc_quotes = _w2_qc_h.get("quotes", [])
+                _w2_qc_n = min(len(_w2_qc_quotes), 5)
+                if _w2_qc_n > 0:
+                    _w2_slot = max(1.5, (dur - 0.5) / _w2_qc_n)
+                    for _qi in range(_w2_qc_n):
+                        _w2_qc_sel = f'.card[data-card-id="{card_id}"] #{card_id}-qc-{_qi}'
+                        _w2_t0 = t_in + _qi * _w2_slot
+                        _w2_t1 = _w2_t0 + _w2_slot - 0.30
+                        if is_ledger:
+                            lines.append(f'  tl.set(\'{_w2_qc_sel}\', {{ opacity: 1 }}, {_w2_t0:.4f});')
+                            if _qi < _w2_qc_n - 1:
+                                lines.append(f'  tl.set(\'{_w2_qc_sel}\', {{ opacity: 0 }}, {_w2_t1:.4f});')
+                        elif is_cinema:
+                            lines.append(f'  tl.fromTo(\'{_w2_qc_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.60, ease: _eIn }}, {_w2_t0:.4f});')
+                            if _qi < _w2_qc_n - 1:
+                                lines.append(f'  tl.to(\'{_w2_qc_sel}\', {{ opacity: 0, duration: 0.50, ease: _eOut }}, {_w2_t1:.4f});')
+                        elif is_vibe:
+                            lines.append(f'  tl.fromTo(\'{_w2_qc_sel}\', {{ opacity: 0, scale: 0.9 }}, {{ opacity: 1, scale: 1, duration: 0.25, ease: _eIn }}, {_w2_t0:.4f});')
+                            if _qi < _w2_qc_n - 1:
+                                lines.append(f'  tl.to(\'{_w2_qc_sel}\', {{ opacity: 0, scale: 1.1, duration: 0.20, ease: _eOut }}, {_w2_t1:.4f});')
+                        elif is_paper or is_craft:
+                            _w2_fi = 0.35 if is_craft else 0.25
+                            lines.append(f'  tl.fromTo(\'{_w2_qc_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: {_w2_fi:.2f}, ease: _eIn }}, {_w2_t0:.4f});')
+                            if _qi < _w2_qc_n - 1:
+                                lines.append(f'  tl.to(\'{_w2_qc_sel}\', {{ opacity: 0, duration: 0.25, ease: _eOut }}, {_w2_t1:.4f});')
+                        else:  # glass: blur transition
+                            lines.append(f'  tl.fromTo(\'{_w2_qc_sel}\', {{ opacity: 0, filter: "blur(4px)" }}, {{ opacity: 1, filter: "blur(0px)", duration: 0.30, ease: _eIn }}, {_w2_t0:.4f});')
+                            if _qi < _w2_qc_n - 1:
+                                lines.append(f'  tl.to(\'{_w2_qc_sel}\', {{ opacity: 0, filter: "blur(4px)", duration: 0.25, ease: _eOut }}, {_w2_t1:.4f});')
+            elif content_style == "emoji_reaction":
+                _w2_em_sel = f'.card[data-card-id="{card_id}"] #{card_id}-er-emoji'
+                _w2_el_sel = f'.card[data-card-id="{card_id}"] #{card_id}-er-label'
+                if is_ledger:
+                    lines.append(f'  tl.set(\'{_w2_em_sel}\', {{ opacity: 1 }}, {t_in:.4f});')
+                    lines.append(f'  tl.set(\'{_w2_el_sel}\', {{ opacity: 1 }}, {t_in:.4f});')
+                elif is_vibe:
+                    lines.append(f'  tl.fromTo(\'{_w2_em_sel}\', {{ opacity: 0, scale: 0.3 }}, {{ opacity: 1, scale: 1.3, duration: 0.30, ease: "back.out(2.5)" }}, {t_in:.4f});')
+                    lines.append(f'  tl.to(\'{_w2_em_sel}\', {{ scale: 1, duration: 0.20, ease: "power2.out" }}, {t_in + 0.30:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_el_sel}\', {{ opacity: 0, y: 8 }}, {{ opacity: 1, y: 0, duration: 0.25, ease: _eIn }}, {t_in + 0.40:.4f});')
+                elif is_cinema:
+                    lines.append(f'  tl.fromTo(\'{_w2_em_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.60, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_el_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.50, ease: _eIn }}, {t_in + 0.40:.4f});')
+                elif is_paper:
+                    lines.append(f'  tl.fromTo(\'{_w2_em_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.30, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_el_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.25, ease: _eIn }}, {t_in + 0.25:.4f});')
+                elif is_craft:
+                    lines.append(f'  tl.fromTo(\'{_w2_em_sel}\', {{ opacity: 0, scale: 0.8, rotation: -2 }}, {{ opacity: 1, scale: 1, rotation: 0, duration: 0.35, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_el_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.25, ease: _eIn }}, {t_in + 0.30:.4f});')
+                else:  # glass: pop + radial glow
+                    lines.append(f'  tl.fromTo(\'{_w2_em_sel}\', {{ opacity: 0, scale: 0.6 }}, {{ opacity: 1, scale: 1.1, duration: 0.30, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.to(\'{_w2_em_sel}\', {{ scale: 1, duration: 0.15, ease: "power2.out" }}, {t_in + 0.30:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_el_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.30, ease: _eIn }}, {t_in + 0.35:.4f});')
+            elif content_style == "price_tag":
+                _w2_pp_sel = f'.card[data-card-id="{card_id}"] #{card_id}-pt-price'
+                _w2_pc_sel = f'.card[data-card-id="{card_id}"] #{card_id}-pt-ctx'
+                if is_ledger:
+                    lines.append(f'  tl.fromTo(\'{_w2_pp_sel}\', {{ clipPath: "inset(0% 100% 0% 0%)" }}, {{ clipPath: "inset(0% 0% 0% 0%)", duration: 0.35, ease: "power2.out" }}, {t_in:.4f});')
+                    lines.append(f'  tl.set(\'{_w2_pc_sel}\', {{ opacity: 1 }}, {t_in + 0.35:.4f});')
+                elif is_vibe:
+                    lines.append(f'  tl.fromTo(\'{_w2_pp_sel}\', {{ opacity: 0, scale: 0.6 }}, {{ opacity: 1, scale: 1.1, duration: 0.30, ease: "back.out(2)" }}, {t_in:.4f});')
+                    lines.append(f'  tl.to(\'{_w2_pp_sel}\', {{ scale: 1, duration: 0.15, ease: "power2.out" }}, {t_in + 0.30:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_pc_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.25, ease: _eIn }}, {t_in + 0.40:.4f});')
+                elif is_cinema:
+                    lines.append(f'  tl.fromTo(\'{_w2_pp_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.70, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_pc_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.50, ease: _eIn }}, {t_in + 0.40:.4f});')
+                elif is_paper:
+                    lines.append(f'  tl.fromTo(\'{_w2_pp_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.30, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_pc_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.25, ease: _eIn }}, {t_in + 0.25:.4f});')
+                elif is_craft:
+                    lines.append(f'  tl.fromTo(\'{_w2_pp_sel}\', {{ opacity: 0, rotation: -2 }}, {{ opacity: 1, rotation: 0, duration: 0.35, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_pc_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.25, ease: _eIn }}, {t_in + 0.30:.4f});')
+                else:  # glass
+                    lines.append(f'  tl.fromTo(\'{_w2_pp_sel}\', {{ opacity: 0, scale: 0.85 }}, {{ opacity: 1, scale: 1, duration: 0.35, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.to(\'{_w2_pp_sel}\', {{ boxShadow: "0 0 20px {_esc_js(p["accent"])}", duration: 0.20 }}, {t_in + 0.35:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_pc_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.25, ease: _eIn }}, {t_in + 0.40:.4f});')
+            elif content_style == "warning_soft":
+                _w2_wi_sel = f'.card[data-card-id="{card_id}"] #{card_id}-ws-icon'
+                _w2_wt_sel = f'.card[data-card-id="{card_id}"] #{card_id}-ws-text'
+                if is_ledger:
+                    lines.append(f'  tl.set(\'{_w2_wi_sel}\', {{ opacity: 1 }}, {t_in:.4f});')
+                    lines.append(f'  tl.set(\'{_w2_wt_sel}\', {{ opacity: 1 }}, {t_in:.4f});')
+                elif is_vibe:
+                    lines.append(f'  tl.fromTo(\'{_w2_wi_sel}\', {{ opacity: 0, scale: 0.6 }}, {{ opacity: 1, scale: 1.1, duration: 0.30, ease: "back.out(2)" }}, {t_in:.4f});')
+                    lines.append(f'  tl.to(\'{_w2_wi_sel}\', {{ scale: 1, duration: 0.15, ease: "power2.out" }}, {t_in + 0.30:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_wt_sel}\', {{ opacity: 0, y: 8 }}, {{ opacity: 1, y: 0, duration: 0.25, ease: _eIn }}, {t_in + 0.35:.4f});')
+                elif is_cinema:
+                    lines.append(f'  tl.fromTo(\'{_w2_wi_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.60, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_wt_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.60, ease: _eIn }}, {t_in + 0.40:.4f});')
+                elif is_paper:
+                    lines.append(f'  tl.fromTo(\'{_w2_wi_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.30, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_wt_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.25, ease: _eIn }}, {t_in + 0.25:.4f});')
+                elif is_craft:
+                    lines.append(f'  tl.fromTo(\'{_w2_wi_sel}\', {{ opacity: 0, scale: 0.9, rotation: -2 }}, {{ opacity: 1, scale: 1, rotation: 0, duration: 0.35, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_wt_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.25, ease: _eIn }}, {t_in + 0.25:.4f});')
+                else:  # glass: icon glow + text slide
+                    lines.append(f'  tl.fromTo(\'{_w2_wi_sel}\', {{ opacity: 0, scale: 0.8 }}, {{ opacity: 1, scale: 1, duration: 0.35, ease: _eIn }}, {t_in:.4f});')
+                    if p["accent"]:
+                        lines.append(f'  tl.to(\'{_w2_wi_sel}\', {{ filter: "drop-shadow(0 0 8px {_esc_js(p["accent"])})", duration: 0.20 }}, {t_in + 0.30:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_wt_sel}\', {{ opacity: 0, y: 8 }}, {{ opacity: 1, y: 0, duration: 0.30, ease: _eIn }}, {t_in + 0.25:.4f});')
+            elif content_style == "testimonial":
+                _w2_tt_sel = f'.card[data-card-id="{card_id}"] #{card_id}-tm-text'
+                _w2_tp_sel = f'.card[data-card-id="{card_id}"] #{card_id}-tm-person'
+                if is_ledger:
+                    lines.append(f'  tl.set(\'{_w2_tt_sel}\', {{ opacity: 1 }}, {t_in:.4f});')
+                    lines.append(f'  tl.set(\'{_w2_tp_sel}\', {{ opacity: 1 }}, {t_in:.4f});')
+                elif is_vibe:
+                    lines.append(f'  tl.fromTo(\'{_w2_tt_sel}\', {{ opacity: 0, y: 20 }}, {{ opacity: 1, y: 0, duration: 0.35, ease: "back.out(1.5)" }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_tp_sel}\', {{ opacity: 0, scale: 0.8 }}, {{ opacity: 1, scale: 1, duration: 0.25, ease: "back.out(2)" }}, {t_in + 0.35:.4f});')
+                elif is_cinema:
+                    lines.append(f'  tl.fromTo(\'{_w2_tt_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.70, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_tp_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.50, ease: _eIn }}, {t_in + 0.60:.4f});')
+                elif is_paper:
+                    lines.append(f'  tl.fromTo(\'{_w2_tt_sel}\', {{ opacity: 0, y: 12 }}, {{ opacity: 1, y: 0, duration: 0.30, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_tp_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.25, ease: _eIn }}, {t_in + 0.30:.4f});')
+                elif is_craft:
+                    lines.append(f'  tl.fromTo(\'{_w2_tt_sel}\', {{ opacity: 0, y: 12 }}, {{ opacity: 1, y: 0, duration: 0.35, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_tp_sel}\', {{ opacity: 0, rotation: -1 }}, {{ opacity: 1, rotation: 0, duration: 0.30, ease: _eIn }}, {t_in + 0.30:.4f});')
+                else:  # glass
+                    lines.append(f'  tl.fromTo(\'{_w2_tt_sel}\', {{ opacity: 0, y: 16 }}, {{ opacity: 1, y: 0, duration: 0.40, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_tp_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.30, ease: _eIn }}, {t_in + 0.35:.4f});')
+            elif content_style == "versus_battle":
+                _w2_va_sel = f'.card[data-card-id="{card_id}"] #{card_id}-vb-a'
+                _w2_vb_sel = f'.card[data-card-id="{card_id}"] #{card_id}-vb-b'
+                _w2_vv_sel = f'.card[data-card-id="{card_id}"] #{card_id}-vb-vs'
+                if is_ledger:
+                    lines.append(f'  tl.set(\'{_w2_va_sel}\', {{ opacity: 1 }}, {t_in:.4f});')
+                    lines.append(f'  tl.set(\'{_w2_vv_sel}\', {{ opacity: 1 }}, {t_in:.4f});')
+                    lines.append(f'  tl.set(\'{_w2_vb_sel}\', {{ opacity: 1 }}, {t_in:.4f});')
+                elif is_vibe:
+                    lines.append(f'  tl.fromTo(\'{_w2_va_sel}\', {{ opacity: 0, x: -40 }}, {{ opacity: 1, x: 0, duration: 0.35, ease: "back.out(1.5)" }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_vb_sel}\', {{ opacity: 0, x: 40 }}, {{ opacity: 1, x: 0, duration: 0.35, ease: "back.out(1.5)" }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_vv_sel}\', {{ opacity: 0, scale: 0.5 }}, {{ opacity: 1, scale: 1.2, duration: 0.25, ease: "back.out(2)" }}, {t_in + 0.20:.4f});')
+                    lines.append(f'  tl.to(\'{_w2_vv_sel}\', {{ scale: 1, duration: 0.15, ease: "power2.out" }}, {t_in + 0.45:.4f});')
+                elif is_cinema:
+                    lines.append(f'  tl.fromTo(\'{_w2_va_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.60, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_vb_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.60, ease: _eIn }}, {t_in + 0.15:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_vv_sel}\', {{ opacity: 0, scale: 0.8 }}, {{ opacity: 1, scale: 1, duration: 0.50, ease: _eIn }}, {t_in + 0.40:.4f});')
+                elif is_paper:
+                    lines.append(f'  tl.fromTo(\'{_w2_va_sel}\', {{ opacity: 0, x: -20 }}, {{ opacity: 1, x: 0, duration: 0.30, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_vb_sel}\', {{ opacity: 0, x: 20 }}, {{ opacity: 1, x: 0, duration: 0.30, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_vv_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.25, ease: _eIn }}, {t_in + 0.20:.4f});')
+                elif is_craft:
+                    lines.append(f'  tl.fromTo(\'{_w2_va_sel}\', {{ opacity: 0, rotation: -1 }}, {{ opacity: 1, rotation: 0, duration: 0.35, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_vb_sel}\', {{ opacity: 0, rotation: 1 }}, {{ opacity: 1, rotation: 0, duration: 0.35, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_vv_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.30, ease: _eIn }}, {t_in + 0.25:.4f});')
+                else:  # glass: sides slide in + VS badge pulses
+                    lines.append(f'  tl.fromTo(\'{_w2_va_sel}\', {{ opacity: 0, x: -30 }}, {{ opacity: 1, x: 0, duration: 0.40, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_vb_sel}\', {{ opacity: 0, x: 30 }}, {{ opacity: 1, x: 0, duration: 0.40, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w2_vv_sel}\', {{ opacity: 0, scale: 0.6 }}, {{ opacity: 1, scale: 1, duration: 0.30, ease: _eIn }}, {t_in + 0.25:.4f});')
+                    lines.append(f'  tl.to(\'{_w2_vv_sel}\', {{ boxShadow: "0 0 20px {_esc_js(p["accent"])}", duration: 0.20 }}, {t_in + 0.55:.4f});')
+                    if p["accent_line_glow"]:
+                        lines.append(f'  tl.to(\'{_w2_vv_sel}\', {{ boxShadow: "{_esc_js(p["accent_line_glow"])}", duration: 0.20 }}, {t_in + 0.75:.4f});')
             else:
                 if is_cinema:
                     lines.append(

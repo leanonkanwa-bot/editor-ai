@@ -335,7 +335,7 @@ OUTPUT: a JSON array of card objects. Each card:
     "accent_word": "<optional: one word/phrase from title to emphasize via highlight swipe>",
     "detail": "<optional supporting text>",
     "number": "<if a stat/number is featured>",
-    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"data_chart"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact",
+    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"data_chart"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle",
     "left_label": "<comparison: left side label>",
     "left_value": "<comparison: left side value>",
     "right_label": "<comparison: right side label>",
@@ -367,7 +367,20 @@ OUTPUT: a JSON array of card objects. Each card:
     "poll_question": "<poll_question: the question text>",
     "poll_options": ["<poll_question: option 1>", "<poll_question: option 2>"],
     "myth_text": "<myth_vs_fact: the incorrect belief to debunk>",
-    "fact_text": "<myth_vs_fact: the corrected truth>"
+    "fact_text": "<myth_vs_fact: the corrected truth>",
+    "step_num": "<step_number: the step number or label, e.g. '01', '3', 'Étape 2'>",
+    "step_label": "<step_number: short description of this step>",
+    "quotes": ["<quote_carousel: quote 1>", "<quote_carousel: quote 2>", "<quote_carousel: quote 3>"],
+    "emoji": "<emoji_reaction: single emoji character>",
+    "emoji_label": "<emoji_reaction: short label or reaction text>",
+    "price": "<price_tag: price string, e.g. '29€', '$199/mo', 'Gratuit'>",
+    "price_context": "<price_tag: optional context, e.g. 'par mois', 'one-time', 'paiement unique'>",
+    "warning_text": "<warning_soft: the warning message text>",
+    "testimonial_text": "<testimonial: the quote from the customer or client>",
+    "person_name": "<testimonial: name of the person>",
+    "person_role": "<testimonial: role or context, e.g. 'CEO at Acme', 'Client depuis 2 ans'>",
+    "side_a": "<versus_battle: first side label or name>",
+    "side_b": "<versus_battle: second side label or name>"
   }}
 }}
 
@@ -438,6 +451,31 @@ RULES:
   "myth_vs_fact" — speaker debunks a myth and states the real fact.
     Distinct from callout (callout adds context, not a correction).
     Provide "myth_text" + "fact_text".
+  "step_number" — speaker calls out a single focal step (e.g. "step 1",
+    "first thing"). Distinct from timeline (timeline shows a full sequence);
+    use step_number for a single isolated step. Provide "step_num" +
+    optional "step_label".
+  "quote_carousel" — speaker delivers 2-4 short quotes or phrases in
+    rapid succession that should cycle visually. Distinct from carousel
+    (carousel is for varied tips/content); use quote_carousel only for
+    multiple pure quotes. Distinct from attributed_quote (attributed_quote
+    is one quote + source). Provide "quotes" array.
+  "emoji_reaction" — speaker expresses a reaction, emotion, or tone best
+    captured with a single emoji. Provide "emoji" + optional "emoji_label".
+  "price_tag" — speaker mentions a specific price point or cost. Provide
+    "price" string + optional "price_context".
+  "warning_soft" — speaker flags a caution, common mistake, or risk (soft
+    register — not a crisis). Uses pack accent color only, NOT orange/red.
+    Distinct from callout (callout is neutral context). Provide "warning_text".
+  "testimonial" — speaker quotes a customer, client, or user with their
+    name and role context. Distinct from attributed_quote (attributed_quote
+    is for public figures or sources); testimonial is for end-user social
+    proof with role. Provide "testimonial_text" + "person_name" +
+    "person_role".
+  "versus_battle" — speaker frames a dramatic head-to-head comparison
+    between two things. More dynamic than comparison (comparison is sober
+    two-column; versus_battle has a central VS badge). Provide "side_a" +
+    "side_b".
 - TIMING: startSec should match when the speaker BEGINS saying the
   words the card references — synchronous with speech, like captions.
 - Place cards at NARRATIVELY IMPORTANT moments — not evenly spaced
