@@ -410,6 +410,7 @@ RULES:
 LANGUAGE: {language}
 - ALL card text (kicker, title, detail, items, steps, line_a/line_b,
   attribution) MUST be in {language} — match the speaker's language exactly.
+- PUNCTUATION: Never use the em-dash character (—) in any card text. Use a comma, colon, or period instead.
 
 BRAND: accent color {brand_color}, content type: {content_type}, style: {editing_style}
 

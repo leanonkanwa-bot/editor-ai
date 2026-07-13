@@ -527,10 +527,10 @@ function loadProfileSection() {
     }
 
     // Platforms
-    const platsEl = $("profilePlatforms");
-    if (platsEl && p.platforms?.length) {
-      platsEl.innerHTML = p.platforms.map(pl => `<span class="platform-badge" style="color:var(--salmon);border-color:var(--salmon-border);background:var(--salmon-dim)">${pl}</span>`).join("");
-    }
+    const savedPlats = new Set(p.platforms || []);
+    document.querySelectorAll("#platformToggles .plat-btn").forEach(btn => {
+      btn.classList.toggle("active", savedPlats.has(btn.dataset.platform));
+    });
 
     // ICP
     const icpEl = $("profileIcp");
@@ -585,6 +585,8 @@ $("saveProfileBtn")?.addEventListener("click", async () => {
       $("pillar2")?.value || "",
       $("pillar3")?.value || "",
     ];
+    p.platforms = [...document.querySelectorAll("#platformToggles .plat-btn.active")]
+      .map(btn => btn.dataset.platform);
     localStorage.setItem("coach_profile", JSON.stringify(p));
 
     // Save to backend
