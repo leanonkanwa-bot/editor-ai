@@ -335,7 +335,7 @@ OUTPUT: a JSON array of card objects. Each card:
     "accent_word": "<optional: one word/phrase from title to emphasize via highlight swipe>",
     "detail": "<optional supporting text>",
     "number": "<if a stat/number is featured>",
-    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"data_chart"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle",
+    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"data_chart"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal",
     "left_label": "<comparison: left side label>",
     "left_value": "<comparison: left side value>",
     "right_label": "<comparison: right side label>",
@@ -380,7 +380,19 @@ OUTPUT: a JSON array of card objects. Each card:
     "person_name": "<testimonial: name of the person>",
     "person_role": "<testimonial: role or context, e.g. 'CEO at Acme', 'Client depuis 2 ans'>",
     "side_a": "<versus_battle: first side label or name>",
-    "side_b": "<versus_battle: second side label or name>"
+    "side_b": "<versus_battle: second side label or name>",
+    "recap_items": ["<recap_summary: first bullet point>", "<second point>", "<third point>"],
+    "journey_points": ["<location_journey: first location/stop>", "<second stop>", "<third stop>"],
+    "formula_parts": ["<formula_equation: first term>", "×", "<second term>", "=", "<result term>"],
+    "milestone_label": "<roadmap_milestone: the milestone title or achievement>",
+    "milestone_context": "<roadmap_milestone: brief context or date/stage>",
+    "pros": ["<pros_cons: first advantage>", "<second advantage>"],
+    "cons": ["<pros_cons: first drawback>", "<second drawback>"],
+    "stars": 4,
+    "review_text": "<star_rating_review: the review quote>",
+    "reviewer_name": "<star_rating_review: reviewer name or handle>",
+    "income_value": "<income_reveal: the income/number to reveal, e.g. '12 000 €/mois'>",
+    "income_context": "<income_reveal: brief context, e.g. 'revenu passif en 6 mois'>"
   }}
 }}
 
@@ -476,6 +488,34 @@ RULES:
     between two things. More dynamic than comparison (comparison is sober
     two-column; versus_battle has a central VS badge). Provide "side_a" +
     "side_b".
+  "recap_summary" — speaker does a structured recap or summary of key
+    points (e.g. "three things to remember"). Distinct from list (list is
+    ad-hoc; recap_summary has a "what we covered" narrative feel). Provide
+    "recap_items" list (2-5 bullet strings).
+  "location_journey" — speaker describes a geographic or spatial journey
+    between multiple places. Distinct from timeline (timeline is temporal
+    event sequence; location_journey is spatial/geographic). Provide
+    "journey_points" list (2-5 location names).
+  "formula_equation" — speaker presents a formula, equation, or
+    mathematical relationship. Use when parts are connected by operators
+    (×, ÷, +, =, →). Provide "formula_parts" list alternating terms and
+    operators (e.g. ["Temps", "×", "Effort", "=", "Résultat"]).
+  "roadmap_milestone" — speaker celebrates or announces a single milestone
+    or checkpoint in a progression. Distinct from timeline (timeline shows
+    the full sequence; roadmap_milestone highlights one achievement moment).
+    Provide "milestone_label" + "milestone_context".
+  "pros_cons" — speaker explicitly weighs advantages against drawbacks in a
+    debate structure. Distinct from comparison (comparison is sober
+    side-by-side data; pros_cons has evaluative "pour/contre" headers).
+    Provide "pros" list + "cons" list (2-4 items each).
+  "star_rating_review" — speaker shares a review or testimonial anchored by
+    a star rating. Distinct from testimonial (testimonial is quote-focused;
+    star_rating_review leads with the star count). Provide "stars" (int
+    0-5), "review_text", "reviewer_name".
+  "income_reveal" — speaker dramatically reveals an income, revenue, or
+    financial figure. Distinct from stat (stat is informational; income_reveal
+    has suspense/reveal energy). Provide "income_value" (the number string)
+    + "income_context" (brief qualifier).
 - TIMING: startSec should match when the speaker BEGINS saying the
   words the card references — synchronous with speech, like captions.
 - Place cards at NARRATIVELY IMPORTANT moments — not evenly spaced
