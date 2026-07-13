@@ -335,7 +335,7 @@ OUTPUT: a JSON array of card objects. Each card:
     "accent_word": "<optional: one word/phrase from title to emphasize via highlight swipe>",
     "detail": "<optional supporting text>",
     "number": "<if a stat/number is featured>",
-    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"data_chart"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking"|"hand_written_note"|"speech_bubble_thought"|"calendar_date_highlight"|"percentage_split"|"red_flag_list"|"success_metric_badge"|"client_avatar_persona",
+    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"data_chart"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking"|"hand_written_note"|"speech_bubble_thought"|"calendar_date_highlight"|"percentage_split"|"red_flag_list"|"success_metric_badge"|"client_avatar_persona"|"book_recommendation"|"tool_stack"|"revenue_breakdown"|"age_milestone"|"contrarian_take"|"action_step_cta"|"story_chapter_transition",
     "left_label": "<comparison: left side label>",
     "left_value": "<comparison: left side value>",
     "right_label": "<comparison: right side label>",
@@ -414,7 +414,17 @@ OUTPUT: a JSON array of card objects. Each card:
     "badge_label": "<success_metric_badge: the achievement or metric headline, e.g. '10 000 abonnés', '+47% de CA'>",
     "badge_context": "<success_metric_badge: brief supporting context, e.g. 'en 90 jours', 'objectif Q1 atteint'>",
     "persona_name": "<client_avatar_persona: the persona or client archetype name, e.g. 'Sophie, 34 ans'>",
-    "persona_traits": ["<client_avatar_persona: trait or pain point 1>", "<trait 2>", "<trait 3>"]
+    "persona_traits": ["<client_avatar_persona: trait or pain point 1>", "<trait 2>", "<trait 3>"],
+    "book_title": "<book_recommendation: the book title>",
+    "book_author": "<book_recommendation: the author name>",
+    "tools": ["<tool_stack: tool or software name 1>", "<tool 2>", "<tool 3>"],
+    "revenue_sources": ["<revenue_breakdown: source label 1>", "<source label 2>"],
+    "revenue_values": [0.0, 0.0],
+    "age_value": "<age_milestone: the age or duration as a number or string, e.g. '34', '10 ans', '90 jours'>",
+    "age_context": "<age_milestone: short context, e.g. 'à laquelle j\'ai lancé mon business', 'de travail pour y arriver'>",
+    "take_text": "<contrarian_take: the contrarian or provocative statement>",
+    "cta_text": "<action_step_cta: the imperative call-to-action text>",
+    "transition_label": "<story_chapter_transition: the short narrative beat label, e.g. 'Mais voilà ce qui s\'est passé', 'La suite…', 'Et maintenant ?'>"
   }}
 }}
 
@@ -659,6 +669,56 @@ RULES:
     is a real person's review; client_avatar_persona is a composite archetype).
     Distinct from versus_battle (versus contrasts two options; client_avatar_persona
     profiles one person). Provide "persona_name" + "persona_traits" list (2-4 items).
+  "book_recommendation" — speaker explicitly names a book they recommend or
+    reference ("je te conseille de lire X", "le livre qui a changé ma vie…").
+    REQUIRES both title and author to be identifiable. Distinct from testimonial
+    (testimonial is a person's review; book_recommendation is a titled work).
+    Distinct from key_phrase (key_phrase is a statement; book_recommendation
+    frames a specific book). Provide "book_title" + "book_author".
+  "tool_stack" — speaker enumerates a set of tools, apps, or software they use
+    ("mes outils du quotidien", "la stack que j'utilise", "les logiciels que…").
+    REQUIRES at least 2 named tools. Distinct from list (list is any enumeration;
+    tool_stack is specifically a set of named software/tools). Distinct from
+    checklist (checklist is to-dos; tool_stack is an inventory of tools).
+    Provide "tools" list (2-6 items).
+  "revenue_breakdown" — speaker details multiple revenue streams with values
+    ("mon CA se répartit entre X€ de Y et Z€ de W"). REQUIRES both source labels
+    and numeric values. Distinct from stat (stat is a single number). Distinct
+    from income_reveal (income_reveal is a single total earnings figure;
+    revenue_breakdown is the breakdown by source). Distinct from data_bar_chart
+    (data_bar_chart is generic numeric comparison; revenue_breakdown is
+    specifically revenue by source). Provide "revenue_sources" list +
+    "revenue_values" list of floats (same length, 2-5 items).
+  "age_milestone" — speaker discloses or references an age or duration as a
+    dramatic personal reveal ("j'avais 24 ans quand…", "ça m'a pris 3 ans",
+    "à 34 ans j'ai…"). REQUIRES a number or duration value. Distinct from
+    stat (stat is a business/data number; age_milestone is a personal age or
+    elapsed time). Distinct from calendar_date_highlight (calendar_date_highlight
+    is a specific date; age_milestone is an age or duration). Distinct from
+    step_number (step_number is a process step; age_milestone is a personal
+    milestone age). Provide "age_value" + "age_context".
+  "contrarian_take" — speaker deliberately voices a provocative, counter-intuitive,
+    or controversial opinion ("voici ce que personne ne dit", "la vérité que tu ne
+    veux pas entendre", "j'ai une opinion impopulaire"). Uses pack accent color
+    unchanged — signals tension through typography only. Distinct from warning_soft
+    (warning_soft is a caution; contrarian_take is an opinion). Distinct from
+    red_flag_list (red_flag_list is multiple danger signals; contrarian_take is
+    one provocative statement). Distinct from callout (callout is a neutral
+    highlight; contrarian_take has editorial tension). Provide "take_text".
+  "action_step_cta" — speaker gives a direct imperative call to action or a
+    concrete next step for the viewer ("maintenant voici ce que tu dois faire",
+    "passe à l'action", "fais X dès aujourd'hui"). Distinct from callout
+    (callout is a statement; action_step_cta is an imperative directive).
+    Distinct from step_number (step_number is one step in a process;
+    action_step_cta is a standalone final CTA). Distinct from question (question
+    poses a query; action_step_cta is a command). Provide "cta_text".
+  "story_chapter_transition" — marks a narrative beat transition between two
+    story parts, a pivot moment, or a scene break ("mais voilà ce qui s'est
+    passé…", "et là tout a changé", "la suite m'a surpris"). Distinct from
+    chapter_marker (chapter_marker is a structured numbered chapter; this is a
+    fluid narrative beat without numbering). Distinct from timeline
+    (timeline is a sequence of events; story_chapter_transition is one
+    pivot-beat separator). Provide "transition_label".
 - TIMING: startSec should match when the speaker BEGINS saying the
   words the card references — synchronous with speech, like captions.
 - Place cards at NARRATIVELY IMPORTANT moments — not evenly spaced
