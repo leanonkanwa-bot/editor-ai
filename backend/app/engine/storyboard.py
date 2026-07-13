@@ -420,8 +420,9 @@ RULES:
   "timeline" — sequential/temporal progression (events along a path
     with dates or temporal ordering). Use timeline, not list, when
     items have a clear chronological sequence.
-  "comparison" — speaker contrasts two specific things (before/after,
-    old/new, us/them). Exactly 2 sides required.
+  "comparison" — speaker contrasts two distinct things (old/new, us/them,
+    method A vs method B). Exactly 2 sides required. NOT for the same
+    thing before vs after a change (use before_after_image for that).
   "stat" — a specific number or metric is featured.
   "key_phrase" — a single impactful statement (not enumerated).
   "quote" — unattributed statement the speaker emphasizes.
@@ -433,8 +434,11 @@ RULES:
   "checklist" — completed/verified action items ("things I checked",
     "requirements met"). Use checklist, not list, when items imply
     done/verified status. Use "items" array.
-  "score" — a score, ranking, or rating (e.g. "3-1", "Top 5", "8/10").
-    NOT a stat (stat is for metrics that count up). Provide "score_text".
+  "score" — a competitive score, ranking, or leaderboard position (e.g.
+    "3-1", "Top 5", "ranked #2"). Use when the number reflects a
+    competition or relative standing. NOT stat (stat is a raw metric).
+    NOT rating (rating is the speaker's own subjective assessment on a
+    scale). Provide "score_text".
   "mindmap" — a central concept with 2-3 branching related ideas.
     Provide "center" + "branches" array.
   "callout" — supplementary context or aside (catch-all, use only
@@ -442,18 +446,22 @@ RULES:
   "dialogue" — speaker recounts an exchange between two people.
   "trend" — speaker describes a directional change (growth/decline).
   "question" — speaker poses a question and then answers it.
-  "rating" — speaker gives a numerical score to something (e.g. "I'd
-    give this 8 out of 10"). Provide "rating_value" + "rating_max".
-    NOT stat (stat is a count/metric); NOT score (score is rankings).
+  "rating" — speaker gives their OWN personal assessment on a scale
+    (e.g. "I'd give this 8 out of 10", "je lui mets 9/10"). Provide
+    "rating_value" + "rating_max". NOT stat (stat is a raw metric).
+    NOT score (score is competitive rankings). NOT star_rating_review
+    (that is a third-party review with star count, not the speaker's own
+    live assessment).
   "map_location" — speaker references a specific geographic location.
     Provide "location_name" + optional "location_context".
   "progress_bar" — speaker describes a percentage, completion level,
     or how far along something is ("we're 70% there"). Provide
     "progress_percent" (0-100 integer) + "progress_label". NOT stat.
-  "before_after_image" — speaker describes a visual transformation
-    (conceptual before/after). Use for transformations, NOT for
-    contrasting two separate things (use comparison for that). Provide
-    "before_label" + "after_label".
+  "before_after_image" — speaker describes how ONE thing transformed
+    (same entity, two points in time: "avant / après"). Use for
+    transformations of a single subject. NOT for two different things
+    side by side (use comparison for that). Provide "before_label" +
+    "after_label".
   "countdown" — speaker counts DOWN from a number (urgency, steps
     remaining, limited time). Numbers DECREASE. NOT stat. Provide
     "countdown_from" (integer) + "countdown_label".
@@ -463,10 +471,17 @@ RULES:
   "myth_vs_fact" — speaker debunks a myth and states the real fact.
     Distinct from callout (callout adds context, not a correction).
     Provide "myth_text" + "fact_text".
-  "step_number" — speaker calls out a single focal step (e.g. "step 1",
-    "first thing"). Distinct from timeline (timeline shows a full sequence);
-    use step_number for a single isolated step. Provide "step_num" +
-    optional "step_label".
+  "step_number" — speaker highlights a single focal step, phase, or
+    pivotal narrative moment (e.g. "step 1", "première chose",
+    "moment charnière", "c'est là que tout a changé"). Use when the
+    speaker wants to emphasize ONE moment or action in isolation.
+    Distinct from timeline (timeline shows the full sequence; step_number
+    is a single spotlight). Distinct from roadmap_milestone (milestone is
+    a past achievement reached in an ongoing journey; step_number is an
+    active focal emphasis, numbered or not). Provide "step_num" (can be
+    a label like "01", "Clé n°1", or "?" if unnamed) + optional
+    "step_label". NOT versus_battle (versus_battle requires two named
+    opposing sides; step_number has only ONE focal subject).
   "quote_carousel" — speaker delivers 2-4 short quotes or phrases in
     rapid succession that should cycle visually. Distinct from carousel
     (carousel is for varied tips/content); use quote_carousel only for
@@ -481,13 +496,19 @@ RULES:
     Distinct from callout (callout is neutral context). Provide "warning_text".
   "testimonial" — speaker quotes a customer, client, or user with their
     name and role context. Distinct from attributed_quote (attributed_quote
-    is for public figures or sources); testimonial is for end-user social
-    proof with role. Provide "testimonial_text" + "person_name" +
-    "person_role".
-  "versus_battle" — speaker frames a dramatic head-to-head comparison
-    between two things. More dynamic than comparison (comparison is sober
-    two-column; versus_battle has a central VS badge). Provide "side_a" +
-    "side_b".
+    is for public figures or named sources); testimonial is for end-user
+    social proof with role context. Distinct from star_rating_review
+    (star_rating_review requires a star count; testimonial does not).
+    Provide "testimonial_text" + "person_name" + "person_role".
+  "versus_battle" — speaker explicitly pits TWO named opponents, options,
+    or philosophies against each other ("employé VS freelance", "X contre
+    Y"). REQUIRES both sides to be explicitly named by the speaker — do
+    NOT use for a single dramatic moment, pivotal event, or turning point
+    (use step_number or roadmap_milestone for those). Do NOT use when the
+    speaker is only describing one thing dramatically. More dynamic than
+    comparison (comparison is sober data; versus_battle has a VS badge).
+    Provide "side_a" + "side_b" — both must come directly from the
+    speaker's words, not be invented.
   "recap_summary" — speaker does a structured recap or summary of key
     points (e.g. "three things to remember"). Distinct from list (list is
     ad-hoc; recap_summary has a "what we covered" narrative feel). Provide
@@ -500,18 +521,27 @@ RULES:
     mathematical relationship. Use when parts are connected by operators
     (×, ÷, +, =, →). Provide "formula_parts" list alternating terms and
     operators (e.g. ["Temps", "×", "Effort", "=", "Résultat"]).
-  "roadmap_milestone" — speaker celebrates or announces a single milestone
-    or checkpoint in a progression. Distinct from timeline (timeline shows
-    the full sequence; roadmap_milestone highlights one achievement moment).
+  "roadmap_milestone" — speaker celebrates a concrete past achievement
+    reached in an ongoing journey (e.g. "on a atteint 1 000 abonnés",
+    "après 6 mois on a signé notre premier client"). Use when the
+    milestone is a COMPLETED checkpoint in a longer progression. Distinct
+    from step_number (step_number is active focal emphasis on one thing,
+    numbered or not; roadmap_milestone is a completed achievement in a
+    journey). Distinct from timeline (timeline shows the full sequence).
     Provide "milestone_label" + "milestone_context".
-  "pros_cons" — speaker explicitly weighs advantages against drawbacks in a
-    debate structure. Distinct from comparison (comparison is sober
-    side-by-side data; pros_cons has evaluative "pour/contre" headers).
-    Provide "pros" list + "cons" list (2-4 items each).
-  "star_rating_review" — speaker shares a review or testimonial anchored by
-    a star rating. Distinct from testimonial (testimonial is quote-focused;
-    star_rating_review leads with the star count). Provide "stars" (int
-    0-5), "review_text", "reviewer_name".
+  "pros_cons" — speaker explicitly lists ADVANTAGES and DRAWBACKS of the
+    SAME subject ("les avantages et inconvénients de X"). Distinct from
+    comparison (comparison contrasts two different things; pros_cons
+    evaluates one thing from two angles). Distinct from versus_battle
+    (versus_battle pits two named opponents against each other; pros_cons
+    evaluates a single subject). Provide "pros" list + "cons" list
+    (2-4 items each).
+  "star_rating_review" — speaker cites a THIRD-PARTY review that includes
+    an explicit star count ("4 étoiles sur 5", "rated 4.8/5"). Distinct
+    from testimonial (testimonial has no star count; use testimonial when
+    only a quote and name are present). Distinct from rating (rating is
+    the SPEAKER's own live assessment, not a cited review). Provide
+    "stars" (int 0-5), "review_text", "reviewer_name".
   "income_reveal" — speaker dramatically reveals an income, revenue, or
     financial figure. Distinct from stat (stat is informational; income_reveal
     has suspense/reveal energy). Provide "income_value" (the number string)
