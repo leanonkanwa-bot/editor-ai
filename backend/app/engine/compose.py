@@ -1998,8 +1998,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'      </div>')
         parts.append(f'    </div>')
     elif content_style == "rating":
-        _rv_raw = str(hints.get("rating_value", "7"))
-        _rm_raw = str(hints.get("rating_max", "10"))
+        _rv_raw = str(hints.get("rating_value") or "7")
+        _rm_raw = str(hints.get("rating_max") or "10")
         try:
             _rv_f = float(_rv_raw.replace(",", "."))
             _rm_f_raw = float(_rm_raw.replace(",", "."))
@@ -3413,8 +3413,8 @@ def _build_timeline_js(
             elif content_style == "rating":
                 _w1_hints = card.get("contentHints", {})
                 try:
-                    _w1_rv = float(str(_w1_hints.get("rating_value", "7")).replace(",", "."))
-                    _w1_rm = max(0.001, float(str(_w1_hints.get("rating_max", "10")).replace(",", ".")))
+                    _w1_rv = float(str(_w1_hints.get("rating_value") or "7").replace(",", "."))
+                    _w1_rm = max(0.001, float(str(_w1_hints.get("rating_max") or "10").replace(",", ".")))
                     _w1_rt_pct = round(min(100.0, max(0.0, _w1_rv / _w1_rm * 100)), 1)
                 except (ValueError, ZeroDivisionError, TypeError):
                     _w1_rt_pct = 70.0
