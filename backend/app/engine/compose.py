@@ -2001,11 +2001,12 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         _rv_raw = str(hints.get("rating_value", "7"))
         _rm_raw = str(hints.get("rating_max", "10"))
         try:
-            _rv_f = float(_rv_raw)
-            _rm_f = float(_rm_raw) if float(_rm_raw) > 0 else 10.0
+            _rv_f = float(_rv_raw.replace(",", "."))
+            _rm_f_raw = float(_rm_raw.replace(",", "."))
+            _rm_f = _rm_f_raw if _rm_f_raw > 0 else 10.0
             _rt_disp = f"{_rv_f:g}/{_rm_f:g}"
         except (ValueError, TypeError):
-            _rt_disp = _rv_raw
+            _rt_disp = _rv_raw.replace(",", ".") or "—"
         parts.append(f'    <div class="rt-wrap">')
         parts.append(f'      <div class="rt-value" id="{card_id}-rt-val">{_esc(_rt_disp)}</div>')
         parts.append(f'      <div class="rt-track"><div class="rt-fill" id="{card_id}-rt-fill"></div></div>')
@@ -3412,8 +3413,8 @@ def _build_timeline_js(
             elif content_style == "rating":
                 _w1_hints = card.get("contentHints", {})
                 try:
-                    _w1_rv = float(str(_w1_hints.get("rating_value", "7")))
-                    _w1_rm = max(0.001, float(str(_w1_hints.get("rating_max", "10"))))
+                    _w1_rv = float(str(_w1_hints.get("rating_value", "7")).replace(",", "."))
+                    _w1_rm = max(0.001, float(str(_w1_hints.get("rating_max", "10")).replace(",", ".")))
                     _w1_rt_pct = round(min(100.0, max(0.0, _w1_rv / _w1_rm * 100)), 1)
                 except (ValueError, ZeroDivisionError, TypeError):
                     _w1_rt_pct = 70.0

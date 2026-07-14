@@ -146,6 +146,27 @@ def _segment_captions(
               f"({len(all_words)} -> {len(merged_words)} words)")
     all_words = merged_words
 
+    # Merge decimal-split tokens (European notation: "8,5" → Whisper ["8", " ,5"])
+    _decimal_merged: list[dict] = []
+    for w in all_words:
+        _wt = w["text"].lstrip()
+        if (
+            _decimal_merged
+            and len(_wt) >= 2
+            and _wt[0] in (",", ".")
+            and _wt[1].isdigit()
+            and _decimal_merged[-1]["text"].rstrip()[-1:].isdigit()
+        ):
+            prev = _decimal_merged[-1]
+            prev["text"] = prev["text"].rstrip() + _wt
+            prev["end"] = w["end"]
+        else:
+            _decimal_merged.append(dict(w))
+    if len(_decimal_merged) != len(all_words):
+        print(f"[CAPTION] Merged {len(all_words) - len(_decimal_merged)} decimal-split tokens "
+              f"({len(all_words)} -> {len(_decimal_merged)} words)")
+    all_words = _decimal_merged
+
     # Step 1: group by sentence boundary OR word count
     raw_groups: list[list[dict]] = []
     current: list[dict] = []
