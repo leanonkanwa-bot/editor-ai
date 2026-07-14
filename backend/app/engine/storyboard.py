@@ -1013,6 +1013,40 @@ def generate_storyboard(
 
     print(f"[STORYBOARD] {len(graphic_cards)} graphic + {len(caption_cards)} caption cards", flush=True)
 
+    # Dead-zone audit: log gaps > 12s between consecutive graphic cards
+    _sorted_gc = sorted(graphic_cards, key=lambda c: float(c.get("startSec", 0)))
+    _dz_gaps = []
+    _prev_end = 0.0
+    for _gi, _gc2 in enumerate(_sorted_gc):
+        _cs = float(_gc2.get("startSec", 0))
+        _ce = float(_gc2.get("endSec", _cs))
+        _gap = _cs - _prev_end
+        if _gap > 12.0:
+            _gap_words = [w for w in remapped_words if _prev_end <= w.start <= _cs]
+            _gap_text = " ".join(w.text for w in _gap_words[:20])
+            print(
+                f"[DEAD-ZONE] card gap {_prev_end:.1f}→{_cs:.1f}s ({_gap:.1f}s): '{_gap_text}'",
+                flush=True,
+            )
+            _dz_gaps.append(_gap)
+        _prev_end = max(_prev_end, _ce)
+    _tail_gap = trimmed_duration - _prev_end
+    if _tail_gap > 12.0:
+        _tail_words = [w for w in remapped_words if _prev_end <= w.start]
+        _tail_text = " ".join(w.text for w in _tail_words[:20])
+        print(
+            f"[DEAD-ZONE] tail gap {_prev_end:.1f}→{trimmed_duration:.1f}s ({_tail_gap:.1f}s): '{_tail_text}'",
+            flush=True,
+        )
+        _dz_gaps.append(_tail_gap)
+    if _dz_gaps:
+        print(
+            f"[DEAD-ZONE] {len(_dz_gaps)} gap(s) > 12s | max={max(_dz_gaps):.1f}s avg={sum(_dz_gaps)/len(_dz_gaps):.1f}s",
+            flush=True,
+        )
+    else:
+        print("[DEAD-ZONE] No card gaps > 12s — full coverage OK", flush=True)
+
     storyboard = {
         "composition": {
             "fps": 30,

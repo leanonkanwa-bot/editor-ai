@@ -2049,6 +2049,26 @@ def _render_hyperframes(
                 flush=True,
             )
 
+    # Zoom coverage audit: log windows with no active zoom entry > 8s
+    _zoom_audit = sorted(remapped_zoom, key=lambda z: float(z.get("start", 0)))
+    _zg_prev_end = 0.0
+    _zoom_gaps: list[tuple[float, float]] = []
+    for _ze in _zoom_audit:
+        _zs = float(_ze.get("start", 0))
+        _ze_e = float(_ze.get("end", _zs))
+        if _zs - _zg_prev_end > 8.0:
+            _zoom_gaps.append((round(_zg_prev_end, 1), round(_zs, 1)))
+            print(
+                f"[ZOOM-GAP] no zoom {_zg_prev_end:.1f}→{_zs:.1f}s ({_zs - _zg_prev_end:.1f}s)",
+                flush=True,
+            )
+        _zg_prev_end = max(_zg_prev_end, _ze_e)
+    if not _zoom_gaps:
+        print(
+            f"[ZOOM-GAP] Full zoom coverage — no gaps > 8s across {len(remapped_zoom)} entries",
+            flush=True,
+        )
+
     # Stage 3: Compose
     _t = time.perf_counter()
     print("[HF] Stage 3: Assembling HyperFrames composition...", flush=True)
