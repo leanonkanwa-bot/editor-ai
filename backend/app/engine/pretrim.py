@@ -43,8 +43,22 @@ from app.engine.silence_remover import (
     _PAUSE_EOL_LONG_KEEP,
     _PAUSE_MID_LONG_KEEP,
 )
-from app.engine.transcribe import FFMPEG_PATH
+from app.engine.transcribe import FFMPEG_PATH, FFPROBE_PATH
 from app.engine.captions import WordTiming
+
+
+def _probe_pix_fmt(path: Path) -> str:
+    """Return pixel format of first video stream (e.g. 'yuv420p10le')."""
+    try:
+        r = subprocess.run(
+            [FFPROBE_PATH, "-v", "quiet", "-select_streams", "v:0",
+             "-show_entries", "stream=pix_fmt", "-of", "default=nw=1",
+             str(path)],
+            capture_output=True, text=True, timeout=15,
+        )
+        return r.stdout.strip().replace("pix_fmt=", "")
+    except Exception:
+        return ""
 
 
 @dataclass
@@ -78,13 +92,22 @@ def _pretrim_passthrough(
     """No-cut passthrough: re-encode source with dense keyframes, 1:1 timing."""
     fps = 30
     final_path = work_dir / "trimmed.mp4"
+    _pix_fmt_src = _probe_pix_fmt(src)
+    _is_10bit = "10" in _pix_fmt_src
+    if _is_10bit:
+        # Debian apt libx264 is 8-bit only; libx265 from the same package supports 10-bit.
+        _venc = ["-c:v", "libx265", "-x265-params", "log-level=error",
+                 "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p10le"]
+    else:
+        _venc = ["-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p"]
+    print(f"[PRETRIM] src pix_fmt={_pix_fmt_src!r} → {'libx265 yuv420p10le' if _is_10bit else 'libx264 yuv420p'}", flush=True)
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-i", str(src),
         "-r", str(fps), "-vsync", "cfr",
-        "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+        *_venc,
         "-g", str(fps), "-keyint_min", str(fps),
-        "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+        "-movflags", "+faststart",
         "-c:a", "aac", "-b:a", "192k",
         str(final_path),
     ])
@@ -632,6 +655,9 @@ def pretrim(
     )
 
     work_dir.mkdir(parents=True, exist_ok=True)
+    _pix_fmt_src = _probe_pix_fmt(src)
+    _is_10bit_src = "10" in _pix_fmt_src
+    print(f"[PRETRIM] src pix_fmt={_pix_fmt_src!r} → {'10-bit' if _is_10bit_src else '8-bit'} encode path", flush=True)
     short_form = plan.format == "short"
     pad = SHORT_PAD_S if short_form else LONG_PAD_S
 
@@ -1462,12 +1488,18 @@ def pretrim(
             audio_args = (
                 ["-af", "afade=t=in:st=0:d=0.004"] if j > 0 else []
             )
+            _sub_venc = (
+                ["-c:v", "libx265", "-x265-params", "log-level=error",
+                 "-preset", "ultrafast", "-crf", "18", "-pix_fmt", "yuv420p10le"]
+                if _is_10bit_src else
+                ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "0"]
+            )
             _run([
                 FFMPEG_PATH, "-y", "-loglevel", "error",
                 "-ss", f"{si_start:.6f}", "-accurate_seek",
                 "-i", str(src),
                 "-t", f"{si_end - si_start:.6f}",
-                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
+                *_sub_venc,
                 "-c:a", "aac", "-b:a", "192k",
                 *audio_args,
                 "-avoid_negative_ts", "make_zero",
@@ -1716,15 +1748,18 @@ def pretrim(
 
     # ── Re-encode with dense keyframes for HyperFrames seekability ───
     final_path = work_dir / "trimmed.mp4"
-    video_info = _probe_video_info(output_path)
     fps = 30
+    if _is_10bit_src:
+        _venc_final = ["-c:v", "libx265", "-x265-params", "log-level=error",
+                       "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p10le"]
+    else:
+        _venc_final = ["-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p"]
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-i", str(output_path),
         "-r", str(fps), "-vsync", "cfr",
-        "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+        *_venc_final,
         "-g", str(fps), "-keyint_min", str(fps),
-        "-pix_fmt", "yuv420p",
         "-movflags", "+faststart",
         "-c:a", "aac", "-b:a", "192k",
         str(final_path),

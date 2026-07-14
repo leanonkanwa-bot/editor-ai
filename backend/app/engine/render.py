@@ -1933,7 +1933,7 @@ def _render_hyperframes(
         # PQ (smpte2084): npl=1000 = HDR10 standard mastering peak; using npl=150
         #   would clip everything above 150 nits, producing an overexposed image.
         _VF_HLG = (
-            "zscale=t=linear:npl=150,format=gbrpf32le,"
+            "zscale=t=linear:npl=203,format=gbrpf32le,"
             "zscale=p=bt709,tonemap=hable:desat=0,"
             "zscale=t=bt709:m=bt709:r=tv,format=yuv420p"
         )
