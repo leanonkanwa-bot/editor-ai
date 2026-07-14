@@ -4872,26 +4872,6 @@ def _esc_js(s: str) -> str:
     return s.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "")
 
 
-def _vignette_css(pack: dict) -> str:
-    """Per-pack radial vignette gradient (always-on, z-index:6).
-
-    All packs: gradient starts at ≥65% so the center+cards area is untouched.
-    Alpha kept ≤0.32 — barely perceptible depth, never a visible border.
-    """
-    pid = pack.get("id", "lean_glass")
-    if pid == "lean_cinema":
-        # Slight cinematic depth — reduced from 0.70@50% which created a hard frame.
-        return "radial-gradient(ellipse at 50% 50%, transparent 65%, rgba(0,0,0,0.32) 100%)"
-    elif pid == "lean_glass":
-        return "radial-gradient(ellipse at 50% 50%, transparent 65%, rgba(0,0,0,0.20) 100%)"
-    elif pid == "lean_vibe":
-        return "radial-gradient(ellipse at 50% 50%, transparent 65%, rgba(120,0,60,0.15) 100%)"
-    elif pid == "lean_ledger":
-        return "radial-gradient(ellipse at 50% 50%, transparent 65%, rgba(0,10,30,0.20) 100%)"
-    elif pid == "lean_craft":
-        return "radial-gradient(ellipse at 50% 50%, transparent 65%, rgba(61,43,31,0.18) 100%)"
-    else:  # lean_paper — near-zero, keep as is
-        return "radial-gradient(ellipse at 50% 50%, transparent 65%, rgba(0,0,0,0.08) 100%)"
 
 
 def _grain_opacity(pack: dict) -> str:
@@ -5161,7 +5141,6 @@ def compose(
     </div>
     <div id="backdrop-dim" style="position:absolute;inset:0;background:rgba(0,0,0,0.45);z-index:5;opacity:0;pointer-events:none;"></div>
     <div id="broll-transition-overlay" style="position:absolute;inset:0;z-index:18;pointer-events:none;opacity:0;"></div>
-    <div id="vignette-overlay" style="position:absolute;inset:0;z-index:6;pointer-events:none;background:{_vignette_css(pack)};"></div>
     <div id="grain-overlay" style="position:absolute;inset:0;z-index:7;pointer-events:none;opacity:{_grain_opacity(pack)};background-image:url('{_grain_svg(pack)}');background-repeat:repeat;mix-blend-mode:overlay;"></div>
 
     <audio id="bg-audio" src="input-video.mp4"
