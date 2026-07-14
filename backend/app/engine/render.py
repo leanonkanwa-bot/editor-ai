@@ -2211,7 +2211,11 @@ def _render_hyperframes(
 
         env["PRODUCER_MAX_WORKERS"] = str(_n_workers)
         env["PRODUCER_MIN_PARALLEL_FRAMES"] = "60"
-        env["PRODUCER_PUPPETEER_PROTOCOL_TIMEOUT_MS"] = "120000"  # 2 min — deadlock fails fast instead of 10 min
+        # HF default is 300 000 ms (5 min). Scale with duration so long videos get headroom.
+        # Formula: max(300 s, duration × 1.5 s/s) — covers heavier DOM/GSAP init on loaded servers.
+        _proto_timeout_ms = max(300_000, int(timing_map.output_duration * 1500))
+        env["PRODUCER_PUPPETEER_PROTOCOL_TIMEOUT_MS"] = str(_proto_timeout_ms)
+        print(f"[HF] protocolTimeout: {_proto_timeout_ms}ms ({_proto_timeout_ms/1000:.0f}s) for {timing_map.output_duration:.1f}s video", flush=True)
 
         _shell_candidates = sorted(
             p for p in Path("/usr/local/lib/chrome").rglob("chrome-headless-shell")
@@ -2246,7 +2250,7 @@ def _render_hyperframes(
                 "--quality", "standard",
                 "--crf", "18",
                 "--workers", str(_n_workers),
-                "--protocol-timeout", "120000",
+                "--protocol-timeout", str(_proto_timeout_ms),
                 "--debug",
                 "--video-frame-format", "png",
                 "--tmp-dir", str(_hf_tmp),
