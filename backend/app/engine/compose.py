@@ -243,11 +243,11 @@ _LEAN_CRAFT = {
     "text": "#3D2B1F",
     "text_secondary": "rgba(61,43,31,0.55)",
     "accent": "#D97757",
-    "font": '"Permanent Marker", cursive',
+    "font": '"Montserrat", "Helvetica Neue", Arial, sans-serif',
     "font_detail": '"Inter", ui-sans-serif, system-ui, sans-serif',
-    "font_weight": "400",
-    "title_size": "56px",
-    "number_size": "80px",
+    "font_weight": "700",
+    "title_size": "64px",
+    "number_size": "90px",
     "kicker_size": "20px",
     "detail_size": "22px",
     "border": "1.5px solid rgba(217,119,87,0.25)",
@@ -5079,7 +5079,6 @@ def compose(
     # Build Google Fonts import for pack-specific fonts
     _font_imports = {
         "lean_vibe": "Poppins:wght@400;800",
-        "lean_craft": "Permanent+Marker",
         "lean_cinema": "Playfair+Display:wght@400;700",
         "lean_ledger": "IBM+Plex+Mono:wght@400;600",
     }
