@@ -4626,9 +4626,15 @@ def _build_timeline_js(
                         f'{t_in:.4f});'
                     )
 
-            # Per-pack accent-word highlight swipe (fires 0.40s after title animates in)
+            # Per-pack accent-word highlight swipe (fires 0.40s after title animates in).
+            # Mirror _split_title_accent(): the id="{card_id}-accent" span only exists
+            # when accent_word is found in display_text (= number || title). Skip the
+            # tween when the word is absent from the rendered text (avoids GSAP warning).
             _aw = card.get("contentHints", {}).get("accent_word", "")
-            if _aw:
+            _ch_ref = card.get("contentHints", {})
+            _display_ref = _ch_ref.get("number") or _ch_ref.get("title", "")
+            _accent_in_dom = bool(_aw) and _aw.lower() in _display_ref.lower()
+            if _accent_in_dom:
                 _aw_sel = f'.card[data-card-id="{card_id}"] #{card_id}-accent'
                 lines.extend(_accent_treatment(p, _aw_sel, t_in + 0.40))
 
@@ -4639,9 +4645,9 @@ def _build_timeline_js(
                     f'{{ opacity: 1, y: 0, duration: 0.250, ease: _eIn }}, '
                     f'{start + 0.10:.4f});'
                 )
-            # Accent-line is suppressed when accent_word is active — the word-level
-            # underline swipe takes precedence; two competing line emphases clash.
-            if not _aw:
+            # Accent-line shows unless the accent_word swipe is actually rendered —
+            # two competing emphasis elements would visually clash.
+            if not _accent_in_dom:
                 _line_w = 80 if card.get("zone", "") in _SIDE_PANEL_ZONES else 120
                 lines.append(
                     f'  tl.fromTo(\'{line_sel}\', '

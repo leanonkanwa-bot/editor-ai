@@ -718,14 +718,18 @@ RULES:
     is a specific date; age_milestone is an age or duration). Distinct from
     step_number (step_number is a process step; age_milestone is a personal
     milestone age). Provide "age_value" + "age_context".
-  "contrarian_take" — speaker deliberately voices a provocative, counter-intuitive,
-    or controversial opinion ("voici ce que personne ne dit", "la vérité que tu ne
-    veux pas entendre", "j'ai une opinion impopulaire"). Uses pack accent color
-    unchanged — signals tension through typography only. Distinct from warning_soft
-    (warning_soft is a caution; contrarian_take is an opinion). Distinct from
-    red_flag_list (red_flag_list is multiple danger signals; contrarian_take is
-    one provocative statement). Distinct from callout (callout is a neutral
-    highlight; contrarian_take has editorial tension). Provide "take_text".
+  "contrarian_take" — speaker EXPLICITLY flags that they are voicing an unpopular
+    or taboo opinion by stepping outside the content to comment on its provocativeness:
+    "voici ce que personne ne dit", "j'ai une opinion impopulaire", "la vérité que
+    tu ne veux pas entendre", "je vais dire quelque chose que personne n'ose dire",
+    or equivalent meta-commentary framing. REQUIRES this explicit signaling — do NOT
+    use when the speaker makes a bold, surprising, or counter-intuitive claim without
+    first announcing it as controversial (use callout or key_phrase for those). Do NOT
+    use for warnings or cautions (use warning_soft or red_flag_list). Uses pack accent
+    color unchanged — signals tension through typography only. Distinct from warning_soft
+    (warning_soft is a caution without opinion framing; contrarian_take requires the
+    speaker to call out the take as controversial). Distinct from callout (callout is
+    neutral context; contrarian_take has explicit editorial tension framing). Provide "take_text".
   "action_step_cta" — speaker gives a direct imperative call to action or a
     concrete next step for the viewer ("maintenant voici ce que tu dois faire",
     "passe à l'action", "fais X dès aujourd'hui"). Distinct from callout
