@@ -68,7 +68,10 @@ def _probe_duration(src: Path) -> float:
 
 
 def _track(src: Path) -> dict:
-    import mediapipe as mp       # lazy — loaded only when subject_tracking=True
+    # Explicit submodule import required: `import mediapipe as mp` does NOT
+    # auto-expose mp.solutions in mediapipe 0.10.x (lazy namespace, not pulled
+    # into __init__). Importing the submodule directly always works.
+    import mediapipe.solutions.face_detection as _mp_fd
     import numpy as np
     from PIL import Image
 
@@ -95,8 +98,8 @@ def _track(src: Path) -> dict:
 
         detections: dict[int, tuple[float, float, float, float]] = {}
 
-        with mp.solutions.face_detection.FaceDetection(
-            model_selection=0,            # short-range (<2 m) — standard talking-head
+        with _mp_fd.FaceDetection(
+            model_selection=0,
             min_detection_confidence=0.5,
         ) as detector:
             for fi, fp in enumerate(frame_paths):
