@@ -523,7 +523,7 @@ def _output_verify(
 ) -> None:
     """Re-transcribe video_path and compare to expected_words. Controlled by VERIFY_OUTPUT env var."""
     import os, re, difflib
-    if os.environ.get("VERIFY_OUTPUT", "true").lower() in ("false", "0", "no"):
+    if os.environ.get("VERIFY_OUTPUT", "true").strip().lower() in ("false", "0", "no"):
         return
 
     # Hallucination patterns Whisper generates on silence (FR + EN).
@@ -1643,7 +1643,7 @@ def pretrim(
     # the segment planner to emit one extra sub-part and accumulate ~50ms of
     # additional codec overhead per refined repetition cut.
     import os as _os_audit
-    _stable_ts_on = _os_audit.getenv("STABLE_TS_REPAIR", "false").lower() == "true"
+    _stable_ts_on = _os_audit.getenv("STABLE_TS_REPAIR", "false").strip().lower() == "true"
     _n_llm_rep = (
         sum(1 for d in (filler_drops or []) if d.reason.startswith("llm_repetition"))
         if _stable_ts_on else 0

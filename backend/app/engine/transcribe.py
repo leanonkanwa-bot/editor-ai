@@ -41,7 +41,7 @@ from app.core.config import settings
 # ---------------------------------------------------------------------------
 # Verbatim ASR: preserve disfluences (Euh, Bah, repetitions) for LLM editorial layer.
 # Set VERBATIM_ASR=false to revert to clean/beam mode.
-_VERBATIM_ASR = os.getenv("VERBATIM_ASR", "true").lower() != "false"
+_VERBATIM_ASR = os.getenv("VERBATIM_ASR", "true").strip().lower() != "false"
 
 if sys.platform == "win32":
     _WIN_CANDIDATES = [

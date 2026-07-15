@@ -210,7 +210,7 @@ def _stable_ts_refine_cuts(src: "Path", drops: list, transcript: dict) -> list:
     Only operates on drops whose reason starts with 'llm_repetition'.
     """
     import os as _os2
-    if _os2.getenv("STABLE_TS_REPAIR", "false").lower() != "true":
+    if _os2.getenv("STABLE_TS_REPAIR", "false").strip().lower() != "true":
         return drops
 
     _rep = [d for d in drops if d.reason.startswith("llm_repetition")]
@@ -630,7 +630,12 @@ def run_job(
         # ── Step 1: Transcribe + Vision (concurrent) ──────────────────────
         store.update(job_id, status="transcribing", progress=10,
                      message="Transcribing audio + analysing subject position…")
-        print(f"[CONFIG] SUBJECT_TRACKING={settings.subject_tracking}", flush=True)
+        import os as _os_st
+        _st_raw = _os_st.environ.get("SUBJECT_TRACKING", "(not set)")
+        print(
+            f"[CONFIG] SUBJECT_TRACKING={settings.subject_tracking} (env={_st_raw!r})",
+            flush=True,
+        )
         _subject_fn = track_subject if settings.subject_tracking else analyze_subject_position
         with ThreadPoolExecutor(max_workers=2) as pool:
             f_transcript = pool.submit(lambda: transcribe(src).to_dict())
@@ -800,9 +805,9 @@ def run_job(
         # The CUT-GUARD below is a second safety net in case the LLM overshoots.
         import os as _os_cfg
         _cfg_fillers = _cfg.cut_fillers   # master switch — gated above
-        _cfg_reps = _os_cfg.getenv("CUT_REPETITIONS", "false").lower() == "true"
-        _cfg_fs   = _os_cfg.getenv("CUT_FALSE_STARTS", "false").lower() == "true"
-        _cfg_paus = _os_cfg.getenv("CUT_PAUSES",       "false").lower() == "true"
+        _cfg_reps = _os_cfg.getenv("CUT_REPETITIONS", "false").strip().lower() == "true"
+        _cfg_fs   = _os_cfg.getenv("CUT_FALSE_STARTS", "false").strip().lower() == "true"
+        _cfg_paus = _os_cfg.getenv("CUT_PAUSES",       "false").strip().lower() == "true"
         if not _cfg_fillers:
             print("[CONFIG] cuts: ALL OFF (fillers paused — CUT_FILLERS=false)", flush=True)
         else:

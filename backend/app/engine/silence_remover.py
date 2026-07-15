@@ -115,9 +115,9 @@ class RhythmAwareSilenceRemover:
             passed to pretrim for physical cutting.
         """
         import os as _os_sr
-        _cut_reps = _os_sr.getenv("CUT_REPETITIONS", "false").lower() == "true"
-        _cut_fs   = _os_sr.getenv("CUT_FALSE_STARTS", "false").lower() == "true"
-        _cut_paus = _os_sr.getenv("CUT_PAUSES",       "false").lower() == "true"
+        _cut_reps = _os_sr.getenv("CUT_REPETITIONS", "false").strip().lower() == "true"
+        _cut_fs   = _os_sr.getenv("CUT_FALSE_STARTS", "false").strip().lower() == "true"
+        _cut_paus = _os_sr.getenv("CUT_PAUSES",       "false").strip().lower() == "true"
 
         drops: list[DropSegment] = []
 

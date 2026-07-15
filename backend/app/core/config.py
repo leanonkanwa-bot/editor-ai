@@ -1,4 +1,5 @@
 from pathlib import Path
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -73,6 +74,13 @@ class Settings(BaseSettings):
     # When true, replaces single-frame Claude Vision with multi-frame face detection.
     # Toggle via SUBJECT_TRACKING=true in Railway env vars (default: false).
     subject_tracking: bool = False
+
+    @field_validator("subject_tracking", "disable_cuts", "cut_fillers", mode="before")
+    @classmethod
+    def _coerce_bool_env(cls, v: object) -> bool:
+        if isinstance(v, str):
+            return v.strip().lower() in ("true", "1", "yes", "on")
+        return bool(v)
 
     # Style pack for graphic cards and captions.
     # "lean_glass" = dark glass panels with cyan glow (LeanGlass).
