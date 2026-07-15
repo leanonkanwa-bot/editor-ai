@@ -67,42 +67,7 @@ def _probe_duration(src: Path) -> float:
         return 0.0
 
 
-def _probe_dims(src: Path) -> tuple[int, int]:
-    """Return (width, height) of the first video stream, or (0, 0) on failure."""
-    try:
-        r = subprocess.run(
-            [FFPROBE_PATH, "-v", "error",
-             "-select_streams", "v:0",
-             "-show_entries", "stream=width,height",
-             "-of", "default=noprint_wrappers=1",
-             str(src)],
-            capture_output=True, text=True, timeout=15,
-        )
-        vals: dict[str, int] = {}
-        for line in r.stdout.splitlines():
-            if "=" in line:
-                k, v = line.split("=", 1)
-                vals[k.strip()] = int(v.strip())
-        return vals.get("width", 0), vals.get("height", 0)
-    except Exception:
-        return 0, 0
-
-
 def _track(src: Path) -> dict:
-    # Portrait-only: MediaPipe tracking is designed for 9:16 talking-head shorts.
-    # Landscape (16:9 long-form) keeps the existing Claude Vision / default-center path.
-    vid_w, vid_h = _probe_dims(src)
-    if vid_w <= 0 or vid_h <= 0:
-        print("[TRACKING] could not probe video dimensions, skipping tracking", flush=True)
-        return dict(_DEFAULT)
-    if vid_w >= vid_h:
-        print(
-            "[TRACKING] landscape video (%dx%d), skipping tracking (portrait only)" % (vid_w, vid_h),
-            flush=True,
-        )
-        return dict(_DEFAULT)
-    print("[TRACKING] portrait video (%dx%d), proceeding" % (vid_w, vid_h), flush=True)
-
     import mediapipe as mp       # lazy — loaded only when subject_tracking=True
     import numpy as np
     from PIL import Image

@@ -632,11 +632,20 @@ def run_job(
                      message="Transcribing audio + analysing subject position…")
         import os as _os_st
         _st_raw = _os_st.environ.get("SUBJECT_TRACKING", "(not set)")
+        # Gate tracking on OUTPUT format, not source dimensions.
+        # format_hint="long" means landscape long-form — no tracking needed.
+        # format_hint="short" or "auto" means portrait short-form — run tracking.
+        _is_portrait_output = format_hint != "long"
         print(
-            f"[CONFIG] SUBJECT_TRACKING={settings.subject_tracking} (env={_st_raw!r})",
+            f"[CONFIG] SUBJECT_TRACKING={settings.subject_tracking} (env={_st_raw!r})"
+            f" format_hint={format_hint!r} portrait_output={_is_portrait_output}",
             flush=True,
         )
-        _subject_fn = track_subject if settings.subject_tracking else analyze_subject_position
+        _subject_fn = (
+            track_subject
+            if settings.subject_tracking and _is_portrait_output
+            else analyze_subject_position
+        )
         with ThreadPoolExecutor(max_workers=2) as pool:
             f_transcript = pool.submit(lambda: transcribe(src).to_dict())
             f_subject    = pool.submit(lambda: _subject_fn(src))
