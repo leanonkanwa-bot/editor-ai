@@ -1765,21 +1765,6 @@ GSAP animation: scale 0.3-1.5, rotation 360deg, label fade</p>
     return Response(content=html, media_type="text/html")
 
 
-# ── Temporary: list outputs for demo-video discovery (remove after use) ───
-@app.get("/api/debug/outputs", include_in_schema=False)
-def debug_list_outputs(_: None = Depends(_check_auth)):
-    """List /data/outputs sorted by mtime desc. Protected by normal app auth."""
-    entries = []
-    for p in sorted(settings.outputs_dir.glob("*.mp4"), key=lambda f: f.stat().st_mtime, reverse=True)[:30]:
-        st = p.stat()
-        entries.append({
-            "name": p.name,
-            "size_mb": round(st.st_size / 1_048_576, 1),
-            "mtime": datetime.fromtimestamp(st.st_mtime).isoformat(),
-        })
-    return {"outputs_dir": str(settings.outputs_dir), "files": entries}
-
-
 # ── Public demo-video streaming (no auth, landing page) ───────────────────
 # Set DEMO_VIDEO_BEFORE / DEMO_VIDEO_AFTER in Railway Variables to the job IDs.
 # Files are served straight from /data without committing large binaries to git.
