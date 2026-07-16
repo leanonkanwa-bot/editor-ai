@@ -56,7 +56,10 @@
       width: 100%; max-width: 1160px; margin: 0 auto; padding: 0 1.5rem;
       display: flex; align-items: center; justify-content: space-between;
     }
-    .logo { display: flex; align-items: center; text-decoration: none; }
+    .logo { display: flex; align-items: center; gap: .55rem; text-decoration: none; }
+    .logo-text { font-size: 1rem; font-weight: 700; }
+    .logo-text .lean { color: #fff; }
+    .logo-text .ret  { color: #FF7751; }
     .nav-right { display: flex; align-items: center; gap: 1.25rem; }
     .nav-link { font-size: .875rem; font-weight: 500; color: var(--muted); text-decoration: none; transition: color .15s; }
     .nav-link:hover { color: var(--text); }
@@ -399,7 +402,8 @@
   <nav class="nav" id="nav">
     <div class="nav-inner">
       <a class="logo" href="/">
-        <img src="/public/logo.png" alt="LeanRetention" height="40" style="display:block;width:auto" />
+        <img src="/public/logo.png" alt="" height="40" style="display:block;width:auto" />
+        <span class="logo-text"><span class="lean">Lean</span><span class="ret">Retention</span></span>
       </a>
       <div class="nav-right">
         <a href="/api/auth/google/login" class="nav-link">Se connecter</a>
@@ -638,7 +642,7 @@
   <!-- FOOTER -->
   <footer class="footer">
     <div class="footer-inner">
-      <a class="logo" href="/"><img src="/public/logo.png" alt="LeanRetention" height="40" style="display:block;width:auto" /></a>
+      <a class="logo" href="/"><img src="/public/logo.png" alt="" height="40" style="display:block;width:auto" /><span class="logo-text"><span class="lean">Lean</span><span class="ret">Retention</span></span></a>
       <div class="footer-links">
         <a href="#features">Fonctionnalités</a>
         <a href="#pricing">Tarifs</a>

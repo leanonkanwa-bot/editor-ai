@@ -55,9 +55,12 @@
         padding: 1.25rem 0; z-index: 100;
       }
       .sidebar .logo {
-        display: block; text-decoration: none;
-        padding: 0 1.25rem; margin-bottom: 1.5rem;
+        display: flex; align-items: center; gap: .55rem;
+        text-decoration: none; padding: 0 1.25rem; margin-bottom: 1.5rem;
       }
+      .sidebar .logo-text { font-size: 1rem; font-weight: 700; }
+      .sidebar .logo-text .lean { color: var(--text); }
+      .sidebar .logo-text .ret  { color: var(--salmon); }
       .sidebar-nav { display: flex; flex-direction: column; gap: .15rem; padding: 0 .75rem; flex: 1; }
       .nav-tab {
         background: transparent; border: none; border-left: 3px solid transparent;
@@ -730,7 +733,7 @@
     <!-- ── SIDEBAR ─────────────────────────────────────────── -->
     <div class="app-shell">
     <aside class="sidebar">
-      <a class="logo" href="#" onclick="event.preventDefault();switchSection('dashboardSection')"><img src="/public/logo.png" alt="LeanRetention" height="40" style="display:block;width:auto" /></a>
+      <a class="logo" href="#" onclick="event.preventDefault();switchSection('dashboardSection')"><img src="/public/logo.png" alt="" height="40" style="display:block;width:auto" /><span class="logo-text"><span class="lean">Lean</span><span class="ret">Retention</span></span></a>
       <div class="sidebar-nav" id="navTabs">
         <button class="nav-tab active" data-target="editorArea">Éditeur</button>
         <button class="nav-tab" data-target="dashboardSection">Dashboard</button>

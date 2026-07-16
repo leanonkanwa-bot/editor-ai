@@ -2211,16 +2211,12 @@ def _render_hyperframes(
         _mem_workers = min(24, max(4, int(_mem_avail_gb / 1.0)))
         _cpu_count = _os.cpu_count() or 8
         _cpu_workers = max(4, _cpu_count - 2)
-        # Cap at 8: HF's file server (Hono/Node.js, single-threaded) uses readFileSync
-        # per request with no Range support. Above ~8 concurrent Chrome workers, simultaneous
-        # full-file video reads saturate the event loop → net::ERR_ABORTED on input-video.mp4.
-        # HF's own auto-ceiling is max(6, min(16, cpus//8)) ≈ 6 on standard servers.
-        _n_workers = min(8, max(4, min(_mem_workers, _cpu_workers)))
+        _n_workers = max(4, min(_mem_workers, _cpu_workers))
         print(
             f"[HF] workers: {_n_workers}"
             f" (limit={_mem_limit_gb:.1f}GB used={_mem_used_gb:.1f}GB"
             f" avail={_mem_avail_gb:.1f}GB→{_mem_workers},"
-            f" cpu {_cpu_count}→{_cpu_workers}, cap 8 file-server)",
+            f" cpu {_cpu_count}→{_cpu_workers})",
             flush=True,
         )
 
