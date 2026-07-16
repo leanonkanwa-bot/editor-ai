@@ -237,8 +237,8 @@ def transcribe(video_path: Path) -> Transcript:
                 beam_size=10,
                 best_of=10,
                 temperature=[0.0],
-                condition_on_previous_text=True,
-                no_speech_threshold=0.4,
+                condition_on_previous_text=False,
+                no_speech_threshold=0.6,
                 compression_ratio_threshold=2.0,
             )
             _MIN_WORD_DUR = 0.010
