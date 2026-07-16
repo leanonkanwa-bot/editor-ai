@@ -64,7 +64,7 @@ def _shell(body: str) -> str:
         '<div style="font-family:\'Helvetica Neue\',Arial,sans-serif;background:#0d0d0d;'
         'color:#F5F5F6;padding:48px 32px;max-width:560px;margin:0 auto">'
         '<div style="margin-bottom:32px">'
-        '<img src="https://leanretention.com/logo.png" alt="LeanRetention"'
+        '<img src="https://leanretention.com/public/logo.png" alt="LeanRetention"'
         ' height="36" style="display:block;max-width:180px" />'
         '</div>'
         + body
