@@ -1779,7 +1779,15 @@ def demo_video(which: str):
     if not job_id:
         raise HTTPException(404)
     _EXTS = (".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v")
-    for search_dir in (settings.outputs_dir, settings.uploads_dir):
+    # Explicit _data_root/"outputs" and "uploads" guard against STORAGE_OUTPUTS
+    # being set to an absolute/empty value on Railway, which would make
+    # settings.outputs_dir skip the expected subdirectory entirely.
+    for search_dir in (
+        settings.outputs_dir,
+        settings._data_root / "outputs",
+        settings.uploads_dir,
+        settings._data_root / "uploads",
+    ):
         for ext in _EXTS:
             candidate = search_dir / f"{job_id}{ext}"
             if candidate.exists():
