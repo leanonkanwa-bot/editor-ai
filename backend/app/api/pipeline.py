@@ -12,11 +12,13 @@ import threading
 import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as _FutureTimeoutError
 from pathlib import Path
 
 # One heavy render at a time — prevents N concurrent Chrome worker pools from
 # exhausting cgroup RAM.  Phase-1 (transcription) is light enough to overlap.
 _RENDER_SEM = threading.Semaphore(1)
+_TRANSCRIPTION_TIMEOUT_S = 900  # 15 min — Whisper hang guard; raises RuntimeError → is_retry=True
 
 from app.agent.planner import FormatHint, analyze_subject_position, plan_edit, rewrite_hook
 from app.api.jobs import store
@@ -646,11 +648,20 @@ def run_job(
             if settings.subject_tracking and _is_portrait_output
             else analyze_subject_position
         )
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            f_transcript = pool.submit(lambda: transcribe(src).to_dict())
-            f_subject    = pool.submit(lambda: _subject_fn(src))
-            transcript  = f_transcript.result()
-            subject_pos = f_subject.result()
+        _tx_pool = ThreadPoolExecutor(max_workers=2)
+        try:
+            f_transcript = _tx_pool.submit(lambda: transcribe(src).to_dict())
+            f_subject    = _tx_pool.submit(lambda: _subject_fn(src))
+            try:
+                transcript = f_transcript.result(timeout=_TRANSCRIPTION_TIMEOUT_S)
+            except _FutureTimeoutError:
+                raise RuntimeError(
+                    f"Transcription bloquée après {_TRANSCRIPTION_TIMEOUT_S // 60} min"
+                    " — crédit remboursé."
+                )
+            subject_pos = f_subject.result(timeout=120)
+        finally:
+            _tx_pool.shutdown(wait=False)
         print(f"[TIMING] transcription+vision: {time.perf_counter()-_t0:.1f}s", flush=True)
 
         # ── Step 2: Silence removal (Feature 2) ───────────────────────────
@@ -1269,6 +1280,7 @@ def run_render_phase(job_id: str, src: Path) -> None:
     job = store.get(job_id)
     if not job:
         return
+    work_dir = settings.work_dir / job_id  # defined before try so finally can always access it
     # Serialize heavy renders: Chrome worker pools (8+ processes × 700 MB each)
     # exhaust the cgroup limit when two renders overlap.  The semaphore queues
     # the second render until the first is complete — no job is dropped.
@@ -1369,7 +1381,6 @@ def run_render_phase(job_id: str, src: Path) -> None:
                      message="Rendering with FFmpeg…")
 
         out_path = settings.outputs_dir / f"{job_id}.mp4"
-        work_dir = settings.work_dir / job_id
 
         _t = time.perf_counter()
         result = render(
@@ -1461,6 +1472,14 @@ def run_render_phase(job_id: str, src: Path) -> None:
         )
     finally:
         _RENDER_SEM.release()
+        try:
+            shutil.rmtree(work_dir, ignore_errors=False)
+        except Exception as _cleanup_exc:
+            import logging as _cleanup_lg
+            _cleanup_lg.getLogger(__name__).warning(
+                "[CLEANUP] WARNING: work_dir cleanup failed for job %s: %s",
+                job_id, _cleanup_exc,
+            )
 
 
 def _build_instructions(

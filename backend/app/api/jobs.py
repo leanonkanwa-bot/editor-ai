@@ -91,8 +91,9 @@ class JobStore:
         for job in self._jobs.values():
             if job.status not in TERMINAL_STATUSES:
                 job.status = "error"
+                job.is_retry = True
                 job.error = INTERRUPT_MESSAGE
-                job.message = "Interrupted by server restart."
+                job.message = "Render interrompu — crédit remboursé."
                 job.progress = 100
         # Persist the corrections so a later request sees the right state.
         self._save_locked()
