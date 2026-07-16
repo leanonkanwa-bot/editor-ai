@@ -4965,6 +4965,15 @@ def compose(
     else:
         _face_cx, _face_cy = 50.0, 50.0
 
+    # object-position X% to CENTER the face in the 9:16 crop window.
+    # With object-fit: cover on a 16:9 source → 9:16 container, the browser
+    # renders at r = (16/9)^2 ≈ 3.16× the container width; a plain cx% would
+    # place the face at cx% of the container, not the center.
+    # Correct formula: X = (cx * r - 50) / (r - 1), clamped to [0, 100].
+    _r_16_9 = 256 / 81  # (16/9)^2 — exact for any 16:9 landscape source
+    _video_pos_x = (_face_cx * _r_16_9 - 50.0) / (_r_16_9 - 1.0)
+    _video_pos_x = max(0.0, min(100.0, _video_pos_x))
+
     def _remap_zone(card: dict) -> dict:
         style = card.get("contentHints", {}).get("style", "")
         zone = card.get("zone", "video-overlay")
@@ -5111,7 +5120,7 @@ def compose(
     overflow: hidden; border-radius: 0; box-shadow: none;
     transform-origin: center center;
   }}
-  .video-wrapper video {{ width: 100%; height: 100%; object-fit: cover; object-position: {_face_cx:.1f}% 50%; }}
+  .video-wrapper video {{ width: 100%; height: 100%; object-fit: cover; object-position: {_video_pos_x:.1f}% 50%; }}
   #stage {{ overflow: hidden; }}
   .video-wrapper.framed {{
     border-radius: 16px;
