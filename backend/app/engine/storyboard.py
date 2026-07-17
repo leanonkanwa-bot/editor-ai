@@ -1055,6 +1055,17 @@ def generate_storyboard(
         if _overlap < _GROUNDING_OVERLAP_THRESHOLD:
             _orig = _style
             _title = _gc.get("contentHints", {}).get("title", "")
+            if not _title:
+                # Promote type-specific trigger field → title so key_phrase always has text.
+                # Without this, cards with no title field render as empty callouts (two blue
+                # bars, no text) because the reclassified callout has nothing to display.
+                _tf = _TRIGGER_TEXT_FIELD.get(_orig, "")
+                _tv = _gc.get("contentHints", {}).get(_tf, "")
+                if isinstance(_tv, list):
+                    _tv = " ".join(str(x) for x in _tv)
+                if _tv:
+                    _gc["contentHints"]["title"] = str(_tv).strip()
+                    _title = _gc["contentHints"]["title"]
             _gc["contentHints"]["style"] = "key_phrase" if _title else "callout"
             print(
                 f"[STORYBOARD] GROUNDING REJECT card {_gc.get('id','?')} "
