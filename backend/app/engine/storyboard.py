@@ -41,6 +41,8 @@ _TRIGGER_STYLES: frozenset[str] = frozenset({
 _GROUNDING_OVERLAP_THRESHOLD = 0.40   # fraction of trigger content-words that must match speech
 _GROUNDING_WINDOW_PRE_S  = 0.5        # seconds before startSec included in the speech window
 _GROUNDING_WINDOW_POST_S = 3.0        # seconds after  startSec included in the speech window
+_ANCHOR_SEARCH_FORWARD_S = 6.0        # how far ahead to scan for trigger keyword position
+_ANCHOR_LEAD_S           = 0.20       # card appears this many seconds before the trigger word
 
 # French stopwords stripped before grounding overlap computation so that invented phrases
 # sharing only function words with genuine speech (e.g. "je vais dire que…" vs "je vais
@@ -971,9 +973,15 @@ def _merge_cards(
 
 
 def _tokenize_text(text: str) -> frozenset[str]:
-    """Lowercase + strip punctuation → frozen token set. Skips 1-char tokens (articles)."""
+    """Lowercase + split at punctuation → frozen token set. Skips 1-char tokens.
+
+    Replaces punctuation (including apostrophes) with spaces so that French
+    contractions like "d'impopulaire" → ["d", "impopulaire"] are handled
+    correctly: the prefix (d, l, j, c, n, m) is filtered by the ≥2-char guard
+    and the root word is kept.
+    """
     return frozenset(
-        t for t in re.sub(r"[^\w\s]", "", text.lower()).split()
+        t for t in re.sub(r"[^\w\s]", " ", text.lower()).split()
         if len(t) >= 2
     )
 
@@ -1000,6 +1008,30 @@ def _card_trigger_text(card: dict) -> str:
     if isinstance(val, list):
         val = " ".join(str(x) for x in val)
     return str(val)
+
+
+def _find_trigger_anchor(card: dict, remapped_words: list[WordTiming]) -> float | None:
+    """Return corrected startSec anchored to the first Whisper word that matches a
+    trigger content-word, scanning [startSec - PRE, startSec + ANCHOR_SEARCH_FORWARD_S].
+
+    Returns None if no matching word is found (caller keeps original startSec).
+    Never moves startSec backward beyond the current value.
+    """
+    trigger_cw = _content_words(_card_trigger_text(card))
+    if not trigger_cw:
+        return None
+    start = float(card.get("startSec", 0))
+    lo = start - _GROUNDING_WINDOW_PRE_S
+    hi = start + _ANCHOR_SEARCH_FORWARD_S
+    for w in remapped_words:
+        if w.start < lo:
+            continue
+        if w.start > hi:
+            break
+        if _content_words(w.text) & trigger_cw:
+            anchored = round(max(w.start - _ANCHOR_LEAD_S, start), 3)
+            return anchored
+    return None
 
 
 def _grounding_overlap(card: dict, remapped_words: list[WordTiming]) -> float:
@@ -1081,6 +1113,30 @@ def generate_storyboard(
             print(
                 f"[STORYBOARD] card {_gc.get('id','?')} startSec snapped "
                 f"{_orig:.2f}→{_gc['startSec']:.2f}s (first word: '{_ahead[0].text}')",
+                flush=True,
+            )
+
+    # Keyword-position anchoring: trigger-style cards are often anchored by the LLM to
+    # the first word of the sentence that CONTAINS the trigger phrase, which can be 3-5s
+    # before the trigger phrase itself ("Aujourd'hui je vais vous dire quelque chose
+    # d'impopulaire" → startSec=1.00s, "impopulaire" at 4.0s → 3s early offset).
+    # Scan the Whisper stream for the earliest match of any trigger content-word within
+    # [startSec-0.5, startSec+6.0] and re-anchor to that word (minus a 200ms lead).
+    # Runs before the grounding guard so the corrected startSec is what gets checked.
+    for _gc in graphic_cards:
+        _style = _gc.get("contentHints", {}).get("style", "")
+        if _style not in _TRIGGER_STYLES:
+            continue
+        _anchor = _find_trigger_anchor(_gc, remapped_words)
+        if _anchor is not None and _anchor > float(_gc.get("startSec", 0)):
+            _orig_start = float(_gc["startSec"])
+            _gc["startSec"] = _anchor
+            if float(_gc.get("endSec", 0)) < _anchor + 1.5:
+                _gc["endSec"] = round(_anchor + 3.0, 3)
+            print(
+                f"[STORYBOARD] ANCHOR card {_gc.get('id','?')} style={_style!r} "
+                f"startSec {_orig_start:.2f}→{_anchor:.2f}s "
+                f"(trigger keyword found in Whisper)",
                 flush=True,
             )
 
