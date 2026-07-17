@@ -105,6 +105,90 @@ async def _purge_trash_loop() -> None:
         _purge_trash()
 
 
+_RESUME_WATCHDOG_S = 45 * 60  # 45 min — give resumed jobs time to finish
+
+
+async def _auto_resume_bg(jobs_to_resume: list) -> None:
+    """Dispatch threads for jobs that were in-flight at last shutdown.
+
+    Called via asyncio.create_task() so the web server starts serving
+    immediately — recovery runs in the background.
+
+    Watchdog: logs a WARNING for any thread still alive after 45 min and
+    exits the task.  The thread continues (daemon) and Layer C handles
+    recovery on the next deploy if the render never finishes.
+
+    Never raises — any error is logged and the finally block always runs.
+    """
+    if not jobs_to_resume:
+        return
+    print(f"[STARTUP] {len(jobs_to_resume)} job(s) to auto-resume", flush=True)
+    _threads: list = []
+    try:
+        for _kind, _job in jobs_to_resume:
+            _src = Path(_job.source_path) if _job.source_path else None
+            if not _src or not _src.exists():
+                store.update(
+                    _job.id,
+                    status="error",
+                    is_retry=True,
+                    error="Source vidéo introuvable après redémarrage",
+                    message="Render interrompu — crédit remboursé.",
+                    progress=100,
+                )
+                print(f"[STARTUP] job {_job.id}: source missing — marked error", flush=True)
+                continue
+            if _kind == "render":
+                _t = threading.Thread(
+                    target=run_render_phase,
+                    args=(_job.id, _src),
+                    daemon=True,
+                    name=f"resume-render-{_job.id[:8]}",
+                )
+            elif _kind == "phase1":
+                _params = dict(_job.params or {})
+                _instructions = _params.pop("instructions", "")
+                _format_hint  = _params.pop("format_hint", "auto")
+                _t = threading.Thread(
+                    target=run_job,
+                    args=(_job.id, _src, _instructions, _format_hint),
+                    kwargs=_params,
+                    daemon=True,
+                    name=f"resume-phase1-{_job.id[:8]}",
+                )
+            else:
+                print(f"[STARTUP] WARN: unknown resume kind {_kind!r} for {_job.id}", flush=True)
+                continue
+            _t.start()
+            print(f"[STARTUP] Auto-resuming {_kind} for job {_job.id}", flush=True)
+            _threads.append((_job, _t))
+
+        # Watchdog: poll every 30 s; log any thread still alive at deadline.
+        _deadline = asyncio.get_event_loop().time() + _RESUME_WATCHDOG_S
+        _alive = list(_threads)
+        while _alive:
+            _remaining = _deadline - asyncio.get_event_loop().time()
+            if _remaining <= 0:
+                break
+            await asyncio.sleep(min(30.0, _remaining))
+            _alive = [(_j, _t) for _j, _t in _alive if _t.is_alive()]
+        for _job, _t in _alive:
+            if _t.is_alive():
+                print(
+                    f"[STARTUP] WARN: job {_job.id} still running after "
+                    f"{_RESUME_WATCHDOG_S // 60} min watchdog — "
+                    "Layer C handles recovery on next deploy",
+                    flush=True,
+                )
+    except Exception as _e:
+        print(f"[STARTUP] WARN: auto-resume unexpected error: {_e}", flush=True)
+    finally:
+        print(
+            f"[STARTUP] Auto-resume task done ({len(_threads)} thread(s) dispatched)",
+            flush=True,
+        )
+
+
 app = FastAPI(title="AI Video Editor Agent", version="0.1.0")
 
 
@@ -182,46 +266,9 @@ def _on_startup() -> None:
     _signal.signal(_signal.SIGTERM, _sigterm_handler)
 
     # ── Auto-resume jobs that were in-flight during the previous shutdown ───
+    # Runs in the background so the web server is immediately ready.
     # _resumable_jobs is populated by JobStore._load() at import time.
-    # Each entry is ("render", job) or ("phase1", job).
-    _to_resume = store._resumable_jobs
-    if _to_resume:
-        print(f"[STARTUP] {len(_to_resume)} job(s) to auto-resume", flush=True)
-    for _kind, _job in _to_resume:
-        _src = Path(_job.source_path) if _job.source_path else None
-        if not _src or not _src.exists():
-            store.update(
-                _job.id,
-                status="error",
-                is_retry=True,
-                error="Source vidéo introuvable après redémarrage",
-                message="Render interrompu — crédit remboursé.",
-                progress=100,
-            )
-            print(f"[STARTUP] job {_job.id}: source missing — marked error", flush=True)
-            continue
-
-        if _kind == "render":
-            print(f"[STARTUP] Auto-resuming render for job {_job.id}", flush=True)
-            threading.Thread(
-                target=run_render_phase,
-                args=(_job.id, _src),
-                daemon=True,
-                name=f"resume-render-{_job.id[:8]}",
-            ).start()
-
-        elif _kind == "phase1":
-            _params = dict(_job.params or {})
-            _instructions = _params.pop("instructions", "")
-            _format_hint  = _params.pop("format_hint", "auto")
-            print(f"[STARTUP] Auto-resuming phase-1 for job {_job.id}", flush=True)
-            threading.Thread(
-                target=run_job,
-                args=(_job.id, _src, _instructions, _format_hint),
-                kwargs=_params,
-                daemon=True,
-                name=f"resume-phase1-{_job.id[:8]}",
-            ).start()
+    asyncio.create_task(_auto_resume_bg(store._resumable_jobs))
 
 app.add_middleware(
     CORSMiddleware,

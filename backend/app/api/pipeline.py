@@ -18,7 +18,7 @@ from pathlib import Path
 # One heavy render at a time — prevents N concurrent Chrome worker pools from
 # exhausting cgroup RAM.  Phase-1 (transcription) is light enough to overlap.
 _RENDER_SEM = threading.Semaphore(1)
-_TRANSCRIPTION_TIMEOUT_S = 900  # 15 min — Whisper hang guard; raises RuntimeError → is_retry=True
+_TRANSCRIPTION_TIMEOUT_S = 1200  # 20 min — Whisper hang guard; sets status=error + is_retry=True
 
 # Set by the SIGTERM handler in main.py.  When set:
 #   - run_render_phase() refuses to start a new render (returns immediately so
@@ -661,10 +661,19 @@ def run_job(
             try:
                 transcript = f_transcript.result(timeout=_TRANSCRIPTION_TIMEOUT_S)
             except _FutureTimeoutError:
-                raise RuntimeError(
-                    f"Transcription bloquée après {_TRANSCRIPTION_TIMEOUT_S // 60} min"
-                    " — crédit remboursé."
+                _mins = _TRANSCRIPTION_TIMEOUT_S // 60
+                store.update(
+                    job_id,
+                    status="error",
+                    is_retry=True,
+                    error=f"Transcription timeout after {_mins} min",
+                    message=(
+                        f"Transcription bloquée ({_mins} min) "
+                        "— crédit remboursé automatiquement."
+                    ),
+                    progress=100,
                 )
+                return  # finally: _tx_pool.shutdown still runs
             subject_pos = f_subject.result(timeout=120)
         finally:
             _tx_pool.shutdown(wait=False)
