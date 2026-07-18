@@ -1418,5 +1418,86 @@
       });
     </script>
     </div><!-- /app-shell -->
+
+    <!-- ── Report button ──────────────────────────────────────────────────────
+         Fixed bottom-right on all pages. POST /api/reports is unauthenticated
+         so it works even when the login card is showing. -->
+    <button id="reportBtn" title="Signaler un problème" aria-label="Signaler un problème" style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:9990;width:36px;height:36px;border-radius:50%;background:rgba(26,26,26,0.92);border:1px solid rgba(255,255,255,0.1);color:rgba(245,245,246,0.4);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;backdrop-filter:blur(8px);box-shadow:0 2px 12px rgba(0,0,0,0.5);transition:color .15s,border-color .15s,background .15s;line-height:1;">!</button>
+
+    <div id="reportModal" style="display:none;position:fixed;inset:0;z-index:9991;align-items:flex-end;justify-content:flex-end;padding:1.5rem;">
+      <div id="reportBackdrop" style="position:absolute;inset:0;"></div>
+      <div style="position:relative;background:#1a1a1a;border:1px solid rgba(255,255,255,0.1);border-radius:14px;padding:18px;width:100%;max-width:300px;box-shadow:0 8px 40px rgba(0,0,0,0.7);margin-bottom:3rem;">
+        <div id="reportForm">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+            <span style="font-size:13px;font-weight:600;color:#F5F5F6;">Signaler un problème</span>
+            <button id="reportClose" type="button" style="background:none;border:none;color:rgba(245,245,246,0.4);cursor:pointer;font-size:18px;line-height:1;padding:0 2px;">×</button>
+          </div>
+          <textarea id="reportMsg" placeholder="Décrivez le problème…" rows="4" style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:9px 11px;color:#F5F5F6;font-size:13px;resize:none;outline:none;line-height:1.6;margin-bottom:10px;font-family:inherit;display:block;"></textarea>
+          <button id="reportSubmit" type="button" style="width:100%;background:rgba(255,119,81,0.45);color:#fff;border:none;border-radius:8px;padding:9px;font-size:13px;font-weight:600;cursor:not-allowed;transition:background .15s;">Envoyer</button>
+        </div>
+        <p id="reportThanks" style="display:none;text-align:center;color:#F5F5F6;font-size:14px;font-weight:600;padding:8px 0;">Merci, on regarde ça.</p>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        const btn    = document.getElementById("reportBtn");
+        const modal  = document.getElementById("reportModal");
+        const bd     = document.getElementById("reportBackdrop");
+        const msg    = document.getElementById("reportMsg");
+        const submit = document.getElementById("reportSubmit");
+        const close  = document.getElementById("reportClose");
+        const form   = document.getElementById("reportForm");
+        const thanks = document.getElementById("reportThanks");
+
+        function openModal() {
+          msg.value = "";
+          form.style.display = "block";
+          thanks.style.display = "none";
+          submit.style.background = "rgba(255,119,81,0.45)";
+          submit.style.cursor = "not-allowed";
+          modal.style.display = "flex";
+          setTimeout(() => msg.focus(), 50);
+        }
+        function closeModal() { modal.style.display = "none"; }
+
+        btn.addEventListener("mouseenter", function () {
+          this.style.color = "#F5F5F6";
+          this.style.borderColor = "rgba(255,255,255,0.22)";
+          this.style.background = "rgba(36,36,36,0.96)";
+        });
+        btn.addEventListener("mouseleave", function () {
+          this.style.color = "rgba(245,245,246,0.4)";
+          this.style.borderColor = "rgba(255,255,255,0.1)";
+          this.style.background = "rgba(26,26,26,0.92)";
+        });
+
+        btn.addEventListener("click", openModal);
+        close.addEventListener("click", closeModal);
+        bd.addEventListener("click", closeModal);
+
+        msg.addEventListener("input", function () {
+          const hasText = this.value.trim().length > 0;
+          submit.style.background = hasText ? "#FF7751" : "rgba(255,119,81,0.45)";
+          submit.style.cursor = hasText ? "pointer" : "not-allowed";
+        });
+
+        submit.addEventListener("click", async function () {
+          const text = msg.value.trim();
+          if (!text) return;
+          try {
+            await fetch("/api/reports", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              credentials: "same-origin",
+              body: JSON.stringify({ message: text, url: location.href, user_agent: navigator.userAgent }),
+            });
+          } catch (_) { /* fire-and-forget */ }
+          form.style.display = "none";
+          thanks.style.display = "block";
+          setTimeout(closeModal, 2500);
+        });
+      })();
+    </script>
   </body>
 </html>
