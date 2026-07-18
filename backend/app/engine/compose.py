@@ -52,6 +52,12 @@ _ZONE_BOUNDS_PORTRAIT = {
     "hook-title":     {"left": 0,   "top": 0,    "width": 1080, "height": 288},
     "upper-right":          {"left": 540, "top": 100,  "width": 500,  "height": 320},   # B-roll compact upper-right
     "upper-data":           {"left": 540, "top": 100,  "width": 500,  "height": 320},   # alias
+    # Multi-item data cards (4-6 rows each) need more height than upper-data's 320 px and
+    # must not crowd the right margin (1080-1040 = 40 px is too tight when text wraps).
+    # Left-side placement also avoids the face which in talking-head portrait video is
+    # usually center-to-right.  Width 540 gives text content area ≈ 412 px, preventing
+    # wrapping even for long items like "12h - Pause déjeuner" at compact 41 px font.
+    "upper-left-data":      {"left": 30,  "top": 80,   "width": 540,  "height": 500},   # tall multi-item, left side
     "lower-third":          {"left": 0,   "top": 1344, "width": 1080, "height": 288},   # captions ONLY
     "lower-third-name":     {"left": 0,   "top": 1150, "width": 1080, "height": 140},   # speaker ID above captions
     "side-panel":     {"left": 540, "top": 100,  "width": 500,  "height": 320},   # alias → upper-right
@@ -79,7 +85,15 @@ def _zone_bounds(zone: str, layout: str) -> dict:
 # chosen zone — they carry the visual message and need the full canvas.
 _DATA_PANEL_TYPES = {"stat", "list", "comparison", "checklist", "score", "trend", "rating", "progress_bar", "countdown", "step_number", "price_tag", "recap_summary", "formula_equation", "pros_cons", "star_rating_review", "income_reveal", "data_bar_chart", "number_ranking", "question_answer_pair", "cause_effect", "percentage_split", "red_flag_list", "client_avatar_persona", "tool_stack", "revenue_breakdown", "hidden_cost_reveal", "social_proof_counter", "red_thread_connector", "day_in_life_schedule", "skill_tree_unlock", "audience_poll_result", "broken_promise_tracker", "ingredient_list", "resource_allocation"}
 _CENTER_ZONES = {"fullscreen", "video-overlay"}
-_SIDE_PANEL_ZONES = {"side-panel", "side-panel-left", "side-panel-right", "side-panel-top", "upper-data", "upper-right"}
+_SIDE_PANEL_ZONES = {"side-panel", "side-panel-left", "side-panel-right", "side-panel-top", "upper-data", "upper-right", "upper-left-data"}
+
+# Subset of _DATA_PANEL_TYPES that render 4-6 stacked rows.  In portrait these are
+# remapped to upper-left-data (left:30, height:500) instead of the standard upper-data
+# (left:540, height:320) which is too narrow (40 px right margin) and too short.
+_TALL_DATA_PANEL_TYPES = frozenset({
+    "day_in_life_schedule", "ingredient_list", "skill_tree_unlock",
+    "audience_poll_result", "broken_promise_tracker", "resource_allocation",
+})
 
 
 def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | None = None) -> str:
@@ -495,11 +509,16 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
     p = pack or _LEAN_GLASS
 
     # Compact variant for side-panel zones — scale typography and tighten padding so
-    # content fits the 806px-wide container without awkward wrapping or overflow.
+    # content fits the container without awkward wrapping or overflow.
+    # Tall multi-item types (4-6 stacked rows, upper-left-data zone) use a tighter
+    # 0.45× scale so long items like "12h - Pause déjeuner" (22 chars) don't wrap
+    # in the 540px-wide container (text area ≈ 374px; 22 chars @ 29px ≈ 352px → fits).
+    content_style = hints.get("style", "")
     if compact:
         def _s(px_str: str, f: float) -> str:
             return f"{int(float(px_str.replace('px', '')) * f)}px"
-        title_size_eff  = _s(p["title_size"],  0.65)
+        _title_scale    = 0.45 if content_style in _TALL_DATA_PANEL_TYPES else 0.65
+        title_size_eff  = _s(p["title_size"],  _title_scale)
         number_size_eff = _s(p["number_size"], 0.67)
         detail_size_eff = "20px"
         kicker_size_eff = "16px"
@@ -5908,17 +5927,21 @@ def compose(
         zone = card.get("zone", "video-overlay")
 
         # Portrait anti-collision: caption band is always 70–85%; data cards
-        # must never share that band.  Force all portrait data cards to upper-data
-        # (20–40%) regardless of what Claude requested — zone separation is the
-        # anti-collision mechanism, no temporal scheduling needed.
+        # must never share that band.  Force all portrait data cards to one of the
+        # upper zones — zone separation is the anti-collision mechanism, no temporal
+        # scheduling needed.
+        # Tall multi-item types (4-6 rows) → upper-left-data (left:30, height:500).
+        # Standard data types               → upper-data     (left:540, height:320).
         if layout == "portrait" and style in _DATA_PANEL_TYPES:
-            if zone != "upper-data":
+            target_zone = "upper-left-data" if style in _TALL_DATA_PANEL_TYPES else "upper-data"
+            if zone != target_zone:
+                _reason = "tall-multi-item" if style in _TALL_DATA_PANEL_TYPES else "anti-collision"
                 print(
                     f"[COMPOSE] portrait-zone: {card.get('id', '?')} ({style})"
-                    f" {zone!r} → 'upper-data' (anti-collision)",
+                    f" {zone!r} → {target_zone!r} ({_reason})",
                     flush=True,
                 )
-                return {**card, "zone": "upper-data"}
+                return {**card, "zone": target_zone}
             return card
 
         # Landscape: remap center-zone data cards to face-aware side panel.
