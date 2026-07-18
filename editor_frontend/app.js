@@ -95,6 +95,14 @@ $("dashEditBtn")?.addEventListener("click", () => switchSection("editorArea"));
           localStorage.setItem("coach_profile", JSON.stringify(restored));
           raw = JSON.stringify(restored);
           showCancelingBanner(restored);
+          // Sync UI language from server profile (server is source of truth)
+          if (restored.language && typeof setLang === "function") {
+            const stored = localStorage.getItem("lle_lang");
+            if (stored !== restored.language) {
+              localStorage.setItem("lle_lang", restored.language);
+              if (typeof initLang === "function") initLang();
+            }
+          }
         }
       } catch {}
 

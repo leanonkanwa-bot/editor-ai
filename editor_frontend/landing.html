@@ -394,7 +394,15 @@
       .section { padding: 4.5rem 1.25rem; }
       .footer-inner { flex-direction: column; align-items: flex-start; gap: .75rem; }
     }
+    /* i18n toggle */
+    .lle-lang-toggle { display: flex; align-items: center; gap: 2px; }
+    .lle-lang-btn { background: none; border: none; color: rgba(245,245,246,.28); cursor: pointer; padding: 3px 5px; font-size: 11px; font-weight: 700; font-family: var(--font); letter-spacing: .05em; line-height: 1; }
+    .lle-lang-btn.lle-lang-active { color: rgba(245,245,246,.75); }
+    .lle-lang-btn:hover { color: rgba(245,245,246,.6); }
+    .lle-lang-sep { color: rgba(245,245,246,.12); font-size: 11px; pointer-events: none; user-select: none; }
   </style>
+  <script src="i18n.js"></script>
+  <script>initLang();</script>
 </head>
 <body>
 
@@ -406,6 +414,11 @@
         <span class="logo-text"><span class="lean">Lean</span><span class="ret">Retention</span></span>
       </a>
       <div class="nav-right">
+        <div class="lle-lang-toggle">
+          <button class="lle-lang-btn" data-lang-btn="fr" onclick="setLang('fr')">FR</button>
+          <span class="lle-lang-sep">|</span>
+          <button class="lle-lang-btn" data-lang-btn="en" onclick="setLang('en')">EN</button>
+        </div>
         <a href="/api/auth/google/login" class="nav-link">Se connecter</a>
         <a href="/api/auth/google/login" class="btn btn-salmon">Commencer gratuitement</a>
       </div>

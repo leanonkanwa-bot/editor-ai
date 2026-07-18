@@ -1378,6 +1378,27 @@ async def get_profile(profile_id: str) -> dict:
         raise HTTPException(500, "Corrupt profile file")
 
 
+@app.patch("/api/profile/language", include_in_schema=False)
+async def patch_profile_language(request: Request, payload: dict = Body(...)) -> dict:
+    """Update only the language field of the authenticated user's profile."""
+    profile_id = _verify_session(request.cookies.get(SESSION_COOKIE))
+    if not profile_id:
+        raise HTTPException(401, "Not authenticated")
+    lang = (payload.get("language") or "fr").strip().lower()
+    if lang not in ("fr", "en"):
+        raise HTTPException(400, "language must be 'fr' or 'en'")
+    profile_path = _PROFILES_DIR / f"{profile_id}.json"
+    if not profile_path.exists():
+        raise HTTPException(404, "Profile not found")
+    try:
+        profile = json.loads(profile_path.read_text(encoding="utf-8"))
+        profile["language"] = lang
+        profile_path.write_text(json.dumps(profile, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        raise HTTPException(500, "Failed to update profile")
+    return {"language": lang}
+
+
 def _oauth_redirect_uri(request: Request) -> str:
     configured = settings.app_base_url.strip().rstrip("/")
     base = configured if configured else str(request.base_url).rstrip("/")
