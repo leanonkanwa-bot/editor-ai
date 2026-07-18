@@ -62,6 +62,10 @@ _ZONE_BOUNDS_PORTRAIT = {
     # keeps 22-char items at 339 px < 372 px text area — no wrapping).
     "upper-left-data":      {"left": 30,  "top": 80,   "width": 540,  "height": 500},   # tall multi-item, left side
     "upper-right-data-tall": {"left": 540, "top": 80,  "width": 500,  "height": 500},   # tall multi-item, right side
+    # 4-position rotation bottom zones — sit between face zone and caption band.
+    # top:1070 + height:250 = 1320px, 24px gap above lower-third (1344).
+    "portrait-bottom-left":  {"left": 30,  "top": 1070, "width": 500, "height": 250},
+    "portrait-bottom-right": {"left": 540, "top": 1070, "width": 500, "height": 250},
     "lower-third":          {"left": 0,   "top": 1344, "width": 1080, "height": 288},   # captions ONLY
     "lower-third-name":     {"left": 0,   "top": 1150, "width": 1080, "height": 140},   # speaker ID above captions
     "side-panel":     {"left": 540, "top": 100,  "width": 500,  "height": 320},   # alias → upper-right
@@ -89,7 +93,7 @@ def _zone_bounds(zone: str, layout: str) -> dict:
 # chosen zone — they carry the visual message and need the full canvas.
 _DATA_PANEL_TYPES = {"stat", "list", "comparison", "checklist", "score", "trend", "rating", "progress_bar", "countdown", "step_number", "price_tag", "recap_summary", "formula_equation", "pros_cons", "star_rating_review", "income_reveal", "data_bar_chart", "number_ranking", "question_answer_pair", "cause_effect", "percentage_split", "red_flag_list", "client_avatar_persona", "tool_stack", "revenue_breakdown", "hidden_cost_reveal", "social_proof_counter", "red_thread_connector", "day_in_life_schedule", "skill_tree_unlock", "audience_poll_result", "broken_promise_tracker", "ingredient_list", "resource_allocation"}
 _CENTER_ZONES = {"fullscreen", "video-overlay"}
-_SIDE_PANEL_ZONES = {"side-panel", "side-panel-left", "side-panel-right", "side-panel-top", "upper-data", "upper-right", "upper-left-data", "upper-left-data-sm", "upper-right-data-tall"}
+_SIDE_PANEL_ZONES = {"side-panel", "side-panel-left", "side-panel-right", "side-panel-top", "upper-data", "upper-right", "upper-left-data", "upper-left-data-sm", "upper-right-data-tall", "portrait-bottom-left", "portrait-bottom-right"}
 
 # Subset of _DATA_PANEL_TYPES that render 4-6 stacked rows.  In portrait these are
 # remapped to upper-left-data (left:30, height:500) instead of the standard upper-data
@@ -117,6 +121,33 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
         zone = "video-overlay"
 
     bounds = _zone_bounds(zone, layout)
+
+    # Dynamic zone height for tall multi-item data cards in portrait.
+    # Avoids fixed 500px that is either too short (8+ items) or wastes space.
+    # Per-item estimate: 28px compact font × 1.4 line-height ≈ 39px + 6px gap = 45px/row.
+    # Panel v-padding: 56px. Root v-padding: 64px. Title/kicker row: 40px.
+    if layout == "portrait" and not is_caption:
+        _dyn_style = card.get("contentHints", {}).get("style", "")
+        if _dyn_style in _TALL_DATA_PANEL_TYPES:
+            _dyn_hints = card.get("contentHints", {})
+            _items_key = {
+                "day_in_life_schedule": "schedule_items",
+                "ingredient_list": "ingredients",
+                "skill_tree_unlock": "unlocked_milestones",
+                "audience_poll_result": "poll_options",
+                "broken_promise_tracker": "promises",
+                "resource_allocation": "resource_labels",
+            }.get(_dyn_style, "items")
+            _n_items = len(_dyn_hints.get(_items_key, _dyn_hints.get("items", [])))
+            _n_items = max(1, min(_n_items, 12))
+            _dyn_h = _n_items * 45 + 160
+            _dyn_h = max(160, min(_dyn_h, 700))
+            bounds = {**bounds, "height": _dyn_h}
+            print(
+                f"[COMPOSE] tall-dyn-height {card.get('id', '?')} ({_dyn_style})"
+                f" n={_n_items} -> {_dyn_h}px",
+                flush=True,
+            )
 
     if is_caption:
         inner = _build_caption_card_html(card, pack=pack)
@@ -554,7 +585,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
     parts.append('<style>')
     parts.append(f'.card[data-card-id="{card_id}"] .root {{')
     parts.append('  width: 100%; height: 100%; display: flex; flex-direction: column;')
-    parts.append('  justify-content: center; align-items: center;')
+    _root_justify = "flex-start" if (compact and content_style in _TALL_DATA_PANEL_TYPES) else "center"
+    parts.append(f'  justify-content: {_root_justify}; align-items: center;')
     parts.append(f'  padding: {root_padding}; gap: 16px;')
     parts.append('}')
     parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
@@ -5930,36 +5962,44 @@ def compose(
         style = card.get("contentHints", {}).get("style", "")
         zone = card.get("zone", "video-overlay")
 
-        # Portrait: keep all data cards out of the caption band (70–85%).
-        # Introduce left/right alternation so consecutive data cards never land in the
-        # same corner — kills the "always top-right" pattern that reduces attention effect.
+        # Portrait: 4-position sequential rotation keeps consecutive data cards visually
+        # distinct. Index resets per-job (data_card_idx is initialised to 0 below).
+        # Fullscreen types are NOT in _DATA_PANEL_TYPES so they are never remapped here.
         #
-        # Alternation rule (applied per data-card index, NOT full-card index):
-        #   face strongly off-centre (>65 % or <35 %) → always card on the opposite side
-        #   face centred or unknown                    → alternate even/odd by data_card_idx
+        # Standard types (320px height):
+        #   pos 0 (top-left)     -> upper-left-data-sm
+        #   pos 1 (center-safe)  -> portrait-bottom-right  (below face, right — no dimming)
+        #   pos 2 (bottom-third) -> portrait-bottom-left   (below face, left  — no dimming)
+        #   pos 3 (top-right)    -> upper-data
         #
-        # Two size classes:
-        #   tall (4-6 rows, _TALL_DATA_PANEL_TYPES) → upper-left-data / upper-right-data-tall (h:500)
-        #   standard                                 → upper-left-data-sm / upper-data        (h:320)
+        # Tall types (4-6 items, dynamic height): bottom zones are too short (<260px) for
+        # 4-6 items, so tall types use a 2-position top rotation instead:
+        #   pos 0,2 (top-left / bottom-third) -> upper-left-data
+        #   pos 1,3 (center-safe / top-right) -> upper-right-data-tall
+        _POS_NAMES = ("top-left", "center-safe", "bottom-third", "top-right")
+        _STD_ZONES  = (
+            "upper-left-data-sm",    # pos 0
+            "portrait-bottom-right", # pos 1
+            "portrait-bottom-left",  # pos 2
+            "upper-data",            # pos 3
+        )
         if layout == "portrait" and style in _DATA_PANEL_TYPES:
-            if _has_face and (_face_cx > 65.0 or _face_cx < 35.0):
-                prefer_left = _face_cx >= 50.0   # face clearly right → card left, and vice versa
-            else:
-                prefer_left = (data_card_idx % 2 == 0)
+            _pos = data_card_idx % 4
+            _pos_name = _POS_NAMES[_pos]
+            is_tall = style in _TALL_DATA_PANEL_TYPES
 
-            if style in _TALL_DATA_PANEL_TYPES:
-                target_zone = "upper-left-data" if prefer_left else "upper-right-data-tall"
+            if is_tall:
+                target_zone = "upper-left-data" if _pos in (0, 2) else "upper-right-data-tall"
             else:
-                target_zone = "upper-left-data-sm" if prefer_left else "upper-data"
+                target_zone = _STD_ZONES[_pos]
 
+            print(
+                f"[STORYBOARD] POSITION-ROTATE {card.get('id', '?')}"
+                f" position={_pos} ({_pos_name})"
+                f" ({style}) {zone!r} -> {target_zone!r}",
+                flush=True,
+            )
             if zone != target_zone:
-                _side = "left" if prefer_left else "right"
-                _reason = f"{'tall-' if style in _TALL_DATA_PANEL_TYPES else ''}data-{_side} idx={data_card_idx}"
-                print(
-                    f"[COMPOSE] portrait-zone: {card.get('id', '?')} ({style})"
-                    f" {zone!r} → {target_zone!r} ({_reason})",
-                    flush=True,
-                )
                 return {**card, "zone": target_zone}
             return card
 
@@ -5971,7 +6011,7 @@ def compose(
         else:
             new_zone = "side-panel-top" if (_has_face and _face_cy > 60.0) else "side-panel"
         print(
-            f"[COMPOSE] zone remap: {card.get('id', '?')} ({style}) {zone!r} → {new_zone!r}",
+            f"[COMPOSE] zone remap: {card.get('id', '?')} ({style}) {zone!r} -> {new_zone!r}",
             flush=True,
         )
         return {**card, "zone": new_zone}
