@@ -112,6 +112,7 @@ def _segment_captions(
     timing_map: TimingMap,
     emphasis_words: list[str],
     word_categories: dict[str, str],
+    max_words: int = _MAX_WORDS,
 ) -> list[dict]:
     """Build caption cards from remapped words using sentence boundaries.
 
@@ -256,7 +257,7 @@ def _segment_captions(
     current: list[dict] = []
     for w in all_words:
         if current:
-            if w.get("seg_start") or len(current) >= _MAX_WORDS:
+            if w.get("seg_start") or len(current) >= max_words:
                 raw_groups.append(current)
                 current = []
         current.append(w)
@@ -273,12 +274,12 @@ def _segment_captions(
 
         if is_orphan:
             # Try forward merge
-            if i + 1 < len(raw_groups) and len(raw_groups[i + 1]) + len(g) <= _MAX_WORDS + 1:
+            if i + 1 < len(raw_groups) and len(raw_groups[i + 1]) + len(g) <= max_words:
                 raw_groups[i + 1] = g + raw_groups[i + 1]
                 i += 1
                 continue
             # Try backward merge
-            if merged and len(merged[-1]) + len(g) <= _MAX_WORDS + 1:
+            if merged and len(merged[-1]) + len(g) <= max_words:
                 merged[-1].extend(g)
                 i += 1
                 continue
@@ -1582,6 +1583,7 @@ def generate_storyboard(
         timing_map=timing_map,
         emphasis_words=caption_emphasis_words,
         word_categories=word_categories,
+        max_words=4 if format_hint == "short" else _MAX_WORDS,
     )
 
     print(f"[STORYBOARD] {len(graphic_cards)} graphic + {len(caption_cards)} caption cards", flush=True)
