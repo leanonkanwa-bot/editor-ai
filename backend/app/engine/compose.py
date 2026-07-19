@@ -34,6 +34,16 @@ _ZONE_BOUNDS_LANDSCAPE = {
     "upper-right":          {"left": 1300, "top": 80,  "width": 580,  "height": 320},
     "upper-data":           {"left": 1300, "top": 80,  "width": 580,  "height": 320},  # alias
     "lower-third-name":     {"left": 0,    "top": 620, "width": 1920, "height": 120},  # speaker ID above captions
+    # 5-position rotation zones for landscape (proportionally adapted for 16:9).
+    # Standard data cards — compact mode.
+    "landscape-tl":      {"left": 40,   "top": 40,  "width": 540, "height": 300},   # top-left
+    "landscape-tr":      {"left": 1340, "top": 40,  "width": 540, "height": 300},   # top-right
+    "landscape-cl":      {"left": 40,   "top": 380, "width": 540, "height": 280},   # center-left
+    "landscape-cr":      {"left": 1340, "top": 380, "width": 540, "height": 280},   # center-right
+    "landscape-cf":      {"left": 0,    "top": 380, "width": 1920, "height": 300},  # center-full (dimming)
+    # Tall multi-item data cards in landscape — 2-position top cycle, extra height.
+    "landscape-tl-tall": {"left": 40,   "top": 40,  "width": 540, "height": 500},
+    "landscape-tr-tall": {"left": 1340, "top": 40,  "width": 540, "height": 500},
 }
 
 # Zone → pixel bounds for portrait 9:16 (1080×1920)
@@ -62,8 +72,11 @@ _ZONE_BOUNDS_PORTRAIT = {
     # keeps 22-char items at 339 px < 372 px text area — no wrapping).
     "upper-left-data":      {"left": 30,  "top": 80,   "width": 540,  "height": 500},   # tall multi-item, left side
     "upper-right-data-tall": {"left": 540, "top": 80,  "width": 500,  "height": 500},   # tall multi-item, right side
-    # 4-position rotation bottom zones — sit between face zone and caption band.
-    # top:1070 + height:250 = 1320px, 24px gap above lower-third (1344).
+    # 5-position rotation — center zones (face zone, 34–50% height). Backdrop-dim applied.
+    "portrait-center-left":  {"left": 20,  "top": 660, "width": 480, "height": 300},
+    "portrait-center-right": {"left": 580, "top": 660, "width": 480, "height": 300},
+    "portrait-center-full":  {"left": 40,  "top": 640, "width": 1000, "height": 320},
+    # Legacy bottom zones (kept for backward compat, not used in the rotation sequence).
     "portrait-bottom-left":  {"left": 30,  "top": 1070, "width": 500, "height": 250},
     "portrait-bottom-right": {"left": 540, "top": 1070, "width": 500, "height": 250},
     "lower-third":          {"left": 0,   "top": 1344, "width": 1080, "height": 288},   # captions ONLY
@@ -93,7 +106,13 @@ def _zone_bounds(zone: str, layout: str) -> dict:
 # chosen zone — they carry the visual message and need the full canvas.
 _DATA_PANEL_TYPES = {"stat", "list", "comparison", "checklist", "score", "trend", "rating", "progress_bar", "countdown", "step_number", "price_tag", "recap_summary", "formula_equation", "pros_cons", "star_rating_review", "income_reveal", "data_bar_chart", "number_ranking", "question_answer_pair", "cause_effect", "percentage_split", "red_flag_list", "client_avatar_persona", "tool_stack", "revenue_breakdown", "hidden_cost_reveal", "social_proof_counter", "red_thread_connector", "day_in_life_schedule", "skill_tree_unlock", "audience_poll_result", "broken_promise_tracker", "ingredient_list", "resource_allocation"}
 _CENTER_ZONES = {"fullscreen", "video-overlay"}
-_SIDE_PANEL_ZONES = {"side-panel", "side-panel-left", "side-panel-right", "side-panel-top", "upper-data", "upper-right", "upper-left-data", "upper-left-data-sm", "upper-right-data-tall", "portrait-bottom-left", "portrait-bottom-right"}
+_SIDE_PANEL_ZONES = {"side-panel", "side-panel-left", "side-panel-right", "side-panel-top", "upper-data", "upper-right", "upper-left-data", "upper-left-data-sm", "upper-right-data-tall", "portrait-bottom-left", "portrait-bottom-right", "portrait-center-left", "portrait-center-right", "landscape-tl", "landscape-tr", "landscape-cl", "landscape-cr", "landscape-cf", "landscape-tl-tall", "landscape-tr-tall"}
+# Zones where the backdrop-dim overlay fires — card overlaps the speaker face.
+_DIMMING_ZONES = frozenset({
+    "fullscreen", "video-overlay",
+    "portrait-center-left", "portrait-center-right", "portrait-center-full",
+    "landscape-cf",
+})
 
 # Subset of _DATA_PANEL_TYPES that render 4-6 stacked rows.  In portrait these are
 # remapped to upper-left-data (left:30, height:500) instead of the standard upper-data
@@ -126,7 +145,7 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
     # Avoids fixed 500px that is either too short (8+ items) or wastes space.
     # Per-item estimate: 28px compact font × 1.4 line-height ≈ 39px + 6px gap = 45px/row.
     # Panel v-padding: 56px. Root v-padding: 64px. Title/kicker row: 40px.
-    if layout == "portrait" and not is_caption:
+    if not is_caption:
         _dyn_style = card.get("contentHints", {}).get("style", "")
         if _dyn_style in _TALL_DATA_PANEL_TYPES:
             _dyn_hints = card.get("contentHints", {})
@@ -3281,11 +3300,11 @@ def _build_timeline_js(
                         f'{start:.4f});'
                     )
 
-            # Premium backdrop dim: every center-zone card darkens the video behind it.
+            # Premium backdrop dim: cards that overlap the speaker face dim the video.
             # Uses a separate overlay div (not CSS filter) — filter: brightness()
             # is not composited by SwiftShader on Railway.
             card_zone = card.get("zone", "")
-            center_zone = card_zone in ("fullscreen", "video-overlay")
+            center_zone = card_zone in _DIMMING_ZONES
             if center_zone:
                 lines.append(
                     f'  tl.to("#backdrop-dim", '
@@ -5962,40 +5981,61 @@ def compose(
         style = card.get("contentHints", {}).get("style", "")
         zone = card.get("zone", "video-overlay")
 
-        # Portrait: 4-position sequential rotation keeps consecutive data cards visually
-        # distinct. Index resets per-job (data_card_idx is initialised to 0 below).
-        # Fullscreen types are NOT in _DATA_PANEL_TYPES so they are never remapped here.
+        # 5-position sequential rotation for data-panel cards (both portrait and landscape).
+        # Non-data-panel types (key_phrase, quote, etc.) are returned unchanged.
+        # Index resets per-job (data_card_idx is initialised to 0 below).
         #
-        # Standard types (320px height):
-        #   pos 0 (top-left)     -> upper-left-data-sm
-        #   pos 1 (center-safe)  -> portrait-bottom-right  (below face, right — no dimming)
-        #   pos 2 (bottom-third) -> portrait-bottom-left   (below face, left  — no dimming)
-        #   pos 3 (top-right)    -> upper-data
+        # Portrait (9:16):
+        #   pos 0 top-left     -> upper-left-data-sm      (top corner, no dimming)
+        #   pos 1 top-right    -> upper-data               (top corner, no dimming)
+        #   pos 2 center-left  -> portrait-center-left     (face zone, dimming applied)
+        #   pos 3 center-right -> portrait-center-right    (face zone, dimming applied)
+        #   pos 4 center-full  -> portrait-center-full     (face zone, dimming applied)
+        # Portrait tall types (4-6 items): 2-position top-only (center zones too short).
         #
-        # Tall types (4-6 items, dynamic height): bottom zones are too short (<260px) for
-        # 4-6 items, so tall types use a 2-position top rotation instead:
-        #   pos 0,2 (top-left / bottom-third) -> upper-left-data
-        #   pos 1,3 (center-safe / top-right) -> upper-right-data-tall
-        _POS_NAMES = ("top-left", "center-safe", "bottom-third", "top-right")
-        _STD_ZONES  = (
+        # Landscape (16:9):
+        #   pos 0 top-left     -> landscape-tl   (top-left corner panel)
+        #   pos 1 top-right    -> landscape-tr   (top-right corner panel)
+        #   pos 2 center-left  -> landscape-cl   (center-left, beside face)
+        #   pos 3 center-right -> landscape-cr   (center-right, beside face)
+        #   pos 4 center-full  -> landscape-cf   (full-width center band, dimming applied)
+        # Landscape tall types: 2-position top-only (landscape-tl-tall / landscape-tr-tall).
+        _POS_NAMES = ("top-left", "top-right", "center-left", "center-right", "center-full")
+        _STD_PORTRAIT = (
             "upper-left-data-sm",    # pos 0
-            "portrait-bottom-right", # pos 1
-            "portrait-bottom-left",  # pos 2
-            "upper-data",            # pos 3
+            "upper-data",            # pos 1
+            "portrait-center-left",  # pos 2
+            "portrait-center-right", # pos 3
+            "portrait-center-full",  # pos 4
         )
-        if layout == "portrait" and style in _DATA_PANEL_TYPES:
-            _pos = data_card_idx % 4
+        _STD_LANDSCAPE = (
+            "landscape-tl",  # pos 0
+            "landscape-tr",  # pos 1
+            "landscape-cl",  # pos 2
+            "landscape-cr",  # pos 3
+            "landscape-cf",  # pos 4
+        )
+
+        if style in _DATA_PANEL_TYPES:
+            _pos = data_card_idx % 5
             _pos_name = _POS_NAMES[_pos]
             is_tall = style in _TALL_DATA_PANEL_TYPES
 
-            if is_tall:
-                target_zone = "upper-left-data" if _pos in (0, 2) else "upper-right-data-tall"
-            else:
-                target_zone = _STD_ZONES[_pos]
+            if layout == "portrait":
+                if is_tall:
+                    # Strict L/R alternation regardless of 5-slot position — use raw index.
+                    target_zone = "upper-left-data" if data_card_idx % 2 == 0 else "upper-right-data-tall"
+                else:
+                    target_zone = _STD_PORTRAIT[_pos]
+            else:  # landscape
+                if is_tall:
+                    target_zone = "landscape-tl-tall" if data_card_idx % 2 == 0 else "landscape-tr-tall"
+                else:
+                    target_zone = _STD_LANDSCAPE[_pos]
 
             print(
                 f"[STORYBOARD] POSITION-ROTATE {card.get('id', '?')}"
-                f" position={_pos} ({_pos_name})"
+                f" position={_pos} ({_pos_name}) layout={layout}"
                 f" ({style}) {zone!r} -> {target_zone!r}",
                 flush=True,
             )
@@ -6003,29 +6043,19 @@ def compose(
                 return {**card, "zone": target_zone}
             return card
 
-        # Landscape: remap center-zone data cards to face-aware side panel.
-        if style not in _DATA_PANEL_TYPES or zone not in _CENTER_ZONES:
-            return card
-        if layout == "landscape":
-            new_zone = "side-panel-left" if _face_cx > 50.0 else "side-panel-right"
-        else:
-            new_zone = "side-panel-top" if (_has_face and _face_cy > 60.0) else "side-panel"
-        print(
-            f"[COMPOSE] zone remap: {card.get('id', '?')} ({style}) {zone!r} -> {new_zone!r}",
-            flush=True,
-        )
-        return {**card, "zone": new_zone}
+        # Non-data-panel types: respect Claude's zone assignment unchanged.
+        return card
 
-    # Count data-card index separately so alternation is based on sequential data-card
-    # position, not overall card index (non-data cards would otherwise skew parity).
-    _portrait_data_idx = 0
+    # Counter increments only for data-panel cards; non-data-panel cards do not
+    # consume a rotation slot (so key_phrase, quote etc. never skew parity).
+    _data_card_idx = 0
     _remapped_cards: list[dict] = []
     for _c in graphic_cards:
         _c_style = _c.get("contentHints", {}).get("style", "")
-        _is_portrait_data = layout == "portrait" and _c_style in _DATA_PANEL_TYPES
-        _remapped_cards.append(_remap_zone(_c, _portrait_data_idx))
-        if _is_portrait_data:
-            _portrait_data_idx += 1
+        _is_data = _c_style in _DATA_PANEL_TYPES
+        _remapped_cards.append(_remap_zone(_c, _data_card_idx))
+        if _is_data:
+            _data_card_idx += 1
     graphic_cards = _remapped_cards
 
     # Guard against overlapping clips on the same HyperFrames track.

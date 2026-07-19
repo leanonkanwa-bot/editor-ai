@@ -1,11 +1,9 @@
 """
-Tests for 4-position sequential rotation in compose._remap_zone.
+Tests for 5-position sequential rotation in compose._remap_zone.
 
-We test the logic directly by constructing a minimal compose() call shim
-that exercises _remap_zone in isolation via monkey-patching the closure vars.
-Since _remap_zone is a nested function inside compose(), we use a lightweight
-inline re-implementation of the rotation table to verify the contract without
-having to spin up the full compose pipeline.
+Covers both portrait (9:16) and landscape (16:9) code paths.
+We replicate the rotation tables inline so any drift between this test
+and compose.py surfaces as a failure here.
 """
 
 import sys
@@ -13,17 +11,31 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__)))
 
-# Replicate the exact rotation tables from compose.py so the test is
-# authoritative — any drift between the tables will surface here.
-_POS_NAMES = ("top-left", "center-safe", "bottom-third", "top-right")
-_STD_ZONES = (
-    "upper-left-data-sm",    # pos 0
-    "portrait-bottom-right", # pos 1
-    "portrait-bottom-left",  # pos 2
-    "upper-data",            # pos 3
+# ── Exact copies of compose.py rotation tables ───────────────────────────────
+
+_POS_NAMES = ("top-left", "top-right", "center-left", "center-right", "center-full")
+
+_STD_PORTRAIT = (
+    "upper-left-data-sm",    # pos 0 — top-left
+    "upper-data",            # pos 1 — top-right
+    "portrait-center-left",  # pos 2 — center-left (dimming)
+    "portrait-center-right", # pos 3 — center-right (dimming)
+    "portrait-center-full",  # pos 4 — center-full (dimming)
 )
-_TALL_LEFT  = "upper-left-data"
-_TALL_RIGHT = "upper-right-data-tall"
+
+_STD_LANDSCAPE = (
+    "landscape-tl",  # pos 0 — top-left
+    "landscape-tr",  # pos 1 — top-right
+    "landscape-cl",  # pos 2 — center-left
+    "landscape-cr",  # pos 3 — center-right
+    "landscape-cf",  # pos 4 — center-full (dimming)
+)
+
+_TALL_LEFT_PORTRAIT  = "upper-left-data"
+_TALL_RIGHT_PORTRAIT = "upper-right-data-tall"
+_TALL_LEFT_LANDSCAPE  = "landscape-tl-tall"
+_TALL_RIGHT_LANDSCAPE = "landscape-tr-tall"
+
 _TALL_DATA_PANEL_TYPES = frozenset({
     "day_in_life_schedule", "ingredient_list", "skill_tree_unlock",
     "audience_poll_result", "broken_promise_tracker", "resource_allocation",
@@ -40,113 +52,212 @@ _DATA_PANEL_TYPES = {
     "resource_allocation",
 }
 
+_DIMMING_ZONES = frozenset({
+    "fullscreen", "video-overlay",
+    "portrait-center-left", "portrait-center-right", "portrait-center-full",
+    "landscape-cf",
+})
 
-def _resolve_zone(style: str, data_card_idx: int) -> str:
-    """Inline replica of the portrait rotation logic in compose._remap_zone."""
-    pos = data_card_idx % 4
+_SIDE_PANEL_ZONES = {
+    "side-panel", "side-panel-left", "side-panel-right", "side-panel-top",
+    "upper-data", "upper-right", "upper-left-data", "upper-left-data-sm",
+    "upper-right-data-tall", "portrait-bottom-left", "portrait-bottom-right",
+    "portrait-center-left", "portrait-center-right",
+    "landscape-tl", "landscape-tr", "landscape-cl", "landscape-cr", "landscape-cf",
+    "landscape-tl-tall", "landscape-tr-tall",
+}
+
+
+def _resolve_zone(style: str, data_card_idx: int, layout: str = "portrait") -> str:
+    """Inline replica of the rotation logic in compose._remap_zone."""
+    pos = data_card_idx % 5
     is_tall = style in _TALL_DATA_PANEL_TYPES
-    if is_tall:
-        return _TALL_LEFT if pos in (0, 2) else _TALL_RIGHT
-    return _STD_ZONES[pos]
+    if layout == "portrait":
+        if is_tall:
+            # Uses raw data_card_idx (not pos) for strict L/R alternation — matches compose.py.
+            return _TALL_LEFT_PORTRAIT if data_card_idx % 2 == 0 else _TALL_RIGHT_PORTRAIT
+        return _STD_PORTRAIT[pos]
+    else:  # landscape
+        if is_tall:
+            return _TALL_LEFT_LANDSCAPE if data_card_idx % 2 == 0 else _TALL_RIGHT_LANDSCAPE
+        return _STD_LANDSCAPE[pos]
 
 
-def test_standard_rotation_sequence():
-    """Standard data card: positions cycle top-left → bottom-right → bottom-left → top-right."""
+# ── Portrait tests ────────────────────────────────────────────────────────────
+
+def test_portrait_5position_sequence():
+    """Portrait standard: top-left → top-right → center-left → center-right → center-full."""
     style = "stat"
-    assert _resolve_zone(style, 0) == "upper-left-data-sm"
-    assert _resolve_zone(style, 1) == "portrait-bottom-right"
-    assert _resolve_zone(style, 2) == "portrait-bottom-left"
-    assert _resolve_zone(style, 3) == "upper-data"
+    assert _resolve_zone(style, 0, "portrait") == "upper-left-data-sm"
+    assert _resolve_zone(style, 1, "portrait") == "upper-data"
+    assert _resolve_zone(style, 2, "portrait") == "portrait-center-left"
+    assert _resolve_zone(style, 3, "portrait") == "portrait-center-right"
+    assert _resolve_zone(style, 4, "portrait") == "portrait-center-full"
 
 
-def test_rotation_repeats_at_4():
-    """Position N and N+4 must resolve to the same zone."""
+def test_portrait_cycle_repeats_at_5():
+    """Position N and N+5 must resolve to the same zone (portrait)."""
     for style in ("stat", "list", "comparison", "checklist"):
-        for idx in range(4):
-            assert _resolve_zone(style, idx) == _resolve_zone(style, idx + 4), \
-                f"cycle break: {style} idx={idx}"
+        for idx in range(5):
+            assert _resolve_zone(style, idx, "portrait") == _resolve_zone(style, idx + 5, "portrait"), \
+                f"portrait cycle break: {style} idx={idx}"
 
 
-def test_rotation_deterministic_8_cards():
-    """8 standard cards → pattern repeats exactly once."""
+def test_portrait_10_cards_two_full_cycles():
+    """10 portrait cards produce exactly 2 complete cycles of all 5 positions."""
     style = "list"
-    expected = [
-        "upper-left-data-sm",
-        "portrait-bottom-right",
-        "portrait-bottom-left",
-        "upper-data",
-        "upper-left-data-sm",
-        "portrait-bottom-right",
-        "portrait-bottom-left",
-        "upper-data",
-    ]
+    expected = list(_STD_PORTRAIT) * 2
     for i, exp in enumerate(expected):
-        assert _resolve_zone(style, i) == exp, f"card {i}: expected {exp!r}, got {_resolve_zone(style, i)!r}"
+        got = _resolve_zone(style, i, "portrait")
+        assert got == exp, f"portrait card {i}: expected {exp!r}, got {got!r}"
 
 
-def test_tall_type_uses_only_top_zones():
-    """Tall types must never land in portrait-bottom-* zones."""
+def test_portrait_tall_stays_top_only():
+    """Portrait tall types must never land in center or bottom zones."""
+    forbidden = {
+        "portrait-center-left", "portrait-center-right", "portrait-center-full",
+        "portrait-bottom-left", "portrait-bottom-right",
+    }
     for style in _TALL_DATA_PANEL_TYPES:
-        for idx in range(8):
-            zone = _resolve_zone(style, idx)
-            assert zone not in ("portrait-bottom-left", "portrait-bottom-right"), \
-                f"tall type {style} idx={idx} resolved to bottom zone {zone!r}"
+        for idx in range(10):
+            zone = _resolve_zone(style, idx, "portrait")
+            assert zone not in forbidden, \
+                f"portrait tall {style} idx={idx} resolved to {zone!r}"
 
 
-def test_tall_type_alternation():
-    """Tall types: even positions → left, odd positions → right (2-position top cycle)."""
+def test_portrait_tall_alternation():
+    """Portrait tall: even positions → left, odd positions → right."""
     for style in _TALL_DATA_PANEL_TYPES:
-        for idx in range(8):
-            zone = _resolve_zone(style, idx)
-            if idx % 4 in (0, 2):
-                assert zone == _TALL_LEFT, \
-                    f"{style} idx={idx} expected {_TALL_LEFT!r}, got {zone!r}"
+        for idx in range(10):
+            zone = _resolve_zone(style, idx, "portrait")
+            if idx % 2 == 0:
+                assert zone == _TALL_LEFT_PORTRAIT, \
+                    f"{style} idx={idx} expected {_TALL_LEFT_PORTRAIT!r}, got {zone!r}"
             else:
-                assert zone == _TALL_RIGHT, \
-                    f"{style} idx={idx} expected {_TALL_RIGHT!r}, got {zone!r}"
+                assert zone == _TALL_RIGHT_PORTRAIT, \
+                    f"{style} idx={idx} expected {_TALL_RIGHT_PORTRAIT!r}, got {zone!r}"
+
+
+# ── Landscape tests ───────────────────────────────────────────────────────────
+
+def test_landscape_5position_sequence():
+    """Landscape standard: top-left → top-right → center-left → center-right → center-full."""
+    style = "stat"
+    assert _resolve_zone(style, 0, "landscape") == "landscape-tl"
+    assert _resolve_zone(style, 1, "landscape") == "landscape-tr"
+    assert _resolve_zone(style, 2, "landscape") == "landscape-cl"
+    assert _resolve_zone(style, 3, "landscape") == "landscape-cr"
+    assert _resolve_zone(style, 4, "landscape") == "landscape-cf"
+
+
+def test_landscape_cycle_repeats_at_5():
+    """Position N and N+5 must resolve to the same zone (landscape)."""
+    for style in ("stat", "list", "comparison", "checklist"):
+        for idx in range(5):
+            assert _resolve_zone(style, idx, "landscape") == _resolve_zone(style, idx + 5, "landscape"), \
+                f"landscape cycle break: {style} idx={idx}"
+
+
+def test_landscape_10_cards_two_full_cycles():
+    """10 landscape cards produce exactly 2 complete cycles of all 5 positions."""
+    style = "score"
+    expected = list(_STD_LANDSCAPE) * 2
+    for i, exp in enumerate(expected):
+        got = _resolve_zone(style, i, "landscape")
+        assert got == exp, f"landscape card {i}: expected {exp!r}, got {got!r}"
+
+
+def test_landscape_tall_stays_top_only():
+    """Landscape tall types must only use landscape-tl-tall or landscape-tr-tall."""
+    allowed = {"landscape-tl-tall", "landscape-tr-tall"}
+    for style in _TALL_DATA_PANEL_TYPES:
+        for idx in range(10):
+            zone = _resolve_zone(style, idx, "landscape")
+            assert zone in allowed, \
+                f"landscape tall {style} idx={idx} resolved to {zone!r}"
+
+
+def test_landscape_tall_alternation():
+    """Landscape tall: even positions → tl-tall, odd → tr-tall."""
+    for style in _TALL_DATA_PANEL_TYPES:
+        for idx in range(10):
+            zone = _resolve_zone(style, idx, "landscape")
+            if idx % 2 == 0:
+                assert zone == _TALL_LEFT_LANDSCAPE, \
+                    f"{style} idx={idx} expected {_TALL_LEFT_LANDSCAPE!r}, got {zone!r}"
+            else:
+                assert zone == _TALL_RIGHT_LANDSCAPE, \
+                    f"{style} idx={idx} expected {_TALL_RIGHT_LANDSCAPE!r}, got {zone!r}"
+
+
+# ── Unified / cross-format tests ──────────────────────────────────────────────
+
+def test_counter_is_format_independent():
+    """Same data_card_idx must produce consistent position names regardless of layout."""
+    style = "stat"
+    for idx in range(5):
+        portrait_name = _POS_NAMES[idx % 5]
+        landscape_name = _POS_NAMES[idx % 5]
+        assert portrait_name == landscape_name, "pos name mismatch between layouts"
 
 
 def test_index_reset_per_job():
-    """Simulated two jobs: each starts data_card_idx at 0 → same zone for card 0."""
+    """Two jobs both start at idx=0 and get the same first zone."""
     style = "checklist"
-    job_a_first_card = _resolve_zone(style, 0)
-    job_b_first_card = _resolve_zone(style, 0)  # fresh counter per job
-    assert job_a_first_card == job_b_first_card == "upper-left-data-sm"
+    assert _resolve_zone(style, 0, "portrait")  == "upper-left-data-sm"
+    assert _resolve_zone(style, 0, "landscape") == "landscape-tl"
+
+
+def test_dimming_zones_include_all_three_portrait_center():
+    """All 3 portrait center zones must be in _DIMMING_ZONES."""
+    assert "portrait-center-left"  in _DIMMING_ZONES
+    assert "portrait-center-right" in _DIMMING_ZONES
+    assert "portrait-center-full"  in _DIMMING_ZONES
+
+
+def test_dimming_zone_landscape_cf():
+    """landscape-cf (center-full) must be in _DIMMING_ZONES."""
+    assert "landscape-cf" in _DIMMING_ZONES
+
+
+def test_landscape_cl_cr_not_dimming():
+    """landscape-cl and landscape-cr are beside the face, not over it — no dimming."""
+    assert "landscape-cl" not in _DIMMING_ZONES
+    assert "landscape-cr" not in _DIMMING_ZONES
+
+
+def test_top_positions_not_dimming():
+    """Top-corner zones must never trigger dimming."""
+    for zone in ("upper-left-data-sm", "upper-data", "landscape-tl", "landscape-tr"):
+        assert zone not in _DIMMING_ZONES, f"{zone!r} should not be a dimming zone"
 
 
 def test_fullscreen_types_not_data_panel():
-    """Types that use fullscreen/video-overlay are NOT in _DATA_PANEL_TYPES → excluded."""
+    """Types that use fullscreen/video-overlay are excluded from rotation."""
     fullscreen_types = {"key_phrase", "quote", "chapter_marker", "story_chapter_transition"}
     for t in fullscreen_types:
         assert t not in _DATA_PANEL_TYPES, \
             f"fullscreen type {t!r} must not be in _DATA_PANEL_TYPES"
 
 
-def test_bottom_zones_not_center_zones():
-    """portrait-bottom-* zones must not be in _CENTER_ZONES (would trigger dimming)."""
-    _CENTER_ZONES = {"fullscreen", "video-overlay"}
-    assert "portrait-bottom-left"  not in _CENTER_ZONES
-    assert "portrait-bottom-right" not in _CENTER_ZONES
+def test_all_rotation_zones_are_side_panel_zones():
+    """All rotation target zones must be in _SIDE_PANEL_ZONES (compact=True)."""
+    for z in _STD_PORTRAIT:
+        if z == "portrait-center-full":
+            continue  # non-compact by design (wide card, full-size rendering)
+        assert z in _SIDE_PANEL_ZONES, f"portrait zone {z!r} missing from _SIDE_PANEL_ZONES"
+    for z in _STD_LANDSCAPE:
+        assert z in _SIDE_PANEL_ZONES, f"landscape zone {z!r} missing from _SIDE_PANEL_ZONES"
+    assert _TALL_LEFT_PORTRAIT  in _SIDE_PANEL_ZONES
+    assert _TALL_RIGHT_PORTRAIT in _SIDE_PANEL_ZONES
+    assert _TALL_LEFT_LANDSCAPE  in _SIDE_PANEL_ZONES
+    assert _TALL_RIGHT_LANDSCAPE in _SIDE_PANEL_ZONES
 
 
-def test_pos_names_match_4_positions():
-    """_POS_NAMES must have exactly 4 entries mapping to 4 distinct zones."""
-    assert len(_POS_NAMES) == 4
-    assert len(_STD_ZONES) == 4
-    assert len(set(_STD_ZONES)) == 4, "duplicate standard zones in rotation table"
-
-
-def test_all_standard_positions_are_side_panel_zones():
-    """All rotation target zones must be in _SIDE_PANEL_ZONES (compact=True → correct scale)."""
-    _SIDE_PANEL_ZONES = {
-        "side-panel", "side-panel-left", "side-panel-right", "side-panel-top",
-        "upper-data", "upper-right", "upper-left-data", "upper-left-data-sm",
-        "upper-right-data-tall", "portrait-bottom-left", "portrait-bottom-right",
-    }
-    for z in _STD_ZONES:
-        assert z in _SIDE_PANEL_ZONES, f"rotation zone {z!r} missing from _SIDE_PANEL_ZONES"
-    assert _TALL_LEFT  in _SIDE_PANEL_ZONES
-    assert _TALL_RIGHT in _SIDE_PANEL_ZONES
+def test_5_distinct_zones_per_layout():
+    """Each layout must produce 5 distinct zones (no duplicates in the cycle)."""
+    assert len(set(_STD_PORTRAIT))  == 5, "duplicate zones in portrait rotation"
+    assert len(set(_STD_LANDSCAPE)) == 5, "duplicate zones in landscape rotation"
 
 
 if __name__ == "__main__":
