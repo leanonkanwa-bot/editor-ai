@@ -325,8 +325,16 @@ function loadVideoLibrary() {
       if (_cachedUsage.period === "lifetime") {
         noticeEl.innerHTML =
           "Tu as utilisé ta vidéo d'essai. " +
-          '<a href="/#pricing" style="color:#FF7751;text-decoration:none;font-weight:600">Passe à Starter</a>' +
-          " pour continuer — 15 vidéos par mois.";
+          '<a id="noticeStarterBtn" href="#" style="color:#FF7751;text-decoration:none;font-weight:600">Passe à Starter</a>' +
+          " pour continuer, 15 vidéos par mois.";
+        const _nsb = noticeEl.querySelector("#noticeStarterBtn");
+        if (_nsb) _nsb.addEventListener("click", function(e) {
+          e.preventDefault();
+          startCheckout("starter").catch(function(err) {
+            console.error("checkout failed:", err);
+            alert("Impossible de démarrer le paiement. Réessayez ou contactez hello@leanretention.com");
+          });
+        });
       } else {
         const now = new Date();
         const nextReset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
