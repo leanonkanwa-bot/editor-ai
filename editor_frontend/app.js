@@ -603,9 +603,11 @@ async function loadPlanUsage() {
     if (!res.ok) return;
     const u = await res.json();
     _cachedUsage = u;
-    nameEl.textContent = u.plan_label || u.plan;
-    const period = u.period === "monthly" ? " ce mois" : " (essai)";
-    usageEl.textContent = `${u.used}/${u.limit} vidéos${period}`;
+    var _t = window.t || function(k) { return k; };
+    var _planNames = { free: _t("plan_free_name") };
+    nameEl.textContent = _planNames[u.plan] || u.plan_label || u.plan;
+    var _period = u.period === "monthly" ? (" " + _t("usage_period_monthly")) : (" " + _t("usage_period_trial"));
+    usageEl.textContent = u.used + "/" + u.limit + " " + _t("usage_videos") + _period;
     usageEl.style.color = u.exceeded ? "#ff5c7a" : "var(--text-secondary)";
   } catch {}
 }

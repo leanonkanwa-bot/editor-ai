@@ -169,6 +169,9 @@
       lib_tab_active: "Bibliothèque",
       lib_tab_trash: "Corbeille",
       lib_empty: "Aucune vidéo éditée pour l'instant.<br>Déposez votre première vidéo dans l'éditeur.",
+      usage_videos: "vidéos",
+      usage_period_monthly: "ce mois",
+      usage_period_trial: "(essai)",
 
       // ── INDEX — QUOTA NOTICE (lifetime trial exhausted) ──────────────────────
       quota_trial_used: "Tu as utilisé ta vidéo d'essai.",
@@ -348,6 +351,9 @@
       lib_tab_active: "Library",
       lib_tab_trash: "Trash",
       lib_empty: "No edited videos yet.<br>Drop your first video in the editor.",
+      usage_videos: "videos",
+      usage_period_monthly: "this month",
+      usage_period_trial: "(trial)",
 
       // ── INDEX — QUOTA NOTICE (lifetime trial exhausted) ──────────────────────
       quota_trial_used: "You have used your free trial video.",
