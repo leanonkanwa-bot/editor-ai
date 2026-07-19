@@ -419,8 +419,8 @@
           <span class="lle-lang-sep">|</span>
           <button class="lle-lang-btn" data-lang-btn="en" onclick="setLang('en')">EN</button>
         </div>
-        <a href="/api/auth/google/login" class="nav-link">Se connecter</a>
-        <a href="/api/auth/google/login" class="btn btn-salmon">Commencer gratuitement</a>
+        <a href="/api/auth/google/login" class="nav-link" data-i18n="nav_login">Se connecter</a>
+        <a href="/api/auth/google/login" class="btn btn-salmon" data-i18n="nav_cta">Commencer gratuitement</a>
       </div>
     </div>
   </nav>
@@ -429,27 +429,27 @@
   <section class="hero">
     <div class="hero-inner">
       <h1>
-        Vos vidéos brutes.
-        <span class="hero-glow">Éditées comme un pro.</span>
+        <span data-i18n="hero_title1">Vos vidéos brutes.</span>
+        <span class="hero-glow" data-i18n="hero_glow">Éditées comme un pro.</span>
       </h1>
-      <p class="hero-sub">LeanRetention analyse votre contenu, réécrit votre hook, supprime les silences et publie automatiquement.</p>
+      <p class="hero-sub" data-i18n="hero_sub">LeanRetention analyse votre contenu, réécrit votre hook, supprime les silences et publie automatiquement.</p>
       <div class="hero-ctas">
-        <a href="/api/auth/google/login" class="btn btn-salmon btn-lg">Éditer ma première vidéo →</a>
-        <a href="#how-it-works" class="btn btn-ghost btn-lg">Voir comment ça marche</a>
+        <a href="/api/auth/google/login" class="btn btn-salmon btn-lg" data-i18n="hero_cta1">Éditer ma première vidéo →</a>
+        <a href="#how-it-works" class="btn btn-ghost btn-lg" data-i18n="hero_cta2">Voir comment ça marche</a>
       </div>
       <div class="hero-trust">
-        <span><span class="check">✓</span> Première vidéo gratuite</span>
-        <span><span class="check">✓</span> Sans carte bancaire</span>
-        <span><span class="check">✓</span> Résultats en 3 minutes</span>
+        <span><span class="check">✓</span> <span data-i18n="trust_free">Première vidéo gratuite</span></span>
+        <span><span class="check">✓</span> <span data-i18n="trust_no_card">Sans carte bancaire</span></span>
+        <span><span class="check">✓</span> <span data-i18n="trust_time">Résultats en 3 minutes</span></span>
       </div>
 
       <div class="hero-demo">
         <div class="demo-col">
-          <span class="demo-label demo-label-before">Avant</span>
+          <span class="demo-label demo-label-before" data-i18n="demo_before">Avant</span>
           <video class="demo-vid" src="/demo/before" autoplay muted loop playsinline></video>
         </div>
         <div class="demo-col demo-col--after">
-          <span class="demo-label demo-label-after">Après</span>
+          <span class="demo-label demo-label-after" data-i18n="demo_after">Après</span>
           <video class="demo-vid" src="/demo/after" autoplay muted loop playsinline></video>
         </div>
       </div>
@@ -459,8 +459,8 @@
   <!-- EMAIL CAPTURE -->
   <section class="email-section" id="email-capture">
     <div class="email-card fade">
-      <h2>Obtenez votre première vidéo éditée gratuitement</h2>
-      <p>Sans carte bancaire. Connexion en un clic.</p>
+      <h2 data-i18n="email_title">Obtenez votre première vidéo éditée gratuitement</h2>
+      <p data-i18n="email_sub">Sans carte bancaire. Connexion en un clic.</p>
       <a href="/api/auth/google/login" class="btn-google">
         <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
           <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
@@ -468,7 +468,7 @@
           <path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/>
           <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>
         </svg>
-        Continuer avec Google
+        <span data-i18n="google_btn">Continuer avec Google</span>
       </a>
     </div>
   </section>
@@ -476,16 +476,16 @@
   <!-- HOW IT WORKS -->
   <section class="section" id="how-it-works">
     <div class="container">
-      <span class="section-tag">Comment ça marche</span>
-      <h2 class="section-title">De la vidéo brute au contenu viral<br>en 3 étapes</h2>
-      <p class="section-sub">Aucune compétence en montage requise. L'IA gère tout de A à Z.</p>
+      <span class="section-tag" data-i18n="how_tag">Comment ça marche</span>
+      <h2 class="section-title" data-i18n-html="how_title">De la vidéo brute au contenu viral<br>en 3 étapes</h2>
+      <p class="section-sub" data-i18n="how_sub">Aucune compétence en montage requise. L'IA gère tout de A à Z.</p>
       <div class="steps-list">
 
         <div class="step-row fade">
           <div class="step-text">
             <span class="step-num">01</span>
-            <h3>Uploadez votre vidéo brute</h3>
-            <p>Glissez-déposez votre fichier mp4, mov ou webm, jusqu'à 20 Go. Notre upload sécurisé par chunks gère les fichiers lourds sans problème.</p>
+            <h3 data-i18n="step1_title">Uploadez votre vidéo brute</h3>
+            <p data-i18n="step1_desc">Glissez-déposez votre fichier mp4, mov ou webm, jusqu'à 20 Go. Notre upload sécurisé par chunks gère les fichiers lourds sans problème.</p>
           </div>
           <div class="step-visual">
             <img class="step-img" src="/public/step-01.png" alt="Interface d'upload LeanRetention">
@@ -495,8 +495,8 @@
         <div class="step-row reverse fade">
           <div class="step-text">
             <span class="step-num">02</span>
-            <h3>L'IA analyse et édite automatiquement</h3>
-            <p>Transcription, réécriture du hook, suppression des silences, ajout de captions et de graphics IA : tout en quelques minutes, pas des heures.</p>
+            <h3 data-i18n="step2_title">L'IA analyse et édite automatiquement</h3>
+            <p data-i18n="step2_desc">Transcription, réécriture du hook, suppression des silences, ajout de captions et de graphics IA : tout en quelques minutes, pas des heures.</p>
           </div>
           <div class="step-visual">
             <img class="step-img" src="/public/step-02.png" alt="L'IA analyse et édite automatiquement">
@@ -506,8 +506,8 @@
         <div class="step-row fade">
           <div class="step-text">
             <span class="step-num">03</span>
-            <h3>Téléchargez ou publiez directement</h3>
-            <p>Récupérez votre MP4 prêt à poster, ou publiez en 1 clic sur YouTube, TikTok, Instagram et LinkedIn.</p>
+            <h3 data-i18n="step3_title">Téléchargez ou publiez directement</h3>
+            <p data-i18n="step3_desc">Récupérez votre MP4 prêt à poster, ou publiez en 1 clic sur YouTube, TikTok, Instagram et LinkedIn.</p>
           </div>
           <div class="step-visual">
             <img class="step-img" src="/public/step-03.png" alt="Résultat final avec motion graphics et captions">
@@ -521,16 +521,16 @@
   <!-- FEATURES GRID -->
   <section class="section" style="padding-top:0" id="features">
     <div class="container">
-      <span class="section-tag">Fonctionnalités</span>
-      <h2 class="section-title">Tout ce dont un créateur a besoin</h2>
-      <p class="section-sub">Un seul outil. Six fonctionnalités qui remplacent une équipe entière.</p>
+      <span class="section-tag" data-i18n="feat_tag">Fonctionnalités</span>
+      <h2 class="section-title" data-i18n="feat_title">Tout ce dont un créateur a besoin</h2>
+      <p class="section-sub" data-i18n="feat_sub">Un seul outil. Six fonctionnalités qui remplacent une équipe entière.</p>
       <div class="features-grid">
-        <div class="feature-card fade"><div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 114 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></div><h3>Hook Rewriter</h3><p>L'IA réécrit les 3 premières secondes de votre vidéo pour maximiser la rétention dès le départ.</p></div>
-        <div class="feature-card fade"><div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg></div><h3>Suppression des silences</h3><p>Détecte et supprime automatiquement les pauses, hésitations et silences qui font décrocher vos viewers.</p></div>
-        <div class="feature-card fade"><div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="5" width="22" height="14" rx="2"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="16" x2="20" y2="16"/></svg></div><h3>Captions automatiques</h3><p>Sous-titres word-by-word précis en français, anglais, espagnol et plus encore.</p></div>
-        <div class="feature-card fade"><div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></div><h3>Graphics IA</h3><p>16 types de cartes graphiques animées : stats, timelines, comparaisons, listes, générées et synchronisées avec votre discours.</p></div>
-        <div class="feature-card fade"><div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="9" height="16" rx="1.5"/><rect x="14" y="7" width="8" height="10" rx="1.5"/></svg></div><h3>Export multi-formats</h3><p>Téléchargez votre vidéo prête en vertical 9:16 (TikTok/Reels) et horizontal 16:9 (YouTube), sans ré-éditer.</p></div>
-        <div class="feature-card fade"><div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div><h3>6 styles visuels</h3><p>Choisissez parmi 6 identités visuelles, du premium dark au manuscrit authentique, chacune avec ses propres animations et transitions.</p></div>
+        <div class="feature-card fade"><div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 114 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></div><h3>Hook Rewriter</h3><p data-i18n="feat1_desc">L'IA réécrit les 3 premières secondes de votre vidéo pour maximiser la rétention dès le départ.</p></div>
+        <div class="feature-card fade"><div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg></div><h3 data-i18n="feat2_title">Suppression des silences</h3><p data-i18n="feat2_desc">Détecte et supprime automatiquement les pauses, hésitations et silences qui font décrocher vos viewers.</p></div>
+        <div class="feature-card fade"><div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="5" width="22" height="14" rx="2"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="16" x2="20" y2="16"/></svg></div><h3 data-i18n="feat3_title">Captions automatiques</h3><p data-i18n="feat3_desc">Sous-titres word-by-word précis en français, anglais, espagnol et plus encore.</p></div>
+        <div class="feature-card fade"><div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></div><h3 data-i18n="feat4_title">Graphics IA</h3><p data-i18n="feat4_desc">16 types de cartes graphiques animées : stats, timelines, comparaisons, listes, générées et synchronisées avec votre discours.</p></div>
+        <div class="feature-card fade"><div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="9" height="16" rx="1.5"/><rect x="14" y="7" width="8" height="10" rx="1.5"/></svg></div><h3 data-i18n="feat5_title">Export multi-formats</h3><p data-i18n="feat5_desc">Téléchargez votre vidéo prête en vertical 9:16 (TikTok/Reels) et horizontal 16:9 (YouTube), sans ré-éditer.</p></div>
+        <div class="feature-card fade"><div class="feature-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></div><h3 data-i18n="feat6_title">6 styles visuels</h3><p data-i18n="feat6_desc">Choisissez parmi 6 identités visuelles, du premium dark au manuscrit authentique, chacune avec ses propres animations et transitions.</p></div>
       </div>
     </div>
   </section>
@@ -538,76 +538,76 @@
   <!-- PRICING -->
   <section class="section" style="padding-top:0" id="pricing">
     <div class="container">
-      <span class="section-tag">Tarifs</span>
-      <h2 class="section-title">Simple. Transparent. Sans surprise.</h2>
-      <p class="section-sub" style="margin-bottom:3rem">Commencez gratuitement. Évoluez quand vous en avez besoin.</p>
+      <span class="section-tag" data-i18n="pricing_tag">Tarifs</span>
+      <h2 class="section-title" data-i18n="pricing_title">Simple. Transparent. Sans surprise.</h2>
+      <p class="section-sub" style="margin-bottom:3rem" data-i18n="pricing_sub">Commencez gratuitement. Évoluez quand vous en avez besoin.</p>
       <!-- PRICING SOURCE OF TRUTH: Essai 0€/1 vid, Starter 29€/15 vid, Pro 79€/50 vid, Agency 199€/150 vid -->
       <div class="pricing-grid" style="grid-template-columns:repeat(4,1fr)">
 
         <!-- Essai gratuit -->
         <div class="pricing-card fade">
           <div>
-            <div class="pricing-name">Essai gratuit</div>
+            <div class="pricing-name" data-i18n="plan_free_name">Essai gratuit</div>
             <div class="pricing-price">0<span class="pricing-period">€</span></div>
-            <div class="pricing-desc" style="margin-top:.5rem">Testez avec 1 vidéo, sans engagement.</div>
+            <div class="pricing-desc" style="margin-top:.5rem" data-i18n="plan_free_desc">Testez avec 1 vidéo, sans engagement.</div>
           </div>
           <ul class="pricing-features">
-            <li><span class="pricing-check">✓</span> 1 vidéo (unique)</li>
-            <li><span class="pricing-check">✓</span> Tous les styles visuels</li>
-            <li><span class="pricing-check">✓</span> Captions IA</li>
+            <li><span class="pricing-check">✓</span> <span data-i18n="plan_free_f1">1 vidéo (unique)</span></li>
+            <li><span class="pricing-check">✓</span> <span data-i18n="plan_free_f2">Tous les styles visuels</span></li>
+            <li><span class="pricing-check">✓</span> <span data-i18n="plan_free_f3">Captions IA</span></li>
             <li><span class="pricing-check">✓</span> Export MP4 1080p</li>
           </ul>
-          <a href="/api/auth/google/login" class="pricing-btn pricing-btn-ghost">Essayer gratuitement</a>
+          <a href="/api/auth/google/login" class="pricing-btn pricing-btn-ghost" data-i18n="plan_free_btn">Essayer gratuitement</a>
         </div>
 
         <!-- Starter -->
         <div class="pricing-card fade">
           <div>
             <div class="pricing-name">Starter</div>
-            <div class="pricing-price"><sup>€</sup>29<span class="pricing-period">/ mois</span></div>
-            <div class="pricing-desc" style="margin-top:.5rem">Pour le coach solo qui démarre sa présence vidéo.</div>
+            <div class="pricing-price"><sup>€</sup>29<span class="pricing-period" data-i18n="pricing_per_month">/ mois</span></div>
+            <div class="pricing-desc" style="margin-top:.5rem" data-i18n="plan_starter_desc">Pour le coach solo qui démarre sa présence vidéo.</div>
           </div>
           <ul class="pricing-features">
             <li><span class="pricing-check">✓</span> <strong>15 vidéos / mois</strong></li>
-            <li><span class="pricing-check">✓</span> 6 styles visuels</li>
-            <li><span class="pricing-check">✓</span> Captions + Hook Rewriter</li>
+            <li><span class="pricing-check">✓</span> <span data-i18n="plan_f_6styles">6 styles visuels</span></li>
+            <li><span class="pricing-check">✓</span> <span data-i18n="plan_f_captions_hook">Captions + Hook Rewriter</span></li>
             <li><span class="pricing-check">✓</span> Export 1080p</li>
           </ul>
-          <a href="/api/auth/google/login" class="pricing-btn pricing-btn-ghost">Choisir Starter</a>
+          <a href="/api/auth/google/login" class="pricing-btn pricing-btn-ghost" data-i18n="plan_starter_btn">Choisir Starter</a>
         </div>
 
         <!-- Pro -->
         <div class="pricing-card featured fade">
           <div>
-            <span class="pricing-badge">POPULAIRE</span>
+            <span class="pricing-badge" data-i18n="pricing_popular">POPULAIRE</span>
             <div class="pricing-name">Pro</div>
-            <div class="pricing-price"><sup>€</sup>79<span class="pricing-period">/ mois</span></div>
-            <div class="pricing-desc" style="margin-top:.5rem">Pour le créateur établi qui poste quotidiennement.</div>
+            <div class="pricing-price"><sup>€</sup>79<span class="pricing-period" data-i18n="pricing_per_month">/ mois</span></div>
+            <div class="pricing-desc" style="margin-top:.5rem" data-i18n="plan_pro_desc">Pour le créateur établi qui poste quotidiennement.</div>
             <video class="pricing-preview-vid" src="/demo/after" autoplay muted loop playsinline></video>
           </div>
           <ul class="pricing-features">
             <li><span class="pricing-check">✓</span> <strong>50 vidéos / mois</strong></li>
-            <li><span class="pricing-check">✓</span> Graphics IA</li>
-            <li><span class="pricing-check">✓</span> Captions + Hook Rewriter</li>
-            <li><span class="pricing-check">✓</span> Support prioritaire</li>
+            <li><span class="pricing-check">✓</span> <span data-i18n="plan_f_graphics">Graphics IA</span></li>
+            <li><span class="pricing-check">✓</span> <span data-i18n="plan_f_captions_hook">Captions + Hook Rewriter</span></li>
+            <li><span class="pricing-check">✓</span> <span data-i18n="plan_f_priority_support">Support prioritaire</span></li>
           </ul>
-          <a href="/api/auth/google/login" class="pricing-btn pricing-btn-salmon">Choisir Pro →</a>
+          <a href="/api/auth/google/login" class="pricing-btn pricing-btn-salmon" data-i18n="plan_pro_btn">Choisir Pro →</a>
         </div>
 
         <!-- Agency -->
         <div class="pricing-card fade">
           <div>
             <div class="pricing-name">Agency</div>
-            <div class="pricing-price"><sup>€</sup>199<span class="pricing-period">/ mois</span></div>
-            <div class="pricing-desc" style="margin-top:.5rem">Pour les agences gérant plusieurs créateurs.</div>
+            <div class="pricing-price"><sup>€</sup>199<span class="pricing-period" data-i18n="pricing_per_month">/ mois</span></div>
+            <div class="pricing-desc" style="margin-top:.5rem" data-i18n="plan_agency_desc">Pour les agences gérant plusieurs créateurs.</div>
           </div>
           <ul class="pricing-features">
             <li><span class="pricing-check">✓</span> <strong>150 vidéos / mois</strong></li>
-            <li><span class="pricing-check">✓</span> Graphics IA</li>
-            <li><span class="pricing-check">✓</span> Captions + Hook Rewriter</li>
-            <li><span class="pricing-check">✓</span> Multi-comptes</li>
+            <li><span class="pricing-check">✓</span> <span data-i18n="plan_f_graphics">Graphics IA</span></li>
+            <li><span class="pricing-check">✓</span> <span data-i18n="plan_f_captions_hook">Captions + Hook Rewriter</span></li>
+            <li><span class="pricing-check">✓</span> <span data-i18n="plan_f_multi_accounts">Multi-comptes</span></li>
           </ul>
-          <a class="pricing-btn pricing-btn-ghost" href="mailto:contact@leanretention.com" style="text-align:center;text-decoration:none">Contacter l'équipe →</a>
+          <a class="pricing-btn pricing-btn-ghost" href="mailto:contact@leanretention.com" style="text-align:center;text-decoration:none" data-i18n="plan_agency_btn">Contacter l'équipe →</a>
         </div>
 
       </div>
@@ -617,17 +617,17 @@
   <!-- FAQ -->
   <section class="section" style="padding-top:0" id="faq">
     <div class="container" style="max-width:700px">
-      <span class="section-tag">FAQ</span>
-      <h2 class="section-title">Questions fréquentes</h2>
-      <p class="section-sub" style="margin-bottom:2.5rem">Tout ce que vous devez savoir avant de commencer.</p>
+      <span class="section-tag" data-i18n="faq_tag">FAQ</span>
+      <h2 class="section-title" data-i18n="faq_title">Questions fréquentes</h2>
+      <p class="section-sub" style="margin-bottom:2.5rem" data-i18n="faq_sub">Tout ce que vous devez savoir avant de commencer.</p>
 
       <div class="faq-list">
         <div class="faq-item">
           <button class="faq-question">
-            Mes vidéos sont-elles stockées sur vos serveurs ?
+            <span data-i18n="faq1_q">Mes vidéos sont-elles stockées sur vos serveurs ?</span>
             <span class="faq-arrow">↓</span>
           </button>
-          <div class="faq-answer">Vos vidéos sont traitées de façon sécurisée et supprimées automatiquement après 24h. Nous ne partageons jamais votre contenu avec des tiers.</div>
+          <div class="faq-answer" data-i18n="faq1_answer">Vos vidéos sont traitées de façon sécurisée et supprimées automatiquement après 24h. Nous ne partageons jamais votre contenu avec des tiers.</div>
         </div>
       </div>
     </div>
@@ -636,8 +636,8 @@
   <!-- FINAL CTA -->
   <section class="cta-section" id="cta">
     <div class="cta-inner">
-      <h2>Prêt à arrêter de perdre<br>des heures à éditer&nbsp;?</h2>
-      <p>Première vidéo offerte. Aucune carte requise.</p>
+      <h2 data-i18n-html="cta_title">Prêt à arrêter de perdre<br>des heures à éditer&nbsp;?</h2>
+      <p data-i18n="cta_sub">Première vidéo offerte. Aucune carte requise.</p>
       <div class="email-card fade" style="max-width:520px;margin:0 auto">
         <a href="/api/auth/google/login" class="btn-google" style="width:100%">
           <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
@@ -646,7 +646,7 @@
             <path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/>
             <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>
           </svg>
-          Continuer avec Google
+          <span data-i18n="google_btn">Continuer avec Google</span>
         </a>
       </div>
     </div>
@@ -657,11 +657,11 @@
     <div class="footer-inner">
       <a class="logo" href="/"><img src="/public/logo.png" alt="" height="40" style="display:block;width:auto" /><span class="logo-text"><span class="lean">Lean</span><span class="ret">Retention</span></span></a>
       <div class="footer-links">
-        <a href="#features">Fonctionnalités</a>
-        <a href="#pricing">Tarifs</a>
-        <a href="mailto:contact@leanretention.com">Contact</a>
+        <a href="#features" data-i18n="footer_features">Fonctionnalités</a>
+        <a href="#pricing" data-i18n="footer_pricing">Tarifs</a>
+        <a href="mailto:contact@leanretention.com" data-i18n="footer_contact">Contact</a>
       </div>
-      <span class="footer-copy">© 2026 LeanRetention. Tous droits réservés.</span>
+      <span class="footer-copy" data-i18n="footer_copy">© 2026 LeanRetention. Tous droits réservés.</span>
     </div>
   </footer>
 

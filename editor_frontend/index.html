@@ -743,10 +743,10 @@
     <aside class="sidebar">
       <a class="logo" href="#" onclick="event.preventDefault();switchSection('dashboardSection')"><img src="/public/logo.png" alt="" height="40" style="display:block;width:auto" /><span class="logo-text"><span class="lean">Lean</span><span class="ret">Retention</span></span></a>
       <div class="sidebar-nav" id="navTabs">
-        <button class="nav-tab active" data-target="editorArea">Éditeur</button>
+        <button class="nav-tab active" data-target="editorArea" data-i18n="tab_editor">Éditeur</button>
         <button class="nav-tab" data-target="dashboardSection">Dashboard</button>
         <button class="nav-tab" data-target="leanBriefSection">LeanBrief</button>
-        <button class="nav-tab" data-target="profileSection">Profil</button>
+        <button class="nav-tab" data-target="profileSection" data-i18n="tab_profile">Profil</button>
       </div>
       <div class="sidebar-bottom">
         <button class="btn-upgrade">Upgrade</button>
@@ -771,18 +771,18 @@
         <h4>Notifications</h4>
         <button id="notifClose" style="background:none;border:none;color:var(--text-secondary);cursor:pointer;font-size:1rem">×</button>
       </div>
-      <div id="notifList"><p class="notif-empty">Aucune notification</p></div>
-      <button class="notif-clear" id="notifClearBtn">Tout effacer</button>
+      <div id="notifList"><p class="notif-empty" data-i18n="notif_empty">Aucune notification</p></div>
+      <button class="notif-clear" id="notifClearBtn" data-i18n="notif_clear">Tout effacer</button>
     </div>
 
     <main>
       <!-- ── LOGIN ────────────────────────────────────────────── -->
       <div id="login" class="card hidden" style="margin-top:2rem">
-        <h2>Connexion requise</h2>
-        <p class="muted" style="margin-bottom:1rem">Entrez votre mot de passe pour accéder à l'éditeur.</p>
+        <h2 data-i18n="login_title">Connexion requise</h2>
+        <p class="muted" style="margin-bottom:1rem" data-i18n="login_sub">Entrez votre mot de passe pour accéder à l'éditeur.</p>
         <form id="loginForm" style="display:flex;flex-direction:column;gap:.75rem">
-          <input id="loginPwd" type="password" placeholder="Mot de passe" />
-          <button type="submit" class="btn-primary">Se connecter</button>
+          <input id="loginPwd" type="password" placeholder="Mot de passe" data-i18n-placeholder="login_pwd_ph" />
+          <button type="submit" class="btn-primary" data-i18n="login_btn">Se connecter</button>
           <p id="loginErr" class="err"></p>
         </form>
         <div id="retryBlock" class="hidden" style="margin-top:.75rem">
@@ -796,13 +796,13 @@
 
           <!-- Onboarding progress -->
           <div class="onboarding-card" id="onboardingCard" style="margin-top:1.5rem">
-            <div class="onboarding-card-title">Démarrage rapide</div>
+            <div class="onboarding-card-title" data-i18n="ob_card_title">Démarrage rapide</div>
             <div class="onboarding-steps">
-              <div class="ob-step" id="step-account"><div class="ob-icon"></div><span class="ob-label">Créer votre profil coach</span></div>
-              <div class="ob-step" id="step-first-video"><div class="ob-icon"></div><span class="ob-label">Éditer votre 1ère vidéo</span></div>
-              <div class="ob-step" id="step-brand"><div class="ob-icon"></div><span class="ob-label">Configurer votre identité de marque</span></div>
-              <div class="ob-step" id="step-5videos"><div class="ob-icon"></div><span class="ob-label">Atteindre 5 vidéos éditées</span></div>
-              <div class="ob-step" id="step-profile"><div class="ob-icon"></div><span class="ob-label">Compléter votre profil ICP</span></div>
+              <div class="ob-step" id="step-account"><div class="ob-icon"></div><span class="ob-label" data-i18n="ob_step1">Créer votre profil coach</span></div>
+              <div class="ob-step" id="step-first-video"><div class="ob-icon"></div><span class="ob-label" data-i18n="ob_step2">Éditer votre 1ère vidéo</span></div>
+              <div class="ob-step" id="step-brand"><div class="ob-icon"></div><span class="ob-label" data-i18n="ob_step3">Configurer votre identité de marque</span></div>
+              <div class="ob-step" id="step-5videos"><div class="ob-icon"></div><span class="ob-label" data-i18n="ob_step4">Atteindre 5 vidéos éditées</span></div>
+              <div class="ob-step" id="step-profile"><div class="ob-icon"></div><span class="ob-label" data-i18n="ob_step5">Compléter votre profil ICP</span></div>
             </div>
           </div>
 
@@ -822,24 +822,24 @@
                 <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
               </svg>
               <div id="dropLabel">Déposer votre vidéo ici</div>
-              <div class="drop-hint">MP4, MOV, MKV · Jusqu'à 4 Go</div>
+              <div class="drop-hint" data-i18n="drop_hint">MP4, MOV, MKV · Jusqu'à 4 Go</div>
             </div>
 
             <!-- Format -->
             <div class="format-pills">
               <div class="format-pill">
                 <input type="radio" name="format_hint" id="fmt-short" value="short" checked />
-                <label for="fmt-short">Court · Reels</label>
+                <label for="fmt-short" data-i18n="fmt_short">Court · Reels</label>
               </div>
               <div class="format-pill">
                 <input type="radio" name="format_hint" id="fmt-long" value="long" />
-                <label for="fmt-long">Long · YouTube</label>
+                <label for="fmt-long" data-i18n="fmt_long">Long · YouTube</label>
               </div>
             </div>
 
             <!-- Style Pack -->
             <div class="field">
-              <span class="section-label">Style visuel</span>
+              <span class="section-label" data-i18n="style_label">Style visuel</span>
               <div class="style-pack-grid" id="stylePackSelector">
                 <button type="button" class="style-pack-btn active" data-pack="lean_glass">
                   <div class="style-pack-preview">
@@ -848,7 +848,7 @@
                   </div>
                   <div class="style-pack-info">
                     <div class="sp-name">LeanGlass</div>
-                    <div class="sp-desc">Pour paraître l'autorité incontestée de ton secteur</div>
+                    <div class="sp-desc" data-i18n="pack_glass_desc">Pour paraître l'autorité incontestée de ton secteur</div>
                   </div>
                   <span class="sp-check">✓</span>
                 </button>
@@ -859,7 +859,7 @@
                   </div>
                   <div class="style-pack-info">
                     <div class="sp-name">LeanPaper</div>
-                    <div class="sp-desc">Pour qu'on te prenne au sérieux dès la première seconde</div>
+                    <div class="sp-desc" data-i18n="pack_paper_desc">Pour qu'on te prenne au sérieux dès la première seconde</div>
                   </div>
                   <span class="sp-check">✓</span>
                 </button>
@@ -870,7 +870,7 @@
                   </div>
                   <div class="style-pack-info">
                     <div class="sp-name">LeanVibe</div>
-                    <div class="sp-desc">Pour arrêter le scroll et faire exploser ton reach</div>
+                    <div class="sp-desc" data-i18n="pack_vibe_desc">Pour arrêter le scroll et faire exploser ton reach</div>
                   </div>
                   <span class="sp-check">✓</span>
                 </button>
@@ -881,7 +881,7 @@
                   </div>
                   <div class="style-pack-info">
                     <div class="sp-name">LeanLedger</div>
-                    <div class="sp-desc">Pour que les investisseurs et clients premium te fassent confiance</div>
+                    <div class="sp-desc" data-i18n="pack_ledger_desc">Pour que les investisseurs et clients premium te fassent confiance</div>
                   </div>
                   <span class="sp-check">✓</span>
                 </button>
@@ -892,7 +892,7 @@
                   </div>
                   <div class="style-pack-info">
                     <div class="sp-name">LeanCraft</div>
-                    <div class="sp-desc">Pour qu'on sente que c'est VRAIMENT toi qui parles</div>
+                    <div class="sp-desc" data-i18n="pack_craft_desc">Pour qu'on sente que c'est VRAIMENT toi qui parles</div>
                   </div>
                   <span class="sp-check">✓</span>
                 </button>
@@ -903,7 +903,7 @@
                   </div>
                   <div class="style-pack-info">
                     <div class="sp-name">LeanCinema</div>
-                    <div class="sp-desc">Pour transformer ton histoire en moment inoubliable</div>
+                    <div class="sp-desc" data-i18n="pack_cinema_desc">Pour transformer ton histoire en moment inoubliable</div>
                   </div>
                   <span class="sp-check">✓</span>
                 </button>
@@ -914,7 +914,7 @@
             <div style="margin-top:1rem">
               <button type="submit" class="btn-submit" id="submit">
                 <span class="btn-shimmer"></span>
-                <span class="btn-label">Éditer ma vidéo</span>
+                <span class="btn-label" data-i18n="editor_submit">Éditer ma vidéo</span>
               </button>
             </div>
           </form>
@@ -935,41 +935,41 @@
             <video id="player" controls playsinline></video>
 
             <a id="downloadLink" href="#" download class="btn-download-fmt fmt-primary" style="display:flex;align-items:center;justify-content:center;margin-bottom:1rem">
-              <span class="fmt-name">Télécharger</span>
+              <span class="fmt-name" data-i18n="result_download">Télécharger</span>
             </a>
 
             <div class="suggested-title" id="suggestedTitleResult" style="display:none"></div>
 
             <!-- CTR Titles -->
             <div id="ctrBlock" style="display:none;margin-bottom:1rem">
-              <span class="tag-label">Titres optimisés CTR</span>
+              <span class="tag-label" data-i18n="ctr_label">Titres optimisés CTR</span>
               <div id="ctrTitles"></div>
             </div>
 
-            <button class="details-toggle" id="detailsToggle">Voir plus</button>
+            <button class="details-toggle" id="detailsToggle" data-i18n="details_more">Voir plus</button>
             <div class="details-body" id="detailsBody">
 
               <!-- Caption editor -->
               <div class="caption-editor" id="captionEditorWrap" style="display:none">
-                <span class="section-label">Éditeur de captions</span>
+                <span class="section-label" data-i18n="caption_editor_label">Éditeur de captions</span>
                 <div class="caption-list" id="captionList"></div>
                 <div style="display:flex;gap:.5rem;margin-top:.6rem;align-items:center">
-                  <button class="btn-submit" id="reburnBtn" style="width:auto;padding:.5rem 1rem;height:auto;font-size:.8rem">Re-brûler les captions</button>
-                  <span id="reburnMsg" class="save-msg">Captions mis à jour !</span>
+                  <button class="btn-submit" id="reburnBtn" style="width:auto;padding:.5rem 1rem;height:auto;font-size:.8rem" data-i18n="reburn_btn">Re-brûler les captions</button>
+                  <span id="reburnMsg" class="save-msg" data-i18n="reburn_msg">Captions mis à jour !</span>
                 </div>
               </div>
 
               <!-- Auto-chapters -->
               <div class="chapters-section" id="chaptersSection" style="display:none;margin-top:.85rem">
-                <span class="section-label">Chapitres YouTube</span>
+                <span class="section-label" data-i18n="chapters_label">Chapitres YouTube</span>
                 <pre class="chapters-pre" id="chaptersOutput"></pre>
-                <button class="btn-copy-sm" id="copyChaptersBtn">Copier les chapitres</button>
+                <button class="btn-copy-sm" id="copyChaptersBtn" data-i18n="copy_chapters_btn">Copier les chapitres</button>
               </div>
 
               <!-- Description generator -->
               <div class="desc-gen-section" style="margin-top:.85rem">
                 <button class="desc-gen-btn" id="descGenBtn" type="button">
-                  <span id="descGenBtnLabel">Générer les descriptions</span>
+                  <span id="descGenBtnLabel" data-i18n="desc_gen_btn">Générer les descriptions</span>
                 </button>
                 <div id="descGenOutput" style="display:none">
                   <div class="desc-tabs">
@@ -980,26 +980,26 @@
                   </div>
                   <div id="desc-youtube" class="desc-platform active">
                     <div class="desc-output" id="desc-youtube-text"></div>
-                    <button class="btn-copy-sm" data-copy="desc-youtube-text">Copier</button>
+                    <button class="btn-copy-sm" data-copy="desc-youtube-text" data-i18n="copy_btn">Copier</button>
                   </div>
                   <div id="desc-tiktok" class="desc-platform">
                     <div class="desc-output" id="desc-tiktok-text"></div>
-                    <button class="btn-copy-sm" data-copy="desc-tiktok-text">Copier</button>
+                    <button class="btn-copy-sm" data-copy="desc-tiktok-text" data-i18n="copy_btn">Copier</button>
                   </div>
                   <div id="desc-instagram" class="desc-platform">
                     <div class="desc-output" id="desc-instagram-text"></div>
-                    <button class="btn-copy-sm" data-copy="desc-instagram-text">Copier</button>
+                    <button class="btn-copy-sm" data-copy="desc-instagram-text" data-i18n="copy_btn">Copier</button>
                   </div>
                   <div id="desc-linkedin" class="desc-platform">
                     <div class="desc-output" id="desc-linkedin-text"></div>
-                    <button class="btn-copy-sm" data-copy="desc-linkedin-text">Copier</button>
+                    <button class="btn-copy-sm" data-copy="desc-linkedin-text" data-i18n="copy_btn">Copier</button>
                   </div>
                 </div>
               </div>
 
               <!-- Platform descriptions -->
               <div class="publish-section">
-                <h3>Publier</h3>
+                <h3 data-i18n="publish_title">Publier</h3>
                 <div class="platform-grid">
                   <button class="platform-btn" data-platform="youtube"><span class="platform-dot" id="dot-youtube"></span>YouTube</button>
                   <button class="platform-btn" data-platform="tiktok"><span class="platform-dot" id="dot-tiktok"></span>TikTok</button>
@@ -1009,7 +1009,7 @@
                 <div id="publishMetaPreview" style="display:none;margin-bottom:.75rem">
                   <input type="text" id="publishTitle" placeholder="Titre de la publication" />
                 </div>
-                <button class="btn-submit" id="publishNowBtn" disabled style="margin-bottom:.5rem;height:40px;font-size:.82rem">Publier sur les plateformes sélectionnées</button>
+                <button class="btn-submit" id="publishNowBtn" disabled style="margin-bottom:.5rem;height:40px;font-size:.82rem" data-i18n="publish_btn">Publier sur les plateformes sélectionnées</button>
                 <p id="publishStatus" style="font-size:.78rem;color:var(--text-secondary)"></p>
               </div>
 
@@ -1026,25 +1026,25 @@
         <div class="dash-stats" style="grid-template-columns:repeat(3,1fr)">
           <div class="dash-stat">
             <span class="big" id="dashVideos">0</span>
-            <span class="lbl">Vidéos éditées</span>
+            <span class="lbl" data-i18n="stat_videos">Vidéos éditées</span>
           </div>
           <div class="dash-stat">
             <span class="big" id="dashTimeSaved">0h</span>
-            <span class="lbl">Temps économisé</span>
+            <span class="lbl" data-i18n="stat_time">Temps économisé</span>
           </div>
           <div class="dash-stat">
             <span class="big" id="dashViews">—</span>
-            <span class="lbl">Ce mois</span>
+            <span class="lbl" data-i18n="stat_month">Ce mois</span>
           </div>
         </div>
 
-        <button class="dash-edit-btn" id="dashEditBtn">Nouvelle vidéo</button>
+        <button class="dash-edit-btn" id="dashEditBtn" data-i18n="dash_new_video">Nouvelle vidéo</button>
 
         <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:.5rem">
-          <span class="section-label" style="margin-bottom:0">Bibliothèque de vidéos</span>
+          <span class="section-label" style="margin-bottom:0" data-i18n="dash_lib_label">Bibliothèque de vidéos</span>
           <div class="lib-tabs">
-            <button type="button" class="lib-tab active" id="libTabActive" data-tab="active">Bibliothèque</button>
-            <button type="button" class="lib-tab" id="libTabTrash" data-tab="trash">Corbeille</button>
+            <button type="button" class="lib-tab active" id="libTabActive" data-tab="active" data-i18n="lib_tab_active">Bibliothèque</button>
+            <button type="button" class="lib-tab" id="libTabTrash" data-tab="trash" data-i18n="lib_tab_trash">Corbeille</button>
           </div>
         </div>
         <div class="video-library-grid" id="videoLibraryGrid" style="display:none"></div>
@@ -1060,7 +1060,7 @@
             <rect x="33" y="25" width="5" height="4" rx="1" fill="currentColor"/>
             <path d="M16 15.5l9 4.5-9 4.5v-9z" fill="currentColor"/>
           </svg>
-          <p style="font-size:.875rem;color:var(--text-secondary)">Aucune vidéo éditée pour l'instant.<br>Déposez votre première vidéo dans l'éditeur.</p>
+          <p style="font-size:.875rem;color:var(--text-secondary)" data-i18n-html="lib_empty">Aucune vidéo éditée pour l'instant.<br>Déposez votre première vidéo dans l'éditeur.</p>
         </div>
       </section>
 
@@ -1077,13 +1077,13 @@
           </div>
 
           <div class="profile-section-card">
-            <h4>Mon plan</h4>
+            <h4 data-i18n="profile_plan">Mon plan</h4>
             <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap">
               <div>
                 <div style="font-size:.95rem;font-weight:700;color:var(--text)" id="profilePlanName">Essai gratuit</div>
                 <div style="font-size:.8rem;color:var(--text-secondary);margin-top:.15rem" id="profilePlanUsage">— vidéos</div>
               </div>
-              <button type="button" class="action-btn" id="changePlanBtn">Changer de plan</button>
+              <button type="button" class="action-btn" id="changePlanBtn" data-i18n="profile_change_plan">Changer de plan</button>
             </div>
           </div>
 
@@ -1100,12 +1100,12 @@
           </div>
 
           <div class="profile-section-card">
-            <h4>Client idéal (ICP)</h4>
-            <textarea id="profileIcp" rows="3" placeholder="Décrivez votre audience cible…"></textarea>
+            <h4 data-i18n="profile_icp">Client idéal (ICP)</h4>
+            <textarea id="profileIcp" rows="3" placeholder="Décrivez votre audience cible…" data-i18n-placeholder="profile_icp_ph"></textarea>
           </div>
 
           <div class="profile-section-card">
-            <h4>Piliers de contenu</h4>
+            <h4 data-i18n="profile_pillars">Piliers de contenu</h4>
             <div class="profile-pillars">
               <div class="profile-pillar"><div class="pillar-num">1</div><input class="pillar-input" id="pillar1" type="text" placeholder="Ex : Business" /></div>
               <div class="profile-pillar"><div class="pillar-num">2</div><input class="pillar-input" id="pillar2" type="text" placeholder="Ex : Mindset" /></div>
@@ -1114,14 +1114,14 @@
           </div>
 
           <div style="display:flex;gap:.75rem;align-items:center;margin-top:.5rem">
-            <button class="btn-submit" id="saveProfileBtn" style="height:44px;width:auto;padding:0 1.5rem;font-size:.875rem">Enregistrer</button>
+            <button class="btn-submit" id="saveProfileBtn" style="height:44px;width:auto;padding:0 1.5rem;font-size:.875rem" data-i18n="profile_save_btn">Enregistrer</button>
             <!-- Only ICP + pillars are editable here. The 9 onboarding fields
                  (email, nom, marque, rôle, audience, offre, plateformes,
                  format, style) are not re-editable after initial setup.
                  TODO: future "full profile editor" feature. -->
-            <button class="action-btn" id="editProfileBtn">Modifier ICP &amp; piliers</button>
+            <button class="action-btn" id="editProfileBtn" data-i18n="profile_edit_btn">Modifier ICP &amp; piliers</button>
           </div>
-          <p id="profileSaveMsg" class="save-msg">Profil enregistré.</p>
+          <p id="profileSaveMsg" class="save-msg" data-i18n="profile_saved_msg">Profil enregistré.</p>
         </div>
       </section>
 
