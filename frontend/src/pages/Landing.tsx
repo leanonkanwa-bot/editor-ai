@@ -376,7 +376,7 @@ function Features({ t }: { t: (k: Parameters<typeof tr>[1]) => string }) {
     { icon: "💬", title: t("feat_4_title"), desc: t("feat_4_desc") },
     { icon: "📊", title: t("feat_5_title"), desc: t("feat_5_desc") },
     { icon: "🎯", title: t("feat_6_title"), desc: t("feat_6_desc") },
-    { icon: "🎬", title: t("feat_7_title"), desc: t("feat_7_desc") },
+    { icon: "", title: t("feat_7_title"), desc: t("feat_7_desc") },
   ];
   return (
     <section id="features" className="py-32 px-6 relative">
@@ -390,9 +390,11 @@ function Features({ t }: { t: (k: Parameters<typeof tr>[1]) => string }) {
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {features.map(f => (
             <div key={f.title} className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-2xl p-7 hover:border-brand-500/25 transition-all hover:-translate-y-0.5 group">
-              <div className="w-12 h-12 bg-white/[0.06] rounded-xl flex items-center justify-center text-2xl mb-5 group-hover:scale-110 transition-transform">
-                {f.icon}
-              </div>
+              {f.icon && (
+                <div className="w-12 h-12 bg-white/[0.06] rounded-xl flex items-center justify-center text-2xl mb-5 group-hover:scale-110 transition-transform">
+                  {f.icon}
+                </div>
+              )}
               <h3 className="text-base font-bold text-white mb-2.5">{f.title}</h3>
               <p className="text-sm text-slate-400 leading-relaxed font-light">{f.desc}</p>
             </div>
