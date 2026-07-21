@@ -573,7 +573,6 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             return f"{int(float(px_str.replace('px', '')) * f)}px"
         _title_scale    = 0.52 if content_style in _TALL_DATA_PANEL_TYPES else 0.75
         title_size_eff  = _s(p["title_size"],  _title_scale)
-        print(f"[COMPOSE-DEBUG] compact card {card.get('id','?')} style={content_style!r} pack={p['id']} title_size={p['title_size']} scale={_title_scale} -> title_size_eff={title_size_eff}", flush=True)
         number_size_eff = _s(p["number_size"], 0.67)
         detail_size_eff = "23px"
         kicker_size_eff = "18px"
@@ -3090,7 +3089,6 @@ def _build_caption_card_html(card: dict, pack: dict | None = None) -> str:
         f'}}\n'
     )
 
-    print(f"[COMPOSE-DEBUG] caption {card_id} font-size=62px pack={p['id']}", flush=True)
     return (
         f'<div class="card caption-card" data-card-id="{card_id}">\n'
         f'<style>\n'
