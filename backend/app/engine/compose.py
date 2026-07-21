@@ -61,7 +61,7 @@ _ZONE_BOUNDS_PORTRAIT = {
     "fullscreen":     {"left": 0,   "top": 0,    "width": 1080, "height": 1920},
     "hook-title":     {"left": 0,   "top": 0,    "width": 1080, "height": 288},
     "upper-right":          {"left": 540, "top": 100,  "width": 500,  "height": 320},   # B-roll compact upper-right
-    "upper-data":           {"left": 380, "top": 260,  "width": 680,  "height": 480},   # alias
+    "upper-data":           {"left": 270, "top": 260,  "width": 780,  "height": 480},   # alias
     # Positional-variety zones — standard data cards alternate left/right per card index
     # (face-biased when subject_position available) so consecutive cards never land in the
     # same corner.  upper-data (right) already exists above; upper-left-data-sm mirrors it.
@@ -74,7 +74,7 @@ _ZONE_BOUNDS_PORTRAIT = {
     "upper-right-data-tall": {"left": 540, "top": 80,  "width": 500,  "height": 500},   # tall multi-item, right side
     # 5-position rotation — center zones (face zone, 34–50% height). Backdrop-dim applied.
     "portrait-center-left":  {"left": 20,  "top": 660, "width": 600, "height": 420},
-    "portrait-center-right": {"left": 500, "top": 660, "width": 560, "height": 420},
+    "portrait-center-right": {"left": 480, "top": 660, "width": 580, "height": 420},
     "portrait-center-full":  {"left": 40,  "top": 640, "width": 1000, "height": 360},
     # Legacy bottom zones (kept for backward compat, not used in the rotation sequence).
     "portrait-bottom-left":  {"left": 30,  "top": 1070, "width": 500, "height": 250},
@@ -679,14 +679,14 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         rv = hints.get("right_value", "")
         max_val_len = max(len(str(lv)), len(str(rv)))
         if compact:
-            val_size = "23px" if max_val_len > 15 else "31px" if max_val_len > 8 else title_size_eff
+            val_size = "23px" if max_val_len > 15 else "31px" if max_val_len > 8 else "53px"
         else:
             val_size = "36px" if max_val_len > 15 else "48px" if max_val_len > 8 else title_size_eff
         parts.append(f'.card[data-card-id="{card_id}"] .cmp-row {{')
         parts.append(f'  display: flex; gap: 24px; align-items: flex-start; width: 100%;')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .cmp-side {{')
-        parts.append(f'  flex: 1; text-align: center; min-width: 0; overflow-wrap: break-word;')
+        parts.append(f'  flex: 1; text-align: center; min-width: 0; max-width: 50%; overflow: hidden; overflow-wrap: break-word;')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .cmp-label {{')
         parts.append(f'  font-family: {p["font"]}; font-size: {kicker_size_eff};')
