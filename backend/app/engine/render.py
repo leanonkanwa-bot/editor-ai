@@ -207,6 +207,8 @@ def _create_proxy(
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-threads", "1",                    # global: limit decoder threads
         "-i", str(src),
+        "-map", "0:v:0",                    # always use first video stream (guards multi-track MKV/MOV)
+        "-map", "0:a?",                     # first audio stream if present, skip if none
         "-vf", vf,
         "-vsync", "cfr",
         "-c:v", "libx264", "-preset", "ultrafast", "-crf", "0",
@@ -438,6 +440,8 @@ def _cut_segment(
         "-ss", f"{start:.6f}",
         "-accurate_seek",
         "-i", str(src),
+        "-map", "0:v:0",                    # always use first video stream
+        "-map", "0:a?",                     # first audio stream if present
         "-t", f"{duration:.6f}",
         "-avoid_negative_ts", "make_zero",
         "-vf", vf,
@@ -1913,6 +1917,12 @@ def _render_hyperframes(
         ],
         capture_output=True, text=True, timeout=30,
     )
+    if _ct_probe.returncode != 0:
+        print(
+            f"[HF] HDR probe failed (exit {_ct_probe.returncode}) — assuming SDR. "
+            f"stderr: {_ct_probe.stderr[:200]}",
+            flush=True,
+        )
     _ct = _ct_probe.stdout
     _is_hlg = "arib-std-b67" in _ct   # HLG — iPhone standard, peak ~1000 nits nominal
     _is_pq  = "smpte2084"    in _ct   # PQ / HDR10 / Dolby Vision, peak up to 10000 nits
@@ -1936,7 +1946,7 @@ def _render_hyperframes(
         _vf = _VF_PQ if _is_pq else _VF_HLG
         print(f"[HF] HDR→SDR: {'PQ npl=1000' if _is_pq else 'HLG npl=150'} hable", flush=True)
         _hdr_stripped = work_dir / "trimmed_sdr.mp4"
-        subprocess.run(
+        _hdr_result = subprocess.run(
             [
                 FFMPEG_PATH, "-y", "-loglevel", "error",
                 "-i", str(trimmed),
@@ -1947,6 +1957,12 @@ def _render_hyperframes(
             ],
             capture_output=True, timeout=300,
         )
+        if _hdr_result.returncode != 0:
+            print(
+                f"[HF] HDR→SDR ffmpeg failed (exit {_hdr_result.returncode}): "
+                f"{_hdr_result.stderr[-500:].strip()}",
+                flush=True,
+            )
         if _hdr_stripped.exists() and _hdr_stripped.stat().st_size > 0:
             trimmed = _hdr_stripped
             print("[HF] HDR→SDR conversion done", flush=True)

@@ -1335,6 +1335,34 @@ def run_render_phase(job_id: str, src: Path) -> None:
         subject_pos = job.subject_pos
         params      = job.params or {}
 
+        # Disk-space guard: estimate temp file footprint before committing to
+        # render.  Proxy (CRF=0 H.264) + HDR stripped + per-segment cuts +
+        # HyperFrames PNGs + output file — roughly 4× source for 1080p, 6× for 4K.
+        # Floor at 300 MB so tiny test files still trigger a useful check.
+        _is_4k_job  = params.get("output_quality") == "4k"
+        _src_bytes  = src.stat().st_size if src.exists() else 0
+        _space_mult = 6 if _is_4k_job else 4
+        _min_free   = max(int(_src_bytes * _space_mult), 300 * 1024 * 1024)
+        _disk_free  = shutil.disk_usage(str(settings._data_root)).free
+        if _disk_free < _min_free:
+            print(
+                f"[DISK-GUARD] job {job_id}: disk space too low — "
+                f"need {_min_free // 1024 // 1024} MB, "
+                f"free {_disk_free // 1024 // 1024} MB",
+                flush=True,
+            )
+            store.update(
+                job_id,
+                status="error",
+                error=(
+                    f"Disk space insufficient: need {_min_free // 1024 // 1024} MB, "
+                    f"free {_disk_free // 1024 // 1024} MB"
+                ),
+                message="Le serveur est temporairement surchargé, réessayez dans quelques minutes.",
+                is_retry=True,
+            )
+            return
+
         from app.agent.planner import EditPlan, _guard_plan_inplace, _fallback_keep_all
         _raw = plan_data.get("raw", {})
         _src_duration = float((job.transcript or {}).get("duration", 0.0))

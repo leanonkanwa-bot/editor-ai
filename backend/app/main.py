@@ -1067,6 +1067,49 @@ async def submit_edit(
     else:
         raise HTTPException(400, "Provide either a video file or an upload_id.")
 
+    # Duration gate: reject before Whisper/Claude costs are spent.
+    # short=3 min, long/auto=2 h. Fail-open: if ffprobe itself fails, let
+    # the pipeline handle it (it will fail with a clear error anyway).
+    try:
+        from app.engine.transcribe import FFPROBE_PATH as _FFPROBE_PATH
+        _dur_raw = subprocess.check_output(
+            [
+                _FFPROBE_PATH, "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                str(dest),
+            ],
+            text=True, timeout=30,
+        )
+        _src_dur = float(_dur_raw.strip())
+        _max_dur = 180.0 if format_hint == "short" else 7200.0
+        if _src_dur > _max_dur:
+            _limit_label = "3 minutes" if format_hint == "short" else "2 heures"
+            _dur_min     = int(_src_dur // 60)
+            _dur_sec     = int(_src_dur % 60)
+            store.update(
+                job.id,
+                status="error",
+                error=(
+                    f"Source duration {_dur_min}m{_dur_sec:02d}s exceeds "
+                    f"{_limit_label} limit for format_hint={format_hint!r}"
+                ),
+                message=f"Cette vidéo dépasse la durée maximale de {_limit_label} pour ce format.",
+            )
+            raise HTTPException(400, {
+                "error": "duration_exceeded",
+                "message": (
+                    f"Cette vidéo dépasse la durée maximale de {_limit_label} pour ce format. "
+                    f"Durée détectée : {_dur_min}m{_dur_sec:02d}s."
+                ),
+            })
+    except (subprocess.CalledProcessError, ValueError, subprocess.TimeoutExpired):
+        pass  # ffprobe failed — let the pipeline handle the bad file
+    except HTTPException:
+        raise  # re-raise our own rejection
+    except Exception:
+        pass   # fail-open on unexpected probe errors
+
     # Persist source path + run params so the job can be retried after a
     # server restart without the user having to re-upload the video.
     run_params = dict(
