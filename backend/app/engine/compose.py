@@ -139,7 +139,13 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
     if not is_caption and zone == "lower-third":
         zone = "video-overlay"
 
+    # Compact flag is based on the original zone (before any centering redirect).
+    # This preserves compact styling for data-panel cards that were in side-panel
+    # zones even when we redirect them to portrait-center-full for positioning.
+    compact = (not is_caption) and (zone in _SIDE_PANEL_ZONES)
+
     # Portrait centering: redirect asymmetric side-zones to the centered full zone.
+    # Must run AFTER compact is computed so styling scales stay correct.
     if layout == "portrait" and not is_caption:
         if zone in ("upper-left-data-sm", "portrait-center-left", "portrait-center-right"):
             zone = "portrait-center-full"
@@ -176,7 +182,6 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
     if is_caption:
         inner = _build_caption_card_html(card, pack=pack)
     else:
-        compact = zone in _SIDE_PANEL_ZONES
         inner = _build_graphic_card_html(card, pack=pack, compact=compact, layout=layout)
 
     # Portrait scrim: full-canvas dimming overlay per card, sibling to card-host.
