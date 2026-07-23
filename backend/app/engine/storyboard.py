@@ -1004,27 +1004,16 @@ RULES:
     gap). Distinct from question (question asks outward to the audience;
     fill_in_the_blank is a structured completion format). Provide
     "sentence_with_blank" (use ___ for the gap) + "blank_word".
-- SCENE PRIMITIVE GUARD — the following narrative moments are handled by the
-  auto-detection semantic scanner, which inserts a dedicated animated scene
-  primitive. Do NOT generate a graphic card for these moments; the scanner
-  will cover them automatically:
-    • Personal before/after transformation language ("avant d'être…", "j'étais X
-      maintenant je Y", "transformed my business/life") → client_transformation
-    • First paying client or first sale milestone ("première vente", "premier
-      client payant", "first sale", "first paying customer") → first_sale_moment
-    • Team size growing from N to M people ("passé de 3 à 12 membres",
-      "team grew from 2 to 15", "hired 5 collaborateurs") → team_growth
-    • Investment-decision language with explicit commitment phrasing ("j'ai
-      investi X€ dans", "I invested $X in", "le pari de ma vie") → investment_decision
-    • Breaking-point or rock-bottom moments ("j'en pouvais plus", "point de
-      rupture", "hit rock bottom", "burned out completely") → breaking_point
-    • Mentor teaching moments ("mon mentor m'a dit", "my coach taught me",
-      "grâce à mon mentor", "my mentor showed me") → mentor_guidance
-    • Business scaling milestones ("mis à l'échelle", "de solo à agence",
-      "scaled from X to Y", "from local to international") → scaling_moment
-  If the scanner fires on one of the above, it takes priority over any LLM card
-  you might otherwise assign to the same window. Use key_phrase or story_chapter_transition
-  as fallback only when the moment is ambiguous and clearly does not match a scene primitive.
+- SCENE PRIMITIVE NOTE — a deterministic semantic scanner runs after your
+  storyboard and auto-inserts animated scene primitives when it detects
+  exact trigger phrases (e.g. "première vente", "mon mentor m'a dit",
+  "j'ai investi", "mis à l'échelle"). When the scanner fires, its card
+  (confidence 0.88) takes priority over yours (confidence 0.70) and your
+  card is suppressed. You do NOT need to avoid these moments — just assign
+  the best normal card type you would otherwise choose (key_phrase, callout,
+  stat, quote, etc.) and the scanner will upgrade it automatically when the
+  exact phrase is present. Never output a card with style "__broll__" —
+  that is reserved for scanner output only.
 - VERBATIM GROUNDING — mandatory check before assigning any explicit-signal
   card type (contrarian_take, warning_soft, red_flag_list, action_step_cta,
   myth_vs_fact, secret_reveal, objection_response, live_reaction_split,
@@ -1139,8 +1128,9 @@ def _merge_cards(
         annotated.append((float(c.get("_confidence", 0.88)), c))
 
     # Sort descending by confidence; ties broken by earliest timestamp.
+    # Guard against LLM cards where startSec was emitted as "" (non-fatal edge case).
     annotated.sort(
-        key=lambda t: (t[0], -float(t[1].get("startSec", 0))),
+        key=lambda t: (t[0], -float(t[1].get("startSec", 0) or 0)),
         reverse=True,
     )
 
@@ -1158,8 +1148,8 @@ def _merge_cards(
                 flush=True,
             )
             break
-        cstart = float(card.get("startSec", 0))
-        cend   = float(card.get("endSec", cstart + 5.0))
+        cstart = float(card.get("startSec", 0) or 0)
+        cend   = float(card.get("endSec", "") or cstart + 5.0)
         suppressed = any(
             _iv_gap(cstart, cend, a_s, a_e) < min_gap_s
             for a_s, a_e in accepted_ivs
