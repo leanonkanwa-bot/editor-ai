@@ -23,7 +23,7 @@ import app.engine.broll_types  # noqa: F401
 from app.engine.compose import (
     _LEAN_GLASS, _LEAN_PAPER, _LEAN_VIBE,
     _LEAN_LEDGER, _LEAN_CRAFT, _LEAN_CINEMA,
-    _build_graphic_card_html, _build_timeline_js,
+    _build_card_host, _build_timeline_js,
 )
 from app.engine import broll_registry as _br
 
@@ -160,13 +160,14 @@ for btype, params, wrapper_cls, content_snippet in SCENE_TYPES:
         issues: list[str] = []
 
         try:
-            html = _build_graphic_card_html(card, pack=pack)
+            # Use _build_card_host so the scrim sibling div is included in the HTML.
+            html = _build_card_host(card, "portrait", 2, pack=pack)
         except Exception as exc:
             issues.append(f"HTML exception: {exc}")
             cell_ok = False
 
         try:
-            js = _build_timeline_js([card], pack=pack)
+            js = _build_timeline_js([card], pack=pack, layout="portrait")
         except Exception as exc:
             issues.append(f"JS exception: {exc}")
             cell_ok = False

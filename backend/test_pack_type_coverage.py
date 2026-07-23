@@ -187,7 +187,7 @@ for pack_name, pack in PACKS.items():
         card = make_card(style, hints)
         try:
             html = _build_graphic_card_html(card, pack=pack)
-            js   = _build_timeline_js([card], pack=pack)
+            js   = _build_timeline_js([card], pack=pack, layout="landscape")
         except Exception as exc:
             print(f"  [ERR] {pack_name:12} / {style:30} → EXCEPTION: {exc}")
             skipped += 1

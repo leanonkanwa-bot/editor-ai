@@ -108,9 +108,9 @@ _DATA_PANEL_TYPES = {"stat", "list", "comparison", "checklist", "score", "trend"
 _CENTER_ZONES = {"fullscreen", "video-overlay"}
 _SIDE_PANEL_ZONES = {"side-panel", "side-panel-left", "side-panel-right", "side-panel-top", "upper-data", "upper-right", "upper-left-data", "upper-left-data-sm", "upper-right-data-tall", "portrait-bottom-left", "portrait-bottom-right", "portrait-center-left", "portrait-center-right", "landscape-tl", "landscape-tr", "landscape-cl", "landscape-cr", "landscape-cf", "landscape-tl-tall", "landscape-tr-tall"}
 # Zones where the backdrop-dim overlay fires — card overlaps the speaker face.
+# Portrait center-* zones are excluded: per-card portrait scrims handle dimming there.
 _DIMMING_ZONES = frozenset({
     "fullscreen", "video-overlay",
-    "portrait-center-left", "portrait-center-right", "portrait-center-full",
     "landscape-cf",
 })
 
@@ -138,6 +138,11 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
 
     if not is_caption and zone == "lower-third":
         zone = "video-overlay"
+
+    # Portrait centering: redirect asymmetric side-zones to the centered full zone.
+    if layout == "portrait" and not is_caption:
+        if zone in ("upper-left-data-sm", "portrait-center-left", "portrait-center-right"):
+            zone = "portrait-center-full"
 
     bounds = _zone_bounds(zone, layout)
 
@@ -174,7 +179,16 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
         compact = zone in _SIDE_PANEL_ZONES
         inner = _build_graphic_card_html(card, pack=pack, compact=compact, layout=layout)
 
-    return (
+    # Portrait scrim: full-canvas dimming overlay per card, sibling to card-host.
+    scrim_html = ""
+    if layout == "portrait" and not is_caption:
+        scrim_html = (
+            f'<div class="portrait-scrim" id="{card_id}-scrim" '
+            f'style="position:absolute;left:0;top:0;width:1080px;height:1920px;'
+            f'background:rgba(0,0,0,0.45);opacity:0;z-index:5;pointer-events:none;"></div>\n'
+        )
+
+    card_host = (
         f'<div class="card-host clip" data-card-id="{card_id}" '
         f'data-start="{start:.3f}" data-duration="{duration:.3f}" '
         f'data-track-index="{track_index}" '
@@ -184,6 +198,7 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
         f'{inner}\n'
         f'</div>'
     )
+    return scrim_html + card_host
 
 
 # ── Style Packs ──────────────────────────────────────────────────────
@@ -3117,6 +3132,7 @@ def _build_timeline_js(
     zoom_entries: list[dict] | None = None,
     subject_position: dict | None = None,
     pack: dict | None = None,
+    layout: str = "portrait",
 ) -> str:
     """Build the master GSAP timeline script including zoom/pan on the video wrapper."""
     p = pack or _LEAN_GLASS
@@ -3231,6 +3247,13 @@ def _build_timeline_js(
         lines.append(f'  try {{')
 
         lines.append(f'  tl.set(\'{sel}\', {{ visibility: "visible" }}, {start:.4f});')
+
+        # Portrait per-card scrim: fade in with the card.
+        if not is_caption and layout == "portrait":
+            scrim_sel = f'#{card_id}-scrim'
+            lines.append(
+                f'  tl.to(\'{scrim_sel}\', {{opacity:1,duration:0.25,ease:_eIn}},{start:.4f});'
+            )
 
         if is_caption:
             lines.append(
@@ -5711,6 +5734,14 @@ def _build_timeline_js(
                 )
         lines.append(f'  tl.set(\'{sel}\', {{ opacity: 0, visibility: "hidden" }}, {end:.4f});')
 
+        # Portrait per-card scrim: fade out synchronized with card exit.
+        if not is_caption and layout == "portrait":
+            scrim_sel = f'#{card_id}-scrim'
+            lines.append(
+                f'  tl.to(\'{scrim_sel}\', {{opacity:0,duration:{exit_dur:.3f},ease:_eOut}},{exit_start:.4f});'
+            )
+            lines.append(f'  tl.set(\'{scrim_sel}\', {{opacity:0}},{end:.4f});')
+
         lines.append(f'  }} catch(_e) {{ console.warn("card {card_id} animation error:", _e); }}')
         lines.append("")
 
@@ -6132,7 +6163,7 @@ def compose(
     all_cards = _rendered_cards
 
     # Build master timeline
-    timeline_js = _build_timeline_js(all_cards, zoom_entries=zoom_entries, subject_position=subject_position, pack=pack)
+    timeline_js = _build_timeline_js(all_cards, zoom_entries=zoom_entries, subject_position=subject_position, pack=pack, layout=layout)
 
     # CSS custom properties from theme
     accent_vars = "\n".join(
