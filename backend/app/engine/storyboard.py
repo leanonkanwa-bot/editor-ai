@@ -1072,8 +1072,8 @@ Design graphic overlay cards for this video — up to {target_cards} maximum. Pl
             cards = cards.get("cards", [])
         # Clamp to video duration
         for card in cards:
-            card["startSec"] = max(0, min(float(card.get("startSec", 0)), trimmed_duration - 1))
-            card["endSec"] = max(card["startSec"] + 1, min(float(card.get("endSec", 0)), trimmed_duration))
+            card["startSec"] = max(0, min(float(card.get("startSec", 0) or 0), trimmed_duration - 1))
+            card["endSec"] = max(card["startSec"] + 1, min(float(card.get("endSec", 0) or 0), trimmed_duration))
         # Defensive duration cap: contrarian_take is a brief verbal signal, not a
         # long window. Cap at 2.5s to prevent swallowing adjacent content types
         # if classification fired on paraphrased planning output rather than
@@ -1113,7 +1113,7 @@ def _merge_cards(
     Set env BROLL_MAX_PER_MINUTE to override without a code push.
     """
     import os
-    _effective_cap = float(os.environ.get("BROLL_MAX_PER_MINUTE", _MAX_BROLL_PER_MINUTE))
+    _effective_cap = float(os.environ.get("BROLL_MAX_PER_MINUTE") or _MAX_BROLL_PER_MINUTE)
     max_cards = (
         max(1, int(_effective_cap * video_duration_s / 60.0))
         if video_duration_s > 0
@@ -1165,7 +1165,7 @@ def _merge_cards(
         accepted_ivs.append((cstart, cend))
 
     # Restore display order (chronological)
-    accepted.sort(key=lambda c: float(c.get("startSec", 0)))
+    accepted.sort(key=lambda c: float(c.get("startSec", 0) or 0))
     print(
         f"[BROLL-MERGE] {len(llm_cards)} LLM + {len(semantic_cards)} semantic → "
         f"{len(accepted)} accepted after merge (cap={max_cards})",
