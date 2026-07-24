@@ -144,6 +144,12 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
     # zones even when we redirect them to portrait-center-full for positioning.
     compact = (not is_caption) and (zone in _SIDE_PANEL_ZONES)
 
+    print(
+        f"[COMPOSE] card {card_id} type={card.get('type','?')} zone={zone}"
+        f" compact={compact} layout={layout}",
+        flush=True,
+    )
+
     # Portrait centering: redirect asymmetric side-zones to the centered full zone.
     # Must run AFTER compact is computed so styling scales stay correct.
     if layout == "portrait" and not is_caption:
