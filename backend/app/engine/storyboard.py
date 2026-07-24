@@ -211,10 +211,30 @@ def _segment_captions(
         print(f"[CAPTION AUDIT] WARNING: seg_tags has {len(seg_tags)} entries "
               f"but only {tag_idx} consumed (mismatch with remapped_words)")
 
+    # Diagnostic: log every apostrophe-boundary word so we can inspect raw Whisper tokens.
+    _APOS_CHARS = ("'", "’", "‘", "ʼ")
+    _apos_dbg: list[str] = []
+    for _ai, _aw in enumerate(all_words):
+        _t = _aw["text"]
+        _prev_t = all_words[_ai - 1]["text"] if _ai > 0 else ""
+        if any(_t.startswith(c) or _t.endswith(c) for c in _APOS_CHARS) or \
+                any(_prev_t.endswith(c) for c in _APOS_CHARS):
+            _apos_dbg.append(
+                f"  [{_ai}] prev={repr(_prev_t) if _ai > 0 else 'N/A'}"
+                f" | cur={repr(_t)} | seg_start={_aw['seg_start']}"
+                f" | t={_aw['start']:.3f}s"
+            )
+    if _apos_dbg:
+        print(f"[CAPTION APOS] {len(_apos_dbg)} apostrophe-boundary entries (raw Whisper tokens):")
+        for _dl in _apos_dbg[:40]:
+            print(_dl, flush=True)
+    else:
+        print("[CAPTION APOS] No apostrophe-boundary words found", flush=True)
+
     # Merge apostrophe-split tokens (French elisions: m'a, l'équipe, j'ai, etc.)
     # Whisper often splits these into ["m'", "a"] or ["m", "'a"] as separate words.
     # Both U+0027 (straight) and U+2019 (right single quotation mark) are handled.
-    _STORYBOARD_APOS = ("'", "'")  # U+0027 + U+2019
+    _STORYBOARD_APOS = ("'", "’")  # U+0027 + U+2019
     merged_words: list[dict] = []
     for w in all_words:
         if merged_words and (

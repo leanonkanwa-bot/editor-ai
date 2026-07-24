@@ -88,22 +88,56 @@ def _render_html(params: dict, pack: dict, card_id: str) -> str:
 
     sale_context = _e(params.get("sale_context", ""))
 
-    # Pack-specific label + icon
+    # Pack-specific label + icon (SVG only — emoji/special-char text fails in headless Chromium)
     if pack_id == "lean_ledger":
-        headline   = "FIRST SALE"
-        icon_html  = '<span class="fs-icon" id="{cid}-fs-icon">$</span>'.replace("{cid}", card_id)
+        headline  = "FIRST SALE"
+        icon_html = (
+            f'<div class="fs-icon" id="{card_id}-fs-icon">'
+            f'<svg viewBox="0 0 24 24" width="28" height="28" xmlns="http://www.w3.org/2000/svg">'
+            # Dollar-sign geometry: vertical bar + two horizontal crossbars
+            f'<line x1="12" y1="2" x2="12" y2="22" stroke="{accent}" stroke-width="2" stroke-linecap="round"/>'
+            f'<path d="M16 5.5 Q7 5.5 7 9.5 Q7 13.5 12 13.5 Q17 13.5 17 17.5 Q17 21.5 8 21.5"'
+            f' fill="none" stroke="{accent}" stroke-width="2" stroke-linecap="round"/>'
+            f'</svg></div>'
+        )
     elif pack_id == "lean_cinema":
-        headline   = "La première vente"
-        icon_html  = '<span class="fs-icon" id="{cid}-fs-icon">★</span>'.replace("{cid}", card_id)
+        headline  = "La première vente"
+        icon_html = (
+            f'<div class="fs-icon" id="{card_id}-fs-icon">'
+            f'<svg viewBox="0 0 24 24" width="28" height="28" xmlns="http://www.w3.org/2000/svg">'
+            f'<polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"'
+            f' fill="{accent}"/>'
+            f'</svg></div>'
+        )
     elif pack_id == "lean_vibe":
-        headline   = "PREMIÈRE VENTE !"
-        icon_html  = '<span class="fs-icon" id="{cid}-fs-icon">🎉</span>'.replace("{cid}", card_id)
+        headline  = "PREMIÈRE VENTE !"
+        icon_html = (
+            f'<div class="fs-icon" id="{card_id}-fs-icon">'
+            f'<svg viewBox="0 0 24 24" width="28" height="28" xmlns="http://www.w3.org/2000/svg">'
+            # 8-point burst (celebratory spark)
+            f'<polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"'
+            f' fill="{accent}"/>'
+            f'</svg></div>'
+        )
     elif pack_id == "lean_craft":
-        headline   = "Première vente"
-        icon_html  = '<span class="fs-icon" id="{cid}-fs-icon">✦</span>'.replace("{cid}", card_id)
+        headline  = "Première vente"
+        icon_html = (
+            f'<div class="fs-icon" id="{card_id}-fs-icon">'
+            f'<svg viewBox="0 0 24 24" width="28" height="28" xmlns="http://www.w3.org/2000/svg">'
+            # 4-point diamond star
+            f'<path d="M12 2 L14.5 9.5 L22 12 L14.5 14.5 L12 22 L9.5 14.5 L2 12 L9.5 9.5 Z"'
+            f' fill="{accent}"/>'
+            f'</svg></div>'
+        )
     else:
-        headline   = "PREMIÈRE VENTE"
-        icon_html  = '<span class="fs-icon" id="{cid}-fs-icon">⚡</span>'.replace("{cid}", card_id)
+        headline  = "PREMIÈRE VENTE"
+        icon_html = (
+            f'<div class="fs-icon" id="{card_id}-fs-icon">'
+            f'<svg viewBox="0 0 24 24" width="28" height="28" xmlns="http://www.w3.org/2000/svg">'
+            # Lightning bolt (same path as broll_primitive "spark" icon)
+            f'<path d="M13 2 L4 13 L10.5 13 L8.5 22 L20 11 L13.5 11 Z" fill="{accent}"/>'
+            f'</svg></div>'
+        )
 
     glow_css = f" text-shadow:{_e(glow_i)};" if glow_i else ""
 
@@ -124,7 +158,7 @@ def _render_html(params: dict, pack: dict, card_id: str) -> str:
 .card[data-card-id="{card_id}"] .fs-ring{{
   {ring_css}opacity:0;
 }}
-.card[data-card-id="{card_id}"] .fs-icon{{font-size:28px;line-height:1;{glow_css}}}
+.card[data-card-id="{card_id}"] .fs-icon{{display:flex;align-items:center;justify-content:center;}}
 .card[data-card-id="{card_id}"] .fs-headline{{font-family:{font};font-size:32px;font-weight:{fw};
   color:{accent};letter-spacing:0.02em;opacity:0;text-align:center;{glow_css}}}
 .card[data-card-id="{card_id}"] .fs-context{{font-family:{font};font-size:18px;font-weight:500;
