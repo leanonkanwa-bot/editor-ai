@@ -576,7 +576,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             from app.engine import broll_registry as _br
             _btype = _br.REGISTRY.get(card["_broll_type"])
             if _btype is not None:
-                return _btype.render_html(card.get("_broll_params", {}), pack or {}, card_id, compact=compact, layout=layout)
+                return _btype.render_html(card.get("_broll_params", {}), pack or {}, card_id)
         except Exception as _broll_html_exc:
             print(f"[BROLL] render_html error {card['_broll_type']}: {_broll_html_exc}", flush=True)
         # Fall through to default rendering on error

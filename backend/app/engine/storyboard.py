@@ -45,14 +45,6 @@ _TRIGGER_STYLES: frozenset[str] = frozenset({
     # Wave 8 trigger types
     "broken_promise_tracker",
 })
-# Styles that legitimately use video-overlay in landscape (full-canvas hero cards).
-# Everything else is remapped to landscape-tl in _generate_graphic_cards so compose
-# derives compact=True (video-overlay is not in _SIDE_PANEL_ZONES).
-_LANDSCAPE_HERO_STYLES: frozenset[str] = frozenset({
-    "key_phrase", "quote", "question", "definition",
-    "chapter_marker", "callout",
-})
-
 _GROUNDING_OVERLAP_THRESHOLD = 0.40   # fraction of trigger content-words that must match speech
 _GROUNDING_WINDOW_PRE_S  = 0.5        # seconds before startSec included in the speech window
 _GROUNDING_WINDOW_POST_S = 3.0        # seconds after  startSec included in the speech window
@@ -1061,16 +1053,6 @@ RULES:
     gap). Distinct from question (question asks outward to the audience;
     fill_in_the_blank is a structured completion format). Provide
     "sentence_with_blank" (use ___ for the gap) + "blank_word".
-- SCENE PRIMITIVE NOTE — a deterministic semantic scanner runs after your
-  storyboard and auto-inserts animated scene primitives when it detects
-  exact trigger phrases (e.g. "première vente", "mon mentor m'a dit",
-  "j'ai investi", "mis à l'échelle"). When the scanner fires, its card
-  (confidence 0.88) takes priority over yours (confidence 0.70) and your
-  card is suppressed. You do NOT need to avoid these moments — just assign
-  the best normal card type you would otherwise choose (key_phrase, callout,
-  stat, quote, etc.) and the scanner will upgrade it automatically when the
-  exact phrase is present. Never output a card with style "__broll__" —
-  that is reserved for scanner output only.
 - VERBATIM GROUNDING — mandatory check before assigning any explicit-signal
   card type (contrarian_take, warning_soft, red_flag_list, action_step_cta,
   myth_vs_fact, secret_reveal, objection_response, live_reaction_split,
@@ -1142,135 +1124,11 @@ Design graphic overlay cards for this video — up to {target_cards} maximum. Pl
                 if _end - _start > 2.5:
                     card["endSec"] = round(_start + 2.5, 2)
                     print(f"[STORYBOARD] contrarian_take cap: {_start:.2f}-{_end:.2f}s → {_start:.2f}-{card['endSec']}s", flush=True)
-        # Landscape zone guard: video-overlay in landscape leaves compact=False for
-        # any card whose style is not in _DATA_PANEL_TYPES (those are rotated later
-        # by _remap_zone in compose.py). Hero/chapter cards legitimately need the full
-        # canvas; everything else is remapped to landscape-tl here so compose sees a
-        # side-panel zone and sets compact=True.
-        if format_hint != "short":  # landscape (16:9)
-            for card in cards:
-                if card.get("zone") == "video-overlay":
-                    _cs = card.get("contentHints", {}).get("style", "")
-                    if _cs not in _LANDSCAPE_HERO_STYLES:
-                        card["zone"] = "landscape-tl"
-                        print(
-                            f"[STORYBOARD] ZONE-REMAP {card.get('id', '?')}"
-                            f" style={_cs!r} video-overlay -> landscape-tl"
-                            f" (landscape non-hero guard)",
-                            flush=True,
-                        )
         print(f"[STORYBOARD] Generated {len(cards)} graphic cards", flush=True)
         return cards
     except Exception as e:
         print(f"[STORYBOARD] Claude API error: {e}", flush=True)
         return []
-
-
-_MAX_BROLL_PER_MINUTE = 3   # hard cap: no more than 3 B-roll cards per 60s
-
-def _merge_cards(
-    llm_cards: list[dict],
-    semantic_cards: list[dict],
-    min_gap_s: float = 4.5,
-    video_duration_s: float = 0.0,
-) -> list[dict]:
-    """Three-phase mixed-quota merge of LLM graphic cards + semantic B-roll cards.
-
-    Phase 1 — LLM quota: ceil(max_cards / 2) slots reserved for the best
-    LLM cards first. This guarantees classic graphic diversity even when
-    multiple high-confidence semantic hits are present (e.g. short videos).
-
-    Phase 2 — Semantic fill: remaining slots go to semantic cards, highest
-    confidence first. If LLM used fewer slots than its quota (sparse content),
-    semantic inherits the bonus.
-
-    Phase 3 — LLM overflow: any slots still unused after Phase 2 (because
-    semantic had too few eligible cards) are backfilled by the remaining LLM
-    cards. This prevents empty slots when semantic coverage is thin.
-
-    All three phases share the same accepted_ivs list so min_gap_s suppression
-    is consistent across phases.
-
-    Density cap: _MAX_BROLL_PER_MINUTE (default 3) — proportional to duration.
-    Set env BROLL_MAX_PER_MINUTE to override without a code push.
-    """
-    import math
-    import os
-    _effective_cap = float(os.environ.get("BROLL_MAX_PER_MINUTE") or _MAX_BROLL_PER_MINUTE)
-    max_cards = (
-        max(1, int(_effective_cap * video_duration_s / 60.0))
-        if video_duration_s > 0
-        else 999
-    )
-    llm_quota = math.ceil(max_cards / 2)
-
-    def _iv_gap(s1: float, e1: float, s2: float, e2: float) -> float:
-        return max(0.0, max(s1, s2) - min(e1, e2))
-
-    def _card_iv(card: dict) -> tuple[float, float]:
-        cstart = float(card.get("startSec", 0) or 0)
-        cend   = float(card.get("endSec", "") or cstart + 5.0)
-        return cstart, cend
-
-    def _greedy(
-        candidates: list[tuple[float, dict]],
-        quota: int,
-        accepted_ivs: list[tuple[float, float]],
-    ) -> list[dict]:
-        picked: list[dict] = []
-        for conf, card in candidates:
-            if len(picked) >= quota:
-                break
-            cstart, cend = _card_iv(card)
-            if any(_iv_gap(cstart, cend, a_s, a_e) < min_gap_s for a_s, a_e in accepted_ivs):
-                print(
-                    f"[BROLL-MERGE] suppressed card {card.get('id','?')} "
-                    f"at {cstart:.2f}s (conf={conf:.2f}) — within {min_gap_s}s of accepted card",
-                    flush=True,
-                )
-                continue
-            picked.append(card)
-            accepted_ivs.append((cstart, cend))
-        return picked
-
-    # ── Phase 1: LLM cards (sorted by confidence desc, then earliest first) ──
-    llm_sorted = sorted(
-        [(float(c.get("_confidence", 0.70)), c) for c in llm_cards],
-        key=lambda t: (t[0], -float(t[1].get("startSec", 0) or 0)),
-        reverse=True,
-    )
-    accepted_ivs: list[tuple[float, float]] = []
-    accepted_llm = _greedy(llm_sorted, llm_quota, accepted_ivs)
-
-    # ── Phase 2: semantic cards fill remaining slots ───────────────────────────
-    sem_quota = max_cards - len(accepted_llm)
-    sem_sorted = sorted(
-        [(float(c.get("_confidence", 0.88)), c) for c in semantic_cards],
-        key=lambda t: (t[0], -float(t[1].get("startSec", 0) or 0)),
-        reverse=True,
-    )
-    accepted_sem = _greedy(sem_sorted, sem_quota, accepted_ivs)
-
-    # ── Phase 3: LLM overflow — backfill slots unused by semantic ─────────────
-    # The LLM quota is a floor, not a ceiling. If semantic had fewer eligible
-    # cards than sem_quota, remaining slots go back to unused LLM cards so the
-    # total never falls below what pure-LLM would have produced.
-    overflow_quota = max_cards - len(accepted_llm) - len(accepted_sem)
-    accepted_llm_ids = {id(c) for c in accepted_llm}
-    llm_overflow = [(conf, c) for conf, c in llm_sorted if id(c) not in accepted_llm_ids]
-    accepted_overflow = _greedy(llm_overflow, overflow_quota, accepted_ivs) if overflow_quota > 0 else []
-
-    accepted = accepted_llm + accepted_sem + accepted_overflow
-    accepted.sort(key=lambda c: float(c.get("startSec", 0) or 0))
-
-    print(
-        f"[BROLL-MERGE] {len(llm_cards)} LLM + {len(semantic_cards)} semantic → "
-        f"{len(accepted)} accepted after merge "
-        f"(cap={max_cards}, llm_quota={llm_quota}: "
-        f"{len(accepted_llm)+len(accepted_overflow)} LLM + {len(accepted_sem)} semantic)",
-        flush=True,
-    )
-    return accepted
 
 
 def _tokenize_text(text: str) -> frozenset[str]:
@@ -1621,43 +1479,6 @@ def generate_storyboard(
                 f"first nearby word='{_near[0].text}'@{_near[0].start:.2f}s",
                 flush=True,
             )
-
-    # Semantic B-roll scan + greedy merge
-    try:
-        from app.engine.semantic_scanner import scan_words
-        from app.engine import broll_registry as _broll_reg
-        _sem_hits = scan_words(remapped_words)
-        _sem_cards: list[dict] = []
-        _card_counter = len(graphic_cards) + 1
-        for _hit in _sem_hits:
-            _btype = _broll_reg.REGISTRY.get(_hit.broll_type)
-            if _btype is None:
-                continue
-            _cid = f"broll-{_card_counter:03d}"
-            _card_counter += 1
-            _end_sec = min(
-                round(_hit.start_sec + _btype.default_duration, 3),
-                trimmed_duration,
-            )
-            _sem_cards.append({
-                "id": _cid,
-                "startSec": round(_hit.start_sec, 3),
-                "endSec": _end_sec,
-                "zone": _btype.preferred_zone,
-                "contentHints": {"style": "__broll__"},
-                "_broll_type": _hit.broll_type,
-                "_broll_params": _hit.params,
-                "_confidence": _hit.confidence,
-                "_text_span": _hit.text_span,
-            })
-            print(
-                f"[BROLL-MERGE] semantic hit: {_hit.broll_type} "
-                f"'{_hit.text_span}' @{_hit.start_sec:.2f}s conf={_hit.confidence:.2f}",
-                flush=True,
-            )
-        graphic_cards = _merge_cards(graphic_cards, _sem_cards, video_duration_s=trimmed_duration)
-    except Exception as _broll_exc:
-        print(f"[BROLL-MERGE] non-fatal error in semantic scan/merge: {_broll_exc}", flush=True)
 
     # Generative B-roll auto-injection is disabled.
     # The engine (broll_generative.py + broll_primitive.py) drove card selection via internal

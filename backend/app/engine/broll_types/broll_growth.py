@@ -9,8 +9,6 @@ Triggers on phrases like:
 Does NOT trigger on:
   - A bare number with no progression marker (avoids doubling with money_counter)
   - Overlapping windows already claimed by money_counter or calendar_date
-    (handled upstream by _merge_cards() greedy-by-confidence — no extra
-    cooldown logic needed here)
 
 render_html : SVG <path> with stroke-dasharray/stroke-dashoffset = 0 (path
              hidden at start). Pack-coloured stroke, gradient fill beneath.
