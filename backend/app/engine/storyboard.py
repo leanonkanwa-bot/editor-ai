@@ -1149,18 +1149,27 @@ def _merge_cards(
     min_gap_s: float = 4.5,
     video_duration_s: float = 0.0,
 ) -> list[dict]:
-    """Greedy-by-confidence merge of LLM graphic cards + semantic B-roll cards.
+    """Three-phase mixed-quota merge of LLM graphic cards + semantic B-roll cards.
 
-    LLM cards are assigned implicit confidence 0.70.
-    Semantic cards carry their own confidence value.
-    All cards are sorted descending by confidence; we walk in that order,
-    accept a card, and immediately suppress any remaining card whose window
-    overlaps within min_gap_s (both directions).
+    Phase 1 — LLM quota: ceil(max_cards / 2) slots reserved for the best
+    LLM cards first. This guarantees classic graphic diversity even when
+    multiple high-confidence semantic hits are present (e.g. short videos).
 
-    Density cap: _MAX_BROLL_PER_MINUTE (default 3) — prevents overlay saturation
-    on content-rich videos. Cap is proportional to video duration.
+    Phase 2 — Semantic fill: remaining slots go to semantic cards, highest
+    confidence first. If LLM used fewer slots than its quota (sparse content),
+    semantic inherits the bonus.
+
+    Phase 3 — LLM overflow: any slots still unused after Phase 2 (because
+    semantic had too few eligible cards) are backfilled by the remaining LLM
+    cards. This prevents empty slots when semantic coverage is thin.
+
+    All three phases share the same accepted_ivs list so min_gap_s suppression
+    is consistent across phases.
+
+    Density cap: _MAX_BROLL_PER_MINUTE (default 3) — proportional to duration.
     Set env BROLL_MAX_PER_MINUTE to override without a code push.
     """
+    import math
     import os
     _effective_cap = float(os.environ.get("BROLL_MAX_PER_MINUTE") or _MAX_BROLL_PER_MINUTE)
     max_cards = (
@@ -1168,56 +1177,72 @@ def _merge_cards(
         if video_duration_s > 0
         else 999
     )
-
-    # Attach confidence to LLM cards (implicit 0.70)
-    annotated: list[tuple[float, dict]] = []
-    for c in llm_cards:
-        annotated.append((float(c.get("_confidence", 0.70)), c))
-    for c in semantic_cards:
-        annotated.append((float(c.get("_confidence", 0.88)), c))
-
-    # Sort descending by confidence; ties broken by earliest timestamp.
-    # Guard against LLM cards where startSec was emitted as "" (non-fatal edge case).
-    annotated.sort(
-        key=lambda t: (t[0], -float(t[1].get("startSec", 0) or 0)),
-        reverse=True,
-    )
-
-    accepted: list[dict] = []
-    accepted_ivs: list[tuple[float, float]] = []
+    llm_quota = math.ceil(max_cards / 2)
 
     def _iv_gap(s1: float, e1: float, s2: float, e2: float) -> float:
         return max(0.0, max(s1, s2) - min(e1, e2))
 
-    for conf, card in annotated:
-        if len(accepted) >= max_cards:
-            print(
-                f"[BROLL-MERGE] density cap reached ({max_cards} cards"
-                f" for {video_duration_s:.0f}s video) — dropping remaining",
-                flush=True,
-            )
-            break
+    def _card_iv(card: dict) -> tuple[float, float]:
         cstart = float(card.get("startSec", 0) or 0)
         cend   = float(card.get("endSec", "") or cstart + 5.0)
-        suppressed = any(
-            _iv_gap(cstart, cend, a_s, a_e) < min_gap_s
-            for a_s, a_e in accepted_ivs
-        )
-        if suppressed:
-            print(
-                f"[BROLL-MERGE] suppressed card {card.get('id','?')} "
-                f"at {cstart:.2f}s (conf={conf:.2f}) — within {min_gap_s}s of accepted card",
-                flush=True,
-            )
-            continue
-        accepted.append(card)
-        accepted_ivs.append((cstart, cend))
+        return cstart, cend
 
-    # Restore display order (chronological)
+    def _greedy(
+        candidates: list[tuple[float, dict]],
+        quota: int,
+        accepted_ivs: list[tuple[float, float]],
+    ) -> list[dict]:
+        picked: list[dict] = []
+        for conf, card in candidates:
+            if len(picked) >= quota:
+                break
+            cstart, cend = _card_iv(card)
+            if any(_iv_gap(cstart, cend, a_s, a_e) < min_gap_s for a_s, a_e in accepted_ivs):
+                print(
+                    f"[BROLL-MERGE] suppressed card {card.get('id','?')} "
+                    f"at {cstart:.2f}s (conf={conf:.2f}) — within {min_gap_s}s of accepted card",
+                    flush=True,
+                )
+                continue
+            picked.append(card)
+            accepted_ivs.append((cstart, cend))
+        return picked
+
+    # ── Phase 1: LLM cards (sorted by confidence desc, then earliest first) ──
+    llm_sorted = sorted(
+        [(float(c.get("_confidence", 0.70)), c) for c in llm_cards],
+        key=lambda t: (t[0], -float(t[1].get("startSec", 0) or 0)),
+        reverse=True,
+    )
+    accepted_ivs: list[tuple[float, float]] = []
+    accepted_llm = _greedy(llm_sorted, llm_quota, accepted_ivs)
+
+    # ── Phase 2: semantic cards fill remaining slots ───────────────────────────
+    sem_quota = max_cards - len(accepted_llm)
+    sem_sorted = sorted(
+        [(float(c.get("_confidence", 0.88)), c) for c in semantic_cards],
+        key=lambda t: (t[0], -float(t[1].get("startSec", 0) or 0)),
+        reverse=True,
+    )
+    accepted_sem = _greedy(sem_sorted, sem_quota, accepted_ivs)
+
+    # ── Phase 3: LLM overflow — backfill slots unused by semantic ─────────────
+    # The LLM quota is a floor, not a ceiling. If semantic had fewer eligible
+    # cards than sem_quota, remaining slots go back to unused LLM cards so the
+    # total never falls below what pure-LLM would have produced.
+    overflow_quota = max_cards - len(accepted_llm) - len(accepted_sem)
+    accepted_llm_ids = {id(c) for c in accepted_llm}
+    llm_overflow = [(conf, c) for conf, c in llm_sorted if id(c) not in accepted_llm_ids]
+    accepted_overflow = _greedy(llm_overflow, overflow_quota, accepted_ivs) if overflow_quota > 0 else []
+
+    accepted = accepted_llm + accepted_sem + accepted_overflow
     accepted.sort(key=lambda c: float(c.get("startSec", 0) or 0))
+
     print(
         f"[BROLL-MERGE] {len(llm_cards)} LLM + {len(semantic_cards)} semantic → "
-        f"{len(accepted)} accepted after merge (cap={max_cards})",
+        f"{len(accepted)} accepted after merge "
+        f"(cap={max_cards}, llm_quota={llm_quota}: "
+        f"{len(accepted_llm)+len(accepted_overflow)} LLM + {len(accepted_sem)} semantic)",
         flush=True,
     )
     return accepted
