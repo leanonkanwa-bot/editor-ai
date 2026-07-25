@@ -372,6 +372,35 @@ def _segment_captions(
     else:
         print(f"[CAPTION AUDIT] PASS: {len(input_texts)}/{len(input_texts)} words, 0 missing")
 
+    # Post-merge apostrophe audit: detect unmerged spans surviving into final cards.
+    # "card starts with apos" = 'j' ended previous card, "'ai" starts this one (merge failed at boundary).
+    # "unmerged span inside card" = merge should have joined these but didn't.
+    _apos_start_warns: list[str] = []
+    _apos_span_warns: list[str] = []
+    for c in cards:
+        for wi, w in enumerate(c["words"]):
+            wt = w["text"]
+            if any(wt.startswith(a) for a in _STORYBOARD_APOS):
+                if wi == 0:
+                    _apos_start_warns.append(
+                        f"  Card {c['id']} starts with: {repr(wt)} at {w['start']:.3f}s"
+                    )
+                else:
+                    prev_wt = c["words"][wi - 1]["text"]
+                    _apos_span_warns.append(
+                        f"  Card {c['id']} [{wi}]: prev={repr(prev_wt)} | cur={repr(wt)} at {w['start']:.3f}s"
+                    )
+    if _apos_start_warns:
+        print(f"[CAPTION APOS] CARD-BOUNDARY: {len(_apos_start_warns)} card(s) open with apostrophe word (merge missed boundary):")
+        for _l in _apos_start_warns:
+            print(_l, flush=True)
+    if _apos_span_warns:
+        print(f"[CAPTION APOS] INTRA-CARD: {len(_apos_span_warns)} unmerged apostrophe span(s) inside card(s):")
+        for _l in _apos_span_warns:
+            print(_l, flush=True)
+    if not _apos_start_warns and not _apos_span_warns:
+        print("[CAPTION APOS] OK: no unmerged apostrophe spans in final cards", flush=True)
+
     return cards
 
 
