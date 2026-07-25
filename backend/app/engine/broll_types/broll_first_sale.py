@@ -40,13 +40,19 @@ _FIRST_SALE_EN_RE = re.compile(
 
 _ALL_PATTERNS = [_PREMIERE_VENTE_RE, _FIRST_SALE_EN_RE]
 
+_APOS = ("\u2019", "'")  # right single quotation mark + straight apostrophe
+
 
 def _ctx_words(words, idx: int, radius: int = 6) -> str:
     n = len(words)
-    return " ".join(
-        getattr(words[i], "text", "")
-        for i in range(max(0, idx - radius), min(n, idx + radius + 1))
-    )
+    tokens = [getattr(words[i], "text", "") for i in range(max(0, idx - radius), min(n, idx + radius + 1))]
+    merged: list[str] = []
+    for w in tokens:
+        if merged and any(w.startswith(a) for a in _APOS):
+            merged[-1] += w
+        else:
+            merged.append(w)
+    return " ".join(merged)
 
 
 def _e(s: str) -> str:
@@ -60,18 +66,14 @@ def _ej(s: str) -> str:
 # ── Extractor ─────────────────────────────────────────────────────────────────
 
 def _extractor(match, words, word_idx: int) -> tuple[dict, float]:
-    ctx = _ctx_words(words, word_idx, 6)
     conf = 0.88 if match.re is _PREMIERE_VENTE_RE else 0.84
-
-    # Use matched text as sale_context (cleaned up)
     sale_context = _ctx_words(words, word_idx, 4).strip()[:80]
-
     return {"sale_context": sale_context}, conf
 
 
 # ── Render HTML ───────────────────────────────────────────────────────────────
 
-def _render_html(params: dict, pack: dict, card_id: str) -> str:
+def _render_html(params: dict, pack: dict, card_id: str, compact: bool = False, layout: str = "portrait") -> str:
     p = pack or {}
     bg       = p.get("bg",             "#1a1a1a")
     text_c   = p.get("text",           "#f1f1f1")
@@ -84,17 +86,25 @@ def _render_html(params: dict, pack: dict, card_id: str) -> str:
     shadow_i = p.get("shadow_inset",   "")
     shadow_v = f"{shadow}, {shadow_i}" if shadow_i else shadow
     glow_i   = p.get("title_glow_intense", "")
+    border   = p.get("border",         "")
     pack_id  = p.get("id",             "")
 
     sale_context = _e(params.get("sale_context", ""))
+
+    pad        = "16px 20px" if compact else "32px 40px"
+    ring_size  = "48px"      if compact else "64px"
+    icon_size  = "22px"      if compact else "28px"
+    head_size  = "26px"      if compact else "32px"
+    ctx_size   = "15px"      if compact else "18px"
+    gap        = "12px"      if compact else "16px"
+    border_css = f"; border:{border}" if border else ""
 
     # Pack-specific label + icon (SVG only — emoji/special-char text fails in headless Chromium)
     if pack_id == "lean_ledger":
         headline  = "FIRST SALE"
         icon_html = (
             f'<div class="fs-icon" id="{card_id}-fs-icon">'
-            f'<svg viewBox="0 0 24 24" width="28" height="28" xmlns="http://www.w3.org/2000/svg">'
-            # Dollar-sign geometry: vertical bar + two horizontal crossbars
+            f'<svg viewBox="0 0 24 24" width="{icon_size}" height="{icon_size}" xmlns="http://www.w3.org/2000/svg">'
             f'<line x1="12" y1="2" x2="12" y2="22" stroke="{accent}" stroke-width="2" stroke-linecap="round"/>'
             f'<path d="M16 5.5 Q7 5.5 7 9.5 Q7 13.5 12 13.5 Q17 13.5 17 17.5 Q17 21.5 8 21.5"'
             f' fill="none" stroke="{accent}" stroke-width="2" stroke-linecap="round"/>'
@@ -104,7 +114,7 @@ def _render_html(params: dict, pack: dict, card_id: str) -> str:
         headline  = "La première vente"
         icon_html = (
             f'<div class="fs-icon" id="{card_id}-fs-icon">'
-            f'<svg viewBox="0 0 24 24" width="28" height="28" xmlns="http://www.w3.org/2000/svg">'
+            f'<svg viewBox="0 0 24 24" width="{icon_size}" height="{icon_size}" xmlns="http://www.w3.org/2000/svg">'
             f'<polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"'
             f' fill="{accent}"/>'
             f'</svg></div>'
@@ -113,8 +123,7 @@ def _render_html(params: dict, pack: dict, card_id: str) -> str:
         headline  = "PREMIÈRE VENTE !"
         icon_html = (
             f'<div class="fs-icon" id="{card_id}-fs-icon">'
-            f'<svg viewBox="0 0 24 24" width="28" height="28" xmlns="http://www.w3.org/2000/svg">'
-            # 8-point burst (celebratory spark)
+            f'<svg viewBox="0 0 24 24" width="{icon_size}" height="{icon_size}" xmlns="http://www.w3.org/2000/svg">'
             f'<polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"'
             f' fill="{accent}"/>'
             f'</svg></div>'
@@ -123,8 +132,7 @@ def _render_html(params: dict, pack: dict, card_id: str) -> str:
         headline  = "Première vente"
         icon_html = (
             f'<div class="fs-icon" id="{card_id}-fs-icon">'
-            f'<svg viewBox="0 0 24 24" width="28" height="28" xmlns="http://www.w3.org/2000/svg">'
-            # 4-point diamond star
+            f'<svg viewBox="0 0 24 24" width="{icon_size}" height="{icon_size}" xmlns="http://www.w3.org/2000/svg">'
             f'<path d="M12 2 L14.5 9.5 L22 12 L14.5 14.5 L12 22 L9.5 14.5 L2 12 L9.5 9.5 Z"'
             f' fill="{accent}"/>'
             f'</svg></div>'
@@ -133,8 +141,7 @@ def _render_html(params: dict, pack: dict, card_id: str) -> str:
         headline  = "PREMIÈRE VENTE"
         icon_html = (
             f'<div class="fs-icon" id="{card_id}-fs-icon">'
-            f'<svg viewBox="0 0 24 24" width="28" height="28" xmlns="http://www.w3.org/2000/svg">'
-            # Lightning bolt (same path as broll_primitive "spark" icon)
+            f'<svg viewBox="0 0 24 24" width="{icon_size}" height="{icon_size}" xmlns="http://www.w3.org/2000/svg">'
             f'<path d="M13 2 L4 13 L10.5 13 L8.5 22 L20 11 L13.5 11 Z" fill="{accent}"/>'
             f'</svg></div>'
         )
@@ -143,25 +150,25 @@ def _render_html(params: dict, pack: dict, card_id: str) -> str:
 
     # Pack-specific burst ring
     if pack_id in ("lean_glass",):
-        ring_css = f"box-shadow:0 0 0 0 {accent}; border-radius:50%; width:64px; height:64px; display:flex; align-items:center; justify-content:center; background:rgba(76,201,240,0.12);"
+        ring_css = f"box-shadow:0 0 0 0 {accent}; border-radius:50%; width:{ring_size}; height:{ring_size}; display:flex; align-items:center; justify-content:center; background:rgba(76,201,240,0.12);"
     elif pack_id == "lean_vibe":
-        ring_css = "border-radius:50%; width:64px; height:64px; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.20);"
+        ring_css = f"border-radius:50%; width:{ring_size}; height:{ring_size}; display:flex; align-items:center; justify-content:center; background:rgba(255,255,255,0.20);"
     elif pack_id == "lean_ledger":
-        ring_css = f"border:1px solid {accent}; border-radius:4px; width:56px; height:56px; display:flex; align-items:center; justify-content:center; background:transparent;"
+        ring_css = f"border:1px solid {accent}; border-radius:4px; width:{ring_size}; height:{ring_size}; display:flex; align-items:center; justify-content:center; background:transparent;"
     else:
-        ring_css = f"border-radius:50%; width:64px; height:64px; display:flex; align-items:center; justify-content:center; background:rgba(128,128,128,0.10);"
+        ring_css = f"border-radius:50%; width:{ring_size}; height:{ring_size}; display:flex; align-items:center; justify-content:center; background:rgba(128,128,128,0.10);"
 
     css = f"""\
 .card[data-card-id="{card_id}"] .root{{width:100%;height:100%;display:flex;align-items:center;justify-content:center;}}
-.card[data-card-id="{card_id}"] .fs-wrap{{background:{bg};border-radius:{radius};padding:32px 40px;
-  display:flex;flex-direction:column;align-items:center;gap:16px;box-shadow:{shadow_v};width:90%;max-width:420px;}}
+.card[data-card-id="{card_id}"] .fs-wrap{{background:{bg};border-radius:{radius};padding:{pad};
+  display:flex;flex-direction:column;align-items:center;gap:{gap};box-shadow:{shadow_v};width:90%;max-width:420px{border_css};}}
 .card[data-card-id="{card_id}"] .fs-ring{{
   {ring_css}opacity:0;
 }}
 .card[data-card-id="{card_id}"] .fs-icon{{display:flex;align-items:center;justify-content:center;}}
-.card[data-card-id="{card_id}"] .fs-headline{{font-family:{font};font-size:32px;font-weight:{fw};
+.card[data-card-id="{card_id}"] .fs-headline{{font-family:{font};font-size:{head_size};font-weight:{fw};
   color:{accent};letter-spacing:0.02em;opacity:0;text-align:center;{glow_css}}}
-.card[data-card-id="{card_id}"] .fs-context{{font-family:{font};font-size:18px;font-weight:500;
+.card[data-card-id="{card_id}"] .fs-context{{font-family:{font};font-size:{ctx_size};font-weight:500;
   color:{text_s};line-height:1.4;text-align:center;opacity:0;}}
 .card[data-card-id="{card_id}"] .fs-line{{width:0;height:2px;background:{accent};border-radius:2px;margin-top:4px;}}"""
 
@@ -197,6 +204,7 @@ def _render_gsap(params: dict, pack: dict, card_id: str, start: float, end: floa
     is_ledger = pack_id == "lean_ledger"
     is_vibe   = pack_id == "lean_vibe"
     is_glass  = pack_id == "lean_glass"
+    is_craft  = pack_id == "lean_craft"
 
     t_in  = round(start + 0.18, 4)
     t_hl  = round(t_in + 0.25, 4)
@@ -210,6 +218,8 @@ def _render_gsap(params: dict, pack: dict, card_id: str, start: float, end: floa
         lines.append(f"  tl.to('#{cid}-fs-ring',{{opacity:1,duration:0.80,ease:'power2.in'}},{t_in:.4f});")
     elif is_vibe:
         lines.append(f"  tl.fromTo('#{cid}-fs-ring',{{opacity:0,scale:0.5}},{{opacity:1,scale:1,duration:0.40,ease:'back.out(2.0)'}},{t_in:.4f});")
+    elif is_craft:
+        lines.append(f"  tl.fromTo('#{cid}-fs-ring',{{opacity:0,scale:0.6,rotate:-10}},{{opacity:1,scale:1,rotate:0,duration:0.38,ease:'back.out(1.6)'}},{t_in:.4f});")
     else:
         lines.append(f"  tl.fromTo('#{cid}-fs-ring',{{opacity:0,scale:0.7}},{{opacity:1,scale:1,duration:0.30,ease:'power2.out'}},{t_in:.4f});")
 
@@ -231,6 +241,8 @@ def _render_gsap(params: dict, pack: dict, card_id: str, start: float, end: floa
         lines.append(f"  tl.fromTo('#{cid}-fs-headline',{{opacity:0,scale:0.8}},{{opacity:1,scale:1,duration:0.35,ease:'back.out(1.5)'}},{t_hl:.4f});")
     elif is_ledger:
         lines.append(f"  tl.to('#{cid}-fs-headline',{{opacity:1,duration:0.15,ease:'none'}},{t_hl:.4f});")
+    elif is_craft:
+        lines.append(f"  tl.fromTo('#{cid}-fs-headline',{{opacity:0,y:-10}},{{opacity:1,y:0,duration:0.35,ease:'circ.out'}},{t_hl:.4f});")
     else:
         lines.append(f"  tl.fromTo('#{cid}-fs-headline',{{opacity:0,y:-8}},{{opacity:1,y:0,duration:0.30,ease:'power2.out'}},{t_hl:.4f});")
 

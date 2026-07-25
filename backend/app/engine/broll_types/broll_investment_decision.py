@@ -44,13 +44,19 @@ _INVEST_EN_RE = re.compile(
 
 _ALL_PATTERNS = [_INVEST_FR_RE, _INVEST_EN_RE]
 
+_APOS = ("\u2019", "'")  # right single quotation mark + straight apostrophe
+
 
 def _ctx_words(words, idx: int, radius: int = 8) -> str:
     n = len(words)
-    return " ".join(
-        getattr(words[i], "text", "")
-        for i in range(max(0, idx - radius), min(n, idx + radius + 1))
-    )
+    tokens = [getattr(words[i], "text", "") for i in range(max(0, idx - radius), min(n, idx + radius + 1))]
+    merged: list[str] = []
+    for w in tokens:
+        if merged and any(w.startswith(a) for a in _APOS):
+            merged[-1] += w
+        else:
+            merged.append(w)
+    return " ".join(merged)
 
 
 def _e(s: str) -> str:
@@ -71,7 +77,7 @@ def _extractor(match, words, word_idx: int) -> tuple[dict, float]:
 
 # ── Render HTML ───────────────────────────────────────────────────────────────
 
-def _render_html(params: dict, pack: dict, card_id: str) -> str:
+def _render_html(params: dict, pack: dict, card_id: str, compact: bool = False, layout: str = "portrait") -> str:
     p = pack or {}
     bg       = p.get("bg",             "#1a1a1a")
     text_c   = p.get("text",           "#f1f1f1")
@@ -85,9 +91,17 @@ def _render_html(params: dict, pack: dict, card_id: str) -> str:
     shadow_v = f"{shadow}, {shadow_i}" if shadow_i else shadow
     glow     = p.get("title_glow",     "")
     glow_i   = p.get("title_glow_intense", "")
+    border   = p.get("border",         "")
     pack_id  = p.get("id",             "")
 
     inv_label = _e(params.get("investment_label", ""))
+
+    pad        = "14px 20px" if compact else "36px 40px"
+    amt_size   = "24px"      if compact else "30px"
+    kick_size  = "10px"      if compact else "12px"
+    gap        = "12px"      if compact else "16px"
+    pulse_size = "40px"      if compact else "48px"
+    border_css = f"; border:{border}" if border else ""
 
     glow_css   = f" text-shadow:{_e(glow)};"   if glow   else ""
     glow_i_css = f" text-shadow:{_e(glow_i)};" if glow_i else ""
@@ -95,39 +109,69 @@ def _render_html(params: dict, pack: dict, card_id: str) -> str:
     # Pack-specific headline
     if pack_id == "lean_ledger":
         kicker = "INVESTMENT DECISION"
-        icon   = "[ Ψ ]"
     elif pack_id == "lean_cinema":
         kicker = "Le pari"
-        icon   = "◈"
     elif pack_id == "lean_vibe":
         kicker = "LE PARI !"
-        icon   = "💸"
     elif pack_id == "lean_craft":
         kicker = "Mon investissement"
-        icon   = "✦"
     else:
         kicker = "J'AI INVESTI"
-        icon   = "→"
+
+    # Pack-specific icon — SVG only (emoji/special chars fail in headless Chromium)
+    if pack_id == "lean_ledger":
+        icon_html = (
+            f'<svg viewBox="0 0 24 24" width="22" height="22" xmlns="http://www.w3.org/2000/svg">'
+            f'<rect x="3" y="14" width="4" height="7" fill="{accent}"/>'
+            f'<rect x="10" y="10" width="4" height="11" fill="{accent}"/>'
+            f'<rect x="17" y="5" width="4" height="16" fill="{accent}"/>'
+            f'</svg>'
+        )
+    elif pack_id == "lean_cinema":
+        icon_html = (
+            f'<svg viewBox="0 0 24 24" width="26" height="26" xmlns="http://www.w3.org/2000/svg">'
+            f'<path d="M12 3 L21 12 L12 21 L3 12 Z" fill="none" stroke="white" stroke-width="1.5"/>'
+            f'<path d="M12 8 L16 12 L12 16 L8 12 Z" fill="white"/>'
+            f'</svg>'
+        )
+    elif pack_id == "lean_vibe":
+        icon_html = (
+            f'<svg viewBox="0 0 24 24" width="26" height="26" xmlns="http://www.w3.org/2000/svg">'
+            f'<path d="M12 3 L14 9 L20 12 L14 15 L12 21 L10 15 L4 12 L10 9 Z" fill="{accent}"/>'
+            f'</svg>'
+        )
+    elif pack_id == "lean_craft":
+        icon_html = (
+            f'<svg viewBox="0 0 24 24" width="26" height="26" xmlns="http://www.w3.org/2000/svg">'
+            f'<path d="M12 2 L14.5 9.5 L22 12 L14.5 14.5 L12 22 L9.5 14.5 L2 12 L9.5 9.5 Z" fill="white"/>'
+            f'</svg>'
+        )
+    else:
+        # lean_glass, lean_paper — simple arrow text works in Chromium
+        icon_html = f'<span style="color:{text_c};font-size:22px;">&#x2192;</span>'
 
     # Accent bar / pulse style per pack
     if pack_id == "lean_glass":
-        pulse_css = f"background:{accent}; border-radius:50%; width:48px; height:48px; display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 0 {accent};"
+        pulse_css = f"background:{accent}; border-radius:50%; width:{pulse_size}; height:{pulse_size}; display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 0 {accent};"
     elif pack_id == "lean_vibe":
-        pulse_css = "background:rgba(255,255,255,0.20); border-radius:50%; width:48px; height:48px; display:flex; align-items:center; justify-content:center;"
+        pulse_css = f"background:rgba(255,255,255,0.20); border-radius:50%; width:{pulse_size}; height:{pulse_size}; display:flex; align-items:center; justify-content:center;"
+    elif pack_id == "lean_cinema":
+        pulse_css = f"background:{accent}; border-radius:8px; width:{pulse_size}; height:{pulse_size}; display:flex; align-items:center; justify-content:center;"
+    elif pack_id == "lean_craft":
+        pulse_css = f"background:{accent}; border-radius:8px; width:{pulse_size}; height:{pulse_size}; display:flex; align-items:center; justify-content:center;"
     elif pack_id == "lean_ledger":
         pulse_css = f"border:1px solid {accent}; border-radius:4px; padding:6px 12px; display:inline-block; background:transparent;"
     else:
-        pulse_css = f"background:{accent}; border-radius:8px; width:48px; height:48px; display:flex; align-items:center; justify-content:center;"
+        pulse_css = f"background:{accent}; border-radius:8px; width:{pulse_size}; height:{pulse_size}; display:flex; align-items:center; justify-content:center;"
 
     css = f"""\
 .card[data-card-id="{card_id}"] .root{{width:100%;height:100%;display:flex;align-items:center;justify-content:center;}}
-.card[data-card-id="{card_id}"] .inv-wrap{{background:{bg};border-radius:{radius};padding:36px 40px;
-  display:flex;flex-direction:column;align-items:center;gap:16px;box-shadow:{shadow_v};width:90%;max-width:440px;}}
+.card[data-card-id="{card_id}"] .inv-wrap{{background:{bg};border-radius:{radius};padding:{pad};
+  display:flex;flex-direction:column;align-items:center;gap:{gap};box-shadow:{shadow_v};width:90%;max-width:440px{border_css};}}
 .card[data-card-id="{card_id}"] .inv-pulse{{{pulse_css}opacity:0;}}
-.card[data-card-id="{card_id}"] .inv-icon{{font-size:22px;color:{text_c};}}
-.card[data-card-id="{card_id}"] .inv-kicker{{font-family:{font};font-size:12px;font-weight:700;
+.card[data-card-id="{card_id}"] .inv-kicker{{font-family:{font};font-size:{kick_size};font-weight:700;
   letter-spacing:0.18em;text-transform:uppercase;color:{text_s};opacity:0;}}
-.card[data-card-id="{card_id}"] .inv-amount{{font-family:{font};font-size:30px;font-weight:{fw};
+.card[data-card-id="{card_id}"] .inv-amount{{font-family:{font};font-size:{amt_size};font-weight:{fw};
   color:{accent};text-align:center;line-height:1.3;opacity:0;{glow_i_css}}}
 .card[data-card-id="{card_id}"] .inv-line{{width:0;height:3px;background:{accent};border-radius:2px;{glow_css}}}"""
 
@@ -141,7 +185,7 @@ def _render_html(params: dict, pack: dict, card_id: str) -> str:
 <div class="root">
   <div class="inv-wrap">
     <div class="inv-pulse" id="{card_id}-inv-pulse">
-      <span class="inv-icon">{_e(icon)}</span>
+      {icon_html}
     </div>
     <div class="inv-kicker" id="{card_id}-inv-kicker">{_e(kicker)}</div>
     {label_html}
@@ -163,6 +207,7 @@ def _render_gsap(params: dict, pack: dict, card_id: str, start: float, end: floa
     is_ledger = pack_id == "lean_ledger"
     is_vibe   = pack_id == "lean_vibe"
     is_glass  = pack_id == "lean_glass"
+    is_craft  = pack_id == "lean_craft"
 
     t_in    = round(start + 0.18, 4)
     t_kick  = round(t_in + 0.25, 4)
@@ -178,6 +223,8 @@ def _render_gsap(params: dict, pack: dict, card_id: str, start: float, end: floa
         lines.append(f"  tl.fromTo('#{cid}-inv-pulse',{{opacity:0,scale:0.5}},{{opacity:1,scale:1,duration:0.40,ease:'back.out(2.0)'}},{t_in:.4f});")
     elif is_ledger:
         lines.append(f"  tl.to('#{cid}-inv-pulse',{{opacity:1,duration:0.15,ease:'none'}},{t_in:.4f});")
+    elif is_craft:
+        lines.append(f"  tl.fromTo('#{cid}-inv-pulse',{{opacity:0,scale:0.6,rotate:-8}},{{opacity:1,scale:1,rotate:0,duration:0.38,ease:'back.out(1.6)'}},{t_in:.4f});")
     else:
         lines.append(f"  tl.fromTo('#{cid}-inv-pulse',{{opacity:0,scale:0.7}},{{opacity:1,scale:1,duration:0.30,ease:'power2.out'}},{t_in:.4f});")
 
@@ -190,9 +237,12 @@ def _render_gsap(params: dict, pack: dict, card_id: str, start: float, end: floa
     # Kicker label
     if is_ledger:
         lines.append(f"  tl.to('#{cid}-inv-kicker',{{opacity:1,duration:0.15,ease:'none'}},{t_kick:.4f});")
+    elif is_cinema:
+        lines.append(f"  tl.to('#{cid}-inv-kicker',{{opacity:1,duration:0.70,ease:'power1.out'}},{t_kick:.4f});")
+    elif is_craft:
+        lines.append(f"  tl.fromTo('#{cid}-inv-kicker',{{opacity:0,y:4}},{{opacity:1,y:0,duration:0.28,ease:'circ.out'}},{t_kick:.4f});")
     else:
-        d_k = 0.70 if is_cinema else 0.25
-        lines.append(f"  tl.to('#{cid}-inv-kicker',{{opacity:1,duration:{d_k},ease:'power1.out'}},{t_kick:.4f});")
+        lines.append(f"  tl.to('#{cid}-inv-kicker',{{opacity:1,duration:0.25,ease:'power1.out'}},{t_kick:.4f});")
 
     # Amount label
     has_amount = bool(params.get("investment_label", "").strip())
@@ -201,6 +251,8 @@ def _render_gsap(params: dict, pack: dict, card_id: str, start: float, end: floa
             lines.append(f"  tl.to('#{cid}-inv-amount',{{opacity:1,duration:0.70,ease:'power2.in'}},{t_amt:.4f});")
         elif is_vibe:
             lines.append(f"  tl.fromTo('#{cid}-inv-amount',{{opacity:0,scale:0.85}},{{opacity:1,scale:1,duration:0.35,ease:'back.out(1.4)'}},{t_amt:.4f});")
+        elif is_craft:
+            lines.append(f"  tl.fromTo('#{cid}-inv-amount',{{opacity:0,y:8}},{{opacity:1,y:0,duration:0.32,ease:'circ.out'}},{t_amt:.4f});")
         else:
             lines.append(f"  tl.fromTo('#{cid}-inv-amount',{{opacity:0,y:6}},{{opacity:1,y:0,duration:0.30,ease:'power2.out'}},{t_amt:.4f});")
 

@@ -47,13 +47,23 @@ _SCALE_EN_RE = re.compile(
 
 _ALL_PATTERNS = [_SCALE_FR_RE, _SCALE_EN_RE]
 
+_APOS = ("\u2019", "'")  # right single quotation mark + straight apostrophe
+
+
+def _merge_apos(tokens: list[str]) -> list[str]:
+    merged: list[str] = []
+    for w in tokens:
+        if merged and any(w.startswith(a) for a in _APOS):
+            merged[-1] += w
+        else:
+            merged.append(w)
+    return merged
+
 
 def _ctx_words(words, idx: int, radius: int = 8) -> str:
     n = len(words)
-    return " ".join(
-        getattr(words[i], "text", "")
-        for i in range(max(0, idx - radius), min(n, idx + radius + 1))
-    )
+    tokens = [getattr(words[i], "text", "") for i in range(max(0, idx - radius), min(n, idx + radius + 1))]
+    return " ".join(_merge_apos(tokens))
 
 
 def _e(s: str) -> str:
@@ -73,10 +83,9 @@ def _extractor(match, words, word_idx: int) -> tuple[dict, float]:
     sc_from = (gd.get("sc_from") or "").strip()[:40]
     sc_to   = (gd.get("sc_to")  or "").strip()[:40]
 
-    # fallback: extract context words
+    # fallback: extract context words with apostrophe merge
     if not sc_from:
-        ctx = _ctx_words(words, word_idx, 5)
-        sc_from = ctx[:40].strip()
+        sc_from = _ctx_words(words, word_idx, 5)[:40].strip()
 
     return {
         "start_label": sc_from,
@@ -86,7 +95,7 @@ def _extractor(match, words, word_idx: int) -> tuple[dict, float]:
 
 # ── Render HTML ───────────────────────────────────────────────────────────────
 
-def _render_html(params: dict, pack: dict, card_id: str) -> str:
+def _render_html(params: dict, pack: dict, card_id: str, compact: bool = False, layout: str = "portrait") -> str:
     p = pack or {}
     bg       = p.get("bg",             "#1a1a1a")
     text_c   = p.get("text",           "#f1f1f1")
@@ -100,19 +109,25 @@ def _render_html(params: dict, pack: dict, card_id: str) -> str:
     shadow_v = f"{shadow}, {shadow_i}" if shadow_i else shadow
     glow     = p.get("title_glow",     "")
     glow_i   = p.get("title_glow_intense", "")
+    border   = p.get("border",         "")
     pack_id  = p.get("id",             "")
 
     start_raw = params.get("start_label", "")
     end_raw   = params.get("end_label",   "")
 
+    pad        = "14px 20px" if compact else "32px 36px"
+    from_size  = "20px"      if compact else "24px"
+    to_size    = "22px"      if compact else "26px"
+    kick_size  = "10px"      if compact else "11px"
+    gap        = "14px"      if compact else "20px"
+    border_css = f"; border:{border}" if border else ""
+
     glow_css   = f" text-shadow:{_e(glow)};"   if glow   else ""
     glow_i_css = f" text-shadow:{_e(glow_i)};" if glow_i else ""
 
-    # Fallback display values
     start_text = _e(start_raw) if start_raw else "Avant"
-    end_text   = _e(end_raw)   if end_raw   else "À l'échelle"
+    end_text   = _e(end_raw)   if end_raw   else "\u00c0 l\u2019\u00e9chelle"
 
-    # Pack-specific headline
     if pack_id == "lean_ledger":
         kicker = "SCALE EVENT"
     elif pack_id in ("lean_craft", "lean_cinema"):
@@ -121,31 +136,28 @@ def _render_html(params: dict, pack: dict, card_id: str) -> str:
         kicker = "MISE À L'ÉCHELLE"
 
     # Arrow style per pack
+    arrow_size = "22px" if compact else "28px"
     if pack_id == "lean_glass":
-        arrow_css  = f"color:{accent}; font-size:28px; opacity:0; transform:scaleX(0.3); text-shadow:{glow_i};" if glow_i else f"color:{accent}; font-size:28px; opacity:0; transform:scaleX(0.3);"
+        arrow_css = f"color:{accent}; font-size:{arrow_size}; opacity:0; transform:scaleX(0.3); text-shadow:{glow_i};" if glow_i else f"color:{accent}; font-size:{arrow_size}; opacity:0; transform:scaleX(0.3);"
     elif pack_id == "lean_vibe":
-        arrow_css  = f"color:{accent}; font-size:32px; opacity:0; transform:scale(0.2);"
+        arrow_css = f"color:{accent}; font-size:{arrow_size}; opacity:0; transform:scale(0.2);"
     elif pack_id == "lean_ledger":
-        arrow_css  = f"color:{accent}; font-size:22px; opacity:0; font-family:monospace;"
+        arrow_css = f"color:{accent}; font-size:{'18px' if compact else '22px'}; opacity:0; font-family:monospace;"
     else:
-        arrow_css  = f"color:{accent}; font-size:28px; opacity:0;"
-
-    # Start/end label sizing
-    label_from_color = text_s
-    label_to_color   = accent
+        arrow_css = f"color:{accent}; font-size:{arrow_size}; opacity:0;"
 
     css = f"""\
 .card[data-card-id="{card_id}"] .root{{width:100%;height:100%;display:flex;align-items:center;justify-content:center;}}
-.card[data-card-id="{card_id}"] .sm-wrap{{background:{bg};border-radius:{radius};padding:32px 36px;
-  display:flex;flex-direction:column;gap:20px;box-shadow:{shadow_v};width:90%;max-width:460px;}}
-.card[data-card-id="{card_id}"] .sm-kicker{{font-family:{font};font-size:11px;font-weight:700;
+.card[data-card-id="{card_id}"] .sm-wrap{{background:{bg};border-radius:{radius};padding:{pad};
+  display:flex;flex-direction:column;gap:{gap};box-shadow:{shadow_v};width:90%;max-width:460px{border_css};}}
+.card[data-card-id="{card_id}"] .sm-kicker{{font-family:{font};font-size:{kick_size};font-weight:700;
   letter-spacing:0.18em;text-transform:uppercase;color:{text_s};opacity:0;margin-bottom:2px;}}
 .card[data-card-id="{card_id}"] .sm-row{{display:flex;align-items:center;gap:16px;justify-content:space-between;}}
-.card[data-card-id="{card_id}"] .sm-from{{font-family:{font};font-size:24px;font-weight:{fw};
-  color:{label_from_color};line-height:1.2;opacity:0;flex:1;{glow_css}}}
+.card[data-card-id="{card_id}"] .sm-from{{font-family:{font};font-size:{from_size};font-weight:{fw};
+  color:{text_s};line-height:1.2;opacity:0;flex:1;{glow_css}}}
 .card[data-card-id="{card_id}"] .sm-arrow{{{arrow_css}flex:0 0 auto;}}
-.card[data-card-id="{card_id}"] .sm-to{{font-family:{font};font-size:26px;font-weight:{fw};
-  color:{label_to_color};line-height:1.2;opacity:0;flex:1;text-align:right;{glow_i_css}}}
+.card[data-card-id="{card_id}"] .sm-to{{font-family:{font};font-size:{to_size};font-weight:{fw};
+  color:{accent};line-height:1.2;opacity:0;flex:1;text-align:right;{glow_i_css}}}
 .card[data-card-id="{card_id}"] .sm-line{{width:0;height:2px;background:{accent};border-radius:2px;{glow_css}}}"""
 
     arrow_char = "→→→" if pack_id == "lean_ledger" else "→"
@@ -180,6 +192,7 @@ def _render_gsap(params: dict, pack: dict, card_id: str, start: float, end: floa
     is_ledger = pack_id == "lean_ledger"
     is_vibe   = pack_id == "lean_vibe"
     is_glass  = pack_id == "lean_glass"
+    is_craft  = pack_id == "lean_craft"
 
     t_in    = round(start + 0.18, 4)
     t_kick  = t_in
@@ -201,6 +214,8 @@ def _render_gsap(params: dict, pack: dict, card_id: str, start: float, end: floa
         lines.append(f"  tl.to('#{cid}-sm-from',{{opacity:1,duration:0.70,ease:'power1.in'}},{t_from:.4f});")
     elif is_ledger:
         lines.append(f"  tl.to('#{cid}-sm-from',{{opacity:1,duration:0.15,ease:'none'}},{t_from:.4f});")
+    elif is_craft:
+        lines.append(f"  tl.fromTo('#{cid}-sm-from',{{opacity:0,x:-12}},{{opacity:1,x:0,duration:0.32,ease:'circ.out'}},{t_from:.4f});")
     else:
         lines.append(f"  tl.fromTo('#{cid}-sm-from',{{opacity:0,x:-10}},{{opacity:1,x:0,duration:0.28,ease:'power2.out'}},{t_from:.4f});")
 
@@ -211,6 +226,8 @@ def _render_gsap(params: dict, pack: dict, card_id: str, start: float, end: floa
         lines.append(f"  tl.fromTo('#{cid}-sm-arrow',{{opacity:0,scale:0.2}},{{opacity:1,scale:1,duration:0.35,ease:'back.out(2.0)'}},{t_arrow:.4f});")
     elif is_glass:
         lines.append(f"  tl.fromTo('#{cid}-sm-arrow',{{opacity:0,scaleX:0.3}},{{opacity:1,scaleX:1,duration:0.35,ease:'power2.out',transformOrigin:'left center'}},{t_arrow:.4f});")
+    elif is_craft:
+        lines.append(f"  tl.fromTo('#{cid}-sm-arrow',{{opacity:0,scaleX:0.1}},{{opacity:1,scaleX:1,duration:0.40,ease:'circ.out',transformOrigin:'left center'}},{t_arrow:.4f});")
     else:
         lines.append(f"  tl.fromTo('#{cid}-sm-arrow',{{opacity:0,scaleX:0.2}},{{opacity:1,scaleX:1,duration:0.30,ease:'power2.out',transformOrigin:'left center'}},{t_arrow:.4f});")
 
@@ -219,6 +236,8 @@ def _render_gsap(params: dict, pack: dict, card_id: str, start: float, end: floa
         lines.append(f"  tl.to('#{cid}-sm-to',{{opacity:1,duration:0.70,ease:'power2.in'}},{t_to:.4f});")
     elif is_vibe:
         lines.append(f"  tl.fromTo('#{cid}-sm-to',{{opacity:0,scale:0.85}},{{opacity:1,scale:1,duration:0.35,ease:'back.out(1.5)'}},{t_to:.4f});")
+    elif is_craft:
+        lines.append(f"  tl.fromTo('#{cid}-sm-to',{{opacity:0,x:12}},{{opacity:1,x:0,duration:0.32,ease:'circ.out'}},{t_to:.4f});")
     else:
         lines.append(f"  tl.fromTo('#{cid}-sm-to',{{opacity:0,x:10}},{{opacity:1,x:0,duration:0.28,ease:'power2.out'}},{t_to:.4f});")
 

@@ -53,13 +53,23 @@ _MAINTENANT_RE = re.compile(
     re.IGNORECASE,
 )
 
+_APOS = ("\u2019", "'")  # right single quotation mark + straight apostrophe
+
+
+def _merge_apos(tokens: list[str]) -> list[str]:
+    merged: list[str] = []
+    for w in tokens:
+        if merged and any(w.startswith(a) for a in _APOS):
+            merged[-1] += w
+        else:
+            merged.append(w)
+    return merged
+
 
 def _ctx_words(words, idx: int, radius: int = 8) -> str:
     n = len(words)
-    return " ".join(
-        getattr(words[i], "text", "")
-        for i in range(max(0, idx - radius), min(n, idx + radius + 1))
-    )
+    tokens = [getattr(words[i], "text", "") for i in range(max(0, idx - radius), min(n, idx + radius + 1))]
+    return " ".join(_merge_apos(tokens))
 
 
 def _e(s: str) -> str:
@@ -77,21 +87,16 @@ def _extractor(match, words, word_idx: int) -> tuple[dict, float]:
 
     if match.re is _AVANT_RE:
         conf = 0.85
-        # Extract a few words after match start as "before" context
         end_w = min(len(words), word_idx + 8)
-        before_state = " ".join(
-            getattr(words[i], "text", "")
-            for i in range(word_idx, end_w)
-        ).strip()
+        raw_tokens = [getattr(words[i], "text", "") for i in range(word_idx, end_w)]
+        before_state = " ".join(_merge_apos(raw_tokens)).strip()
         after_state = ""
     elif match.re is _MAINTENANT_RE:
         conf = 0.80
         before_state = ""
         end_w = min(len(words), word_idx + 8)
-        after_state = " ".join(
-            getattr(words[i], "text", "")
-            for i in range(word_idx, end_w)
-        ).strip()
+        raw_tokens = [getattr(words[i], "text", "") for i in range(word_idx, end_w)]
+        after_state = " ".join(_merge_apos(raw_tokens)).strip()
     else:  # _TRANSFORM_RE
         conf = 0.82
         before_state = ctx[:50].strip()
@@ -105,7 +110,7 @@ def _extractor(match, words, word_idx: int) -> tuple[dict, float]:
 
 # ── Render HTML ───────────────────────────────────────────────────────────────
 
-def _render_html(params: dict, pack: dict, card_id: str) -> str:
+def _render_html(params: dict, pack: dict, card_id: str, compact: bool = False, layout: str = "portrait") -> str:
     p = pack or {}
     bg       = p.get("bg",             "#1a1a1a")
     text_c   = p.get("text",           "#f1f1f1")
@@ -118,10 +123,17 @@ def _render_html(params: dict, pack: dict, card_id: str) -> str:
     shadow_i = p.get("shadow_inset",   "")
     shadow_v = f"{shadow}, {shadow_i}" if shadow_i else shadow
     glow     = p.get("title_glow",     "")
+    border   = p.get("border",         "")
     pack_id  = p.get("id",             "")
 
     before_raw = params.get("before_state", "")
     after_raw  = params.get("after_state",  "")
+
+    pad        = "14px 20px" if compact else "32px 36px"
+    text_size  = "18px"      if compact else "22px"
+    label_size = "10px"      if compact else "11px"
+    gap        = "10px"      if compact else "14px"
+    border_css = f"; border:{border}" if border else ""
 
     if pack_id == "lean_ledger":
         lbl_before, lbl_after = "BEFORE", "AFTER"
@@ -153,13 +165,13 @@ def _render_html(params: dict, pack: dict, card_id: str) -> str:
 
     css = f"""\
 .card[data-card-id="{card_id}"] .root{{width:100%;height:100%;display:flex;align-items:center;justify-content:center;}}
-.card[data-card-id="{card_id}"] .ct-wrap{{background:{bg};border-radius:{radius};padding:32px 36px;
-  display:flex;flex-direction:column;gap:14px;box-shadow:{shadow_v};width:90%;max-width:460px;}}
-.card[data-card-id="{card_id}"] .ct-label{{font-family:{font};font-size:11px;font-weight:700;
+.card[data-card-id="{card_id}"] .ct-wrap{{background:{bg};border-radius:{radius};padding:{pad};
+  display:flex;flex-direction:column;gap:{gap};box-shadow:{shadow_v};width:90%;max-width:460px{border_css};}}
+.card[data-card-id="{card_id}"] .ct-label{{font-family:{font};font-size:{label_size};font-weight:700;
   letter-spacing:0.16em;text-transform:uppercase;color:{text_s};opacity:0;margin-bottom:2px;}}
-.card[data-card-id="{card_id}"] .ct-text{{font-family:{font};font-size:22px;font-weight:{fw};
+.card[data-card-id="{card_id}"] .ct-text{{font-family:{font};font-size:{text_size};font-weight:{fw};
   color:{text_c};line-height:1.3;opacity:0;{glow_css}}}
-.card[data-card-id="{card_id}"] .ct-text-after{{font-family:{font};font-size:22px;font-weight:{fw};
+.card[data-card-id="{card_id}"] .ct-text-after{{font-family:{font};font-size:{text_size};font-weight:{fw};
   color:{accent};line-height:1.3;opacity:0;}}
 .card[data-card-id="{card_id}"] .ct-divider{{width:100%;height:2px;background:{accent};{divider_extra}}}
 .card[data-card-id="{card_id}"] .ct-after-block{{{after_bg}opacity:0;}}"""
@@ -196,6 +208,7 @@ def _render_gsap(params: dict, pack: dict, card_id: str, start: float, end: floa
     is_cinema = pack_id == "lean_cinema"
     is_ledger = pack_id == "lean_ledger"
     is_vibe   = pack_id == "lean_vibe"
+    is_craft  = pack_id == "lean_craft"
 
     t_in   = round(start + 0.18, 4)
     t_b1   = t_in
@@ -219,6 +232,8 @@ def _render_gsap(params: dict, pack: dict, card_id: str, start: float, end: floa
         lines.append(f"  tl.to('#{cid}-ct-before',{{opacity:1,duration:0.70,ease:'power1.in'}},{t_b2:.4f});")
     elif is_vibe:
         lines.append(f"  tl.fromTo('#{cid}-ct-before',{{opacity:0,y:8}},{{opacity:1,y:0,duration:0.30,ease:'back.out(1.4)'}},{t_b2:.4f});")
+    elif is_craft:
+        lines.append(f"  tl.fromTo('#{cid}-ct-before',{{opacity:0,y:7}},{{opacity:1,y:0,duration:0.32,ease:'circ.out'}},{t_b2:.4f});")
     else:
         lines.append(f"  tl.fromTo('#{cid}-ct-before',{{opacity:0,y:6}},{{opacity:1,y:0,duration:0.25,ease:'power2.out'}},{t_b2:.4f});")
 
@@ -227,6 +242,8 @@ def _render_gsap(params: dict, pack: dict, card_id: str, start: float, end: floa
         lines.append(f"  tl.to('#{cid}-ct-divider',{{opacity:1,duration:0.20,ease:'none'}},{t_div:.4f});")
     elif is_cinema:
         lines.append(f"  tl.to('#{cid}-ct-divider',{{scaleX:1,duration:0.80,ease:'power1.inOut',transformOrigin:'left center'}},{t_div:.4f});")
+    elif is_craft:
+        lines.append(f"  tl.to('#{cid}-ct-divider',{{scaleX:1,duration:0.45,ease:'circ.inOut',transformOrigin:'left center'}},{t_div:.4f});")
     else:
         lines.append(f"  tl.to('#{cid}-ct-divider',{{scaleX:1,duration:0.40,ease:'power2.inOut',transformOrigin:'left center'}},{t_div:.4f});")
 
@@ -240,6 +257,9 @@ def _render_gsap(params: dict, pack: dict, card_id: str, start: float, end: floa
     elif is_vibe:
         lines.append(f"  tl.fromTo('#{cid}-ct-after-block',{{opacity:0,scale:0.92}},{{opacity:1,scale:1,duration:0.35,ease:'back.out(1.6)'}},{t_a2:.4f});")
         lines.append(f"  tl.to('#{cid}-ct-after',{{opacity:1,duration:0.25,ease:'power1.out'}},{round(t_a2+0.05,4):.4f});")
+    elif is_craft:
+        lines.append(f"  tl.fromTo('#{cid}-ct-after-block',{{opacity:0,y:10}},{{opacity:1,y:0,duration:0.35,ease:'circ.out'}},{t_a2:.4f});")
+        lines.append(f"  tl.to('#{cid}-ct-after',{{opacity:1,duration:0.28,ease:'power1.out'}},{round(t_a2+0.06,4):.4f});")
     else:
         lines.append(f"  tl.fromTo('#{cid}-ct-after-block',{{opacity:0,y:8}},{{opacity:1,y:0,duration:0.30,ease:'power2.out'}},{t_a2:.4f});")
         lines.append(f"  tl.to('#{cid}-ct-after',{{opacity:1,duration:0.25,ease:'power1.out'}},{round(t_a2+0.08,4):.4f});")

@@ -47,13 +47,19 @@ _RUPTURE_EN_RE = re.compile(
 
 _ALL_PATTERNS = [_RUPTURE_FR_RE, _RUPTURE_EN_RE]
 
+_APOS = ("\u2019", "'")  # right single quotation mark + straight apostrophe
+
 
 def _ctx_words(words, idx: int, radius: int = 7) -> str:
     n = len(words)
-    return " ".join(
-        getattr(words[i], "text", "")
-        for i in range(max(0, idx - radius), min(n, idx + radius + 1))
-    )
+    tokens = [getattr(words[i], "text", "") for i in range(max(0, idx - radius), min(n, idx + radius + 1))]
+    merged: list[str] = []
+    for w in tokens:
+        if merged and any(w.startswith(a) for a in _APOS):
+            merged[-1] += w
+        else:
+            merged.append(w)
+    return " ".join(merged)
 
 
 def _e(s: str) -> str:
@@ -74,7 +80,7 @@ def _extractor(match, words, word_idx: int) -> tuple[dict, float]:
 
 # ── Render HTML ───────────────────────────────────────────────────────────────
 
-def _render_html(params: dict, pack: dict, card_id: str) -> str:
+def _render_html(params: dict, pack: dict, card_id: str, compact: bool = False, layout: str = "portrait") -> str:
     p = pack or {}
     bg       = p.get("bg",             "#1a1a1a")
     text_c   = p.get("text",           "#f1f1f1")
@@ -87,35 +93,37 @@ def _render_html(params: dict, pack: dict, card_id: str) -> str:
     shadow_i = p.get("shadow_inset",   "")
     shadow_v = f"{shadow}, {shadow_i}" if shadow_i else shadow
     glow_i   = p.get("title_glow_intense", "")
+    border   = p.get("border",         "")
     pack_id  = p.get("id",             "")
 
     ctx = _e(params.get("breaking_context", ""))
 
+    pad         = "14px 20px" if compact else "32px 40px"
+    head_size   = "21px"      if compact else "26px"
+    ctx_size    = "14px"      if compact else "17px"
+    recov_size  = "13px"      if compact else "16px"
+    gap         = "12px"      if compact else "18px"
+    border_css  = f"; border:{border}" if border else ""
+
     # Pack-specific stress / recovery color
     if pack_id == "lean_paper":
-        stress_color   = "#e53e3e"
-        recovery_color = accent
-        track_bg       = "rgba(0,0,0,0.08)"
+        stress_color = "#e53e3e"
+        track_bg     = "rgba(0,0,0,0.08)"
     elif pack_id == "lean_vibe":
-        stress_color   = "#ff3b3b"
-        recovery_color = accent
-        track_bg       = "rgba(255,255,255,0.20)"
+        stress_color = "#ff3b3b"
+        track_bg     = "rgba(255,255,255,0.20)"
     elif pack_id == "lean_ledger":
-        stress_color   = "#ff4444"
-        recovery_color = accent
-        track_bg       = "rgba(0,200,150,0.10)"
+        stress_color = "#ff4444"
+        track_bg     = "rgba(0,200,150,0.10)"
     elif pack_id == "lean_craft":
-        stress_color   = "#c0392b"
-        recovery_color = accent
-        track_bg       = "rgba(61,43,31,0.12)"
+        stress_color = "#c0392b"
+        track_bg     = "rgba(61,43,31,0.12)"
     elif pack_id == "lean_cinema":
-        stress_color   = "#8b0000"
-        recovery_color = accent
-        track_bg       = "rgba(245,240,232,0.08)"
+        stress_color = "#8b0000"
+        track_bg     = "rgba(245,240,232,0.08)"
     else:  # glass
-        stress_color   = "#ff4d4d"
-        recovery_color = accent
-        track_bg       = "rgba(255,255,255,0.08)"
+        stress_color = "#ff4d4d"
+        track_bg     = "rgba(255,255,255,0.08)"
 
     glow_i_css = f" text-shadow:{_e(glow_i)};" if glow_i else ""
 
@@ -131,19 +139,17 @@ def _render_html(params: dict, pack: dict, card_id: str) -> str:
 
     css = f"""\
 .card[data-card-id="{card_id}"] .root{{width:100%;height:100%;display:flex;align-items:center;justify-content:center;}}
-.card[data-card-id="{card_id}"] .bp-wrap{{background:{bg};border-radius:{radius};padding:32px 40px;
-  display:flex;flex-direction:column;gap:18px;box-shadow:{shadow_v};width:90%;max-width:440px;}}
-.card[data-card-id="{card_id}"] .bp-headline{{font-family:{font};font-size:26px;font-weight:{fw};
+.card[data-card-id="{card_id}"] .bp-wrap{{background:{bg};border-radius:{radius};padding:{pad};
+  display:flex;flex-direction:column;gap:{gap};box-shadow:{shadow_v};width:90%;max-width:440px{border_css};}}
+.card[data-card-id="{card_id}"] .bp-headline{{font-family:{font};font-size:{head_size};font-weight:{fw};
   color:{text_c};letter-spacing:0.02em;opacity:0;{glow_i_css}}}
-.card[data-card-id="{card_id}"] .bp-context{{font-family:{font};font-size:17px;font-weight:500;
+.card[data-card-id="{card_id}"] .bp-context{{font-family:{font};font-size:{ctx_size};font-weight:500;
   color:{text_s};line-height:1.4;opacity:0;}}
 .card[data-card-id="{card_id}"] .bp-track{{width:100%;height:8px;background:{track_bg};border-radius:99px;overflow:hidden;}}
 .card[data-card-id="{card_id}"] .bp-bar{{height:100%;width:0%;background:{stress_color};border-radius:99px;
   transform-origin:left center;}}
-.card[data-card-id="{card_id}"] .bp-recovery{{font-family:{font};font-size:16px;font-weight:{fw};
+.card[data-card-id="{card_id}"] .bp-recovery{{font-family:{font};font-size:{recov_size};font-weight:{fw};
   color:{accent};letter-spacing:0.06em;text-transform:uppercase;opacity:0;{glow_i_css}}}"""
-
-    recovery_color_val = recovery_color  # used in GSAP
 
     ctx_html = f'<div class="bp-context" id="{card_id}-bp-context">{ctx}</div>' if ctx else ""
 
@@ -176,16 +182,11 @@ def _render_gsap(params: dict, pack: dict, card_id: str, start: float, end: floa
     is_cinema = pack_id == "lean_cinema"
     is_ledger = pack_id == "lean_ledger"
     is_vibe   = pack_id == "lean_vibe"
+    is_craft  = pack_id == "lean_craft"
 
-    # Stress color per pack
-    stress = "#8b0000" if is_cinema else ("#ff4d4d" if pack_id == "lean_glass" else "#ff3b3b")
-
-    t_in     = round(start + 0.18, 4)
-    t_ctx    = round(t_in + 0.22, 4)
-    t_fill   = round(t_ctx + 0.25, 4)
-    t_snap   = round(t_fill + 1.20, 4)  # bar fills over ~1.2s then snaps
-    t_reset  = round(t_snap + 0.12, 4)
-    t_recov  = round(t_reset + 0.30, 4)
+    t_in    = round(start + 0.18, 4)
+    t_ctx   = round(t_in + 0.22, 4)
+    t_fill  = round(t_ctx + 0.25, 4)
 
     dur_total = max(0.5, end - start)
     fill_dur  = round(min(1.40, max(0.80, dur_total * 0.35)), 3)
@@ -195,13 +196,15 @@ def _render_gsap(params: dict, pack: dict, card_id: str, start: float, end: floa
 
     lines: list[str] = []
 
-    # Headline
+    # Headline — pack-specific reveal
     if is_cinema:
         lines.append(f"  tl.to('#{cid}-bp-headline',{{opacity:1,duration:0.80,ease:'power1.in'}},{t_in:.4f});")
     elif is_vibe:
         lines.append(f"  tl.fromTo('#{cid}-bp-headline',{{opacity:0,x:-10}},{{opacity:1,x:0,duration:0.30,ease:'power2.out'}},{t_in:.4f});")
     elif is_ledger:
         lines.append(f"  tl.to('#{cid}-bp-headline',{{opacity:1,duration:0.15,ease:'none'}},{t_in:.4f});")
+    elif is_craft:
+        lines.append(f"  tl.fromTo('#{cid}-bp-headline',{{opacity:0,y:-8}},{{opacity:1,y:0,duration:0.32,ease:'back.out(1.4)'}},{t_in:.4f});")
     else:
         lines.append(f"  tl.fromTo('#{cid}-bp-headline',{{opacity:0,y:-6}},{{opacity:1,y:0,duration:0.28,ease:'power2.out'}},{t_in:.4f});")
 
@@ -210,17 +213,19 @@ def _render_gsap(params: dict, pack: dict, card_id: str, start: float, end: floa
     if has_context:
         lines.append(f"  tl.to('#{cid}-bp-context',{{opacity:1,duration:0.25,ease:'power1.out'}},{t_ctx:.4f});")
 
-    # Bar fills to 100% (stress color) — accent/ease varies by pack
+    # Bar fills to 100% (stress color)
     if is_cinema:
         lines.append(f"  tl.to('#{cid}-bp-bar',{{width:'100%',duration:{fill_dur:.3f},ease:'power1.in'}},{t_fill:.4f});")
     elif is_vibe:
         lines.append(f"  tl.to('#{cid}-bp-bar',{{width:'100%',duration:{fill_dur:.3f},ease:'power2.in'}},{t_fill:.4f});")
     elif is_ledger:
         lines.append(f"  tl.to('#{cid}-bp-bar',{{width:'100%',duration:{fill_dur:.3f},ease:'none'}},{t_fill:.4f});")
+    elif is_craft:
+        lines.append(f"  tl.to('#{cid}-bp-bar',{{width:'100%',duration:{fill_dur:.3f},ease:'circ.in'}},{t_fill:.4f});")
     else:
         lines.append(f"  tl.to('#{cid}-bp-bar',{{width:'100%',duration:{fill_dur:.3f},ease:'power2.in'}},{t_fill:.4f});")
 
-    # Snap: quick width reset to 0, color changes to accent
+    # Snap: quick width reset, color to accent
     if is_cinema:
         lines.append(f"  tl.to('#{cid}-bp-bar',{{width:'0%',duration:0.08,ease:'none'}},{t_snap:.4f});")
         lines.append(f"  tl.to('#{cid}-bp-bar',{{width:'35%',background:'{accent}',duration:0.50,ease:'power2.out'}},{t_reset:.4f});")
@@ -233,6 +238,8 @@ def _render_gsap(params: dict, pack: dict, card_id: str, start: float, end: floa
         lines.append(f"  tl.to('#{cid}-bp-recovery',{{opacity:1,duration:0.60,ease:'power1.in'}},{t_recov:.4f});")
     elif is_vibe:
         lines.append(f"  tl.fromTo('#{cid}-bp-recovery',{{opacity:0,scale:0.85}},{{opacity:1,scale:1,duration:0.35,ease:'back.out(1.5)'}},{t_recov:.4f});")
+    elif is_craft:
+        lines.append(f"  tl.fromTo('#{cid}-bp-recovery',{{opacity:0,y:5}},{{opacity:1,y:0,duration:0.30,ease:'circ.out'}},{t_recov:.4f});")
     else:
         lines.append(f"  tl.fromTo('#{cid}-bp-recovery',{{opacity:0,y:6}},{{opacity:1,y:0,duration:0.28,ease:'power2.out'}},{t_recov:.4f});")
 
