@@ -45,6 +45,14 @@ _TRIGGER_STYLES: frozenset[str] = frozenset({
     # Wave 8 trigger types
     "broken_promise_tracker",
 })
+# Styles that legitimately use video-overlay in landscape (full-canvas hero cards).
+# Everything else is remapped to landscape-tl in _generate_graphic_cards so compose
+# derives compact=True (video-overlay is not in _SIDE_PANEL_ZONES).
+_LANDSCAPE_HERO_STYLES: frozenset[str] = frozenset({
+    "key_phrase", "quote", "question", "definition",
+    "chapter_marker", "callout",
+})
+
 _GROUNDING_OVERLAP_THRESHOLD = 0.40   # fraction of trigger content-words that must match speech
 _GROUNDING_WINDOW_PRE_S  = 0.5        # seconds before startSec included in the speech window
 _GROUNDING_WINDOW_POST_S = 3.0        # seconds after  startSec included in the speech window
@@ -1134,6 +1142,23 @@ Design graphic overlay cards for this video — up to {target_cards} maximum. Pl
                 if _end - _start > 2.5:
                     card["endSec"] = round(_start + 2.5, 2)
                     print(f"[STORYBOARD] contrarian_take cap: {_start:.2f}-{_end:.2f}s → {_start:.2f}-{card['endSec']}s", flush=True)
+        # Landscape zone guard: video-overlay in landscape leaves compact=False for
+        # any card whose style is not in _DATA_PANEL_TYPES (those are rotated later
+        # by _remap_zone in compose.py). Hero/chapter cards legitimately need the full
+        # canvas; everything else is remapped to landscape-tl here so compose sees a
+        # side-panel zone and sets compact=True.
+        if format_hint != "short":  # landscape (16:9)
+            for card in cards:
+                if card.get("zone") == "video-overlay":
+                    _cs = card.get("contentHints", {}).get("style", "")
+                    if _cs not in _LANDSCAPE_HERO_STYLES:
+                        card["zone"] = "landscape-tl"
+                        print(
+                            f"[STORYBOARD] ZONE-REMAP {card.get('id', '?')}"
+                            f" style={_cs!r} video-overlay -> landscape-tl"
+                            f" (landscape non-hero guard)",
+                            flush=True,
+                        )
         print(f"[STORYBOARD] Generated {len(cards)} graphic cards", flush=True)
         return cards
     except Exception as e:
