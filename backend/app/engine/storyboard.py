@@ -501,7 +501,7 @@ OUTPUT: a JSON array of card objects. Each card:
     "accent_word": "<optional: one word/phrase from title to emphasize via highlight swipe>",
     "detail": "<optional supporting text>",
     "number": "<if a stat/number is featured>",
-    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"data_chart"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking"|"hand_written_note"|"speech_bubble_thought"|"calendar_date_highlight"|"percentage_split"|"red_flag_list"|"success_metric_badge"|"client_avatar_persona"|"book_recommendation"|"tool_stack"|"revenue_breakdown"|"age_milestone"|"contrarian_take"|"action_step_cta"|"story_chapter_transition"|"live_reaction_split"|"hidden_cost_reveal"|"social_proof_counter"|"timeline_prediction"|"red_thread_connector"|"silent_beat_pause"|"comment_reply_style"|"before_you_scroll"|"traffic_light_status"|"day_in_life_schedule"|"skill_tree_unlock"|"audience_poll_result"|"broken_promise_tracker"|"ingredient_list"|"resource_allocation"|"fill_in_the_blank",
+    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"data_chart"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking"|"hand_written_note"|"speech_bubble_thought"|"calendar_date_highlight"|"percentage_split"|"red_flag_list"|"success_metric_badge"|"client_avatar_persona"|"book_recommendation"|"tool_stack"|"revenue_breakdown"|"age_milestone"|"contrarian_take"|"action_step_cta"|"story_chapter_transition"|"live_reaction_split"|"hidden_cost_reveal"|"social_proof_counter"|"timeline_prediction"|"red_thread_connector"|"silent_beat_pause"|"comment_reply_style"|"before_you_scroll"|"traffic_light_status"|"day_in_life_schedule"|"skill_tree_unlock"|"audience_poll_result"|"broken_promise_tracker"|"ingredient_list"|"resource_allocation"|"fill_in_the_blank"|"streak_counter"|"before_now_later"|"platform_stats"|"cost_comparison"|"decision_matrix"|"habit_tracker"|"income_vs_expense",
     "left_label": "<comparison: left side label>",
     "left_value": "<comparison: left side value>",
     "right_label": "<comparison: right side label>",
@@ -615,7 +615,25 @@ OUTPUT: a JSON array of card objects. Each card:
     "resource_labels": ["<resource_allocation: label for resource 1, e.g. 'Temps', 'Énergie', 'Budget'>"],
     "resource_values": [0.0, 0.0],
     "sentence_with_blank": "<fill_in_the_blank: the sentence with a blank placeholder, e.g. 'La clé du succès c\\'est ___'>",
-    "blank_word": "<fill_in_the_blank: the single word or short phrase that fills the blank>"
+    "blank_word": "<fill_in_the_blank: the single word or short phrase that fills the blank>",
+    "streak_count": "<streak_counter: the accumulation number, e.g. '42', '100'>",
+    "streak_unit": "<streak_counter: unit of the streak, e.g. 'jours', 'semaines', 'posts'>",
+    "streak_label": "<streak_counter: short label describing the streak, e.g. 'de publication quotidienne', 'sans interruption'>",
+    "before_label": "<before_now_later: description of the BEFORE state>",
+    "now_label": "<before_now_later: description of the CURRENT / NOW state>",
+    "later_label": "<before_now_later: description of the FUTURE / LATER state>",
+    "platforms": ["<platform_stats: platform name 1, e.g. 'TikTok', 'YouTube', 'Instagram'>"],
+    "values": ["<platform_stats: metric value for platform 1, e.g. '50k', '20k abonnés'>"],
+    "option_labels": ["<cost_comparison: label for option 1, e.g. 'Basique', 'Pro', 'Enterprise'>"],
+    "option_prices": ["<cost_comparison: price string for option 1, e.g. '0€', '29€/mois', '99€/mois'>"],
+    "best_index": "<cost_comparison: 0-based index of the recommended/best option; omit to default to last>",
+    "quadrant_labels": ["<decision_matrix: label for quadrant 1 (top-left)>", "<quadrant 2 (top-right)>", "<quadrant 3 (bottom-left)>", "<quadrant 4 (bottom-right)>"],
+    "habit_label": "<habit_tracker: name of the habit being tracked, e.g. 'Sport matinal', 'Lecture 30 min'>",
+    "days_completed": [true, false],
+    "income_value": "<income_vs_expense: the income figure as a string, e.g. '12 000€', '8k'>",
+    "expense_value": "<income_vs_expense: the expense figure as a string, e.g. '7 500€', '5k'>",
+    "income_label": "<income_vs_expense: label for the income bar, defaults to 'Revenus'>",
+    "expense_label": "<income_vs_expense: label for the expense bar, defaults to 'Dépenses'>"
   }}
 }}
 
@@ -1061,6 +1079,58 @@ RULES:
     gap). Distinct from question (question asks outward to the audience;
     fill_in_the_blank is a structured completion format). Provide
     "sentence_with_blank" (use ___ for the gap) + "blank_word".
+  "streak_counter" — speaker highlights a running streak or accumulating count
+    ("ça fait 42 jours que je poste chaque jour", "100 jours de suite"). REQUIRES
+    an explicit count AND a unit of continuity. Distinct from progress_bar (progress_bar
+    tracks progress toward a goal; streak_counter celebrates unbroken continuity).
+    Distinct from countdown (countdown is a DECREASING timer; streak_counter INCREASES).
+    Distinct from stat (stat is generic data; streak_counter has streak/series energy).
+    Provide "streak_count" + "streak_unit" + optional "streak_label".
+  "before_now_later" — speaker explicitly maps THREE temporal states of the same
+    subject: past state, current state, and future state ("avant j'étais X, maintenant
+    je suis Y, et demain je vise Z"). REQUIRES all three states to be named. Distinct
+    from comparison (comparison is exactly 2 sides; before_now_later always has 3).
+    Distinct from timeline_prediction (timeline_prediction is a sequence of steps;
+    before_now_later is a 3-point temporal snapshot of ONE subject). Distinct from
+    before_after_image (before_after_image is 2 states of one subject; before_now_later
+    adds an explicit FUTURE/LATER state). Provide "before_label" + "now_label" + "later_label".
+  "platform_stats" — speaker cites metrics for MULTIPLE platforms or channels
+    simultaneously ("sur TikTok j'ai 50k, sur YouTube 20k, sur Insta 30k").
+    REQUIRES at least 2 named platforms each with a numeric value. Distinct from
+    social_proof_counter (social_proof_counter is ONE rapidly-accumulating number;
+    platform_stats shows multiple platforms side-by-side). Distinct from stat (stat
+    is a single metric; platform_stats is a multi-platform grid). Provide "platforms"
+    list + "values" list (same length, 2-5 items).
+  "cost_comparison" — speaker presents MULTIPLE pricing options side-by-side ("le
+    plan basique à 0€, le pro à 29€/mois, l'enterprise à 99€"). REQUIRES at least
+    2 named options each with a price. Distinct from price_tag (price_tag is a SINGLE
+    price point; cost_comparison shows 2+ options). Distinct from comparison (comparison
+    is a qualitative contrast; cost_comparison is specifically a pricing grid). Distinct
+    from income_vs_expense (income_vs_expense is binary income/outflow; cost_comparison
+    is 2+ buying options). Provide "option_labels" list + "option_prices" list (same
+    length, 2-4 items). Optionally set "best_index" (0-based) to highlight the recommended
+    option — defaults to the last option.
+  "decision_matrix" — speaker introduces a 2×2 framework to classify actions or
+    choices ("urgent/important, urgent/pas important, pas urgent/important, pas urgent/
+    pas important"). REQUIRES exactly 4 quadrant labels. Distinct from comparison
+    (comparison contrasts 2 sides; decision_matrix is a 2×2 grid). Distinct from
+    pros_cons (pros_cons evaluates one subject from two angles; decision_matrix is a
+    classification grid for actions). Provide "quadrant_labels" list of exactly 4 strings.
+  "habit_tracker" — speaker describes a recurring daily habit and its completion
+    status over recent days ("voici ma streak de sport — lundi oui, mardi non, …").
+    REQUIRES a named habit AND a boolean completion list. Distinct from checklist
+    (checklist is one-time completed tasks; habit_tracker is recurring daily tracking
+    with a visual grid). Distinct from skill_tree_unlock (skill_tree_unlock is a
+    progression sequence; habit_tracker is a repeating daily binary done/not-done).
+    Provide "habit_label" + "days_completed" list of booleans (7-14 days typical).
+  "income_vs_expense" — speaker contrasts their total income against their total
+    expenses ("je gagne 12 000€ par mois et mes dépenses sont à 7 500€"). REQUIRES
+    both an income value AND an expense value. Distinct from revenue_breakdown
+    (revenue_breakdown shows multiple income sources; income_vs_expense is binary
+    income-vs-outflow). Distinct from comparison (comparison is qualitative; income_vs_expense
+    is a binary financial bars). Distinct from cost_comparison (cost_comparison is
+    buying options; income_vs_expense is total inflow vs total outflow). Provide
+    "income_value" + "expense_value" + optional "income_label" / "expense_label".
 - VERBATIM GROUNDING — mandatory check before assigning any explicit-signal
   card type (contrarian_take, warning_soft, red_flag_list, action_step_cta,
   myth_vs_fact, secret_reveal, objection_response, live_reaction_split,

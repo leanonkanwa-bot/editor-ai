@@ -144,6 +144,24 @@ _HINTS: dict[str, dict] = {
     "resource_allocation":  {"resource_labels": ["Temps", "Énergie", "Budget"],
                              "resource_values": [40.0, 35.0, 25.0]},
     "fill_in_the_blank":    {"sentence_with_blank": "La clé du succès c'est ___", "blank_word": "la régularité"},
+    # ── Wave 9 ────────────────────────────────────────────────────────────────
+    "streak_counter":       {"streak_count": "42", "streak_unit": "jours",
+                             "streak_label": "de publication quotidienne"},
+    "before_now_later":     {"before_label": "Salarié épuisé",
+                             "now_label": "Freelance en croissance",
+                             "later_label": "Business automatisé"},
+    "platform_stats":       {"platforms": ["TikTok", "YouTube", "Instagram"],
+                             "values": ["50k", "20k", "30k"]},
+    "cost_comparison":      {"option_labels": ["Basique", "Pro", "Enterprise"],
+                             "option_prices": ["0€", "29€/mois", "99€/mois"]},
+    "decision_matrix":      {"quadrant_labels": ["Urgent + Important",
+                                                  "Pas urgent + Important",
+                                                  "Urgent + Pas important",
+                                                  "Ni urgent ni important"]},
+    "habit_tracker":        {"habit_label": "Sport matinal",
+                             "days_completed": [True, True, True, False, True, False, True]},
+    "income_vs_expense":    {"income_value": "12000€", "expense_value": "7500€",
+                             "income_label": "Revenus", "expense_label": "Dépenses"},
 }
 
 CARD_ID = "c1"
