@@ -150,10 +150,11 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
         flush=True,
     )
 
-    # Portrait centering: redirect asymmetric side-zones to the centered full zone.
+    # Portrait centering: every non-canvas zone → portrait-center-full.
+    # video-overlay and fullscreen are the only full-canvas hero positions that stay.
     # Must run AFTER compact is computed so styling scales stay correct.
     if layout == "portrait" and not is_caption:
-        if zone in ("upper-left-data-sm", "portrait-center-left", "portrait-center-right"):
+        if zone not in ("video-overlay", "fullscreen", "portrait-center-full"):
             zone = "portrait-center-full"
 
     bounds = _zone_bounds(zone, layout)
@@ -191,8 +192,10 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
         inner = _build_graphic_card_html(card, pack=pack, compact=compact, layout=layout)
 
     # Portrait scrim: full-canvas dimming overlay per card, sibling to card-host.
+    # Explicit != "caption" check: generative cards omit the type field entirely
+    # so not is_caption (derived from == "caption") is equivalent, but this is clearer.
     scrim_html = ""
-    if layout == "portrait" and not is_caption:
+    if layout == "portrait" and card.get("type") != "caption":
         scrim_html = (
             f'<div class="portrait-scrim" id="{card_id}-scrim" '
             f'style="position:absolute;left:0;top:0;width:1080px;height:1920px;'
@@ -3249,7 +3252,7 @@ def _build_timeline_js(
         lines.append(f'  tl.set(\'{sel}\', {{ visibility: "visible" }}, {start:.4f});')
 
         # Portrait per-card scrim: fade in with the card.
-        if not is_caption and layout == "portrait":
+        if card.get("type") != "caption" and layout == "portrait":
             scrim_sel = f'#{card_id}-scrim'
             lines.append(
                 f'  tl.to(\'{scrim_sel}\', {{opacity:1,duration:0.25,ease:_eIn}},{start:.4f});'
@@ -5713,7 +5716,7 @@ def _build_timeline_js(
         lines.append(f'  tl.set(\'{sel}\', {{ opacity: 0, visibility: "hidden" }}, {end:.4f});')
 
         # Portrait per-card scrim: fade out synchronized with card exit.
-        if not is_caption and layout == "portrait":
+        if card.get("type") != "caption" and layout == "portrait":
             scrim_sel = f'#{card_id}-scrim'
             lines.append(
                 f'  tl.to(\'{scrim_sel}\', {{opacity:0,duration:{exit_dur:.3f},ease:_eOut}},{exit_start:.4f});'
