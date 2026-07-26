@@ -105,6 +105,14 @@ _TRIGGER_TEXT_FIELD: dict[str, str] = {
     "broken_promise_tracker": "promises",  # promise list joined — speaker must name these literally
 }
 
+# Styles that legitimately occupy video-overlay / fullscreen in landscape (full-canvas heroes).
+# All other non-data-panel cards with these zones are remapped to landscape-tl so
+# compose.py sees a side-panel zone and derives compact=True.
+_LANDSCAPE_HERO_STYLES: frozenset[str] = frozenset({
+    "key_phrase", "quote", "question", "definition",
+    "chapter_marker", "callout",
+})
+
 
 def _segment_captions(
     remapped_words: list[WordTiming],
@@ -1124,6 +1132,23 @@ Design graphic overlay cards for this video — up to {target_cards} maximum. Pl
                 if _end - _start > 2.5:
                     card["endSec"] = round(_start + 2.5, 2)
                     print(f"[STORYBOARD] contrarian_take cap: {_start:.2f}-{_end:.2f}s → {_start:.2f}-{card['endSec']}s", flush=True)
+        # Landscape zone guard: video-overlay and fullscreen in landscape leave compact=False
+        # for any card not in _DATA_PANEL_TYPES (those are rotated later by _remap_zone in
+        # compose.py). Hero styles (key_phrase, quote, etc.) legitimately need the full canvas;
+        # everything else is remapped to landscape-tl so compose derives compact=True.
+        if format_hint != "short":  # landscape (16:9)
+            for card in cards:
+                _zone = card.get("zone", "")
+                if _zone in ("video-overlay", "fullscreen"):
+                    _cs = card.get("contentHints", {}).get("style", "")
+                    if _cs not in _LANDSCAPE_HERO_STYLES:
+                        card["zone"] = "landscape-tl"
+                        print(
+                            f"[STORYBOARD] ZONE-REMAP {card.get('id', '?')}"
+                            f" style={_cs!r} {_zone!r} -> 'landscape-tl'"
+                            f" (landscape non-hero guard)",
+                            flush=True,
+                        )
         print(f"[STORYBOARD] Generated {len(cards)} graphic cards", flush=True)
         return cards
     except Exception as e:
