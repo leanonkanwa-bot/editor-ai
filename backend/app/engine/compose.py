@@ -187,7 +187,7 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
             )
 
     if is_caption:
-        inner = _build_caption_card_html(card, pack=pack)
+        inner = _build_caption_card_html(card, pack=pack, layout=layout)
     else:
         inner = _build_graphic_card_html(card, pack=pack, compact=compact, layout=layout)
 
@@ -3090,7 +3090,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
     return "\n".join(parts)
 
 
-def _build_caption_card_html(card: dict, pack: dict | None = None) -> str:
+def _build_caption_card_html(card: dict, pack: dict | None = None, layout: str = "portrait") -> str:
     """Build inner HTML for a caption card with per-word spans."""
     card_id = card["id"]
     words = card.get("words", [])
@@ -3117,7 +3117,7 @@ def _build_caption_card_html(card: dict, pack: dict | None = None) -> str:
         f'  display: flex; flex-wrap: wrap; justify-content: center; align-items: center;\n'
         f'  gap: 0.3em; padding: 16px 24px;\n'
         f'  font-family: {p["font"]};\n'
-        f'  font-size: 62px; font-weight: 700; color: #FFFFFF;\n'
+        f'  font-size: {"62px" if layout == "portrait" else "48px"}; font-weight: 700; color: #FFFFFF;\n'
         f'  text-shadow: 0 2px 8px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9);\n'
         f'  text-align: center; line-height: 1.4;\n'
         f'}}\n'
