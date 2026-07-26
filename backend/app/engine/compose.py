@@ -570,17 +570,6 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
     """Build inner HTML for a graphic overlay card using the given style pack."""
     card_id = card["id"]
 
-    # B-roll semantic cards render via their own type's render_html
-    if "_broll_type" in card:
-        try:
-            from app.engine import broll_registry as _br
-            _btype = _br.REGISTRY.get(card["_broll_type"])
-            if _btype is not None:
-                return _btype.render_html(card.get("_broll_params", {}), pack or {}, card_id)
-        except Exception as _broll_html_exc:
-            print(f"[BROLL] render_html error {card['_broll_type']}: {_broll_html_exc}", flush=True)
-        # Fall through to default rendering on error
-
     hints = card.get("contentHints", {})
     kicker = hints.get("kicker", "")
     title = hints.get("title", "")
@@ -3292,7 +3281,7 @@ def _build_timeline_js(
             # timeline and news_ticker are full-screen overlays built without a
             # .card-panel div, so skip the panel tween for those types.
             # content_style isn't assigned until ~line 2762, so look it up here.
-            _early_style = card.get("contentHints", {}).get("style", "") if "_broll_type" not in card else "__broll__"
+            _early_style = card.get("contentHints", {}).get("style", "")
             if _early_style not in ("timeline", "news_ticker"):
                 if is_cinema:
                     pass  # cinema: slow opacity only, no panel movement
@@ -3354,11 +3343,7 @@ def _build_timeline_js(
                 # Punch-in is handled as independent zoom entries via
                 # _build_punch_in_zoom_entries() — not wired to card entry events.
 
-            content_style = (
-                "__broll__"
-                if "_broll_type" in card
-                else card.get("contentHints", {}).get("style", "key_phrase")
-            )
+            content_style = card.get("contentHints", {}).get("style", "key_phrase")
             title_sel = f'.card[data-card-id="{card_id}"] #{card_id}-title'
             kicker_sel = f'.card[data-card-id="{card_id}"] #{card_id}-kicker'
             line_sel = f'.card[data-card-id="{card_id}"] #{card_id}-line'
@@ -3366,25 +3351,7 @@ def _build_timeline_js(
 
             is_paper = p["id"] == "lean_paper"
 
-            if content_style == "__broll__":
-                try:
-                    from app.engine import broll_registry as _br
-                    _btype = _br.REGISTRY.get(card.get("_broll_type", ""))
-                    if _btype is not None:
-                        _broll_lines = _btype.render_gsap(
-                            card.get("_broll_params", {}),
-                            p,
-                            card_id,
-                            start,
-                            end,
-                        )
-                        lines.extend(_broll_lines)
-                except Exception as _broll_gsap_exc:
-                    print(
-                        f"[BROLL] render_gsap error {card.get('_broll_type','?')}: {_broll_gsap_exc}",
-                        flush=True,
-                    )
-            elif content_style == "stat" and card.get("contentHints", {}).get("number"):
+            if content_style == "stat" and card.get("contentHints", {}).get("number"):
                 num_val, num_suffix = _safe_number(card["contentHints"]["number"])
                 if num_val is not None:
                     count_dur = min(1.5, max(0.6, dur * 0.25))
@@ -5709,7 +5676,7 @@ def _build_timeline_js(
                 )
             # Shimmer sweep — only for cards that have a shimmer-mask in DOM
             # (timeline cards return early in _build_graphic_card_html, no shimmer-mask)
-            if content_style not in ("timeline", "__broll__"):
+            if content_style not in ("timeline",):
                 shimmer_sel = f'.card[data-card-id="{card_id}"] #{card_id}-shimmer'
                 shimmer_start = start + 0.50
                 lines.append(
