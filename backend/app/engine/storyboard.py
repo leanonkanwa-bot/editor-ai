@@ -1081,19 +1081,32 @@ RULES:
     "sentence_with_blank" (use ___ for the gap) + "blank_word".
   "streak_counter" — speaker highlights a running streak or accumulating count
     ("ça fait 42 jours que je poste chaque jour", "100 jours de suite"). REQUIRES
-    an explicit count AND a unit of continuity. Distinct from progress_bar (progress_bar
-    tracks progress toward a goal; streak_counter celebrates unbroken continuity).
-    Distinct from countdown (countdown is a DECREASING timer; streak_counter INCREASES).
-    Distinct from stat (stat is generic data; streak_counter has streak/series energy).
+    an explicit count AND a unit of continuity. The streak must be ONGOING and
+    still accumulating — not a retrospective duration used as context. Distinct from
+    progress_bar (progress_bar tracks progress toward a goal; streak_counter celebrates
+    unbroken continuity). Distinct from countdown (countdown is a DECREASING timer;
+    streak_counter INCREASES). Distinct from stat (stat is generic data; streak_counter
+    has streak/series energy). NOT when the speaker references a past duration as
+    context ("il y a deux ans", "il y a X mois") — a retrospective duration anchoring
+    a BEFORE state is NOT a streak; if paired with a current and future state in the
+    same segment, use before_now_later instead.
     Provide "streak_count" + "streak_unit" + optional "streak_label".
   "before_now_later" — speaker explicitly maps THREE temporal states of the same
     subject: past state, current state, and future state ("avant j'étais X, maintenant
-    je suis Y, et demain je vise Z"). REQUIRES all three states to be named. Distinct
-    from comparison (comparison is exactly 2 sides; before_now_later always has 3).
-    Distinct from timeline_prediction (timeline_prediction is a sequence of steps;
-    before_now_later is a 3-point temporal snapshot of ONE subject). Distinct from
-    before_after_image (before_after_image is 2 states of one subject; before_now_later
-    adds an explicit FUTURE/LATER state). Provide "before_label" + "now_label" + "later_label".
+    je suis Y, et demain je vise Z"; "il y a deux ans je galérais, aujourd'hui je
+    dirige une entreprise, dans le futur je vise l'indépendance"). REQUIRES all three
+    states to be named in the same segment. PRIORITY — when a segment names all three
+    states (past context + present reality + future goal/aspiration), before_now_later
+    WINS over streak_counter (even if the past state mentions a duration like "il y a
+    deux ans"), key_phrase, before_after_image, and comparison. Trigger pattern:
+    past anchor ("il y a X / avant / jadis / j'étais") + present state ("aujourd'hui /
+    maintenant / je suis / je dirige") + future goal ("demain / dans le futur / je vise /
+    l'objectif est / je serai"). Distinct from comparison (comparison is exactly 2 sides;
+    before_now_later always has 3). Distinct from timeline_prediction (timeline_prediction
+    is a sequence of steps; before_now_later is a 3-point temporal snapshot of ONE
+    subject). Distinct from before_after_image (before_after_image is 2 states of one
+    subject; before_now_later adds an explicit FUTURE/LATER state).
+    Provide "before_label" + "now_label" + "later_label".
   "platform_stats" — speaker cites metrics for MULTIPLE platforms or channels
     simultaneously ("sur TikTok j'ai 50k, sur YouTube 20k, sur Insta 30k").
     REQUIRES at least 2 named platforms each with a numeric value. Distinct from
