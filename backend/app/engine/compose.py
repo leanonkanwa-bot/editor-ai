@@ -36,14 +36,14 @@ _ZONE_BOUNDS_LANDSCAPE = {
     "lower-third-name":     {"left": 0,    "top": 620, "width": 1920, "height": 120},  # speaker ID above captions
     # 5-position rotation zones for landscape (proportionally adapted for 16:9).
     # Standard data cards — compact mode.
-    "landscape-tl":      {"left": 40,   "top": 40,  "width": 540, "height": 300},   # top-left
-    "landscape-tr":      {"left": 1340, "top": 40,  "width": 540, "height": 300},   # top-right
-    "landscape-cl":      {"left": 40,   "top": 380, "width": 540, "height": 280},   # center-left
-    "landscape-cr":      {"left": 1340, "top": 380, "width": 540, "height": 280},   # center-right
+    "landscape-tl":      {"left": 40,   "top": 40,  "width": 660, "height": 300},   # top-left
+    "landscape-tr":      {"left": 1220, "top": 40,  "width": 660, "height": 300},   # top-right
+    "landscape-cl":      {"left": 40,   "top": 380, "width": 660, "height": 280},   # center-left
+    "landscape-cr":      {"left": 1220, "top": 380, "width": 660, "height": 280},   # center-right
     "landscape-cf":      {"left": 0,    "top": 380, "width": 1920, "height": 300},  # center-full (dimming)
     # Tall multi-item data cards in landscape — 2-position top cycle, extra height.
-    "landscape-tl-tall": {"left": 40,   "top": 40,  "width": 540, "height": 500},
-    "landscape-tr-tall": {"left": 1340, "top": 40,  "width": 540, "height": 500},
+    "landscape-tl-tall": {"left": 40,   "top": 40,  "width": 660, "height": 500},
+    "landscape-tr-tall": {"left": 1220, "top": 40,  "width": 660, "height": 500},
 }
 
 # Zone → pixel bounds for portrait 9:16 (1080×1920)
