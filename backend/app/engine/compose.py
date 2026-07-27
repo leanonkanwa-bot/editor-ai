@@ -179,6 +179,10 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
                 "audience_poll_result": "poll_options",
                 "broken_promise_tracker": "promises",
                 "resource_allocation": "resource_labels",
+                "milestone_recap": "milestones",
+                "content_calendar": "calendar_items",
+                "tool_comparison": "tool_features",
+                "weekly_review": "review_categories",
             }.get(_dyn_style, "items")
             _n_items = len(_dyn_hints.get(_items_key, _dyn_hints.get("items", [])))
             _n_items = max(1, min(_n_items, 12))
@@ -2415,8 +2419,9 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]}; line-height:1.3;')
         parts.append('}')
     if content_style == "tool_comparison":
-        _tc_head_sz = "13px" if compact else "16px"
-        _tc_feat_sz = "11px" if compact else "14px"
+        _tc_head_sz = "16px"
+        _tc_feat_sz = "14px"
+        parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{ width: {max_width_eff}; box-sizing: border-box; }}')
         parts.append(f'.card[data-card-id="{card_id}"] .tc-wrap {{')
         parts.append('  display:flex; flex-direction:column; gap:8px; width:100%;')
         parts.append('}')
