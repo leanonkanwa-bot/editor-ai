@@ -407,7 +407,7 @@ _PACKS = {"lean_glass": _LEAN_GLASS, "lean_paper": _LEAN_PAPER, "lean_vibe": _LE
 # Per-pack hero punch-in parameters ({scale, in_dur, in_ease, out_dur, out_ease}).
 # lean_paper: None → no punch-in; clean/minimal aesthetic.
 _PUNCH_IN_PARAMS: dict = {
-    "lean_glass":  {"scale": 1.030, "in_dur": 0.40, "in_ease": "power2.in",          "out_dur": 0.40, "out_ease": "power2.out"},
+    "lean_glass":  {"scale": 1.015, "in_dur": 0.40, "in_ease": "power2.in",          "out_dur": 0.40, "out_ease": "power2.out"},
     "lean_paper":  None,
     "lean_vibe":   {"scale": 1.060, "in_dur": 0.50, "in_ease": "back.out(1.7)",      "out_dur": 0.35, "out_ease": "power2.out"},
     "lean_ledger": {"scale": 1.020, "in_dur": 0.25, "in_ease": "linear",              "out_dur": 0.20, "out_ease": "linear"},
@@ -2335,7 +2335,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('}')
     # ── Wave 10 ───────────────────────────────────────────────────────────────
     if content_style == "milestone_recap":
-        _mr_sz = "18px"
+        _mr_sz = "33px"
         parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{ width: {max_width_eff}; box-sizing: border-box; }}')
         parts.append(f'.card[data-card-id="{card_id}"] .mr-wrap {{')
         parts.append('  display:flex; flex-direction:column; gap:6px; width:100%;')
@@ -2353,8 +2353,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]}; line-height:1.3;')
         parts.append('}')
     if content_style == "content_calendar":
-        _cal_day_sz = "16px"
-        _cal_cnt_sz = "14px"
+        _cal_day_sz = "33px"
+        _cal_cnt_sz = "26px"
         parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{ width: {max_width_eff}; box-sizing: border-box; }}')
         parts.append(f'.card[data-card-id="{card_id}"] .cal-wrap {{')
         parts.append('  display:flex; flex-direction:column; gap:5px; width:100%;')
@@ -2421,8 +2421,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]}; line-height:1.3;')
         parts.append('}')
     if content_style == "tool_comparison":
-        _tc_head_sz = "16px"
-        _tc_feat_sz = "14px"
+        _tc_head_sz = "33px"
+        _tc_feat_sz = "26px"
         parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{ width: {max_width_eff}; box-sizing: border-box; }}')
         parts.append(f'.card[data-card-id="{card_id}"] .tc-wrap {{')
         parts.append('  display:flex; flex-direction:column; gap:8px; width:100%;')
@@ -2445,7 +2445,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  padding:3px 0; border-bottom:1px solid {p["text_secondary"]}22;')
         parts.append('}')
     if content_style == "weekly_review":
-        _wr_sz = "16px"
+        _wr_sz = "33px"
         parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{ width: {max_width_eff}; box-sizing: border-box; }}')
         parts.append(f'.card[data-card-id="{card_id}"] .wr-wrap {{')
         parts.append('  display:flex; flex-direction:column; gap:6px; width:100%;')
@@ -3834,10 +3834,10 @@ def _build_timeline_js(
                         f'{start:.4f});'
                     )
                 else:
-                    # lean_glass (default)
+                    # lean_glass (default) — restrained entry, premium/authoritative read
                     lines.append(
                         f'  tl.fromTo(\'{panel_sel}\', '
-                        f'{{ scale: 1.04, y: 14 }}, '
+                        f'{{ scale: 1.015, y: 8 }}, '
                         f'{{ scale: 1, y: 0, duration: 0.350, ease: _eIn }}, '
                         f'{start:.4f});'
                     )
