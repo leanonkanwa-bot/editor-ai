@@ -2392,8 +2392,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text_secondary"]}; opacity:0;')
         parts.append('}')
     if content_style == "mistake_lesson":
-        _ml_tag_sz = "11px" if compact else "13px"
-        _ml_txt_sz = "13px" if compact else "16px"
+        _ml_tag_sz = "18px" if compact else "20px"
+        _ml_txt_sz = "22px" if compact else "26px"
         parts.append(f'.card[data-card-id="{card_id}"] .ml-wrap {{')
         parts.append('  display:flex; flex-direction:column; gap:10px; width:100%;')
         parts.append('}')
@@ -2465,7 +2465,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'  text-shadow:{p["title_glow"]};')
         parts.append('}')
     if content_style == "audience_question":
-        _aq_sz = "20px" if compact else "28px"
+        _aq_sz = "26px" if compact else "33px"
         parts.append(f'.card[data-card-id="{card_id}"] .aq-wrap {{')
         parts.append('  display:flex; flex-direction:column; align-items:center;')
         parts.append('}')
