@@ -1140,7 +1140,9 @@ RULES:
     pas important"). REQUIRES exactly 4 quadrant labels. Distinct from comparison
     (comparison contrasts 2 sides; decision_matrix is a 2×2 grid). Distinct from
     pros_cons (pros_cons evaluates one subject from two angles; decision_matrix is a
-    classification grid for actions). Provide "quadrant_labels" list of exactly 4 strings.
+    classification grid for actions). Provide "quadrant_labels" list of exactly 4 strings
+    AND a short "title" (e.g. "Matrice Eisenhower") to appear as a header above the
+    grid — always provide a title so the card has context beyond the 4 quadrant labels.
   "habit_tracker" — speaker describes a recurring daily habit and its completion
     status over recent days ("voici ma streak de sport — lundi oui, mardi non, …").
     REQUIRES a named habit AND a boolean completion list. Distinct from checklist

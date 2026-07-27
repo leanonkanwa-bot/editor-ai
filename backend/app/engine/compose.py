@@ -2198,14 +2198,17 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  display:flex; flex-direction:column; gap:4px;')
         parts.append(f'  padding:8px 14px; border-radius:{p["radius"]};')
         parts.append(f'  background:{p["bg"]}; border:1px solid rgba(255,255,255,0.08); opacity:0;')
+        parts.append(f'  min-width:0; overflow:hidden;')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .bnl-tag {{')
         parts.append(f'  font-family:{p["font"]}; font-size:{kicker_size_eff};')
         parts.append(f'  font-weight:700; color:{p["accent"]}; letter-spacing:0.10em; text-transform:uppercase;')
         parts.append('}')
+        _bnl_text_sz = detail_size_eff if compact else title_size_eff
         parts.append(f'.card[data-card-id="{card_id}"] .bnl-text {{')
-        parts.append(f'  font-family:{p["font"]}; font-size:{title_size_eff};')
+        parts.append(f'  font-family:{p["font"]}; font-size:{_bnl_text_sz};')
         parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]};')
+        parts.append(f'  overflow-wrap:break-word; word-break:break-word;')
         parts.append('}')
     if content_style == "platform_stats":
         parts.append(f'.card[data-card-id="{card_id}"] .pst-wrap {{')
@@ -2267,6 +2270,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  font-family:{p["font"]}; font-size:{kicker_size_eff};')
         parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]};')
         parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .accent-line {{ display:none; }}')
     if content_style == "habit_tracker":
         _ht_day_sz = "28px" if compact else "36px"
         parts.append(f'.card[data-card-id="{card_id}"] .ht-wrap {{')
@@ -3435,6 +3439,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'      </div>')
         parts.append(f'    </div>')
     elif content_style == "decision_matrix":
+        if title:
+            parts.append(f'    <div class="title" id="{card_id}-title">{_split_title_accent(display_text, accent_word_hint, card_id)}</div>')
         _dmx_quads = hints.get("quadrant_labels", ["", "", "", ""])
         parts.append(f'    <div class="dmx-wrap">')
         for _dmx_i, _dmx_q in enumerate(_dmx_quads[:4]):
@@ -6512,9 +6518,10 @@ def _build_timeline_js(
                     f'{{ opacity: 1, y: 0, duration: 0.250, ease: _eIn }}, '
                     f'{start + 0.10:.4f});'
                 )
-            # Accent-line shows unless the accent_word swipe is actually rendered —
-            # two competing emphasis elements would visually clash.
-            if not _accent_in_dom:
+            # Accent-line shows unless the accent_word swipe is actually rendered,
+            # or the card type uses a grid layout where a bottom bar has no meaning.
+            _no_line_types = {"decision_matrix"}
+            if not _accent_in_dom and content_style not in _no_line_types:
                 _line_w = 80 if card.get("zone", "") in _SIDE_PANEL_ZONES else 120
                 lines.append(
                     f'  tl.fromTo(\'{line_sel}\', '
