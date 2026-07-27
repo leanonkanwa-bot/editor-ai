@@ -162,6 +162,24 @@ _HINTS: dict[str, dict] = {
                              "days_completed": [True, True, True, False, True, False, True]},
     "income_vs_expense":    {"income_value": "12000€", "expense_value": "7500€",
                              "income_label": "Revenus", "expense_label": "Dépenses"},
+    # ── Wave 10 ───────────────────────────────────────────────────────────────
+    "milestone_recap":      {"milestones": ["2021 — Premier client signé",
+                                             "2022 — 10k abonnés",
+                                             "2024 — 6 chiffres atteints"]},
+    "content_calendar":     {"calendar_items": ["Lundi — Post produit",
+                                                 "Mercredi — Story behind-the-scenes",
+                                                 "Vendredi — Reel viral"]},
+    "client_result_number": {"result_value": "+340%", "result_context": "en 60 jours",
+                              "client_label": "Marie D."},
+    "mistake_lesson":       {"mistake_text": "J'ai ignoré mes analytics pendant 6 mois",
+                              "lesson_text": "Les données ne mentent pas — regarde-les chaque semaine"},
+    "tool_comparison":      {"tool_names": ["Notion", "Trello"],
+                              "tool_features": ["Prix: Gratuit | 5€/mois",
+                                                "Collaboration: Oui | Oui",
+                                                "Templates: Oui | Non"]},
+    "weekly_review":        {"review_categories": ["Contenu", "Prospection", "Santé"],
+                              "review_scores": ["8/10", "6/10", "9/10"]},
+    "audience_question":    {"question_text": "Et toi, tu sais vraiment ce que veut ton audience?"},
 }
 
 CARD_ID = "c1"

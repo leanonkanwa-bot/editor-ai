@@ -106,7 +106,9 @@ def _zone_bounds(zone: str, layout: str) -> dict:
 # chosen zone — they carry the visual message and need the full canvas.
 _DATA_PANEL_TYPES = {"stat", "list", "comparison", "checklist", "score", "trend", "rating", "progress_bar", "countdown", "step_number", "price_tag", "recap_summary", "formula_equation", "pros_cons", "star_rating_review", "income_reveal", "data_bar_chart", "number_ranking", "question_answer_pair", "cause_effect", "percentage_split", "red_flag_list", "client_avatar_persona", "tool_stack", "revenue_breakdown", "hidden_cost_reveal", "social_proof_counter", "red_thread_connector", "day_in_life_schedule", "skill_tree_unlock", "audience_poll_result", "broken_promise_tracker", "ingredient_list", "resource_allocation",
     "streak_counter", "before_now_later", "platform_stats",
-    "cost_comparison", "decision_matrix", "habit_tracker", "income_vs_expense"}
+    "cost_comparison", "decision_matrix", "habit_tracker", "income_vs_expense",
+    "milestone_recap", "content_calendar", "client_result_number",
+    "mistake_lesson", "tool_comparison", "weekly_review", "audience_question"}
 _CENTER_ZONES = {"fullscreen", "video-overlay"}
 _SIDE_PANEL_ZONES = {"side-panel", "side-panel-left", "side-panel-right", "side-panel-top", "upper-data", "upper-right", "upper-left-data", "upper-left-data-sm", "upper-right-data-tall", "portrait-bottom-left", "portrait-bottom-right", "portrait-center-left", "portrait-center-right", "landscape-tl", "landscape-tr", "landscape-cl", "landscape-cr", "landscape-cf", "landscape-tl-tall", "landscape-tr-tall"}
 # Zones where the backdrop-dim overlay fires — card overlaps the speaker face.
@@ -122,6 +124,7 @@ _DIMMING_ZONES = frozenset({
 _TALL_DATA_PANEL_TYPES = frozenset({
     "day_in_life_schedule", "ingredient_list", "skill_tree_unlock",
     "audience_poll_result", "broken_promise_tracker", "resource_allocation",
+    "milestone_recap", "content_calendar", "tool_comparison", "weekly_review",
 })
 
 
@@ -2322,6 +2325,143 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'.card[data-card-id="{card_id}"] .ive-fill-expense {{')
         parts.append(f'  height:100%; width:0; border-radius:{p["radius"]}; background:{p["text_secondary"]}; opacity:0.6;')
         parts.append('}')
+    # ── Wave 10 ───────────────────────────────────────────────────────────────
+    if content_style == "milestone_recap":
+        _mr_sz = "14px" if compact else "18px"
+        parts.append(f'.card[data-card-id="{card_id}"] .mr-wrap {{')
+        parts.append('  display:flex; flex-direction:column; gap:6px; width:100%;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .mr-item {{')
+        parts.append('  display:flex; align-items:center; gap:10px; opacity:0;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .mr-dot {{')
+        parts.append(f'  width:8px; height:8px; border-radius:50%; flex-shrink:0; background:{p["accent"]};')
+        if p.get("accent_line_glow"):
+            parts.append(f'  box-shadow:{p["accent_line_glow"]};')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .mr-text {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{_mr_sz};')
+        parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]}; line-height:1.3;')
+        parts.append('}')
+    if content_style == "content_calendar":
+        _cal_day_sz = "13px" if compact else "16px"
+        _cal_cnt_sz = "12px" if compact else "14px"
+        parts.append(f'.card[data-card-id="{card_id}"] .cal-wrap {{')
+        parts.append('  display:flex; flex-direction:column; gap:5px; width:100%;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .cal-item {{')
+        parts.append('  display:flex; gap:8px; align-items:flex-start; opacity:0;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .cal-day {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{_cal_day_sz};')
+        parts.append(f'  font-weight:900; color:{p["accent"]}; min-width:80px; flex-shrink:0;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .cal-content {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{_cal_cnt_sz};')
+        parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]}; line-height:1.3;')
+        parts.append('}')
+    if content_style == "client_result_number":
+        _crn_val_sz = "52px" if compact else "72px"
+        _crn_ctx_sz = "16px" if compact else "20px"
+        _crn_lbl_sz = "13px" if compact else "15px"
+        parts.append(f'.card[data-card-id="{card_id}"] .crn-wrap {{')
+        parts.append('  display:flex; flex-direction:column; align-items:center; gap:6px;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .crn-value {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{_crn_val_sz};')
+        parts.append(f'  font-weight:900; color:{p["accent"]}; line-height:1.0; opacity:0;')
+        if p["title_glow"]:
+            parts.append(f'  text-shadow:{p["title_glow"]};')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .crn-context {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{_crn_ctx_sz};')
+        parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]}; opacity:0;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .crn-label {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{_crn_lbl_sz};')
+        parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text_secondary"]}; opacity:0;')
+        parts.append('}')
+    if content_style == "mistake_lesson":
+        _ml_tag_sz = "11px" if compact else "13px"
+        _ml_txt_sz = "13px" if compact else "16px"
+        parts.append(f'.card[data-card-id="{card_id}"] .ml-wrap {{')
+        parts.append('  display:flex; flex-direction:column; gap:10px; width:100%;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .ml-block {{')
+        parts.append(f'  display:flex; flex-direction:column; gap:4px; padding:10px;')
+        parts.append(f'  border-radius:{p["radius"]}; opacity:0;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .ml-mistake {{')
+        parts.append(f'  border-left:3px solid {p["text_secondary"]};')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .ml-lesson {{')
+        parts.append(f'  border-left:3px solid {p["accent"]};')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .ml-tag {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{_ml_tag_sz};')
+        parts.append(f'  font-weight:900; text-transform:uppercase; letter-spacing:0.08em;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .ml-tag-err {{ color:{p["text_secondary"]}; }}')
+        parts.append(f'.card[data-card-id="{card_id}"] .ml-tag-lsn {{ color:{p["accent"]};')
+        if p["title_glow"]:
+            parts.append(f'  text-shadow:{p["title_glow"]};')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .ml-text {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{_ml_txt_sz};')
+        parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]}; line-height:1.3;')
+        parts.append('}')
+    if content_style == "tool_comparison":
+        _tc_head_sz = "13px" if compact else "16px"
+        _tc_feat_sz = "11px" if compact else "14px"
+        parts.append(f'.card[data-card-id="{card_id}"] .tc-wrap {{')
+        parts.append('  display:flex; flex-direction:column; gap:8px; width:100%;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .tc-heads {{')
+        parts.append('  display:flex; gap:6px; width:100%; opacity:0;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .tc-head {{')
+        parts.append(f'  flex:1; text-align:center; font-family:{p["font"]}; font-size:{_tc_head_sz};')
+        parts.append(f'  font-weight:900; color:{p["accent"]};')
+        if p["title_glow"]:
+            parts.append(f'  text-shadow:{p["title_glow"]};')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .tc-feats {{')
+        parts.append('  display:flex; flex-direction:column; gap:4px;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .tc-feat {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{_tc_feat_sz};')
+        parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]}; opacity:0;')
+        parts.append(f'  padding:3px 0; border-bottom:1px solid {p["text_secondary"]}22;')
+        parts.append('}')
+    if content_style == "weekly_review":
+        _wr_sz = "13px" if compact else "16px"
+        parts.append(f'.card[data-card-id="{card_id}"] .wr-wrap {{')
+        parts.append('  display:flex; flex-direction:column; gap:6px; width:100%;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .wr-item {{')
+        parts.append(f'  display:flex; justify-content:space-between; align-items:center; opacity:0;')
+        parts.append(f'  padding:5px 0; border-bottom:1px solid {p["text_secondary"]}22;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .wr-cat {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{_wr_sz};')
+        parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]};')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .wr-score {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{_wr_sz};')
+        parts.append(f'  font-weight:900; color:{p["accent"]};')
+        if p.get("title_glow"):
+            parts.append(f'  text-shadow:{p["title_glow"]};')
+        parts.append('}')
+    if content_style == "audience_question":
+        _aq_sz = "20px" if compact else "28px"
+        parts.append(f'.card[data-card-id="{card_id}"] .aq-wrap {{')
+        parts.append('  display:flex; flex-direction:column; align-items:center;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .aq-q {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{_aq_sz};')
+        parts.append(f'  font-weight:900; color:{p["text"]}; text-align:center;')
+        parts.append(f'  line-height:1.3; opacity:0;')
+        parts.append('}')
     parts.append('</style>')
     # Timeline: full-screen overlay, no card-panel wrapper
     if content_style == "timeline":
@@ -3351,6 +3491,88 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'          <div class="ive-fill-expense" id="{card_id}-ive-fill-expense" data-pct="{_ive_exp_pct}"></div>')
         parts.append(f'        </div>')
         parts.append(f'      </div>')
+        parts.append(f'    </div>')
+    # ── Wave 10 ───────────────────────────────────────────────────────────────
+    elif content_style == "milestone_recap":
+        _mr_ms = hints.get("milestones", hints.get("items", []))
+        parts.append(f'    <div class="mr-wrap">')
+        for _i, _ms in enumerate(_mr_ms[:6]):
+            parts.append(f'      <div class="mr-item" id="{card_id}-mr-item-{_i}">')
+            parts.append(f'        <div class="mr-dot"></div>')
+            parts.append(f'        <div class="mr-text">{_esc(str(_ms))}</div>')
+            parts.append(f'      </div>')
+        parts.append(f'    </div>')
+    elif content_style == "content_calendar":
+        _cal_entries = hints.get("calendar_items", hints.get("items", []))
+        parts.append(f'    <div class="cal-wrap">')
+        for _i, _cal_e in enumerate(_cal_entries[:7]):
+            _cal_s = str(_cal_e)
+            _sep = '—' if '—' in _cal_s else ('-' if '-' in _cal_s else None)
+            if _sep:
+                _cal_parts = _cal_s.split(_sep, 1)
+                _cal_day = _esc(_cal_parts[0].strip())
+                _cal_cnt = _esc(_cal_parts[1].strip()) if len(_cal_parts) > 1 else ""
+            else:
+                _cal_day, _cal_cnt = "", _esc(_cal_s)
+            parts.append(f'      <div class="cal-item" id="{card_id}-cal-item-{_i}">')
+            if _cal_day:
+                parts.append(f'        <div class="cal-day">{_cal_day}</div>')
+            parts.append(f'        <div class="cal-content">{_cal_cnt}</div>')
+            parts.append(f'      </div>')
+        parts.append(f'    </div>')
+    elif content_style == "client_result_number":
+        _crn_val = _esc(hints.get("result_value", hints.get("number", "")))
+        _crn_ctx = _esc(hints.get("result_context", hints.get("detail", "")))
+        _crn_lbl = hints.get("client_label", "")
+        parts.append(f'    <div class="crn-wrap">')
+        parts.append(f'      <div class="crn-value" id="{card_id}-crn-value">{_crn_val}</div>')
+        parts.append(f'      <div class="crn-context" id="{card_id}-crn-context">{_crn_ctx}</div>')
+        if _crn_lbl:
+            parts.append(f'      <div class="crn-label" id="{card_id}-crn-label">{_esc(_crn_lbl)}</div>')
+        parts.append(f'    </div>')
+    elif content_style == "mistake_lesson":
+        _ml_err = _esc(hints.get("mistake_text", ""))
+        _ml_lsn = _esc(hints.get("lesson_text", ""))
+        parts.append(f'    <div class="ml-wrap">')
+        parts.append(f'      <div class="ml-block ml-mistake" id="{card_id}-ml-mistake">')
+        parts.append(f'        <div class="ml-tag ml-tag-err">Erreur</div>')
+        parts.append(f'        <div class="ml-text">{_ml_err}</div>')
+        parts.append(f'      </div>')
+        parts.append(f'      <div class="ml-block ml-lesson" id="{card_id}-ml-lesson">')
+        parts.append(f'        <div class="ml-tag ml-tag-lsn">Leçon</div>')
+        parts.append(f'        <div class="ml-text">{_ml_lsn}</div>')
+        parts.append(f'      </div>')
+        parts.append(f'    </div>')
+    elif content_style == "tool_comparison":
+        _tc_names = hints.get("tool_names", [])
+        _tc_feats = hints.get("tool_features", hints.get("items", []))
+        parts.append(f'    <div class="tc-wrap">')
+        if _tc_names:
+            parts.append(f'      <div class="tc-heads" id="{card_id}-tc-heads">')
+            for _tc_n in _tc_names[:3]:
+                parts.append(f'        <div class="tc-head">{_esc(str(_tc_n))}</div>')
+            parts.append(f'      </div>')
+        parts.append(f'      <div class="tc-feats">')
+        for _i, _tc_f in enumerate(_tc_feats[:5]):
+            parts.append(f'        <div class="tc-feat" id="{card_id}-tc-feat-{_i}">{_esc(str(_tc_f))}</div>')
+        parts.append(f'      </div>')
+        parts.append(f'    </div>')
+    elif content_style == "weekly_review":
+        _wr_cats = hints.get("review_categories", hints.get("items", []))
+        _wr_scrs = hints.get("review_scores", [])
+        parts.append(f'    <div class="wr-wrap">')
+        for _i, _wr_c in enumerate(_wr_cats[:6]):
+            _wr_s = _esc(str(_wr_scrs[_i])) if _i < len(_wr_scrs) else ""
+            parts.append(f'      <div class="wr-item" id="{card_id}-wr-item-{_i}">')
+            parts.append(f'        <div class="wr-cat">{_esc(str(_wr_c))}</div>')
+            if _wr_s:
+                parts.append(f'        <div class="wr-score">{_wr_s}</div>')
+            parts.append(f'      </div>')
+        parts.append(f'    </div>')
+    elif content_style == "audience_question":
+        _aq_q = _esc(hints.get("question_text", hints.get("title", "")))
+        parts.append(f'    <div class="aq-wrap">')
+        parts.append(f'      <div class="aq-q" id="{card_id}-aq-q">{_aq_q}</div>')
         parts.append(f'    </div>')
     else:
         # key_phrase, quote and any unknown style
@@ -6075,6 +6297,158 @@ def _build_timeline_js(
                     lines.append(f'  tl.fromTo(\'{_w9_ive_fe_sel}\', {{ width: "0%" }}, {{ width: "{_w9_ive_exp_pct}", duration: {_w9_ive_dur:.3f}, ease: {_w9_ive_ease} }}, {_w9_ive_t2 + 0.10:.4f});')
                     if not is_paper and p.get("accent_line_glow"):
                         lines.append(f'  tl.to(\'{_w9_ive_fi_sel}\', {{ boxShadow: "{_esc_js(p["accent_line_glow"])}", duration: 0.22 }}, {t_in + _w9_ive_dur:.4f});')
+            # ── Wave 10 ───────────────────────────────────────────────────────
+            elif content_style == "milestone_recap":
+                _w10_mr_h     = card.get("contentHints", {})
+                _w10_mr_items = _w10_mr_h.get("milestones", _w10_mr_h.get("items", []))
+                _w10_mr_n     = min(len(_w10_mr_items), 6)
+                _w10_mr_step  = 0.20 if is_cinema else 0.12
+                _w10_mr_dur   = 0.50 if is_cinema else 0.20 if is_ledger else 0.28
+                for _w10_i in range(_w10_mr_n):
+                    _sel = f'.card[data-card-id="{card_id}"] #{card_id}-mr-item-{_w10_i}'
+                    _t   = t_in + _w10_i * _w10_mr_step
+                    if is_ledger:
+                        lines.append(f'  tl.set(\'{_sel}\', {{ opacity: 1 }}, {_t:.4f});')
+                    elif is_cinema:
+                        lines.append(f'  tl.fromTo(\'{_sel}\', {{ opacity: 0, x: -10 }}, {{ opacity: 1, x: 0, duration: {_w10_mr_dur:.3f}, ease: _eIn }}, {_t:.4f});')
+                    elif is_vibe:
+                        lines.append(f'  tl.fromTo(\'{_sel}\', {{ opacity: 0, x: -8, scale: 0.92 }}, {{ opacity: 1, x: 0, scale: 1, duration: {_w10_mr_dur:.3f}, ease: "back.out(1.4)" }}, {_t:.4f});')
+                    elif is_paper:
+                        lines.append(f'  tl.fromTo(\'{_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: {_w10_mr_dur:.3f}, ease: _eIn }}, {_t:.4f});')
+                    else:
+                        lines.append(f'  tl.fromTo(\'{_sel}\', {{ opacity: 0, y: 10 }}, {{ opacity: 1, y: 0, duration: {_w10_mr_dur:.3f}, ease: _eIn }}, {_t:.4f});')
+                if not (is_ledger or is_paper or is_craft or is_vibe or is_cinema) and _w10_mr_n and p.get("accent_line_glow"):
+                    lines.append(f'  tl.to(\'.card[data-card-id="{card_id}"] .mr-dot\', {{ boxShadow: "{_esc_js(p["accent_line_glow"])}", duration: 0.22 }}, {t_in + _w10_mr_n * _w10_mr_step:.4f});')
+            elif content_style == "content_calendar":
+                _w10_cal_h     = card.get("contentHints", {})
+                _w10_cal_items = _w10_cal_h.get("calendar_items", _w10_cal_h.get("items", []))
+                _w10_cal_n     = min(len(_w10_cal_items), 7)
+                _w10_cal_step  = 0.20 if is_cinema else 0.12
+                _w10_cal_dur   = 0.50 if is_cinema else 0.20 if is_ledger else 0.28
+                for _w10_i in range(_w10_cal_n):
+                    _sel = f'.card[data-card-id="{card_id}"] #{card_id}-cal-item-{_w10_i}'
+                    _t   = t_in + _w10_i * _w10_cal_step
+                    if is_ledger:
+                        lines.append(f'  tl.set(\'{_sel}\', {{ opacity: 1 }}, {_t:.4f});')
+                    elif is_cinema:
+                        lines.append(f'  tl.fromTo(\'{_sel}\', {{ opacity: 0, y: 8 }}, {{ opacity: 1, y: 0, duration: {_w10_cal_dur:.3f}, ease: _eIn }}, {_t:.4f});')
+                    elif is_vibe:
+                        lines.append(f'  tl.fromTo(\'{_sel}\', {{ opacity: 0, y: 8, scale: 0.94 }}, {{ opacity: 1, y: 0, scale: 1, duration: {_w10_cal_dur:.3f}, ease: "back.out(1.4)" }}, {_t:.4f});')
+                    elif is_paper:
+                        lines.append(f'  tl.fromTo(\'{_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: {_w10_cal_dur:.3f}, ease: _eIn }}, {_t:.4f});')
+                    else:
+                        lines.append(f'  tl.fromTo(\'{_sel}\', {{ opacity: 0, x: 10 }}, {{ opacity: 1, x: 0, duration: {_w10_cal_dur:.3f}, ease: _eIn }}, {_t:.4f});')
+            elif content_style == "client_result_number":
+                _w10_crn_val = f'.card[data-card-id="{card_id}"] #{card_id}-crn-value'
+                _w10_crn_ctx = f'.card[data-card-id="{card_id}"] #{card_id}-crn-context'
+                _w10_crn_dur = 0.60 if is_cinema else 0.20 if is_ledger else 0.35
+                if is_ledger:
+                    lines.append(f'  tl.set(\'{_w10_crn_val}\', {{ opacity: 1 }}, {t_in:.4f});')
+                    lines.append(f'  tl.set(\'{_w10_crn_ctx}\', {{ opacity: 1 }}, {t_in:.4f});')
+                elif is_cinema:
+                    lines.append(f'  tl.fromTo(\'{_w10_crn_val}\', {{ opacity: 0, scale: 0.80 }}, {{ opacity: 1, scale: 1, duration: {_w10_crn_dur:.3f}, ease: "expo.out" }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w10_crn_ctx}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.40, ease: _eIn }}, {t_in + 0.50:.4f});')
+                    if p.get("title_glow"):
+                        lines.append(f'  tl.to(\'{_w10_crn_val}\', {{ textShadow: "{_esc_js(p["title_glow"])}", duration: 0.30 }}, {t_in + _w10_crn_dur:.4f});')
+                elif is_vibe:
+                    lines.append(f'  tl.fromTo(\'{_w10_crn_val}\', {{ opacity: 0, scale: 0.70 }}, {{ opacity: 1, scale: 1, duration: {_w10_crn_dur:.3f}, ease: "back.out(2.0)" }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w10_crn_ctx}\', {{ opacity: 0, y: 8 }}, {{ opacity: 1, y: 0, duration: 0.28, ease: _eIn }}, {t_in + 0.28:.4f});')
+                elif is_paper:
+                    lines.append(f'  tl.fromTo(\'{_w10_crn_val}\', {{ opacity: 0 }}, {{ opacity: 1, duration: {_w10_crn_dur:.3f}, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w10_crn_ctx}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.30, ease: _eIn }}, {t_in + 0.25:.4f});')
+                else:
+                    lines.append(f'  tl.fromTo(\'{_w10_crn_val}\', {{ opacity: 0, scale: 0.85, y: 10 }}, {{ opacity: 1, scale: 1, y: 0, duration: {_w10_crn_dur:.3f}, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w10_crn_ctx}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.28, ease: _eIn }}, {t_in + 0.28:.4f});')
+                    if not is_craft and p.get("title_glow"):
+                        lines.append(f'  tl.to(\'{_w10_crn_val}\', {{ textShadow: "{_esc_js(p["title_glow"])}", duration: 0.22 }}, {t_in + _w10_crn_dur:.4f});')
+            elif content_style == "mistake_lesson":
+                _w10_ml_err = f'.card[data-card-id="{card_id}"] #{card_id}-ml-mistake'
+                _w10_ml_lsn = f'.card[data-card-id="{card_id}"] #{card_id}-ml-lesson'
+                _w10_ml_dur = 0.50 if is_cinema else 0.20 if is_ledger else 0.30
+                _w10_ml_t2  = t_in + (0.45 if is_cinema else 0.32)
+                if is_ledger:
+                    lines.append(f'  tl.set(\'{_w10_ml_err}\', {{ opacity: 1 }}, {t_in:.4f});')
+                    lines.append(f'  tl.set(\'{_w10_ml_lsn}\', {{ opacity: 1 }}, {t_in:.4f});')
+                elif is_cinema:
+                    lines.append(f'  tl.fromTo(\'{_w10_ml_err}\', {{ opacity: 0, y: 10 }}, {{ opacity: 1, y: 0, duration: {_w10_ml_dur:.3f}, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w10_ml_lsn}\', {{ opacity: 0, y: 10 }}, {{ opacity: 1, y: 0, duration: {_w10_ml_dur:.3f}, ease: _eIn }}, {_w10_ml_t2:.4f});')
+                elif is_vibe:
+                    lines.append(f'  tl.fromTo(\'{_w10_ml_err}\', {{ opacity: 0, x: -10 }}, {{ opacity: 1, x: 0, duration: {_w10_ml_dur:.3f}, ease: "back.out(1.2)" }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w10_ml_lsn}\', {{ opacity: 0, x: -10 }}, {{ opacity: 1, x: 0, duration: {_w10_ml_dur:.3f}, ease: "back.out(1.2)" }}, {_w10_ml_t2:.4f});')
+                elif is_paper:
+                    lines.append(f'  tl.fromTo(\'{_w10_ml_err}\', {{ opacity: 0 }}, {{ opacity: 1, duration: {_w10_ml_dur:.3f}, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w10_ml_lsn}\', {{ opacity: 0 }}, {{ opacity: 1, duration: {_w10_ml_dur:.3f}, ease: _eIn }}, {_w10_ml_t2:.4f});')
+                else:
+                    lines.append(f'  tl.fromTo(\'{_w10_ml_err}\', {{ opacity: 0, y: 8 }}, {{ opacity: 1, y: 0, duration: {_w10_ml_dur:.3f}, ease: _eIn }}, {t_in:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_w10_ml_lsn}\', {{ opacity: 0, y: 8 }}, {{ opacity: 1, y: 0, duration: {_w10_ml_dur:.3f}, ease: _eIn }}, {_w10_ml_t2:.4f});')
+                    if not is_craft and p.get("title_glow"):
+                        lines.append(f'  tl.to(\'{_w10_ml_lsn}\', {{ boxShadow: "0 0 14px {_esc_js(p["accent"])}", duration: 0.22 }}, {_w10_ml_t2 + _w10_ml_dur:.4f});')
+            elif content_style == "tool_comparison":
+                _w10_tc_h      = card.get("contentHints", {})
+                _w10_tc_feats  = _w10_tc_h.get("tool_features", _w10_tc_h.get("items", []))
+                _w10_tc_n      = min(len(_w10_tc_feats), 5)
+                _w10_tc_heads  = f'.card[data-card-id="{card_id}"] #{card_id}-tc-heads'
+                _w10_tc_dur    = 0.50 if is_cinema else 0.20 if is_ledger else 0.28
+                _w10_tc_step   = 0.18 if is_cinema else 0.12
+                if is_ledger:
+                    lines.append(f'  tl.set(\'{_w10_tc_heads}\', {{ opacity: 1 }}, {t_in:.4f});')
+                elif is_cinema:
+                    lines.append(f'  tl.fromTo(\'{_w10_tc_heads}\', {{ opacity: 0, y: -8 }}, {{ opacity: 1, y: 0, duration: {_w10_tc_dur:.3f}, ease: _eIn }}, {t_in:.4f});')
+                elif is_vibe:
+                    lines.append(f'  tl.fromTo(\'{_w10_tc_heads}\', {{ opacity: 0, scale: 0.90 }}, {{ opacity: 1, scale: 1, duration: {_w10_tc_dur:.3f}, ease: "back.out(1.4)" }}, {t_in:.4f});')
+                elif is_paper:
+                    lines.append(f'  tl.fromTo(\'{_w10_tc_heads}\', {{ opacity: 0 }}, {{ opacity: 1, duration: {_w10_tc_dur:.3f}, ease: _eIn }}, {t_in:.4f});')
+                else:
+                    lines.append(f'  tl.fromTo(\'{_w10_tc_heads}\', {{ opacity: 0, y: -8 }}, {{ opacity: 1, y: 0, duration: {_w10_tc_dur:.3f}, ease: _eIn }}, {t_in:.4f});')
+                    if not is_craft and p.get("title_glow"):
+                        lines.append(f'  tl.to(\'{_w10_tc_heads}\', {{ textShadow: "{_esc_js(p["title_glow"])}", duration: 0.20 }}, {t_in + _w10_tc_dur:.4f});')
+                for _w10_i in range(_w10_tc_n):
+                    _sel = f'.card[data-card-id="{card_id}"] #{card_id}-tc-feat-{_w10_i}'
+                    _t   = t_in + _w10_tc_dur + 0.08 + _w10_i * _w10_tc_step
+                    if is_ledger:
+                        lines.append(f'  tl.set(\'{_sel}\', {{ opacity: 1 }}, {_t:.4f});')
+                    elif is_cinema:
+                        lines.append(f'  tl.fromTo(\'{_sel}\', {{ opacity: 0, x: 10 }}, {{ opacity: 1, x: 0, duration: {_w10_tc_dur:.3f}, ease: _eIn }}, {_t:.4f});')
+                    elif is_vibe:
+                        lines.append(f'  tl.fromTo(\'{_sel}\', {{ opacity: 0, scale: 0.92 }}, {{ opacity: 1, scale: 1, duration: {_w10_tc_dur:.3f}, ease: "back.out(1.4)" }}, {_t:.4f});')
+                    elif is_paper:
+                        lines.append(f'  tl.fromTo(\'{_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: {_w10_tc_dur:.3f}, ease: _eIn }}, {_t:.4f});')
+                    else:
+                        lines.append(f'  tl.fromTo(\'{_sel}\', {{ opacity: 0, y: 6 }}, {{ opacity: 1, y: 0, duration: {_w10_tc_dur:.3f}, ease: _eIn }}, {_t:.4f});')
+            elif content_style == "weekly_review":
+                _w10_wr_h    = card.get("contentHints", {})
+                _w10_wr_cats = _w10_wr_h.get("review_categories", _w10_wr_h.get("items", []))
+                _w10_wr_n    = min(len(_w10_wr_cats), 6)
+                _w10_wr_step = 0.18 if is_cinema else 0.12
+                _w10_wr_dur  = 0.50 if is_cinema else 0.20 if is_ledger else 0.28
+                for _w10_i in range(_w10_wr_n):
+                    _sel = f'.card[data-card-id="{card_id}"] #{card_id}-wr-item-{_w10_i}'
+                    _t   = t_in + _w10_i * _w10_wr_step
+                    if is_ledger:
+                        lines.append(f'  tl.set(\'{_sel}\', {{ opacity: 1 }}, {_t:.4f});')
+                    elif is_cinema:
+                        lines.append(f'  tl.fromTo(\'{_sel}\', {{ opacity: 0, x: 12 }}, {{ opacity: 1, x: 0, duration: {_w10_wr_dur:.3f}, ease: _eIn }}, {_t:.4f});')
+                    elif is_vibe:
+                        lines.append(f'  tl.fromTo(\'{_sel}\', {{ opacity: 0, x: 8, scale: 0.94 }}, {{ opacity: 1, x: 0, scale: 1, duration: {_w10_wr_dur:.3f}, ease: "back.out(1.4)" }}, {_t:.4f});')
+                    elif is_paper:
+                        lines.append(f'  tl.fromTo(\'{_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: {_w10_wr_dur:.3f}, ease: _eIn }}, {_t:.4f});')
+                    else:
+                        lines.append(f'  tl.fromTo(\'{_sel}\', {{ opacity: 0, y: 8 }}, {{ opacity: 1, y: 0, duration: {_w10_wr_dur:.3f}, ease: _eIn }}, {_t:.4f});')
+                if not (is_ledger or is_paper or is_craft or is_vibe or is_cinema) and _w10_wr_n and p.get("title_glow"):
+                    lines.append(f'  tl.to(\'.card[data-card-id="{card_id}"] .wr-score\', {{ textShadow: "{_esc_js(p["title_glow"])}", duration: 0.22 }}, {t_in + _w10_wr_n * _w10_wr_step:.4f});')
+            elif content_style == "audience_question":
+                _w10_aq = f'.card[data-card-id="{card_id}"] #{card_id}-aq-q'
+                _w10_aq_dur = 0.70 if is_cinema else 0.22 if is_ledger else 0.40
+                if is_ledger:
+                    lines.append(f'  tl.set(\'{_w10_aq}\', {{ opacity: 1 }}, {t_in:.4f});')
+                elif is_cinema:
+                    lines.append(f'  tl.fromTo(\'{_w10_aq}\', {{ opacity: 0, scale: 0.96 }}, {{ opacity: 1, scale: 1, duration: {_w10_aq_dur:.3f}, ease: _eIn }}, {t_in:.4f});')
+                elif is_vibe:
+                    lines.append(f'  tl.fromTo(\'{_w10_aq}\', {{ opacity: 0, y: 12, scale: 0.95 }}, {{ opacity: 1, y: 0, scale: 1, duration: {_w10_aq_dur:.3f}, ease: "back.out(1.2)" }}, {t_in:.4f});')
+                elif is_paper:
+                    lines.append(f'  tl.fromTo(\'{_w10_aq}\', {{ opacity: 0 }}, {{ opacity: 1, duration: {_w10_aq_dur:.3f}, ease: _eIn }}, {t_in:.4f});')
+                else:
+                    lines.append(f'  tl.fromTo(\'{_w10_aq}\', {{ opacity: 0, y: 16 }}, {{ opacity: 1, y: 0, duration: {_w10_aq_dur:.3f}, ease: _eIn }}, {t_in:.4f});')
             else:
                 if is_cinema:
                     lines.append(

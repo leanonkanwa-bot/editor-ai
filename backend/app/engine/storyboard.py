@@ -501,7 +501,7 @@ OUTPUT: a JSON array of card objects. Each card:
     "accent_word": "<optional: one word/phrase from title to emphasize via highlight swipe>",
     "detail": "<optional supporting text>",
     "number": "<if a stat/number is featured>",
-    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"data_chart"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking"|"hand_written_note"|"speech_bubble_thought"|"calendar_date_highlight"|"percentage_split"|"red_flag_list"|"success_metric_badge"|"client_avatar_persona"|"book_recommendation"|"tool_stack"|"revenue_breakdown"|"age_milestone"|"contrarian_take"|"action_step_cta"|"story_chapter_transition"|"live_reaction_split"|"hidden_cost_reveal"|"social_proof_counter"|"timeline_prediction"|"red_thread_connector"|"silent_beat_pause"|"comment_reply_style"|"before_you_scroll"|"traffic_light_status"|"day_in_life_schedule"|"skill_tree_unlock"|"audience_poll_result"|"broken_promise_tracker"|"ingredient_list"|"resource_allocation"|"fill_in_the_blank"|"streak_counter"|"before_now_later"|"platform_stats"|"cost_comparison"|"decision_matrix"|"habit_tracker"|"income_vs_expense",
+    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"data_chart"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking"|"hand_written_note"|"speech_bubble_thought"|"calendar_date_highlight"|"percentage_split"|"red_flag_list"|"success_metric_badge"|"client_avatar_persona"|"book_recommendation"|"tool_stack"|"revenue_breakdown"|"age_milestone"|"contrarian_take"|"action_step_cta"|"story_chapter_transition"|"live_reaction_split"|"hidden_cost_reveal"|"social_proof_counter"|"timeline_prediction"|"red_thread_connector"|"silent_beat_pause"|"comment_reply_style"|"before_you_scroll"|"traffic_light_status"|"day_in_life_schedule"|"skill_tree_unlock"|"audience_poll_result"|"broken_promise_tracker"|"ingredient_list"|"resource_allocation"|"fill_in_the_blank"|"streak_counter"|"before_now_later"|"platform_stats"|"cost_comparison"|"decision_matrix"|"habit_tracker"|"income_vs_expense"|"milestone_recap"|"content_calendar"|"client_result_number"|"mistake_lesson"|"tool_comparison"|"weekly_review"|"audience_question",
     "left_label": "<comparison: left side label>",
     "left_value": "<comparison: left side value>",
     "right_label": "<comparison: right side label>",
@@ -633,7 +633,19 @@ OUTPUT: a JSON array of card objects. Each card:
     "income_value": "<income_vs_expense: the income figure as a string, e.g. '12 000€', '8k'>",
     "expense_value": "<income_vs_expense: the expense figure as a string, e.g. '7 500€', '5k'>",
     "income_label": "<income_vs_expense: label for the income bar, defaults to 'Revenus'>",
-    "expense_label": "<income_vs_expense: label for the expense bar, defaults to 'Dépenses'>"
+    "expense_label": "<income_vs_expense: label for the expense bar, defaults to 'Dépenses'>",
+    "milestones": ["<milestone_recap: milestone text 1, e.g. '2020 — Premier client'>", "<milestone 2>"],
+    "calendar_items": ["<content_calendar: calendar entry, e.g. 'Lundi — Post produit'>", "<entry 2>"],
+    "result_value": "<client_result_number: the transformation result, e.g. '+340%', '10k abonnés', 'x3 CA'>",
+    "result_context": "<client_result_number: time or context frame, e.g. 'en 60 jours', 'en 3 mois'>",
+    "client_label": "<client_result_number: optional client identifier, e.g. 'Marie D.', 'Client e-commerce'>",
+    "mistake_text": "<mistake_lesson: the mistake that was made, in the speaker's own words>",
+    "lesson_text": "<mistake_lesson: the lesson learned from that mistake>",
+    "tool_names": ["<tool_comparison: name of tool 1, e.g. 'Notion'>", "<tool 2>"],
+    "tool_features": ["<tool_comparison: feature comparison row 1, e.g. 'Prix: Gratuit | 5€/mois'>", "<row 2>"],
+    "review_categories": ["<weekly_review: category name 1, e.g. 'Contenu', 'Prospection', 'Santé'>"],
+    "review_scores": ["<weekly_review: score or assessment for category 1, e.g. '8/10', '✓', '⚠️'>"],
+    "question_text": "<audience_question: the single question posed to the audience — no answer included>"
   }}
 }}
 
@@ -1144,6 +1156,68 @@ RULES:
     is a binary financial bars). Distinct from cost_comparison (cost_comparison is
     buying options; income_vs_expense is total inflow vs total outflow). Provide
     "income_value" + "expense_value" + optional "income_label" / "expense_label".
+  "milestone_recap" — speaker reviews MULTIPLE key milestones or achievements in
+    sequence ("en 2021 j'ai décroché mon premier client, en 2022 j'ai passé les 10k
+    abonnés, en 2024 j'atteins les 6 chiffres"). REQUIRES at least 2 milestones listed
+    together. Distinct from recap_summary (recap_summary is a general conclusion
+    summary in unordered bullet points; milestone_recap is a chronological retrospective
+    of specific achievements). Distinct from roadmap_milestone (roadmap_milestone is a
+    SINGLE isolated milestone; milestone_recap always lists SEVERAL together). Distinct
+    from timeline (timeline is a progression of arbitrary events; milestone_recap focuses
+    exclusively on ACHIEVEMENTS and past accomplishments). Provide "milestones" list
+    (2-6 items, each formatted as "Année — Réalisation" or similar).
+  "content_calendar" — speaker shows or describes a content planning schedule by day
+    or week slot ("lundi je poste un produit, mercredi une story behind-the-scenes,
+    vendredi un reel viral"). REQUIRES multiple days or time slots each with a distinct
+    content assignment. Distinct from day_in_life_schedule (day_in_life_schedule is a
+    SINGLE day's hourly routine — "9h réveil, 10h gym"; content_calendar is a MULTI-DAY
+    weekly or monthly publishing plan). Distinct from roadmap_milestone (roadmap_milestone
+    is a project phase; content_calendar is a publishing schedule). Provide
+    "calendar_items" list (3-7 items, each formatted as "Jour — Contenu").
+  "client_result_number" — speaker reveals a TRANSFORMATION RESULT achieved by a
+    client or customer ("mon client a gagné +340% en 60 jours", "elle est passée de 0
+    à 10k abonnés en 3 mois"). REQUIRES a result value AND a time or context frame.
+    Distinct from income_reveal (income_reveal is the SPEAKER'S OWN revenue; this is
+    a CLIENT'S transformation result). Distinct from social_proof_counter (that is a
+    community headcount like followers; this is a specific performance transformation).
+    Distinct from stat (stat is generic data with no client-transformation framing).
+    Provide "result_value" + "result_context" + optional "client_label".
+  "mistake_lesson" — speaker explicitly names a mistake they made AND the lesson
+    they drew from it ("j'ai fait l'erreur de X... et j'en ai retenu que Y"). REQUIRES
+    both a mistake AND a lesson stated in the same segment. Distinct from
+    objection_response (objection_response is a CLIENT'S objection + speaker's
+    defensive counter; mistake_lesson is the SPEAKER'S OWN error + personal reflection).
+    Distinct from cause_effect (cause_effect is a neutral causal chain, no personal
+    error acknowledgment; mistake_lesson has explicit self-critique and retrospective
+    tone). Distinct from warning_soft (warning_soft is an advisory warning about
+    something to avoid; mistake_lesson is a POST-HOC reflection on something already
+    done wrong). Provide "mistake_text" + "lesson_text".
+  "tool_comparison" — speaker compares MULTIPLE tools or software against each other
+    on specific criteria ("Notion vs Trello vs Asana — voici les différences clés").
+    REQUIRES at least 2 named tools AND a feature-by-feature comparison angle. Distinct
+    from cost_comparison (cost_comparison is purely a pricing grid; tool_comparison is
+    multi-criteria feature analysis). Distinct from tool_stack (tool_stack is a simple
+    list of tools used; tool_comparison evaluates tools head-to-head). Distinct from
+    versus_battle (versus_battle is a stylized duel framing; tool_comparison is a
+    structured multi-criteria grid). Provide "tool_names" list (2-3 items) +
+    "tool_features" list of comparison rows (2-5 items).
+  "weekly_review" — speaker evaluates MULTIPLE categories of a period (week, month)
+    each with a separate score or assessment ("ma semaine : contenu 8/10, prospection
+    6/10, santé 9/10"). REQUIRES at least 2 categories each with a distinct
+    score/assessment. Distinct from star_rating_review (star_rating_review is a
+    SINGLE overall rating for ONE item; weekly_review has MULTIPLE categories each
+    assessed separately). Distinct from audience_poll_result (that is an external
+    audience vote; weekly_review is a personal self-assessment). Provide
+    "review_categories" list + "review_scores" list (same length, 2-6 items).
+  "audience_question" — speaker poses a SINGLE question to the audience with NO answer
+    shown on the card — the question hangs in suspense to invite participation
+    ("dis-moi en commentaire...", "et toi, tu sais vraiment ce que veut ton audience?").
+    REQUIRES exactly one question with no accompanying answer in the same segment.
+    Distinct from question_answer_pair (question_answer_pair shows BOTH question AND
+    answer on the same card; audience_question shows ONLY the question). Distinct from
+    question (question is a rhetorical hook asked to create tension; audience_question
+    is specifically an ENGAGEMENT question directed at the audience asking for their
+    participation or input). Provide "question_text".
 - VERBATIM GROUNDING — mandatory check before assigning any explicit-signal
   card type (contrarian_take, warning_soft, red_flag_list, action_step_cta,
   myth_vs_fact, secret_reveal, objection_response, live_reaction_split,
