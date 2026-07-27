@@ -2335,7 +2335,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('}')
     # ── Wave 10 ───────────────────────────────────────────────────────────────
     if content_style == "milestone_recap":
-        _mr_sz = "14px" if compact else "18px"
+        _mr_sz = "18px"
+        parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{ width: {max_width_eff}; box-sizing: border-box; }}')
         parts.append(f'.card[data-card-id="{card_id}"] .mr-wrap {{')
         parts.append('  display:flex; flex-direction:column; gap:6px; width:100%;')
         parts.append('}')
@@ -2352,8 +2353,9 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]}; line-height:1.3;')
         parts.append('}')
     if content_style == "content_calendar":
-        _cal_day_sz = "13px" if compact else "16px"
-        _cal_cnt_sz = "12px" if compact else "14px"
+        _cal_day_sz = "16px"
+        _cal_cnt_sz = "14px"
+        parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{ width: {max_width_eff}; box-sizing: border-box; }}')
         parts.append(f'.card[data-card-id="{card_id}"] .cal-wrap {{')
         parts.append('  display:flex; flex-direction:column; gap:5px; width:100%;')
         parts.append('}')
@@ -2443,7 +2445,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  padding:3px 0; border-bottom:1px solid {p["text_secondary"]}22;')
         parts.append('}')
     if content_style == "weekly_review":
-        _wr_sz = "13px" if compact else "16px"
+        _wr_sz = "16px"
+        parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{ width: {max_width_eff}; box-sizing: border-box; }}')
         parts.append(f'.card[data-card-id="{card_id}"] .wr-wrap {{')
         parts.append('  display:flex; flex-direction:column; gap:6px; width:100%;')
         parts.append('}')
