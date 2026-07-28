@@ -24,4 +24,4 @@ RUN cd app/engine && npm ci --omit=dev 2>/dev/null || npm install --omit=dev 2>/
 COPY editor_frontend/ /app/editor_frontend/
 COPY frontend/ /app/frontend/
 EXPOSE 8000
-CMD ["sh", "-c", "Xvfb :99 -screen 0 1920x1080x24 & sleep 1 && DISPLAY=:99 uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "rm -f /tmp/.X99-lock && Xvfb :99 -screen 0 1920x1080x24 & sleep 2 && DISPLAY=:99 uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

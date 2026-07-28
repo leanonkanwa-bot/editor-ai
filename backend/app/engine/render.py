@@ -2366,7 +2366,10 @@ def _render_hyperframes(
     # OOM SIGKILL or severe progressive slowdown → timeout.  We split the render
     # into N sequential HF runs (each hard-capped at _SEG_MAX_FRAMES) and concat.
     _total_frames = int(fps * timing_map.output_duration)
-    _SEG_MAX_FRAMES = 3000
+    # HF_SEG_MAX_FRAMES env var allows fast test cycles without a code redeploy:
+    # set to 500 in Railway Variables to trigger segmentation on short test videos,
+    # then delete the variable (reverts to 3000) once segmentation is confirmed working.
+    _SEG_MAX_FRAMES = int(_os.environ.get("HF_SEG_MAX_FRAMES", "3000"))
     _max_seg_dur = _SEG_MAX_FRAMES / fps  # e.g. 100 s at 30 fps
 
     # Build segment boundaries greedily so each segment is guaranteed ≤ _SEG_MAX_FRAMES.
