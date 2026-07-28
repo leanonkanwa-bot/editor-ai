@@ -1860,20 +1860,26 @@ def _upscale_to_source_resolution(output_path: Path, src: Path, short_form: bool
         return {"upscaled": False, "output_resolution": f"{base_w}x{base_h}", "upscale_error": str(e)}
 
 
-def _find_seg_split(storyboard: dict, total_dur: float) -> float | None:
-    """Return a clean segment split time near total_dur/2, or None if no gap found.
+def _find_seg_split(
+    storyboard: dict,
+    total_dur: float,
+    *,
+    target: float | None = None,
+) -> float | None:
+    """Return a clean segment split time near target (default: total_dur/2), or None if no gap.
 
     Scans all cards (graphic + caption) for time ranges where nothing is active,
-    then picks the gap midpoint closest to the overall midpoint.  A minimum gap
-    of 0.3 s is required to allow a frame-accurate FFmpeg -c copy cut.
+    then picks the gap midpoint closest to target.  A minimum gap of 0.3 s is
+    required to allow a frame-accurate FFmpeg -c copy cut.
     """
     all_cards = storyboard.get("cards", [])
     intervals: list[tuple[float, float]] = sorted(
         (float(c.get("startSec", 0)), float(c.get("endSec", 0)))
         for c in all_cards
     )
+    _target = target if target is not None else total_dur / 2.0
     if not intervals:
-        return round(total_dur / 2.0, 3)
+        return round(_target, 3)
 
     # Merge overlapping intervals to find true silent windows.
     merged: list[list[float]] = []
@@ -1896,8 +1902,7 @@ def _find_seg_split(storyboard: dict, total_dur: float) -> float | None:
     if not gaps:
         return None
 
-    midpoint = total_dur / 2.0
-    best_gap = min(gaps, key=lambda g: abs((g[0] + g[1]) / 2.0 - midpoint))
+    best_gap = min(gaps, key=lambda g: abs((g[0] + g[1]) / 2.0 - _target))
     return round((best_gap[0] + best_gap[1]) / 2.0, 3)
 
 
@@ -2348,109 +2353,108 @@ def _render_hyperframes(
 
     # ── Segmentation check ──────────────────────────────────────────────────
     # SwiftShader accumulates a per-frame memory leak inside each Chrome worker.
-    # Beyond ~3000 frames (~100s at 30fps) the cumulative RSS exceeds the cgroup
-    # limit → rc=-9 SIGKILL.  We split the render into two sequential HF runs
-    # (each on a shorter segment video) and losslessly concat the outputs.
+    # Beyond ~3000 frames (~100s at 30fps) the cumulative RSS either causes an
+    # OOM SIGKILL or severe progressive slowdown → timeout.  We split the render
+    # into N sequential HF runs (each guaranteed ≤ _SEG_MAX_FRAMES) and concat.
     _total_frames = int(fps * timing_map.output_duration)
     _SEG_MAX_FRAMES = 3000
+    # ceiling division without importing math
+    _n_segs = -(_total_frames // -_SEG_MAX_FRAMES) if _total_frames > _SEG_MAX_FRAMES else 1
 
-    _split_sec: float | None = None
-    if _total_frames > _SEG_MAX_FRAMES:
-        _split_sec = _find_seg_split(storyboard, timing_map.output_duration)
-        if _split_sec is None:
-            # No clean gap exists (continuous card coverage across the whole video).
-            # Force-split at the midpoint anyway — a single card's entry animation
-            # may replay at t=0 of segment 1 (minor glitch), but that is far
-            # preferable to OOM SIGKILL.
-            _split_sec = round(timing_map.output_duration / 2.0, 3)
-            print(
-                f"[HF] WARN: {_total_frames} frames, no gap ≥0.3s — "
-                f"forcing midpoint split at {_split_sec:.2f}s (card-boundary re-entry possible)",
-                flush=True,
-            )
-        else:
-            print(
-                f"[HF] Segmented render: {_total_frames} frames → split at {_split_sec:.2f}s "
-                f"(segs: {_split_sec:.1f}s + {timing_map.output_duration - _split_sec:.1f}s)",
-                flush=True,
-            )
-
-    if _split_sec is not None:
+    if _n_segs > 1:
         # ── SEGMENTED PATH ─────────────────────────────────────────────────
         import shutil as _shutil
         from app.engine.compose import _DATA_PANEL_TYPES as _DPT
 
-        _seg0_dur = _split_sec
-        _seg1_dur = timing_map.output_duration - _split_sec
+        # Compute N-1 split points, each near the ideal equal-division boundary.
+        _seg_dur_target = timing_map.output_duration / _n_segs
+        _split_points: list[float] = []
+        for _i in range(1, _n_segs):
+            _target_t = _seg_dur_target * _i
+            _sp = _find_seg_split(storyboard, timing_map.output_duration, target=_target_t)
+            if _sp is None:
+                _sp = round(_target_t, 3)
+                print(
+                    f"[HF] WARN: no gap near {_target_t:.1f}s — forcing boundary at {_sp:.2f}s",
+                    flush=True,
+                )
+            _split_points.append(_sp)
 
-        # Count data-panel cards that end before the split so the zone
-        # rotation counter initialises correctly for segment 1.
-        _all_graphic = [c for c in storyboard.get("cards", []) if c.get("type") != "caption"]
-        _seg0_data_count = sum(
-            1 for c in _all_graphic
-            if float(c.get("endSec", 0)) <= _split_sec
-            and c.get("contentHints", {}).get("style", "") in _DPT
+        # Deduplicate: if two searches converged on the same gap, replace the
+        # second with the ideal boundary time so no segment becomes zero-length.
+        _clean: list[float] = []
+        for _ii, _sp in enumerate(_split_points):
+            if _clean and abs(_sp - _clean[-1]) < 0.3:
+                _sp = round(_seg_dur_target * (_ii + 1), 3)
+            _clean.append(_sp)
+        _split_points = _clean
+
+        _seg_boundaries = [0.0] + _split_points + [timing_map.output_duration]
+        _n_segs = len(_seg_boundaries) - 1
+        _seg_info = " + ".join(
+            f"{_seg_boundaries[i + 1] - _seg_boundaries[i]:.1f}s"
+            for i in range(_n_segs)
         )
-
-        # Segment 0: compose + video cut + HF ───────────────────────────────
-        print(f"[HF-SEG] Stage 3a: Composing segment 0 (0.0s → {_split_sec:.2f}s) ...", flush=True)
-        _t_seg = time.perf_counter()
-        _seg0_proj = compose(
-            storyboard=storyboard,
-            trimmed_video=trimmed,
-            work_dir=work_dir / "seg0",
-            zoom_entries=remapped_zoom,
-            style_pack=style_pack,
-            subject_position=subject_position,
-            segment_offset=0.0,
-            segment_end=_split_sec,
-            segment_data_card_offset=0,
-        )
-        # compose() copies the full trimmed video; replace it with the cut segment
-        # so HyperFrames only renders the frames it actually needs.
-        _seg0_vid = work_dir / "seg0_video.mp4"
-        _ffmpeg_cut(trimmed, _seg0_vid, 0.0, _split_sec)
-        _shutil.copy2(str(_seg0_vid), str(_seg0_proj / "public" / "input-video.mp4"))
-        print(f"[TIMING] seg0_compose+cut: {time.perf_counter()-_t_seg:.1f}s", flush=True)
-
-        _seg0_raw = work_dir / "seg0_hf.mp4"
-        print(f"[HF-SEG] Stage 4a: Rendering segment 0 ({_seg0_dur:.1f}s) ...", flush=True)
-        _hf_render_on(_seg0_proj / "public", _seg0_raw, _seg0_dur)
-        print(f"[HF-SEG] Segment 0 done: {_seg0_raw}", flush=True)
-
-        # Segment 1: compose + video cut + HF ───────────────────────────────
         print(
-            f"[HF-SEG] Stage 3b: Composing segment 1 ({_split_sec:.2f}s → "
-            f"{timing_map.output_duration:.2f}s) ...",
+            f"[HF] Segmented render: {_total_frames} frames → {_n_segs} segs ({_seg_info})",
             flush=True,
         )
-        _t_seg = time.perf_counter()
-        _seg1_proj = compose(
-            storyboard=storyboard,
-            trimmed_video=trimmed,
-            work_dir=work_dir / "seg1",
-            zoom_entries=remapped_zoom,
-            style_pack=style_pack,
-            subject_position=subject_position,
-            segment_offset=_split_sec,
-            segment_end=timing_map.output_duration,
-            segment_data_card_offset=_seg0_data_count,
-        )
-        _seg1_vid = work_dir / "seg1_video.mp4"
-        _ffmpeg_cut(trimmed, _seg1_vid, _split_sec, timing_map.output_duration)
-        _shutil.copy2(str(_seg1_vid), str(_seg1_proj / "public" / "input-video.mp4"))
-        print(f"[TIMING] seg1_compose+cut: {time.perf_counter()-_t_seg:.1f}s", flush=True)
 
-        _seg1_raw = work_dir / "seg1_hf.mp4"
-        print(f"[HF-SEG] Stage 4b: Rendering segment 1 ({_seg1_dur:.1f}s) ...", flush=True)
-        _hf_render_on(_seg1_proj / "public", _seg1_raw, _seg1_dur)
-        print(f"[HF-SEG] Segment 1 done: {_seg1_raw}", flush=True)
+        _all_graphic = [c for c in storyboard.get("cards", []) if c.get("type") != "caption"]
+        _seg_raws: list[Path] = []
 
-        # FFmpeg lossless concat ──────────────────────────────────────────────
-        print("[HF-SEG] Concatenating segments...", flush=True)
+        for _seg_i in range(_n_segs):
+            _seg_start = _seg_boundaries[_seg_i]
+            _seg_end   = _seg_boundaries[_seg_i + 1]
+            _seg_dur   = _seg_end - _seg_start
+
+            # Count data-panel cards that ended before this segment so the zone
+            # rotation counter initialises correctly.
+            _seg_data_offset = sum(
+                1 for c in _all_graphic
+                if float(c.get("endSec", 0)) <= _seg_start
+                and c.get("contentHints", {}).get("style", "") in _DPT
+            )
+
+            print(
+                f"[HF-SEG] Stage 3.{_seg_i}: Composing segment {_seg_i}/{_n_segs - 1} "
+                f"({_seg_start:.1f}s → {_seg_end:.1f}s) ...",
+                flush=True,
+            )
+            _t_seg = time.perf_counter()
+            _seg_proj = compose(
+                storyboard=storyboard,
+                trimmed_video=trimmed,
+                work_dir=work_dir / f"seg{_seg_i}",
+                zoom_entries=remapped_zoom,
+                style_pack=style_pack,
+                subject_position=subject_position,
+                segment_offset=_seg_start,
+                segment_end=_seg_end,
+                segment_data_card_offset=_seg_data_offset,
+            )
+            # compose() copies the full trimmed video; replace it with the cut segment
+            # so HyperFrames only renders the frames it actually needs.
+            _seg_vid = work_dir / f"seg{_seg_i}_video.mp4"
+            _ffmpeg_cut(trimmed, _seg_vid, _seg_start, _seg_end)
+            _shutil.copy2(str(_seg_vid), str(_seg_proj / "public" / "input-video.mp4"))
+            print(f"[TIMING] seg{_seg_i}_compose+cut: {time.perf_counter()-_t_seg:.1f}s", flush=True)
+
+            _seg_raw = work_dir / f"seg{_seg_i}_hf.mp4"
+            print(
+                f"[HF-SEG] Stage 4.{_seg_i}: Rendering segment {_seg_i}/{_n_segs - 1} "
+                f"({_seg_dur:.1f}s) ...",
+                flush=True,
+            )
+            _hf_render_on(_seg_proj / "public", _seg_raw, _seg_dur)
+            print(f"[HF-SEG] Segment {_seg_i} done: {_seg_raw}", flush=True)
+            _seg_raws.append(_seg_raw)
+
+        # FFmpeg lossless concat of all N segments ───────────────────────────
+        print(f"[HF-SEG] Concatenating {_n_segs} segments...", flush=True)
         _concat_list = work_dir / "seg_concat.txt"
         _concat_list.write_text(
-            f"file '{_seg0_raw.as_posix()}'\nfile '{_seg1_raw.as_posix()}'\n",
+            "\n".join(f"file '{r.as_posix()}'" for r in _seg_raws) + "\n",
             encoding="utf-8",
         )
         _concat_result = subprocess.run(
@@ -2471,7 +2475,7 @@ def _render_hyperframes(
         print(f"[HF-SEG] Concat done → {output_path}", flush=True)
 
     else:
-        # ── SINGLE RUN (short video, or no clean gap for segmentation) ─────
+        # ── SINGLE RUN (short video, ≤ _SEG_MAX_FRAMES frames) ─────────────
         print("[HF] Stage 3: Assembling HyperFrames composition...", flush=True)
         _t = time.perf_counter()
         project_dir = compose(
