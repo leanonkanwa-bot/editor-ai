@@ -2284,7 +2284,11 @@ def _render_hyperframes(
     # ── Per-segment HF CLI runner (closure over env, _hf_cmd, fps, _n_workers) ─
     def _hf_render_on(pub_dir: Path, out_path: Path, seg_dur: float) -> None:
         """Run HyperFrames CLI on one project's public/ dir. Raises on failure."""
-        _seg_timeout = max(600, int(seg_dur * 45))
+        # 8× real-time + 30 min floor.  At 10 fps a 200 s segment takes ~600 s;
+        # Chrome OOM always fires well before this ceiling (protocolTimeout
+        # ensures HF CLI exits within another 5 min after Chrome dies), so the
+        # only scenario that reaches here is a genuine HF hang → we kill it.
+        _seg_timeout = max(1800, int(seg_dur * 8))
         _seg_proto_ms = max(300_000, int(seg_dur * 1500))
         _seg_env = {**env, "PRODUCER_PUPPETEER_PROTOCOL_TIMEOUT_MS": str(_seg_proto_ms)}
         print(f"[HF] protocolTimeout: {_seg_proto_ms}ms ({_seg_proto_ms/1000:.0f}s) for {seg_dur:.1f}s", flush=True)

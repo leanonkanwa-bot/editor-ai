@@ -106,6 +106,44 @@ async def _purge_trash_loop() -> None:
         _purge_trash()
 
 
+_ORPHAN_CHECK_INTERVAL_S = 5 * 60   # check every 5 min
+_ORPHAN_MAX_AGE_S        = 2 * 3600 # 2 h from job creation → definitely stuck
+
+
+async def _orphan_detector_loop() -> None:
+    """Every 5 min: if any job has been in an active state for >2 h, force it to
+    error.  Catches renders whose subprocess hung (e.g. Chrome OOM without a
+    clean exit) so the semaphore is released and the queue unblocks on next boot.
+
+    Note: this marks the job 'error' in jobs.json, but if the render thread is
+    still alive it still holds _RENDER_SEM.  The true semaphore release happens
+    when the thread finally exits (timeout or next deploy restart).  Marking the
+    job error here at least lets the user retry and see a clear status instead of
+    an endless 'En file d'attente' message.
+    """
+    while True:
+        await asyncio.sleep(_ORPHAN_CHECK_INTERVAL_S)
+        _now = time.time()
+        for _job in list(store._jobs.values()):
+            if _job.status not in ("rendering", "queued", "transcribing", "planning"):
+                continue
+            if _now - _job.created_at < _ORPHAN_MAX_AGE_S:
+                continue
+            print(
+                f"[ORPHAN] job {_job.id} stuck in '{_job.status}' for "
+                f"{(_now - _job.created_at)/3600:.1f}h — forcing error",
+                flush=True,
+            )
+            store.update(
+                _job.id,
+                status="error",
+                error="Render orphan (stuck >2h) — force-failed by orphan detector",
+                message="Rendu interrompu — crédit remboursé. Cliquez Relancer.",
+                is_retry=True,
+                progress=100,
+            )
+
+
 _RESUME_WATCHDOG_S = 45 * 60  # 45 min — give resumed jobs time to finish
 
 
@@ -206,6 +244,7 @@ def _on_startup() -> None:
     _purge_trash()
     asyncio.create_task(_purge_trash_loop())
     asyncio.create_task(_reengagement_loop())
+    asyncio.create_task(_orphan_detector_loop())
 
     # ── SIGTERM handler — register AFTER uvicorn sets up its own handler ────
     # We wrap uvicorn's handler: set the shutdown flag (rejects new renders),
@@ -1173,6 +1212,34 @@ def restore_job(job_id: str) -> dict:
         raise HTTPException(404, "Job not found")
     store.update(job_id, trashed_at=None)
     return {"job_id": job_id, "trashed": False}
+
+
+@app.post("/api/admin/jobs/{job_id}/fail", include_in_schema=False)
+def admin_force_fail(job_id: str, request: Request) -> dict:
+    """Admin escape hatch: force a stuck job to 'error' without a redeploy.
+
+    Does NOT release _RENDER_SEM (the hung thread still holds it), but clears
+    the job status so the user sees an error + Retry button instead of an
+    endless queue message.  The semaphore self-heals on the next deploy restart.
+    Requires the site access_password via cookie (same auth as /admin).
+    """
+    if not _admin_authed(request):
+        raise HTTPException(403, "Forbidden")
+    job = store.get(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    if job.status in ("done", "error"):
+        return {"ok": True, "job_id": job_id, "note": f"already terminal ({job.status})"}
+    store.update(
+        job_id,
+        status="error",
+        error="Force-failed by admin (ghost job cleanup)",
+        message="Rendu annulé — crédit remboursé. Cliquez Relancer.",
+        is_retry=True,
+        progress=100,
+    )
+    print(f"[ADMIN] force-failed job {job_id} (was: {job.status})", flush=True)
+    return {"ok": True, "job_id": job_id, "was": job.status}
 
 
 @app.post("/api/retry/{job_id}")
