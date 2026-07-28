@@ -2354,9 +2354,14 @@ def _render_hyperframes(
     if _total_frames > _SEG_MAX_FRAMES:
         _split_sec = _find_seg_split(storyboard, timing_map.output_duration)
         if _split_sec is None:
+            # No clean gap exists (continuous card coverage across the whole video).
+            # Force-split at the midpoint anyway — a single card's entry animation
+            # may replay at t=0 of segment 1 (minor glitch), but that is far
+            # preferable to OOM SIGKILL.
+            _split_sec = round(timing_map.output_duration / 2.0, 3)
             print(
-                f"[HF] WARN: {_total_frames} frames but no clean card gap found "
-                f"— falling back to single session (OOM risk)",
+                f"[HF] WARN: {_total_frames} frames, no gap ≥0.3s — "
+                f"forcing midpoint split at {_split_sec:.2f}s (card-boundary re-entry possible)",
                 flush=True,
             )
         else:
