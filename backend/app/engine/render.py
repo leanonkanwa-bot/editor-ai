@@ -1865,21 +1865,25 @@ def _find_seg_split(
     total_dur: float,
     *,
     target: float | None = None,
+    max_end: float | None = None,
 ) -> float | None:
-    """Return a clean segment split time near target (default: total_dur/2), or None if no gap.
+    """Return a clean segment split time, or None if no eligible gap found.
 
-    Scans all cards (graphic + caption) for time ranges where nothing is active,
-    then picks the gap midpoint closest to target.  A minimum gap of 0.3 s is
-    required to allow a frame-accurate FFmpeg -c copy cut.
+    target:  preferred split time (default: max_end or total_dur/2).
+    max_end: when set, only gaps whose midpoint is ≤ max_end are eligible.
+             This is the safety constraint that keeps each segment ≤ SEG_MAX_FRAMES:
+             the caller passes `prev_boundary + max_seg_dur` so the returned split
+             can never extend beyond the frame-count limit.
     """
     all_cards = storyboard.get("cards", [])
     intervals: list[tuple[float, float]] = sorted(
         (float(c.get("startSec", 0)), float(c.get("endSec", 0)))
         for c in all_cards
     )
-    _target = target if target is not None else total_dur / 2.0
+    _target = target if target is not None else (max_end if max_end is not None else total_dur / 2.0)
+
     if not intervals:
-        return round(_target, 3)
+        return round(min(_target, max_end) if max_end is not None else _target, 3)
 
     # Merge overlapping intervals to find true silent windows.
     merged: list[list[float]] = []
@@ -1902,7 +1906,12 @@ def _find_seg_split(
     if not gaps:
         return None
 
-    best_gap = min(gaps, key=lambda g: abs((g[0] + g[1]) / 2.0 - _target))
+    # When max_end is set, restrict to gaps whose midpoint does not exceed it.
+    eligible = [g for g in gaps if (g[0] + g[1]) / 2.0 <= max_end] if max_end is not None else gaps
+    if not eligible:
+        return None
+
+    best_gap = min(eligible, key=lambda g: abs((g[0] + g[1]) / 2.0 - _target))
     return round((best_gap[0] + best_gap[1]) / 2.0, 3)
 
 
@@ -2355,42 +2364,43 @@ def _render_hyperframes(
     # SwiftShader accumulates a per-frame memory leak inside each Chrome worker.
     # Beyond ~3000 frames (~100s at 30fps) the cumulative RSS either causes an
     # OOM SIGKILL or severe progressive slowdown → timeout.  We split the render
-    # into N sequential HF runs (each guaranteed ≤ _SEG_MAX_FRAMES) and concat.
+    # into N sequential HF runs (each hard-capped at _SEG_MAX_FRAMES) and concat.
     _total_frames = int(fps * timing_map.output_duration)
     _SEG_MAX_FRAMES = 3000
-    # ceiling division without importing math
-    _n_segs = -(_total_frames // -_SEG_MAX_FRAMES) if _total_frames > _SEG_MAX_FRAMES else 1
+    _max_seg_dur = _SEG_MAX_FRAMES / fps  # e.g. 100 s at 30 fps
+
+    # Build segment boundaries greedily so each segment is guaranteed ≤ _SEG_MAX_FRAMES.
+    # Passing max_end to _find_seg_split restricts gap search to midpoints ≤ max_end,
+    # which is what ensures the frame-count bound holds even when gaps are sparse.
+    _seg_boundaries: list[float] = [0.0]
+    while _seg_boundaries[-1] < timing_map.output_duration - 0.1:
+        _prev = _seg_boundaries[-1]
+        _limit = _prev + _max_seg_dur
+        if _limit >= timing_map.output_duration:
+            _seg_boundaries.append(timing_map.output_duration)
+            break
+        _sp = _find_seg_split(
+            storyboard, timing_map.output_duration,
+            target=_prev + _max_seg_dur * 0.85,  # prefer a gap a bit before the hard limit
+            max_end=_limit,
+        )
+        if _sp is None or _sp <= _prev + 0.1:
+            _sp = round(_limit, 3)
+            print(f"[HF] WARN: no gap before {_limit:.1f}s — forcing boundary at {_sp:.2f}s", flush=True)
+        _seg_boundaries.append(_sp)
+    # Ensure the final boundary is exactly output_duration (guards against floating-point
+    # edge cases where a forced boundary lands within 0.1 s of the end, exiting the
+    # while-loop before appending output_duration).
+    if _seg_boundaries[-1] < timing_map.output_duration - 0.01:
+        _seg_boundaries.append(timing_map.output_duration)
+
+    _n_segs = len(_seg_boundaries) - 1
 
     if _n_segs > 1:
         # ── SEGMENTED PATH ─────────────────────────────────────────────────
         import shutil as _shutil
         from app.engine.compose import _DATA_PANEL_TYPES as _DPT
 
-        # Compute N-1 split points, each near the ideal equal-division boundary.
-        _seg_dur_target = timing_map.output_duration / _n_segs
-        _split_points: list[float] = []
-        for _i in range(1, _n_segs):
-            _target_t = _seg_dur_target * _i
-            _sp = _find_seg_split(storyboard, timing_map.output_duration, target=_target_t)
-            if _sp is None:
-                _sp = round(_target_t, 3)
-                print(
-                    f"[HF] WARN: no gap near {_target_t:.1f}s — forcing boundary at {_sp:.2f}s",
-                    flush=True,
-                )
-            _split_points.append(_sp)
-
-        # Deduplicate: if two searches converged on the same gap, replace the
-        # second with the ideal boundary time so no segment becomes zero-length.
-        _clean: list[float] = []
-        for _ii, _sp in enumerate(_split_points):
-            if _clean and abs(_sp - _clean[-1]) < 0.3:
-                _sp = round(_seg_dur_target * (_ii + 1), 3)
-            _clean.append(_sp)
-        _split_points = _clean
-
-        _seg_boundaries = [0.0] + _split_points + [timing_map.output_duration]
-        _n_segs = len(_seg_boundaries) - 1
         _seg_info = " + ".join(
             f"{_seg_boundaries[i + 1] - _seg_boundaries[i]:.1f}s"
             for i in range(_n_segs)
