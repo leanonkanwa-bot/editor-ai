@@ -1860,6 +1860,68 @@ def _upscale_to_source_resolution(output_path: Path, src: Path, short_form: bool
         return {"upscaled": False, "output_resolution": f"{base_w}x{base_h}", "upscale_error": str(e)}
 
 
+def _find_seg_split(storyboard: dict, total_dur: float) -> float | None:
+    """Return a clean segment split time near total_dur/2, or None if no gap found.
+
+    Scans all cards (graphic + caption) for time ranges where nothing is active,
+    then picks the gap midpoint closest to the overall midpoint.  A minimum gap
+    of 0.3 s is required to allow a frame-accurate FFmpeg -c copy cut.
+    """
+    all_cards = storyboard.get("cards", [])
+    intervals: list[tuple[float, float]] = sorted(
+        (float(c.get("startSec", 0)), float(c.get("endSec", 0)))
+        for c in all_cards
+    )
+    if not intervals:
+        return round(total_dur / 2.0, 3)
+
+    # Merge overlapping intervals to find true silent windows.
+    merged: list[list[float]] = []
+    for s, e in intervals:
+        if merged and s <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], e)
+        else:
+            merged.append([s, e])
+
+    # Collect gaps ≥ 0.3 s.
+    gaps: list[tuple[float, float]] = []
+    prev_end = 0.0
+    for seg in merged:
+        if seg[0] - prev_end >= 0.3:
+            gaps.append((prev_end, seg[0]))
+        prev_end = max(prev_end, seg[1])
+    if total_dur - prev_end >= 0.3:
+        gaps.append((prev_end, total_dur))
+
+    if not gaps:
+        return None
+
+    midpoint = total_dur / 2.0
+    best_gap = min(gaps, key=lambda g: abs((g[0] + g[1]) / 2.0 - midpoint))
+    return round((best_gap[0] + best_gap[1]) / 2.0, 3)
+
+
+def _ffmpeg_cut(src: Path, dst: Path, start_sec: float, end_sec: float) -> None:
+    """FFmpeg stream-copy cut of src → dst in [start_sec, end_sec), timestamps reset to 0."""
+    result = subprocess.run(
+        [
+            FFMPEG_PATH, "-y",
+            "-ss", f"{start_sec:.3f}",
+            "-i", str(src),
+            "-t", f"{end_sec - start_sec:.3f}",
+            "-c", "copy",
+            "-avoid_negative_ts", "make_zero",
+            str(dst),
+        ],
+        capture_output=True, timeout=300,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"FFmpeg cut [{start_sec:.1f}→{end_sec:.1f}s] failed: "
+            f"{result.stderr[-300:].decode(errors='replace').strip()}"
+        )
+
+
 def _render_hyperframes(
     src: Path,
     transcript: dict[str, Any],
@@ -2132,194 +2194,287 @@ def _render_hyperframes(
         remapped_zoom.sort(key=lambda z: float(z.get("start", 0)))
         print(f"[ZOOM-GAP-FILL] {len(_zoom_bumps)} bump entries injected total", flush=True)
 
-    # Stage 3: Compose
-    _t = time.perf_counter()
-    print("[HF] Stage 3: Assembling HyperFrames composition...", flush=True)
-    project_dir = compose(
-        storyboard=storyboard,
-        trimmed_video=trimmed,
-        work_dir=work_dir,
-        zoom_entries=remapped_zoom,
-        style_pack=style_pack,
-        subject_position=subject_position,
-    )
-
-    print(f"[TIMING] compose: {time.perf_counter()-_t:.1f}s", flush=True)
-
-    # Stage 4: Render (Modal A10G if configured, else local HyperFrames CLI)
+    # Stage 3+4: Compose + Render
     _t_cli = time.perf_counter()
     import os as _os
+    import signal as _signal
+    import threading as _threading
     fps = storyboard["composition"]["fps"]
     _test_fps = _os.environ.get("RENDER_TEST_FPS")
     if _test_fps:
         fps = int(_test_fps)
         print(f"[HF] RENDER_TEST_FPS={fps} — test mode, overrides composition fps ({storyboard['composition']['fps']})", flush=True)
-    public_dir = project_dir / "public"
-    _timeout = max(600, int(timing_map.output_duration * 45))
 
-    # Modal GPU render disabled — using local HyperFrames CLI only.
-    # _modal_id = _os.environ.get("MODAL_TOKEN_ID")
-    # _modal_secret = _os.environ.get("MODAL_TOKEN_SECRET")
-    # if _modal_id and _modal_secret:
-    #     try:
-    #         import io as _io
-    #         import zipfile as _zipfile
-    #         import modal as _modal
-    #         print("[HF] Using Modal GPU render", flush=True)
-    #         zip_buffer = _io.BytesIO()
-    #         with _zipfile.ZipFile(zip_buffer, "w", _zipfile.ZIP_DEFLATED) as zf:
-    #             for f in public_dir.rglob("*"):
-    #                 if f.is_file():
-    #                     zf.write(f, f.relative_to(public_dir))
-    #         zip_bytes = zip_buffer.getvalue()
-    #         print(f"[HF] Zip size: {len(zip_bytes) // 1024} KB", flush=True)
-    #         render_fn = _modal.Function.from_name("leanlead-hyperframes", "render_hf")
-    #         mp4_bytes = render_fn.remote(zip_bytes)
-    #         output_path.write_bytes(mp4_bytes)
-    #         print(f"[HF] Modal render done: {len(mp4_bytes) // 1024} KB", flush=True)
-    #     except Exception as _modal_err:
-    #         print(f"[HF] Modal failed: {_modal_err}, falling back to local", flush=True)
+    # ── One-time memory/env sizing (shared across all segments) ────────────
+    print("[HF] Stage 4: Rendering via HyperFrames CLI (local)...", flush=True)
+    env = _os.environ.copy()
+    env["DISPLAY"] = env.get("DISPLAY", ":99")
 
-    if True:
-        import signal as _signal
-        print("[HF] Stage 4: Rendering via HyperFrames CLI (local)...", flush=True)
-        env = _os.environ.copy()
-        env["DISPLAY"] = env.get("DISPLAY", ":99")
+    def _cgroup_mem_limit_gb() -> float | None:
+        for _p in ["/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"]:
+            try:
+                _v = Path(_p).read_text().strip()
+                if _v == "max":
+                    return None
+                return int(_v) / (1024 ** 3)
+            except (FileNotFoundError, ValueError):
+                continue
+        return None
 
-        def _cgroup_mem_limit_gb() -> float | None:
-            for _p in ["/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"]:
-                try:
-                    _v = Path(_p).read_text().strip()
-                    if _v == "max":
-                        return None
-                    return int(_v) / (1024 ** 3)
-                except (FileNotFoundError, ValueError):
-                    continue
-            return None
+    def _cgroup_mem_used_gb() -> float | None:
+        for _p in ["/sys/fs/cgroup/memory.current",
+                   "/sys/fs/cgroup/memory/memory.usage_in_bytes"]:
+            try:
+                return int(Path(_p).read_text().strip()) / (1024 ** 3)
+            except (FileNotFoundError, ValueError):
+                continue
+        return None
 
-        def _cgroup_mem_used_gb() -> float | None:
-            for _p in ["/sys/fs/cgroup/memory.current",
-                       "/sys/fs/cgroup/memory/memory.usage_in_bytes"]:
-                try:
-                    return int(Path(_p).read_text().strip()) / (1024 ** 3)
-                except (FileNotFoundError, ValueError):
-                    continue
-            return None
+    _mem_limit_gb = _cgroup_mem_limit_gb() or 8.0
+    _mem_used_gb  = _cgroup_mem_used_gb()
+    # Workers are sized on AVAILABLE memory (limit − current RSS), not the
+    # cgroup limit.  The limit is a ceiling; the process is already using
+    # 1.5–2 GB (Python + ctranslate2 residual + ffmpeg) before Chrome starts.
+    if _mem_used_gb is not None:
+        _mem_avail_gb = max(0.5, _mem_limit_gb - _mem_used_gb)
+    else:
+        _mem_avail_gb = _mem_limit_gb * 0.6   # conservative fallback
+    # Size Node heap first; Chrome workers get what's left.
+    # Both pools draw from the same cgroup limit — the old formula computed
+    # them independently, causing the 24 GB plan to allocate 8 GB Node +
+    # 14 workers × 700 MB steady (21 GB JIT peak) → OOM → SwiftShader crash.
+    _node_heap_mb = max(4096, min(8192, int(_mem_avail_gb * 512)))  # 50% of avail, 4–8 GB
+    _chrome_budget_gb = max(2.0, _mem_avail_gb - (_node_heap_mb / 1024) - 2.0)
+    _mem_workers = min(24, max(4, int(_chrome_budget_gb / 1.5)))  # 1.5 GB/worker (JIT peak)
+    _cpu_count = _os.cpu_count() or 8
+    _cpu_workers = max(4, _cpu_count - 2)
+    _n_workers = max(4, min(_mem_workers, _cpu_workers))
+    print(
+        f"[HF] workers: {_n_workers}"
+        f" (limit={_mem_limit_gb:.1f}GB used={_mem_used_gb:.1f}GB"
+        f" avail={_mem_avail_gb:.1f}GB node={_node_heap_mb // 1024}GB"
+        f" chrome_budget={_chrome_budget_gb:.1f}GB→{_mem_workers},"
+        f" cpu {_cpu_count}→{_cpu_workers})",
+        flush=True,
+    )
 
-        _mem_limit_gb = _cgroup_mem_limit_gb() or 8.0
-        _mem_used_gb  = _cgroup_mem_used_gb()
-        # Workers are sized on AVAILABLE memory (limit − current RSS), not the
-        # cgroup limit.  The limit is a ceiling; the process is already using
-        # 1.5–2 GB (Python + ctranslate2 residual + ffmpeg) before Chrome starts.
-        if _mem_used_gb is not None:
-            _mem_avail_gb = max(0.5, _mem_limit_gb - _mem_used_gb)
-        else:
-            _mem_avail_gb = _mem_limit_gb * 0.6   # conservative fallback
-        # Size Node heap first; Chrome workers get what's left.
-        # Both pools draw from the same cgroup limit — the old formula computed
-        # them independently, causing the 24 GB plan to allocate 8 GB Node +
-        # 14 workers × 700 MB steady (21 GB JIT peak) → OOM → SwiftShader crash.
-        _node_heap_mb = max(4096, min(8192, int(_mem_avail_gb * 512)))  # 50% of avail, 4–8 GB
-        _chrome_budget_gb = max(2.0, _mem_avail_gb - (_node_heap_mb / 1024) - 2.0)
-        _mem_workers = min(24, max(4, int(_chrome_budget_gb / 1.5)))  # 1.5 GB/worker (JIT peak)
-        _cpu_count = _os.cpu_count() or 8
-        _cpu_workers = max(4, _cpu_count - 2)
-        _n_workers = max(4, min(_mem_workers, _cpu_workers))
-        print(
-            f"[HF] workers: {_n_workers}"
-            f" (limit={_mem_limit_gb:.1f}GB used={_mem_used_gb:.1f}GB"
-            f" avail={_mem_avail_gb:.1f}GB node={_node_heap_mb // 1024}GB"
-            f" chrome_budget={_chrome_budget_gb:.1f}GB→{_mem_workers},"
-            f" cpu {_cpu_count}→{_cpu_workers})",
-            flush=True,
-        )
+    env["PRODUCER_MAX_WORKERS"] = str(_n_workers)
+    env["PRODUCER_MIN_PARALLEL_FRAMES"] = "60"
+    env["NODE_OPTIONS"] = f"--max-old-space-size={_node_heap_mb}"
+    print(f"[HF] NODE_OPTIONS: --max-old-space-size={_node_heap_mb} ({_node_heap_mb // 1024}GB)", flush=True)
 
-        env["PRODUCER_MAX_WORKERS"] = str(_n_workers)
-        env["PRODUCER_MIN_PARALLEL_FRAMES"] = "60"
-        # HF default is 300 000 ms (5 min). Scale with duration so long videos get headroom.
-        # Formula: max(300 s, duration × 1.5 s/s) — covers heavier DOM/GSAP init on loaded servers.
-        _proto_timeout_ms = max(300_000, int(timing_map.output_duration * 1500))
-        env["PRODUCER_PUPPETEER_PROTOCOL_TIMEOUT_MS"] = str(_proto_timeout_ms)
-        print(f"[HF] protocolTimeout: {_proto_timeout_ms}ms ({_proto_timeout_ms/1000:.0f}s) for {timing_map.output_duration:.1f}s video", flush=True)
+    _shell_candidates = sorted(
+        p for p in Path("/usr/local/lib/chrome").rglob("chrome-headless-shell")
+        if p.is_file()
+    )
+    if _shell_candidates:
+        env["PRODUCER_HEADLESS_SHELL_PATH"] = str(_shell_candidates[0])
+        print(f"[HF] chrome-headless-shell: {_shell_candidates[0]}", flush=True)
+    else:
+        print("[HF] WARNING: chrome-headless-shell NOT FOUND — beginFrame mode disabled, falling back to screenshot mode", flush=True)
 
-        # Raise Node.js V8 heap beyond its ~4 GB default. Railway containers have
-        # 22 GB cgroup RAM; without this, the frame-capture JSON serialisation OOMs
-        # around the halfway point on any video longer than ~20s.
-        env["NODE_OPTIONS"] = f"--max-old-space-size={_node_heap_mb}"
-        print(f"[HF] NODE_OPTIONS: --max-old-space-size={_node_heap_mb} ({_node_heap_mb // 1024}GB)", flush=True)
+    # Use the LOCAL hyperframes CLI binary (not npx/global) so the
+    # manifest.json sibling resolution works correctly.
+    _hf_cli = Path(__file__).resolve().parent / "node_modules" / ".bin" / "hyperframes"
+    if not _hf_cli.exists():
+        _hf_cli = Path(__file__).resolve().parent / "node_modules" / "hyperframes" / "dist" / "cli.js"
+    _hf_cmd = ["node", str(_hf_cli)] if _hf_cli.suffix == ".js" else [str(_hf_cli)]
+    print(f"[HF] CLI path: {_hf_cli} (exists={_hf_cli.exists()})")
 
-        _shell_candidates = sorted(
-            p for p in Path("/usr/local/lib/chrome").rglob("chrome-headless-shell")
-            if p.is_file()
-        )
-        if _shell_candidates:
-            env["PRODUCER_HEADLESS_SHELL_PATH"] = str(_shell_candidates[0])
-            print(f"[HF] chrome-headless-shell: {_shell_candidates[0]}", flush=True)
-        else:
-            print("[HF] WARNING: chrome-headless-shell NOT FOUND — beginFrame mode disabled, falling back to screenshot mode", flush=True)
-
-        # Use the LOCAL hyperframes CLI binary (not npx/global) so the
-        # manifest.json sibling resolution works correctly.
-        _hf_cli = Path(__file__).resolve().parent / "node_modules" / ".bin" / "hyperframes"
-        if not _hf_cli.exists():
-            _hf_cli = Path(__file__).resolve().parent / "node_modules" / "hyperframes" / "dist" / "cli.js"
-        _hf_cmd = ["node", str(_hf_cli)] if _hf_cli.suffix == ".js" else [str(_hf_cli)]
-        print(f"[HF] CLI path: {_hf_cli} (exists={_hf_cli.exists()})")
+    # ── Per-segment HF CLI runner (closure over env, _hf_cmd, fps, _n_workers) ─
+    def _hf_render_on(pub_dir: Path, out_path: Path, seg_dur: float) -> None:
+        """Run HyperFrames CLI on one project's public/ dir. Raises on failure."""
+        _seg_timeout = max(600, int(seg_dur * 45))
+        _seg_proto_ms = max(300_000, int(seg_dur * 1500))
+        _seg_env = {**env, "PRODUCER_PUPPETEER_PROTOCOL_TIMEOUT_MS": str(_seg_proto_ms)}
+        print(f"[HF] protocolTimeout: {_seg_proto_ms}ms ({_seg_proto_ms/1000:.0f}s) for {seg_dur:.1f}s", flush=True)
+        _hf_tmp = pub_dir.parent / "hf_tmp"
+        _hf_tmp.mkdir(parents=True, exist_ok=True)
 
         # Launch in its own process group so we can kill the entire tree
-        # (npx + Chrome children) on timeout, preventing orphaned processes.
-        _hf_tmp = work_dir / "hf_tmp"
-        _hf_tmp.mkdir(parents=True, exist_ok=True)
-        import threading as _threading
-
-        proc = subprocess.Popen(
+        # (Node + Chrome children) on timeout, preventing orphaned processes.
+        _proc = subprocess.Popen(
             [
                 *_hf_cmd, "render",
-                str(public_dir),
-                "-o", str(output_path),
+                str(pub_dir),
+                "-o", str(out_path),
                 "--fps", str(fps),
                 "--quality", "standard",
                 "--crf", "18",
                 "--workers", str(_n_workers),
-                "--protocol-timeout", str(_proto_timeout_ms),
+                "--protocol-timeout", str(_seg_proto_ms),
                 "--debug",
                 "--video-frame-format", "png",
                 "--tmp-dir", str(_hf_tmp),
             ],
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, env=env,
+            text=True, env=_seg_env,
             start_new_session=True,
         )
 
-        _hf_log_lines: list[str] = []
+        _log: list[str] = []
 
-        def _stream_output() -> None:
-            for _line in proc.stdout:
-                _stripped = _line.rstrip()
-                _hf_log_lines.append(_stripped)
-                print(f"[HF] {_stripped}", flush=True)
+        def _stream() -> None:
+            for _line in _proc.stdout:
+                _s = _line.rstrip()
+                _log.append(_s)
+                print(f"[HF] {_s}", flush=True)
 
-        _stream_thread = _threading.Thread(target=_stream_output, daemon=True)
-        _stream_thread.start()
+        _st = _threading.Thread(target=_stream, daemon=True)
+        _st.start()
 
         try:
-            proc.wait(timeout=_timeout)
-            _stream_thread.join(timeout=5)
+            _proc.wait(timeout=_seg_timeout)
+            _st.join(timeout=5)
         except subprocess.TimeoutExpired:
             print("[HF] Render timed out — killing process group")
             try:
-                _os.killpg(_os.getpgid(proc.pid), _signal.SIGKILL)
+                _os.killpg(_os.getpgid(_proc.pid), _signal.SIGKILL)
             except Exception:
-                proc.kill()
-            proc.wait(timeout=10)
+                _proc.kill()
+            _proc.wait(timeout=10)
             _kill_orphan_chrome()
             raise RuntimeError("HyperFrames CLI render timed out")
 
-        if proc.returncode != 0 or not output_path.exists():
-            _tail = "\n".join(_hf_log_lines[-30:])
-            print(f"[HF] Render failed (rc={proc.returncode}):\n{_tail}", flush=True)
+        if _proc.returncode != 0 or not out_path.exists():
+            _tail = "\n".join(_log[-30:])
+            print(f"[HF] Render failed (rc={_proc.returncode}):\n{_tail}", flush=True)
             _kill_orphan_chrome()
             raise RuntimeError("HyperFrames CLI render failed")
+
+    # ── Segmentation check ──────────────────────────────────────────────────
+    # SwiftShader accumulates a per-frame memory leak inside each Chrome worker.
+    # Beyond ~3000 frames (~100s at 30fps) the cumulative RSS exceeds the cgroup
+    # limit → rc=-9 SIGKILL.  We split the render into two sequential HF runs
+    # (each on a shorter segment video) and losslessly concat the outputs.
+    _total_frames = int(fps * timing_map.output_duration)
+    _SEG_MAX_FRAMES = 3000
+
+    _split_sec: float | None = None
+    if _total_frames > _SEG_MAX_FRAMES:
+        _split_sec = _find_seg_split(storyboard, timing_map.output_duration)
+        if _split_sec is None:
+            print(
+                f"[HF] WARN: {_total_frames} frames but no clean card gap found "
+                f"— falling back to single session (OOM risk)",
+                flush=True,
+            )
+        else:
+            print(
+                f"[HF] Segmented render: {_total_frames} frames → split at {_split_sec:.2f}s "
+                f"(segs: {_split_sec:.1f}s + {timing_map.output_duration - _split_sec:.1f}s)",
+                flush=True,
+            )
+
+    if _split_sec is not None:
+        # ── SEGMENTED PATH ─────────────────────────────────────────────────
+        import shutil as _shutil
+        from app.engine.compose import _DATA_PANEL_TYPES as _DPT
+
+        _seg0_dur = _split_sec
+        _seg1_dur = timing_map.output_duration - _split_sec
+
+        # Count data-panel cards that end before the split so the zone
+        # rotation counter initialises correctly for segment 1.
+        _all_graphic = [c for c in storyboard.get("cards", []) if c.get("type") != "caption"]
+        _seg0_data_count = sum(
+            1 for c in _all_graphic
+            if float(c.get("endSec", 0)) <= _split_sec
+            and c.get("contentHints", {}).get("style", "") in _DPT
+        )
+
+        # Segment 0: compose + video cut + HF ───────────────────────────────
+        print(f"[HF-SEG] Stage 3a: Composing segment 0 (0.0s → {_split_sec:.2f}s) ...", flush=True)
+        _t_seg = time.perf_counter()
+        _seg0_proj = compose(
+            storyboard=storyboard,
+            trimmed_video=trimmed,
+            work_dir=work_dir / "seg0",
+            zoom_entries=remapped_zoom,
+            style_pack=style_pack,
+            subject_position=subject_position,
+            segment_offset=0.0,
+            segment_end=_split_sec,
+            segment_data_card_offset=0,
+        )
+        # compose() copies the full trimmed video; replace it with the cut segment
+        # so HyperFrames only renders the frames it actually needs.
+        _seg0_vid = work_dir / "seg0_video.mp4"
+        _ffmpeg_cut(trimmed, _seg0_vid, 0.0, _split_sec)
+        _shutil.copy2(str(_seg0_vid), str(_seg0_proj / "public" / "input-video.mp4"))
+        print(f"[TIMING] seg0_compose+cut: {time.perf_counter()-_t_seg:.1f}s", flush=True)
+
+        _seg0_raw = work_dir / "seg0_hf.mp4"
+        print(f"[HF-SEG] Stage 4a: Rendering segment 0 ({_seg0_dur:.1f}s) ...", flush=True)
+        _hf_render_on(_seg0_proj / "public", _seg0_raw, _seg0_dur)
+        print(f"[HF-SEG] Segment 0 done: {_seg0_raw}", flush=True)
+
+        # Segment 1: compose + video cut + HF ───────────────────────────────
+        print(
+            f"[HF-SEG] Stage 3b: Composing segment 1 ({_split_sec:.2f}s → "
+            f"{timing_map.output_duration:.2f}s) ...",
+            flush=True,
+        )
+        _t_seg = time.perf_counter()
+        _seg1_proj = compose(
+            storyboard=storyboard,
+            trimmed_video=trimmed,
+            work_dir=work_dir / "seg1",
+            zoom_entries=remapped_zoom,
+            style_pack=style_pack,
+            subject_position=subject_position,
+            segment_offset=_split_sec,
+            segment_end=timing_map.output_duration,
+            segment_data_card_offset=_seg0_data_count,
+        )
+        _seg1_vid = work_dir / "seg1_video.mp4"
+        _ffmpeg_cut(trimmed, _seg1_vid, _split_sec, timing_map.output_duration)
+        _shutil.copy2(str(_seg1_vid), str(_seg1_proj / "public" / "input-video.mp4"))
+        print(f"[TIMING] seg1_compose+cut: {time.perf_counter()-_t_seg:.1f}s", flush=True)
+
+        _seg1_raw = work_dir / "seg1_hf.mp4"
+        print(f"[HF-SEG] Stage 4b: Rendering segment 1 ({_seg1_dur:.1f}s) ...", flush=True)
+        _hf_render_on(_seg1_proj / "public", _seg1_raw, _seg1_dur)
+        print(f"[HF-SEG] Segment 1 done: {_seg1_raw}", flush=True)
+
+        # FFmpeg lossless concat ──────────────────────────────────────────────
+        print("[HF-SEG] Concatenating segments...", flush=True)
+        _concat_list = work_dir / "seg_concat.txt"
+        _concat_list.write_text(
+            f"file '{_seg0_raw.as_posix()}'\nfile '{_seg1_raw.as_posix()}'\n",
+            encoding="utf-8",
+        )
+        _concat_result = subprocess.run(
+            [
+                FFMPEG_PATH, "-y",
+                "-f", "concat", "-safe", "0",
+                "-i", str(_concat_list),
+                "-c", "copy",
+                str(output_path),
+            ],
+            capture_output=True, timeout=300,
+        )
+        if _concat_result.returncode != 0:
+            raise RuntimeError(
+                f"HyperFrames segmented concat failed: "
+                f"{_concat_result.stderr.decode(errors='replace')[-300:].strip()}"
+            )
+        print(f"[HF-SEG] Concat done → {output_path}", flush=True)
+
+    else:
+        # ── SINGLE RUN (short video, or no clean gap for segmentation) ─────
+        print("[HF] Stage 3: Assembling HyperFrames composition...", flush=True)
+        _t = time.perf_counter()
+        project_dir = compose(
+            storyboard=storyboard,
+            trimmed_video=trimmed,
+            work_dir=work_dir,
+            zoom_entries=remapped_zoom,
+            style_pack=style_pack,
+            subject_position=subject_position,
+        )
+        print(f"[TIMING] compose: {time.perf_counter()-_t:.1f}s", flush=True)
+        _hf_render_on(project_dir / "public", output_path, timing_map.output_duration)
 
     print(f"[TIMING] hyperframes_cli: {time.perf_counter()-_t_cli:.1f}s", flush=True)
     print(f"[HF] Done: {output_path}", flush=True)

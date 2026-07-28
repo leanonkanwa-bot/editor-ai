@@ -6790,6 +6790,9 @@ def compose(
     zoom_entries: list[dict] | None = None,
     style_pack: str = "lean_glass",
     subject_position: dict | None = None,
+    segment_offset: float = 0.0,
+    segment_end: float | None = None,
+    segment_data_card_offset: int = 0,
 ) -> Path:
     """Assemble a HyperFrames project directory from a storyboard.
 
@@ -6843,6 +6846,49 @@ def compose(
     all_cards = storyboard.get("cards", [])
     graphic_cards = [c for c in all_cards if c.get("type") != "caption"]
     caption_cards = [c for c in all_cards if c.get("type") == "caption"]
+
+    # ── Segmentation window ───────────────────────────────────────────────────
+    # When rendering one segment of a long video, filter cards to the window
+    # [segment_offset, _seg_end) and shift all GSAP times by -segment_offset so
+    # the trimmed segment video (which starts at t=0) stays in sync.
+    _seg_end = segment_end if segment_end is not None else duration
+    if segment_offset > 0.0 or segment_end is not None:
+        _seg_dur = _seg_end - segment_offset
+        print(
+            f"[COMPOSE] Segment window: {segment_offset:.3f}s → {_seg_end:.3f}s "
+            f"({_seg_dur:.3f}s of {duration:.3f}s total)",
+            flush=True,
+        )
+
+        def _in_seg(c: dict) -> bool:
+            return (
+                float(c.get("startSec", 0)) < _seg_end
+                and float(c.get("endSec", 0)) > segment_offset
+            )
+
+        def _shift_card_times(c: dict) -> dict:
+            s = round(max(0.0, float(c["startSec"]) - segment_offset), 3)
+            e = round(min(_seg_dur, float(c["endSec"]) - segment_offset), 3)
+            return {**c, "startSec": s, "endSec": e}
+
+        graphic_cards = [_shift_card_times(c) for c in graphic_cards if _in_seg(c)]
+        caption_cards = [_shift_card_times(c) for c in caption_cards if _in_seg(c)]
+
+        if zoom_entries:
+            _z_shifted: list[dict] = []
+            for _ze in zoom_entries:
+                _zs = float(_ze.get("start", 0))
+                _ze_e = float(_ze.get("end", _zs))
+                if _ze_e <= segment_offset or _zs >= _seg_end:
+                    continue
+                _z_shifted.append({
+                    **_ze,
+                    "start": round(max(0.0, _zs - segment_offset), 4),
+                    "end": round(min(_seg_dur, _ze_e - segment_offset), 4),
+                })
+            zoom_entries = _z_shifted
+
+        duration = _seg_dur
 
     # Speaker-aware zone remap — applied before _clamp_overlaps so the same
     # zone value is seen by both _build_card_host (HTML) and _build_timeline_js (GSAP).
@@ -6937,7 +6983,9 @@ def compose(
 
     # Counter increments only for data-panel cards; non-data-panel cards do not
     # consume a rotation slot (so key_phrase, quote etc. never skew parity).
-    _data_card_idx = 0
+    # segment_data_card_offset initialises the counter to its correct global
+    # value when composing a later segment, so zone rotation stays continuous.
+    _data_card_idx = segment_data_card_offset
     _remapped_cards: list[dict] = []
     for _c in graphic_cards:
         _c_style = _c.get("contentHints", {}).get("style", "")
