@@ -2363,15 +2363,29 @@ def _render_hyperframes(
 
     # ── Segmentation check ──────────────────────────────────────────────────
     # SwiftShader accumulates a per-frame memory leak inside each Chrome worker.
-    # Beyond ~3000 frames (~100s at 30fps) the cumulative RSS either causes an
-    # OOM SIGKILL or severe progressive slowdown → timeout.  We split the render
+    # Beyond a worker-count-dependent frame ceiling, SwiftShader GPU memory accumulates
+    # to the point of OOM SIGKILL or severe slowdown → timeout.  We split the render
     # into N sequential HF runs (each hard-capped at _SEG_MAX_FRAMES) and concat.
     _total_frames = int(fps * timing_map.output_duration)
-    # HF_SEG_MAX_FRAMES env var allows fast test cycles without a code redeploy:
-    # set to 500 in Railway Variables to trigger segmentation on short test videos,
-    # then delete the variable (reverts to 3000) once segmentation is confirmed working.
-    _SEG_MAX_FRAMES = int(_os.environ.get("HF_SEG_MAX_FRAMES", "3000"))
-    _max_seg_dur = _SEG_MAX_FRAMES / fps  # e.g. 100 s at 30 fps
+    # Per-worker frame budget — calibrated from Railway OOM data:
+    #   6 workers × 345 frames/worker (2071 total) → SUCCESS
+    #   6 workers × 476 frames/worker (2856 total) → OOM at frame 2760 (rc=1, timeout)
+    # 250 frames/worker gives a ~27% safety margin below the confirmed-safe threshold.
+    # The formula scales automatically with _n_workers, so if HyperFrames is ever
+    # allocated more than 6 workers the limit tightens proportionally.
+    # Revisit _SEG_FRAMES_PER_WORKER if Railway container RAM allocation changes significantly.
+    _SEG_FRAMES_PER_WORKER = 250
+    _SEG_MAX_FRAMES_DEFAULT = _SEG_FRAMES_PER_WORKER * _n_workers  # e.g. 1500 at 6 workers
+    # HF_SEG_MAX_FRAMES env var overrides the computed value — use for fast test cycles
+    # (set to 500 in Railway Variables to trigger segmentation on short test videos).
+    _SEG_MAX_FRAMES = int(_os.environ.get("HF_SEG_MAX_FRAMES", str(_SEG_MAX_FRAMES_DEFAULT)))
+    _max_seg_dur = _SEG_MAX_FRAMES / fps
+    print(
+        f"[HF] seg_max={_SEG_MAX_FRAMES} frames"
+        f" ({_n_workers} workers × {_SEG_FRAMES_PER_WORKER}/worker"
+        f"{' [env override]' if 'HF_SEG_MAX_FRAMES' in _os.environ else ''})",
+        flush=True,
+    )
 
     # Build segment boundaries greedily so each segment is guaranteed ≤ _SEG_MAX_FRAMES.
     # Passing max_end to _find_seg_split restricts gap search to midpoints ≤ max_end,
@@ -2455,9 +2469,10 @@ def _render_hyperframes(
             print(f"[TIMING] seg{_seg_i}_compose+cut: {time.perf_counter()-_t_seg:.1f}s", flush=True)
 
             _seg_raw = work_dir / f"seg{_seg_i}_hf.mp4"
+            _seg_frames = int(_seg_dur * fps)
             print(
                 f"[HF-SEG] Stage 4.{_seg_i}: Rendering segment {_seg_i}/{_n_segs - 1} "
-                f"({_seg_dur:.1f}s) ...",
+                f"({_seg_dur:.1f}s, {_seg_frames} frames, {_n_workers} workers) ...",
                 flush=True,
             )
             _hf_render_on(_seg_proj / "public", _seg_raw, _seg_dur)
