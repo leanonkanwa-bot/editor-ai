@@ -1924,6 +1924,7 @@ def _ffmpeg_cut(src: Path, dst: Path, start_sec: float, end_sec: float) -> None:
             "-i", str(src),
             "-t", f"{end_sec - start_sec:.3f}",
             "-c", "copy",
+            "-movflags", "+faststart",
             "-avoid_negative_ts", "make_zero",
             str(dst),
         ],
