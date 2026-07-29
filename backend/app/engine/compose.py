@@ -156,10 +156,14 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
     )
 
     # Portrait centering: every non-canvas zone → portrait-center-full.
-    # video-overlay and fullscreen are the only full-canvas hero positions that stay.
+    # portrait-center-left and portrait-center-right are kept so face-aware
+    # rotation (see _remap_zone) can place cards on the safe side of an
+    # off-centre face without crushing them into the full-width center band.
     # Must run AFTER compact is computed so styling scales stay correct.
     if layout == "portrait" and not is_caption:
-        if zone not in ("video-overlay", "fullscreen", "portrait-center-full"):
+        if zone not in ("video-overlay", "fullscreen",
+                        "portrait-center-full",
+                        "portrait-center-left", "portrait-center-right"):
             zone = "portrait-center-full"
 
     bounds = _zone_bounds(zone, layout)
@@ -2335,7 +2339,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('}')
     # ── Wave 10 ───────────────────────────────────────────────────────────────
     if content_style == "milestone_recap":
-        _mr_sz = "33px"
+        _mr_sz = "24px"
         parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{ width: {max_width_eff}; box-sizing: border-box; }}')
         parts.append(f'.card[data-card-id="{card_id}"] .mr-wrap {{')
         parts.append('  display:flex; flex-direction:column; gap:6px; width:100%;')
@@ -2353,8 +2357,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]}; line-height:1.3;')
         parts.append('}')
     if content_style == "content_calendar":
-        _cal_day_sz = "33px"
-        _cal_cnt_sz = "26px"
+        _cal_day_sz = "24px"
+        _cal_cnt_sz = "18px"
         parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{ width: {max_width_eff}; box-sizing: border-box; }}')
         parts.append(f'.card[data-card-id="{card_id}"] .cal-wrap {{')
         parts.append('  display:flex; flex-direction:column; gap:5px; width:100%;')
@@ -2392,8 +2396,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text_secondary"]}; opacity:0;')
         parts.append('}')
     if content_style == "mistake_lesson":
-        _ml_tag_sz = "18px" if compact else "20px"
-        _ml_txt_sz = "22px" if compact else "26px"
+        _ml_tag_sz = "14px" if compact else "16px"
+        _ml_txt_sz = "18px" if compact else "22px"
         parts.append(f'.card[data-card-id="{card_id}"] .ml-wrap {{')
         parts.append('  display:flex; flex-direction:column; gap:10px; width:100%;')
         parts.append('}')
@@ -2421,8 +2425,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]}; line-height:1.3;')
         parts.append('}')
     if content_style == "tool_comparison":
-        _tc_head_sz = "33px"
-        _tc_feat_sz = "26px"
+        _tc_head_sz = "24px"
+        _tc_feat_sz = "18px"
         parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{ width: {max_width_eff}; box-sizing: border-box; }}')
         parts.append(f'.card[data-card-id="{card_id}"] .tc-wrap {{')
         parts.append('  display:flex; flex-direction:column; gap:8px; width:100%;')
@@ -2445,7 +2449,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  padding:3px 0; border-bottom:1px solid {p["text_secondary"]}22;')
         parts.append('}')
     if content_style == "weekly_review":
-        _wr_sz = "33px"
+        _wr_sz = "24px"
         parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{ width: {max_width_eff}; box-sizing: border-box; }}')
         parts.append(f'.card[data-card-id="{card_id}"] .wr-wrap {{')
         parts.append('  display:flex; flex-direction:column; gap:6px; width:100%;')
@@ -2465,7 +2469,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'  text-shadow:{p["title_glow"]};')
         parts.append('}')
     if content_style == "audience_question":
-        _aq_sz = "26px" if compact else "33px"
+        _aq_sz = "22px" if compact else "28px"
         parts.append(f'.card[data-card-id="{card_id}"] .aq-wrap {{')
         parts.append('  display:flex; flex-direction:column; align-items:center;')
         parts.append('}')
@@ -6920,13 +6924,14 @@ def compose(
         # Non-data-panel types (key_phrase, quote, etc.) are returned unchanged.
         # Index resets per-job (data_card_idx is initialised to 0 below).
         #
-        # Portrait (9:16):
-        #   pos 0 top-left     -> upper-left-data-sm      (top corner, no dimming)
-        #   pos 1 top-right    -> upper-data               (top corner, no dimming)
-        #   pos 2 center-left  -> portrait-center-left     (face zone, dimming applied)
-        #   pos 3 center-right -> portrait-center-right    (face zone, dimming applied)
-        #   pos 4 center-full  -> portrait-center-full     (face zone, dimming applied)
-        # Portrait tall types (4-6 items): 2-position top-only (center zones too short).
+        # Portrait (9:16) — face-aware:
+        #   Face centred (38 ≤ cx ≤ 62): full 5-position rotation; existing scrim
+        #     dimming handles face overlap for center-zone cards.
+        #   Face LEFT (cx < 38): portrait-center-left and portrait-center-full excluded
+        #     (both overlap the left side). Rotation collapses to top corners +
+        #     portrait-center-right only. No dimming needed — face zone is avoided.
+        #   Face RIGHT (cx > 62): symmetric — portrait-center-right and
+        #     portrait-center-full excluded; portrait-center-left is safe.
         #
         # Landscape (16:9):
         #   pos 0 top-left     -> landscape-tl   (top-left corner panel)
@@ -6936,13 +6941,40 @@ def compose(
         #   pos 4 center-full  -> landscape-cf   (full-width center band, dimming applied)
         # Landscape tall types: 2-position top-only (landscape-tl-tall / landscape-tr-tall).
         _POS_NAMES = ("top-left", "top-right", "center-left", "center-right", "center-full")
-        _STD_PORTRAIT = (
-            "upper-left-data-sm",    # pos 0
-            "upper-data",            # pos 1
-            "portrait-center-left",  # pos 2
-            "portrait-center-right", # pos 3
-            "portrait-center-full",  # pos 4
-        )
+
+        # Face-side derived from _face_cx (closure variable set in the outer compose() scope).
+        _face_side = "left" if _face_cx < 38.0 else ("right" if _face_cx > 62.0 else "center")
+
+        if _face_side == "left":
+            # portrait-center-left (x:20-620) and portrait-center-full (x:40-1040)
+            # both overlap a left-positioned face — exclude them entirely.
+            _STD_PORTRAIT = (
+                "upper-left-data-sm",    # pos 0 — top-left corner, always safe
+                "upper-data",            # pos 1 — top-right corner, always safe
+                "portrait-center-right", # pos 2 — right side only, face is left
+                "upper-left-data-sm",    # pos 3 — wrap: no center-full available
+                "upper-data",            # pos 4 — wrap
+            )
+        elif _face_side == "right":
+            # portrait-center-right (x:480-1060) and portrait-center-full (x:40-1040)
+            # both overlap a right-positioned face — exclude them entirely.
+            _STD_PORTRAIT = (
+                "upper-left-data-sm",    # pos 0
+                "upper-data",            # pos 1
+                "portrait-center-left",  # pos 2 — left side only, face is right
+                "upper-data",            # pos 3 — wrap
+                "upper-left-data-sm",    # pos 4 — wrap
+            )
+        else:
+            # Face centred: full 5-position rotation; scrim+dimming handle overlap.
+            _STD_PORTRAIT = (
+                "upper-left-data-sm",    # pos 0
+                "upper-data",            # pos 1
+                "portrait-center-left",  # pos 2
+                "portrait-center-right", # pos 3
+                "portrait-center-full",  # pos 4
+            )
+
         _STD_LANDSCAPE = (
             "landscape-tl",  # pos 0
             "landscape-tr",  # pos 1
