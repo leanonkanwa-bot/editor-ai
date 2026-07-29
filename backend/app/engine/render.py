@@ -2154,8 +2154,8 @@ def _render_hyperframes(
         gap = gap_end - gap_start
         if gap <= 25.0:
             return
-        n_ideal = max(1, int(gap / 40.0))
-        n = min(3, n_ideal)
+        n_ideal = max(1, int(gap / 25.0))
+        n = min(5, n_ideal)
         if n_ideal > n:
             print(
                 f"[ZOOM-GAP-FILL] skipped (cap reached): gap at {gap_start:.1f}s-{gap_end:.1f}s"

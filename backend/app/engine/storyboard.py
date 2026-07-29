@@ -1740,7 +1740,7 @@ def generate_storyboard(
                 "zone": "video-overlay",
                 "startSec": c_start,
                 "endSec": c_end,
-                "contentHints": {"phrase": phrase or "…"},
+                "contentHints": {"title": phrase or "…"},
                 "_fallback": True,
                 "_confidence": 0.50,
             })
