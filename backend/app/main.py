@@ -257,10 +257,12 @@ def _on_startup() -> None:
     #
     # 570 s = 600 s (Railway hard-kill) − 30 s (clean-exit margin).
     # The app finishes draining before Railway's SIGKILL can interrupt it.
-    # If you change drainingSeconds in railway.json, update this constant too,
+    # ⚠️  TEMPORAIRE — REMETTRE À 570 AVANT TOUT TRAFIC UTILISATEUR RÉEL  ⚠️
+    # Valeur de prod : 570 (9m30s — Railway 600s kill minus 30s margin).
+    # Si you change drainingSeconds in railway.json, update this constant too,
     # keeping the 30 s margin intact.  Renders that outlast even 570 s are
     # killed by Railway and auto-resumed by Layer C on next boot.
-    _SIGTERM_DRAIN_SECS = 570  # 9m30s — Railway 600s kill minus 30s margin
+    _SIGTERM_DRAIN_SECS = 12  # ⚠️ TEMP — accélère les cycles de test ; prod = 570
     _uvicorn_sigterm = _signal.getsignal(_signal.SIGTERM)
 
     def _sigterm_handler(signum: int, frame: object) -> None:
