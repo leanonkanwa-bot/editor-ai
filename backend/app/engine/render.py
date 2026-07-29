@@ -2417,6 +2417,7 @@ def _render_hyperframes(
     if _n_segs > 1:
         # ── SEGMENTED PATH ─────────────────────────────────────────────────
         import shutil as _shutil
+        import concurrent.futures as _cf
         from app.engine.compose import _DATA_PANEL_TYPES as _DPT
 
         _seg_info = " + ".join(
@@ -2431,53 +2432,76 @@ def _render_hyperframes(
         _all_graphic = [c for c in storyboard.get("cards", []) if c.get("type") != "caption"]
         _seg_raws: list[Path] = []
 
-        for _seg_i in range(_n_segs):
-            _seg_start = _seg_boundaries[_seg_i]
-            _seg_end   = _seg_boundaries[_seg_i + 1]
-            _seg_dur   = _seg_end - _seg_start
-
-            # Count data-panel cards that ended before this segment so the zone
-            # rotation counter initialises correctly.
-            _seg_data_offset = sum(
+        def _prepare_seg(idx: int) -> tuple[Path, Path]:
+            """compose + ffmpeg_cut for one segment. Thread-safe: writes to seg{idx}/ only."""
+            _s   = _seg_boundaries[idx]
+            _e   = _seg_boundaries[idx + 1]
+            _doff = sum(
                 1 for c in _all_graphic
-                if float(c.get("endSec", 0)) <= _seg_start
+                if float(c.get("endSec", 0)) <= _s
                 and c.get("contentHints", {}).get("style", "") in _DPT
             )
-
             print(
-                f"[HF-SEG] Stage 3.{_seg_i}: Composing segment {_seg_i}/{_n_segs - 1} "
-                f"({_seg_start:.1f}s → {_seg_end:.1f}s) ...",
+                f"[HF-SEG] Stage 3.{idx}: Composing segment {idx}/{_n_segs - 1} "
+                f"({_s:.1f}s → {_e:.1f}s) ...",
                 flush=True,
             )
-            _t_seg = time.perf_counter()
-            _seg_proj = compose(
+            _t0 = time.perf_counter()
+            _proj = compose(
                 storyboard=storyboard,
                 trimmed_video=trimmed,
-                work_dir=work_dir / f"seg{_seg_i}",
+                work_dir=work_dir / f"seg{idx}",
                 zoom_entries=remapped_zoom,
                 style_pack=style_pack,
                 subject_position=subject_position,
-                segment_offset=_seg_start,
-                segment_end=_seg_end,
-                segment_data_card_offset=_seg_data_offset,
+                segment_offset=_s,
+                segment_end=_e,
+                segment_data_card_offset=_doff,
             )
-            # compose() copies the full trimmed video; replace it with the cut segment
+            # compose() copies the full trimmed video; replace with the cut segment
             # so HyperFrames only renders the frames it actually needs.
-            _seg_vid = work_dir / f"seg{_seg_i}_video.mp4"
-            _ffmpeg_cut(trimmed, _seg_vid, _seg_start, _seg_end)
-            _shutil.copy2(str(_seg_vid), str(_seg_proj / "public" / "input-video.mp4"))
-            print(f"[TIMING] seg{_seg_i}_compose+cut: {time.perf_counter()-_t_seg:.1f}s", flush=True)
+            _vid = work_dir / f"seg{idx}_video.mp4"
+            _ffmpeg_cut(trimmed, _vid, _s, _e)
+            _shutil.copy2(str(_vid), str(_proj / "public" / "input-video.mp4"))
+            print(f"[TIMING] seg{idx}_compose+cut: {time.perf_counter() - _t0:.1f}s", flush=True)
+            return _proj, work_dir / f"seg{idx}_hf.mp4"
 
-            _seg_raw = work_dir / f"seg{_seg_i}_hf.mp4"
-            _seg_frames = int(_seg_dur * fps)
-            print(
-                f"[HF-SEG] Stage 4.{_seg_i}: Rendering segment {_seg_i}/{_n_segs - 1} "
-                f"({_seg_dur:.1f}s, {_seg_frames} frames, {_n_workers} workers) ...",
-                flush=True,
-            )
-            _hf_render_on(_seg_proj / "public", _seg_raw, _seg_dur)
-            print(f"[HF-SEG] Segment {_seg_i} done: {_seg_raw}", flush=True)
-            _seg_raws.append(_seg_raw)
+        # Pipeline: fire compose+cut for seg N+1 in a background thread while
+        # HF renders seg N.  One worker max keeps memory flat (no extra Chrome).
+        # Future.result() re-raises any prepare exception in the main thread.
+        with _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="seg-prep") as _pool:
+            _cur_proj, _cur_raw = _pool.submit(_prepare_seg, 0).result()
+
+            for _seg_i in range(_n_segs):
+                _seg_start  = _seg_boundaries[_seg_i]
+                _seg_end    = _seg_boundaries[_seg_i + 1]
+                _seg_dur    = _seg_end - _seg_start
+                _seg_frames = int(_seg_dur * fps)
+
+                # Prefetch seg N+1 immediately — overlaps with the HF render below
+                _nxt = (
+                    _pool.submit(_prepare_seg, _seg_i + 1)
+                    if _seg_i + 1 < _n_segs else None
+                )
+
+                print(
+                    f"[HF-SEG] Stage 4.{_seg_i}: Rendering segment {_seg_i}/{_n_segs - 1} "
+                    f"({_seg_dur:.1f}s, {_seg_frames} frames, {_n_workers} workers) ...",
+                    flush=True,
+                )
+                _hf_render_on(_cur_proj / "public", _cur_raw, _seg_dur)
+                print(f"[HF-SEG] Segment {_seg_i} done: {_cur_raw}", flush=True)
+                _seg_raws.append(_cur_raw)
+
+                if _nxt is not None:
+                    _t_wait = time.perf_counter()
+                    _cur_proj, _cur_raw = _nxt.result()  # raises if prepare failed
+                    _wait = time.perf_counter() - _t_wait
+                    print(
+                        f"[HF-SEG] Pipeline: seg{_seg_i + 1} "
+                        f"{'ready (0 wait)' if _wait < 0.5 else f'waited {_wait:.1f}s'}",
+                        flush=True,
+                    )
 
         # FFmpeg lossless concat of all N segments ───────────────────────────
         print(f"[HF-SEG] Concatenating {_n_segs} segments...", flush=True)
