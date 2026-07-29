@@ -47,6 +47,7 @@ STRONG_ROLES = {
 STRONG_SCORE_MIN = 6
 MIN_GAP_S        = 4.5
 DEFAULT_DURATION = 5.0
+_DZ_MAX_GAP_S    = 25.0   # time-based filler: inject one card per this many uncovered seconds
 
 
 # ── Label / kicker extraction (deterministic, from transcript) ─────────────────
@@ -257,6 +258,96 @@ def _find_candidates(
         flush=True,
     )
     return candidates
+
+
+# ── Time-based gap filler ────────────────────────────────────────────────────
+
+def _fill_time_gaps(
+    all_cards: list[dict],
+    remapped_words: list,
+    trimmed_duration: float,
+    max_gap_s: float = _DZ_MAX_GAP_S,
+) -> list[dict]:
+    """
+    Inject icon cards into any remaining dead zone longer than max_gap_s.
+    Called after both accepted and strong-beat generative cards are placed.
+    No LLM call — fixed visual params + deterministic label from transcript.
+    """
+    ivs = sorted(_card_intervals(all_cards), key=lambda x: x[0])
+
+    # Merge overlapping intervals
+    merged: list[list[float]] = []
+    for s, e in ivs:
+        if merged and s <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], e)
+        else:
+            merged.append([s, e])
+
+    # Identify gaps exceeding max_gap_s
+    gaps: list[tuple[float, float]] = []
+    prev_end = 0.0
+    for seg in merged:
+        if seg[0] - prev_end > max_gap_s:
+            gaps.append((prev_end, seg[0]))
+        prev_end = seg[1]
+    if trimmed_duration - prev_end > max_gap_s:
+        gaps.append((prev_end, trimmed_duration))
+
+    if not gaps:
+        print(f"[BROLL-GENERATIVE] time-gap filler: no gaps > {max_gap_s:.0f}s", flush=True)
+        return []
+
+    new_cards: list[dict] = []
+    cid_idx = 0
+
+    for gap_s, gap_e in gaps:
+        gap_dur = gap_e - gap_s
+        print(
+            f"[BROLL-GENERATIVE] time-gap: {gap_s:.1f}s-{gap_e:.1f}s"
+            f" ({gap_dur:.1f}s) → injecting every {max_gap_s:.0f}s",
+            flush=True,
+        )
+        pos = gap_s + max_gap_s
+        while pos < gap_e - DEFAULT_DURATION * 0.5:
+            out_s  = round(pos, 3)
+            out_e  = round(min(pos + DEFAULT_DURATION, gap_e), 3)
+            label  = _extract_label(remapped_words, out_s, out_e)
+            kicker = _extract_kicker(remapped_words, out_s)
+            cid_idx += 1
+            cid = f"dz-fill-t-{cid_idx:03d}"
+            new_cards.append({
+                "id":           cid,
+                "startSec":     out_s,
+                "endSec":       out_e,
+                "zone":         "upper-right",
+                "contentHints": {"style": "__broll__"},
+                "_broll_type":  "generative_primitive",
+                "_broll_params": {
+                    "frame":         "card",
+                    "visual":        "icon",
+                    "icon_name":     "spark",
+                    "n_bubbles":     2,
+                    "content_value": "",
+                    "text_slot":     "label",
+                    "layout":        "stacked",
+                    "entry":         "pop",
+                    "label":         label,
+                    "kicker":        kicker,
+                },
+                "_confidence":  0.50,
+                "_beat_role":   "time_gap_fill",
+            })
+            print(
+                f"[BROLL-GENERATIVE] {cid} at {out_s:.1f}s label={label!r}",
+                flush=True,
+            )
+            pos += max_gap_s
+
+    print(
+        f"[BROLL-GENERATIVE] time-gap filler: {len(new_cards)} card(s) inserted",
+        flush=True,
+    )
+    return new_cards
 
 
 # ── Haiku call ────────────────────────────────────────────────────────────────
@@ -602,7 +693,7 @@ def generate_generative_broll(
 
     if not candidates:
         print("[BROLL-GENERATIVE] no uncovered strong beats — skipping LLM call", flush=True)
-        return []
+        return _fill_time_gaps(list(accepted_cards), remapped_words, trimmed_duration)
 
     print(
         f"[BROLL-GENERATIVE] {len(candidates)} uncovered beat(s):"
@@ -612,7 +703,7 @@ def generate_generative_broll(
 
     llm_outputs = _call_haiku(candidates, pack, language)
     if llm_outputs is None:
-        return []
+        return _fill_time_gaps(list(accepted_cards), remapped_words, trimmed_duration)
 
     if len(llm_outputs) != len(candidates):
         print(
@@ -620,7 +711,7 @@ def generate_generative_broll(
             f" expected {len(candidates)}, got {len(llm_outputs)} — rejecting all",
             flush=True,
         )
-        return []
+        return _fill_time_gaps(list(accepted_cards), remapped_words, trimmed_duration)
 
     new_cards: list[dict] = []
     accepted_ivs = _card_intervals(accepted_cards)
@@ -708,7 +799,12 @@ def generate_generative_broll(
         )
 
     print(
-        f"[BROLL-GENERATIVE] {len(new_cards)}/{len(candidates)} candidate(s) → cards",
+        f"[BROLL-GENERATIVE] {len(new_cards)}/{len(candidates)} strong-beat candidate(s) → cards",
         flush=True,
     )
+
+    # Time-based gap filler: covers dead zones > _DZ_MAX_GAP_S missed by strong-beat pass.
+    all_placed = list(accepted_cards) + new_cards
+    time_fill = _fill_time_gaps(all_placed, remapped_words, trimmed_duration)
+    new_cards.extend(time_fill)
     return new_cards

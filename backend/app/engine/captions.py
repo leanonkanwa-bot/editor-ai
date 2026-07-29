@@ -74,10 +74,10 @@ PUNCT_RE = re.compile(r"""[.,!?;:"()\[\]…–—]""")
 # Main caption text is always white; brand_color is reserved for these.
 _EMPH_RE = re.compile(r"\d|%|\$")
 
-# Whisper word timestamps are systematically 50–150ms earlier than when words
-# are actually spoken (known faster-whisper alignment bias). This constant
-# shifts all captions forward so they match actual lip movement.
-WHISPER_TIMESTAMP_CORRECTION: float = 0.05   # 50ms forward shift (reduced after remapping fix)
+# Whisper word timestamps are systematically early (known faster-whisper alignment bias).
+# Measured on French coaching content: first-word bias ~200-300ms on segment 0.
+# 0.25s shifts all captions forward to match actual lip movement without noticeable lag.
+WHISPER_TIMESTAMP_CORRECTION: float = 0.25   # 250ms forward shift
 
 # Additional per-group delay on top of the Whisper correction (usually 0).
 CAPTION_DELAY_S: float = 0.0
