@@ -1944,20 +1944,29 @@ def _declick_segment_boundaries(
 ) -> None:
     """Symmetric micro-fades at HF segment boundaries to suppress audio clicks.
     Video stream-copied; only audio re-encoded (AAC 192k).
+
+    Uses a volume filter with per-boundary V-shaped expressions rather than
+    chained afade filters.  afade=t=out keeps the signal at 0 for the rest of
+    the stream after the fade window, so chaining N fade-outs would silence
+    everything after the first boundary.  The volume expression approach is
+    independent per boundary: each factor = 1 outside [T-d, T+d] and dips to
+    0 at exactly T, so multiplying N factors together is correct.
     """
     d = fade_ms / 1000.0
-    filters = []
+    factors = []
     for t in boundary_times:
-        t_out = max(0.0, t - d)
-        filters.append(f"afade=t=out:st={t_out:.4f}:d={d}")
-        filters.append(f"afade=t=in:st={t:.4f}:d={d}")
-    af = ",".join(filters)
+        t_lo = t - d
+        t_hi = t + d
+        factors.append(
+            f"if(between(t,{t_lo:.4f},{t_hi:.4f}),abs(t-{t:.4f})/{d:.4f},1)"
+        )
+    vol_expr = "*".join(factors)
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-i", str(src),
         "-c:v", "copy",
         "-c:a", "aac", "-b:a", "192k",
-        "-af", af,
+        "-af", f"volume='{vol_expr}'",
         str(dst),
     ])
 
