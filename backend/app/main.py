@@ -262,7 +262,7 @@ def _on_startup() -> None:
     # Si you change drainingSeconds in railway.json, update this constant too,
     # keeping the 30 s margin intact.  Renders that outlast even 570 s are
     # killed by Railway and auto-resumed by Layer C on next boot.
-    _SIGTERM_DRAIN_SECS = 12  # ⚠️ TEMP — accélère les cycles de test ; prod = 570
+    _SIGTERM_DRAIN_SECS = 570  # 9.5 min drain window — allows in-flight render to complete
     _uvicorn_sigterm = _signal.getsignal(_signal.SIGTERM)
 
     def _sigterm_handler(signum: int, frame: object) -> None:
