@@ -44,9 +44,42 @@ STRONG_ROLES = {
     "payoff", "realization", "principle", "climax",
     "hook", "stat", "emotional_end", "amplify",
 }
-STRONG_SCORE_MIN = 6
+STRONG_SCORE_MIN = 4
 MIN_GAP_S        = 4.5
 DEFAULT_DURATION = 5.0
+
+# ── Enumeration detection ─────────────────────────────────────────────────────
+# Pattern 1 — ordinal markers: "premièrement / deuxièmement", "d'abord / ensuite / enfin"
+_ENUM_FIRST = frozenset({
+    "premièrement", "primo", "firstly",
+    "d'abord", "d’abord",          # ASCII + curly apostrophe variants
+})
+_ENUM_NEXT = frozenset({
+    "deuxièmement", "secundo", "secondly", "ensuite", "puis",
+    "troisièmement", "tertio", "thirdly",
+    "quatrièmement", "fourthly", "enfin", "finalement", "finally", "lastly",
+})
+_ENUM_MAX_GAP_S  = 90.0   # max seconds between consecutive ordinal markers
+_ENUM_CARD_DUR_S = 5.0    # display duration for each injected card
+
+# Pattern 2 — conjunctive lists: "X, Y et Z"
+_ENUM_CONNECTORS = frozenset({"et", "ou", "and", "or"})
+_ENUM_STOPWORDS  = frozenset({
+    # French function words
+    "je", "tu", "il", "elle", "nous", "vous", "ils", "elles",
+    "me", "te", "se", "le", "la", "les", "lui", "leur",
+    "un", "une", "des", "du", "au", "aux",
+    "ce", "cet", "cette", "ces",
+    "est", "sont", "ont",
+    "mais", "car", "donc", "si",
+    "en", "par", "pour", "sur", "sous", "dans", "avec", "sans",
+    # English function words
+    "the", "an", "is", "are", "was", "were",
+    "in", "on", "at", "to", "for", "of", "with", "by", "from", "as",
+    "not", "its",
+})
+_ENUM_LIST_ITEM_GAP_S = 1.2   # max start-to-start gap between items (tight timing)
+_ENUM_LIST_MAX_SPAN_S = 5.0   # max total span for a "X, Y et Z" sequence
 
 
 # ── Label / kicker extraction (deterministic, from transcript) ─────────────────
@@ -257,6 +290,143 @@ def _find_candidates(
         flush=True,
     )
     return candidates
+
+
+# ── Enumeration detector ─────────────────────────────────────────────────────
+
+def _detect_enumerations(
+    remapped_words: list,
+    accepted_cards: list[dict],
+    trimmed_duration: float,
+) -> list[dict]:
+    """Detect spoken enumerations and inject checklist/timeline_dots cards.
+
+    Two independent patterns:
+    1. Ordinal markers — d'abord/ensuite/enfin, premièrement/deuxièmement/…
+    2. Conjunctive lists — tight "X, Y et Z" sequences (≥ 2 pre-items, gap < 1.2s)
+    """
+
+    def _norm(text: str) -> str:
+        return text.lower().strip(".,!?;:\"«»").replace("’", "'").replace("‘", "'")
+
+    existing_ivs = _card_intervals(accepted_cards)
+    new_cards: list[dict] = []
+    cid_idx = 0
+
+    def _try_inject(g_start: float, g_end: float, n_items: int, source: str) -> None:
+        nonlocal cid_idx
+        out_s = round(max(0.0, g_start), 3)
+        out_e = round(min(g_end + _ENUM_CARD_DUR_S, trimmed_duration), 3)
+        all_ivs = existing_ivs + _card_intervals(new_cards)
+        if any(_interval_gap(out_s, out_e, a_s, a_e) < MIN_GAP_S for a_s, a_e in all_ivs):
+            print(f"[ENUM-DETECT] {source} at {out_s:.1f}s — already covered, skip", flush=True)
+            return
+        visual = "timeline_dots" if n_items >= 3 else "checklist"
+        label  = _extract_label(remapped_words, out_s, out_e)
+        kicker = _extract_kicker(remapped_words, out_s)
+        cid_idx += 1
+        new_cards.append({
+            "id":           f"enum-{cid_idx:03d}",
+            "startSec":     out_s,
+            "endSec":       out_e,
+            "zone":         "upper-right",
+            "contentHints": {"style": "__broll__"},
+            "_broll_type":  "generative_primitive",
+            "_broll_params": {
+                "frame":         "card",
+                "visual":        visual,
+                "icon_name":     "check",
+                "n_bubbles":     min(n_items, 3),
+                "content_value": "",
+                "text_slot":     "label",
+                "layout":        "stacked",
+                "entry":         "sequential",
+                "label":         label,
+                "kicker":        kicker,
+            },
+            "_confidence":  0.75,
+            "_beat_role":   "enumeration",
+        })
+        print(
+            f"[ENUM-DETECT] enum-{cid_idx:03d} ({source})"
+            f" at {out_s:.1f}s {n_items} items visual={visual}",
+            flush=True,
+        )
+
+    # ── Pattern 1: ordinal marker sequences ──────────────────────────────────
+    tagged = [
+        (float(getattr(w, "start", 0)), _norm(w.text))
+        for w in remapped_words
+        if _norm(w.text) in (_ENUM_FIRST | _ENUM_NEXT)
+    ]
+    current: list[tuple[float, str]] = []
+    for ts, norm in tagged:
+        if norm in _ENUM_FIRST:
+            if len(current) >= 2:
+                _try_inject(current[0][0], current[-1][0], len(current), "ordinal")
+            current = [(ts, norm)]
+        elif norm in _ENUM_NEXT and current:
+            if ts - current[-1][0] <= _ENUM_MAX_GAP_S:
+                current.append((ts, norm))
+            else:
+                if len(current) >= 2:
+                    _try_inject(current[0][0], current[-1][0], len(current), "ordinal")
+                current = []
+    if len(current) >= 2:
+        _try_inject(current[0][0], current[-1][0], len(current), "ordinal")
+
+    # ── Pattern 2: conjunctive lists "X, Y et Z" ─────────────────────────────
+    # Requires ≥ 2 content words before a connector (et/ou/and/or), each pair
+    # within _ENUM_LIST_ITEM_GAP_S of each other, and total span < _ENUM_LIST_MAX_SPAN_S.
+    # Tight timing requirement keeps false-positive rate low.
+    words = [w for w in remapped_words if w.text.strip()]
+    for i, w in enumerate(words):
+        if _norm(w.text) not in _ENUM_CONNECTORS:
+            continue
+
+        # Scan backward for consecutive content words immediately before connector
+        pre: list = []
+        j = i - 1
+        while j >= 0 and len(pre) < 6:
+            pw = words[j]
+            pn = _norm(pw.text)
+            if pn in _ENUM_STOPWORDS or len(pn) < 3:
+                break
+            # Start-to-start gap from pw → next word in pre (or connector)
+            next_start = words[j + 1].start if j + 1 < len(words) else w.start
+            if next_start - float(getattr(pw, "start", 0)) > _ENUM_LIST_ITEM_GAP_S:
+                break
+            pre.insert(0, pw)
+            j -= 1
+
+        if len(pre) < 2:
+            continue
+
+        # Scan forward for the first content word after the connector
+        post = None
+        for k in range(i + 1, min(i + 5, len(words))):
+            nw = words[k]
+            nn = _norm(nw.text)
+            if len(nn) >= 3 and nn not in _ENUM_STOPWORDS:
+                if float(getattr(nw, "start", 0)) - float(getattr(w, "start", 0)) <= _ENUM_LIST_ITEM_GAP_S + 0.3:
+                    post = nw
+                break
+
+        if post is None:
+            continue
+
+        g_start = float(getattr(pre[0], "start", 0))
+        g_end   = float(getattr(post, "start", 0))
+        if g_end - g_start > _ENUM_LIST_MAX_SPAN_S:
+            continue
+
+        _try_inject(g_start, g_end, len(pre) + 1, "list")
+
+    if new_cards:
+        print(f"[ENUM-DETECT] {len(new_cards)} enumeration card(s) injected", flush=True)
+    else:
+        print("[ENUM-DETECT] no enumeration patterns detected", flush=True)
+    return new_cards
 
 
 # ── Haiku call ────────────────────────────────────────────────────────────────
@@ -595,6 +765,10 @@ def generate_generative_broll(
     Find uncovered strong beats, call Haiku once, return validated gap-fill cards.
     The caller inserts these AFTER the greedy merge (no confidence competition).
     """
+    # Enumeration detection runs unconditionally (independent of LLM/beats path).
+    # Computed first against accepted_cards so it fills gaps regardless of LLM outcome.
+    enum_cards = _detect_enumerations(remapped_words, list(accepted_cards), trimmed_duration)
+
     candidates = _find_candidates(
         script_structure, accepted_cards, remapped_words,
         timing_map, trimmed_duration,
@@ -602,7 +776,7 @@ def generate_generative_broll(
 
     if not candidates:
         print("[BROLL-GENERATIVE] no uncovered strong beats — skipping LLM call", flush=True)
-        return []
+        return enum_cards
 
     print(
         f"[BROLL-GENERATIVE] {len(candidates)} uncovered beat(s):"
@@ -612,7 +786,7 @@ def generate_generative_broll(
 
     llm_outputs = _call_haiku(candidates, pack, language)
     if llm_outputs is None:
-        return []
+        return enum_cards
 
     if len(llm_outputs) != len(candidates):
         print(
@@ -620,7 +794,7 @@ def generate_generative_broll(
             f" expected {len(candidates)}, got {len(llm_outputs)} — rejecting all",
             flush=True,
         )
-        return []
+        return enum_cards
 
     new_cards: list[dict] = []
     accepted_ivs = _card_intervals(accepted_cards)
@@ -712,4 +886,5 @@ def generate_generative_broll(
         flush=True,
     )
 
+    new_cards.extend(enum_cards)
     return new_cards
