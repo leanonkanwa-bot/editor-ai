@@ -2478,6 +2478,120 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  font-weight:900; color:{p["text"]}; text-align:center;')
         parts.append(f'  line-height:1.3; opacity:0;')
         parts.append('}')
+    # ── Catalogue primitives CSS (Wave 11) ───────────────────────────────────
+    if content_style == "prim_stat_counter":
+        # Scale relative to zone so it reads well in both portrait upper-right (500px)
+        # and landscape landscape-tr (660px). compact=True applies to both via
+        # _SIDE_PANEL_ZONES membership, so use zone width for finer calibration.
+        _psc_zone_w = _zone_bounds(card.get("zone", "upper-right"), layout).get("width", 500)
+        _psc_num_sz  = "46px" if _psc_zone_w < 400 else "62px" if _psc_zone_w < 560 else "80px"
+        _psc_side_sz = "22px" if _psc_zone_w < 400 else "28px" if _psc_zone_w < 560 else "36px"
+        # Glassmorphism panel: genuine blur on dark packs (lean_glass, lean_ledger, lean_cinema)
+        if p.get("id") in ("lean_glass", "lean_ledger", "lean_cinema", "lean_vibe"):
+            parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
+            parts.append('  backdrop-filter:blur(22px) saturate(180%);')
+            parts.append('  -webkit-backdrop-filter:blur(22px) saturate(180%);')
+            parts.append(f'  background:rgba(10,10,20,0.62);')
+            parts.append(f'  border:1px solid {p["accent"]}26;')
+            parts.append(f'  border-top:1px solid rgba(255,255,255,0.09);')
+            parts.append('  box-sizing:border-box;')
+            parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .psc-row {{')
+        parts.append('  display:flex; align-items:baseline; gap:6px; justify-content:center;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .psc-number {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{_psc_num_sz};')
+        parts.append(f'  font-weight:900; color:{p["text"]}; line-height:1.0;')
+        parts.append(f'  font-variant-numeric:tabular-nums; opacity:0;')
+        # Start with zero glow; GSAP charges it during count-up
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .psc-side {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{_psc_side_sz};')
+        parts.append(f'  font-weight:700; color:{p["accent"]}; opacity:0;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .psc-kicker {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{kicker_size_eff};')
+        parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text_secondary"]};')
+        parts.append('  text-align:center; opacity:0; margin-top:6px;')
+        parts.append('}')
+    if content_style == "prim_numbered_rule":
+        parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
+        parts.append('  width:100%; height:100%; max-width:none; padding:0;')
+        parts.append('  display:flex; flex-direction:column; align-items:center;')
+        parts.append('  justify-content:center; gap:20px; box-sizing:border-box;')
+        parts.append(f'  background:{p.get("bg_full", "#000")};')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .pnr-number {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:180px;')
+        parts.append(f'  font-weight:900; color:{p["accent"]}; line-height:1.0;')
+        parts.append('  font-variant-numeric:tabular-nums; opacity:0;')
+        parts.append('  transform-origin:center center;')
+        if p.get("title_glow"):
+            parts.append(f'  text-shadow:{p["title_glow"]};')
+        parts.append('}')
+        # Rule text: always on a near-black bg_full background.
+        # Light packs (craft, paper) have dark p["text"] → use white override.
+        _pnr_rule_color = (
+            "rgba(255,255,255,0.88)"
+            if p.get("id") in ("lean_craft", "lean_paper")
+            else p["text"]
+        )
+        parts.append(f'.card[data-card-id="{card_id}"] .pnr-rule {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:38px;')
+        parts.append(f'  font-weight:{p["font_weight"]}; color:{_pnr_rule_color};')
+        parts.append('  text-align:center; opacity:0; max-width:80%; line-height:1.3;')
+        parts.append('}')
+    if content_style == "prim_anecdote_frame":
+        _af_grain = (
+            "url(\"data:image/svg+xml,"
+            "<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256'>"
+            "<filter id='g'>"
+            "<feTurbulence type='fractalNoise' baseFrequency='0.80' numOctaves='4' stitchTiles='stitch'/>"
+            "<feColorMatrix type='saturate' values='0'/>"
+            "</filter>"
+            "<rect width='256' height='256' filter='url(%23g)' opacity='0.5'/>"
+            "</svg>\")"
+        )
+        parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
+        parts.append('  width:100%; height:100%; max-width:none; padding:0;')
+        parts.append('  position:relative; background:transparent; overflow:hidden;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .af-tint {{')
+        parts.append('  position:absolute; inset:0; opacity:0;')
+        parts.append('  background:rgba(20,10,5,0.35);')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .af-vignette {{')
+        parts.append('  position:absolute; inset:0; opacity:0;')
+        parts.append('  background:radial-gradient(ellipse at center, transparent 25%, rgba(0,0,0,0.88) 100%);')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .af-grain {{')
+        parts.append('  position:absolute; inset:0; opacity:0;')
+        parts.append(f'  background-image:{_af_grain};')
+        parts.append('  background-size:256px 256px; mix-blend-mode:overlay;')
+        parts.append('}')
+    if content_style == "prim_split_compare":
+        parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
+        parts.append('  width:100%; height:100%; max-width:none; padding:0;')
+        parts.append('  display:flex; position:relative; overflow:hidden; background:#000;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .spc-half {{')
+        parts.append('  flex:1; display:flex; align-items:center; justify-content:center;')
+        parts.append('  overflow:hidden;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .spc-left {{ background:{p["accent"]}1a; }}')
+        parts.append(f'.card[data-card-id="{card_id}"] .spc-right {{ background:{p["text"]}0d; }}')
+        parts.append(f'.card[data-card-id="{card_id}"] .spc-label {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:42px;')
+        parts.append(f'  font-weight:900; color:{p["text"]}; text-align:center;')
+        parts.append('  padding:24px; line-height:1.2; opacity:0;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .spc-divider {{')
+        parts.append('  position:absolute; left:50%; top:0; bottom:0; width:3px;')
+        parts.append(f'  background:{p["accent"]}; transform:translateX(-50%) scaleY(0);')
+        parts.append('  transform-origin:top center;')
+        if p.get("accent_line_glow"):
+            parts.append(f'  box-shadow:{p["accent_line_glow"]};')
+        parts.append('}')
     parts.append('</style>')
     # Timeline: full-screen overlay, no card-panel wrapper
     if content_style == "timeline":
@@ -3594,6 +3708,41 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'    <div class="aq-wrap">')
         parts.append(f'      <div class="aq-q" id="{card_id}-aq-q">{_aq_q}</div>')
         parts.append(f'    </div>')
+    # ── Catalogue primitives HTML (Wave 11) ──────────────────────────────────
+    elif content_style == "prim_stat_counter":
+        _psc_pfx = _esc(hints.get("prefix", ""))
+        _psc_num = _esc(hints.get("number", "0"))
+        _psc_sfx = _esc(hints.get("suffix", ""))
+        _psc_kck = _esc(hints.get("title", hints.get("kicker", "")))
+        parts.append(f'    <div class="psc-row">')
+        if _psc_pfx:
+            parts.append(f'      <span class="psc-side" id="{card_id}-psc-prefix">{_psc_pfx}</span>')
+        parts.append(f'      <span class="psc-number" id="{card_id}-psc-number">{_psc_num}</span>')
+        if _psc_sfx:
+            parts.append(f'      <span class="psc-side" id="{card_id}-psc-suffix">{_psc_sfx}</span>')
+        parts.append(f'    </div>')
+        if _psc_kck:
+            parts.append(f'    <div class="psc-kicker" id="{card_id}-psc-kicker">{_psc_kck}</div>')
+    elif content_style == "prim_numbered_rule":
+        _pnr_num  = _esc(hints.get("number", "1"))
+        _pnr_rule = _esc(hints.get("title", ""))
+        parts.append(f'    <div class="pnr-number" id="{card_id}-pnr-number">{_pnr_num}</div>')
+        if _pnr_rule:
+            parts.append(f'    <div class="pnr-rule" id="{card_id}-pnr-rule">{_pnr_rule}</div>')
+    elif content_style == "prim_anecdote_frame":
+        parts.append(f'    <div class="af-tint" id="{card_id}-af-tint"></div>')
+        parts.append(f'    <div class="af-vignette" id="{card_id}-af-vignette"></div>')
+        parts.append(f'    <div class="af-grain" id="{card_id}-af-grain"></div>')
+    elif content_style == "prim_split_compare":
+        _spc_l = _esc(hints.get("left_label", "A"))
+        _spc_r = _esc(hints.get("right_label", "B"))
+        parts.append(f'    <div class="spc-half spc-left" id="{card_id}-spc-left">')
+        parts.append(f'      <div class="spc-label" id="{card_id}-spc-label-l">{_spc_l}</div>')
+        parts.append(f'    </div>')
+        parts.append(f'    <div class="spc-half spc-right" id="{card_id}-spc-right">')
+        parts.append(f'      <div class="spc-label" id="{card_id}-spc-label-r">{_spc_r}</div>')
+        parts.append(f'    </div>')
+        parts.append(f'    <div class="spc-divider" id="{card_id}-spc-divider"></div>')
     else:
         # key_phrase, quote and any unknown style
         parts.append(f'    <div class="title" id="{card_id}-title">{_split_title_accent(display_text, accent_word_hint, card_id)}</div>')
@@ -3849,9 +3998,20 @@ def _build_timeline_js(
             # Premium backdrop dim: cards that overlap the speaker face dim the video.
             # Uses a separate overlay div (not CSS filter) — filter: brightness()
             # is not composited by SwiftShader on Railway.
+            content_style = card.get("contentHints", {}).get("style", "key_phrase")
             card_zone = card.get("zone", "")
             center_zone = card_zone in _DIMMING_ZONES
-            if center_zone:
+            if card.get("_family") == "full_cover" and content_style != "prim_anecdote_frame":
+                # Full-cover blackout: solid black fills the canvas; video invisible.
+                lines.append(
+                    f'  tl.to("#backdrop-dim", '
+                    f'{{ opacity: 1, backgroundColor: "#000", duration: 0.30, ease: _eIn }}, {start:.4f});'
+                )
+                lines.append(
+                    f'  tl.to("#backdrop-dim", '
+                    f'{{ opacity: 0, backgroundColor: "rgba(0,0,0,0.45)", duration: 0.18, ease: _eOut }}, {end - 0.18:.4f});'
+                )
+            elif center_zone:
                 lines.append(
                     f'  tl.to("#backdrop-dim", '
                     f'{{ opacity: 1, duration: 0.30, ease: _eIn }}, {start:.4f});'
@@ -3862,8 +4022,6 @@ def _build_timeline_js(
                 )
                 # Punch-in is handled as independent zoom entries via
                 # _build_punch_in_zoom_entries() — not wired to card entry events.
-
-            content_style = card.get("contentHints", {}).get("style", "key_phrase")
             title_sel = f'.card[data-card-id="{card_id}"] #{card_id}-title'
             kicker_sel = f'.card[data-card-id="{card_id}"] #{card_id}-kicker'
             line_sel = f'.card[data-card-id="{card_id}"] #{card_id}-line'
@@ -6469,6 +6627,112 @@ def _build_timeline_js(
                     lines.append(f'  tl.fromTo(\'{_w10_aq}\', {{ opacity: 0 }}, {{ opacity: 1, duration: {_w10_aq_dur:.3f}, ease: _eIn }}, {t_in:.4f});')
                 else:
                     lines.append(f'  tl.fromTo(\'{_w10_aq}\', {{ opacity: 0, y: 16 }}, {{ opacity: 1, y: 0, duration: {_w10_aq_dur:.3f}, ease: _eIn }}, {t_in:.4f});')
+            # ── Catalogue primitives GSAP (Wave 11) ──────────────────────────
+            elif content_style == "prim_stat_counter":
+                _psc_num_sel = f'.card[data-card-id="{card_id}"] #{card_id}-psc-number'
+                _psc_pfx_sel = f'.card[data-card-id="{card_id}"] #{card_id}-psc-prefix'
+                _psc_sfx_sel = f'.card[data-card-id="{card_id}"] #{card_id}-psc-suffix'
+                _psc_kck_sel = f'.card[data-card-id="{card_id}"] #{card_id}-psc-kicker'
+                _psc_raw     = card.get("contentHints", {}).get("number", "0")
+                _psc_pfx_raw = _esc_js(card.get("contentHints", {}).get("prefix", ""))
+                _psc_sfx_raw = _esc_js(card.get("contentHints", {}).get("suffix", ""))
+                _psc_count_dur = min(0.90, max(0.40, dur * 0.55))
+                _psc_val, _psc_auto_sfx = _safe_number(_psc_raw)
+                _psc_final_sfx = _psc_sfx_raw or _esc_js(_psc_auto_sfx)
+                # Prefix and suffix: slide up simultaneously
+                lines.append(f'  tl.fromTo(\'{_psc_pfx_sel}\', {{ opacity: 0, y: -6 }}, {{ opacity: 1, y: 0, duration: 0.280, ease: _eIn }}, {t_in:.4f});')
+                lines.append(f'  tl.fromTo(\'{_psc_sfx_sel}\', {{ opacity: 0, y: -6 }}, {{ opacity: 1, y: 0, duration: 0.280, ease: _eIn }}, {t_in:.4f});')
+                if _psc_val is not None:
+                    _psc_dec = 1 if '.' in str(_psc_val) else 0
+                    _psc_fmt = (
+                        f'o.v.toFixed(1)+\'{_psc_final_sfx}\''
+                        if _psc_dec else
+                        f'Math.round(o.v).toLocaleString()+\'{_psc_final_sfx}\''
+                    )
+                    # Count-up with expo.out — rushes through low values, decelerates into target
+                    lines.append(
+                        f'  (function(){{ var o={{v:0}}; '
+                        f'tl.to(o, {{v:{_psc_val}, duration:{_psc_count_dur:.3f}, ease:"expo.out", '
+                        f'onUpdate:function(){{ var el=document.querySelector(\'{_psc_num_sel}\'); '
+                        f'if(el) el.textContent={_psc_fmt}; }}}}, {t_in:.4f}); }})();'
+                    )
+                    lines.append(f'  tl.fromTo(\'{_psc_num_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.160, ease: _eIn }}, {t_in:.4f});')
+                    # Glow charge: text-shadow builds from zero to full glow over count duration,
+                    # then bursts to intense at pulse moment (only for packs with title_glow)
+                    if p.get("title_glow"):
+                        lines.append(
+                            f'  tl.fromTo(\'{_psc_num_sel}\', '
+                            f'{{ textShadow: "0 0 0 transparent" }}, '
+                            f'{{ textShadow: "{_esc_js(p["title_glow"])}", duration: {_psc_count_dur:.3f}, ease: "power2.in" }}, '
+                            f'{t_in:.4f});'
+                        )
+                        if p.get("title_glow_intense"):
+                            lines.append(
+                                f'  tl.fromTo(\'{_psc_num_sel}\', '
+                                f'{{ textShadow: "{_esc_js(p["title_glow"])}" }}, '
+                                f'{{ textShadow: "{_esc_js(p["title_glow_intense"])}", duration: 0.110, ease: "power2.out", yoyo: true, repeat: 1 }}, '
+                                f'{t_in + _psc_count_dur:.4f});'
+                            )
+                    # Scale pulse at count arrival (after glow burst)
+                    lines.append(
+                        f'  tl.fromTo(\'{_psc_num_sel}\', {{ scale: 1 }}, '
+                        f'{{ scale: 1.08, duration: 0.100, ease: "power2.out", yoyo: true, repeat: 1 }}, '
+                        f'{t_in + _psc_count_dur:.4f});'
+                    )
+                else:
+                    lines.append(f'  tl.fromTo(\'{_psc_num_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.380, ease: _eIn }}, {t_in:.4f});')
+                # Kicker label — slides up after number lands
+                lines.append(f'  tl.fromTo(\'{_psc_kck_sel}\', {{ opacity: 0, y: 8 }}, {{ opacity: 1, y: 0, duration: 0.260, ease: _eIn }}, {t_in + 0.52:.4f});')
+            elif content_style == "prim_numbered_rule":
+                _pnr_num_sel  = f'.card[data-card-id="{card_id}"] #{card_id}-pnr-number'
+                _pnr_rule_sel = f'.card[data-card-id="{card_id}"] #{card_id}-pnr-rule'
+                # Number: scale-bounce from small (0.30) → slight overshoot (1.10) → settle (1.0)
+                lines.append(
+                    f'  tl.fromTo(\'{_pnr_num_sel}\', '
+                    f'{{ opacity: 0, scale: 0.30 }}, '
+                    f'{{ opacity: 1, scale: 1.10, duration: 0.260, ease: "power3.out" }}, '
+                    f'{start:.4f});'
+                )
+                lines.append(
+                    f'  tl.to(\'{_pnr_num_sel}\', '
+                    f'{{ scale: 1.0, duration: 0.140, ease: "power2.inOut" }}, '
+                    f'{start + 0.260:.4f});'
+                )
+                # Rule text fades in after bounce settles
+                lines.append(
+                    f'  tl.fromTo(\'{_pnr_rule_sel}\', '
+                    f'{{ opacity: 0, y: 14 }}, '
+                    f'{{ opacity: 1, y: 0, duration: 0.320, ease: _eIn }}, '
+                    f'{start + 0.460:.4f});'
+                )
+            elif content_style == "prim_anecdote_frame":
+                _af_tint_sel  = f'.card[data-card-id="{card_id}"] #{card_id}-af-tint'
+                _af_vig_sel   = f'.card[data-card-id="{card_id}"] #{card_id}-af-vignette'
+                _af_grain_sel = f'.card[data-card-id="{card_id}"] #{card_id}-af-grain'
+                _af_in_dur    = min(0.70, dur * 0.20)
+                _af_out_t     = end - _af_in_dur
+                # Fade in: warm tint + vignette + grain
+                lines.append(f'  tl.to(\'{_af_tint_sel}\', {{ opacity: 1, duration: {_af_in_dur:.3f}, ease: "power2.out" }}, {start:.4f});')
+                lines.append(f'  tl.to(\'{_af_vig_sel}\', {{ opacity: 1, duration: {_af_in_dur:.3f}, ease: "power2.out" }}, {start:.4f});')
+                lines.append(f'  tl.to(\'{_af_grain_sel}\', {{ opacity: 0.80, duration: {_af_in_dur:.3f}, ease: "power2.out" }}, {start:.4f});')
+                # Fade out
+                lines.append(f'  tl.to(\'{_af_tint_sel}\', {{ opacity: 0, duration: {_af_in_dur:.3f}, ease: "power2.in" }}, {_af_out_t:.4f});')
+                lines.append(f'  tl.to(\'{_af_vig_sel}\', {{ opacity: 0, duration: {_af_in_dur:.3f}, ease: "power2.in" }}, {_af_out_t:.4f});')
+                lines.append(f'  tl.to(\'{_af_grain_sel}\', {{ opacity: 0, duration: {_af_in_dur:.3f}, ease: "power2.in" }}, {_af_out_t:.4f});')
+            elif content_style == "prim_split_compare":
+                _spc_l_sel   = f'.card[data-card-id="{card_id}"] #{card_id}-spc-left'
+                _spc_r_sel   = f'.card[data-card-id="{card_id}"] #{card_id}-spc-right'
+                _spc_ll_sel  = f'.card[data-card-id="{card_id}"] #{card_id}-spc-label-l'
+                _spc_rl_sel  = f'.card[data-card-id="{card_id}"] #{card_id}-spc-label-r'
+                _spc_div_sel = f'.card[data-card-id="{card_id}"] #{card_id}-spc-divider'
+                # Panels slide from opposite edges simultaneously
+                lines.append(f'  tl.fromTo(\'{_spc_l_sel}\', {{ xPercent: -100 }}, {{ xPercent: 0, duration: 0.480, ease: "power3.out" }}, {start:.4f});')
+                lines.append(f'  tl.fromTo(\'{_spc_r_sel}\', {{ xPercent: 100 }}, {{ xPercent: 0, duration: 0.480, ease: "power3.out" }}, {start:.4f});')
+                # Divider line grows down after panels land
+                lines.append(f'  tl.fromTo(\'{_spc_div_sel}\', {{ scaleY: 0 }}, {{ scaleY: 1, duration: 0.180, ease: "power2.inOut" }}, {start + 0.430:.4f});')
+                # Labels fade in after divider
+                lines.append(f'  tl.fromTo(\'{_spc_ll_sel}\', {{ opacity: 0, scale: 0.88 }}, {{ opacity: 1, scale: 1, duration: 0.260, ease: _eIn }}, {start + 0.530:.4f});')
+                lines.append(f'  tl.fromTo(\'{_spc_rl_sel}\', {{ opacity: 0, scale: 0.88 }}, {{ opacity: 1, scale: 1, duration: 0.260, ease: _eIn }}, {start + 0.580:.4f});')
             else:
                 if is_cinema:
                     lines.append(

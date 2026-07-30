@@ -500,8 +500,10 @@ OUTPUT: a JSON array of card objects. Each card:
     "title": "<main text>",
     "accent_word": "<optional: one word/phrase from title to emphasize via highlight swipe>",
     "detail": "<optional supporting text>",
-    "number": "<if a stat/number is featured>",
-    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"data_chart"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking"|"hand_written_note"|"speech_bubble_thought"|"calendar_date_highlight"|"percentage_split"|"red_flag_list"|"success_metric_badge"|"client_avatar_persona"|"book_recommendation"|"tool_stack"|"revenue_breakdown"|"age_milestone"|"contrarian_take"|"action_step_cta"|"story_chapter_transition"|"live_reaction_split"|"hidden_cost_reveal"|"social_proof_counter"|"timeline_prediction"|"red_thread_connector"|"silent_beat_pause"|"comment_reply_style"|"before_you_scroll"|"traffic_light_status"|"day_in_life_schedule"|"skill_tree_unlock"|"audience_poll_result"|"broken_promise_tracker"|"ingredient_list"|"resource_allocation"|"fill_in_the_blank"|"streak_counter"|"before_now_later"|"platform_stats"|"cost_comparison"|"decision_matrix"|"habit_tracker"|"income_vs_expense"|"milestone_recap"|"content_calendar"|"client_result_number"|"mistake_lesson"|"tool_comparison"|"weekly_review"|"audience_question",
+    "number": "<if a stat/number is featured — for prim_stat_counter use numeric string only, e.g. '46.2' not '46,2 M€'>",
+    "prefix": "<prim_stat_counter only — currency/unit BEFORE the number, e.g. '$'. Convention FR: laisser vide, mettre la devise dans suffix>",
+    "suffix": "<prim_stat_counter only — unit AFTER the number, e.g. 'M€', 'K', '%'. Convention FR: suffix='€' ou 'M€', prefix vide>",
+    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"data_chart"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking"|"hand_written_note"|"speech_bubble_thought"|"calendar_date_highlight"|"percentage_split"|"red_flag_list"|"success_metric_badge"|"client_avatar_persona"|"book_recommendation"|"tool_stack"|"revenue_breakdown"|"age_milestone"|"contrarian_take"|"action_step_cta"|"story_chapter_transition"|"live_reaction_split"|"hidden_cost_reveal"|"social_proof_counter"|"timeline_prediction"|"red_thread_connector"|"silent_beat_pause"|"comment_reply_style"|"before_you_scroll"|"traffic_light_status"|"day_in_life_schedule"|"skill_tree_unlock"|"audience_poll_result"|"broken_promise_tracker"|"ingredient_list"|"resource_allocation"|"fill_in_the_blank"|"streak_counter"|"before_now_later"|"platform_stats"|"cost_comparison"|"decision_matrix"|"habit_tracker"|"income_vs_expense"|"milestone_recap"|"content_calendar"|"client_result_number"|"mistake_lesson"|"tool_comparison"|"weekly_review"|"audience_question"|"prim_stat_counter",
     "left_label": "<comparison: left side label>",
     "left_value": "<comparison: left side value>",
     "right_label": "<comparison: right side label>",
@@ -677,6 +679,26 @@ RULES:
     method A vs method B). Exactly 2 sides required. NOT for the same
     thing before vs after a change (use before_after_image for that).
   "stat" — a specific number or metric is featured.
+  "prim_stat_counter" — animated count-up card for a single highlighted
+    metric. Use when the speaker states ONE precise number that deserves
+    its own visual impact (revenue, growth %, subscriber count).
+    NUMBER FORMATTING RULES (strict — no exceptions):
+    • Always split the magnitude into number + suffix. NEVER put the unit
+      inside number. Always use decimal point "." not comma.
+    • Millions   → suffix "M"  : "1 million" → number="1", suffix="M"
+                                  "46,2 millions d'euros" → number="46.2", suffix="M€"
+    • Thousands  → suffix "K"  : "500 000" or "500 000 euros" → number="500", suffix="K€"
+                                  Always abbreviate to K when ≥ 100 000; never leave raw 6-digit number.
+    • Milliards  → suffix "Md" : "2,3 milliards" → number="2.3", suffix="Md"
+                                  "2,3 milliards d'euros" → number="2.3", suffix="Md€"
+    • Percentages → suffix "%" : "87 %" → number="87", suffix="%"
+    • Dollars (before number) → prefix="$", suffix="" or suffix="M"/"K"
+    • Convention FR: currency symbol always in suffix, prefix always empty for euros.
+    Fields: "number" (mandatory, numeric string), "title" (mandatory, kicker label),
+    "suffix" (recommended), "prefix" (optional, USD only).
+    Zone: upper-right. Duration: 1.2–1.8 s.
+    Do NOT use for percentages inside a comparative sentence (use "stat" or "comparison")
+    or for lists of numbers.
   "key_phrase" — a single impactful statement (not enumerated).
   "quote" — unattributed statement the speaker emphasizes.
   "attributed_quote" — quote with a named source ("X said...").
@@ -1741,6 +1763,40 @@ def generate_storyboard(
         )
     else:
         print("[DEAD-ZONE] No card gaps > 12s — full coverage OK", flush=True)
+
+    # ── Full-cover exclusion pass ─────────────────────────────────────────────
+    # Drop card_overlay cards that overlap a full_cover window. full_cover cards
+    # consume the entire canvas; any overlay card behind them is invisible and
+    # would waste GSAP budget.
+    _fc_windows = [
+        (c["startSec"], c["endSec"])
+        for c in graphic_cards
+        if c.get("_family") == "full_cover"
+    ]
+    if _fc_windows:
+        _fc_kept, _fc_dropped = [], []
+        for _c in graphic_cards:
+            if _c.get("_family") == "full_cover":
+                _fc_kept.append(_c)
+            elif any(_c["startSec"] < _we and _c["endSec"] > _ws for _ws, _we in _fc_windows):
+                _fc_dropped.append(_c)
+            else:
+                _fc_kept.append(_c)
+        graphic_cards = _fc_kept
+        if _fc_dropped:
+            print(
+                f"[FULL-COVER] Dropped {len(_fc_dropped)} overlapping card_overlay card(s): "
+                f"{[_c['id'] for _c in _fc_dropped]}",
+                flush=True,
+            )
+        # Assertion: no card_overlay must overlap a full_cover window after the pass.
+        for _c in graphic_cards:
+            if _c.get("_family") != "full_cover":
+                for _ws, _we in _fc_windows:
+                    assert not (_c["startSec"] < _we and _c["endSec"] > _ws), (
+                        f"[FULL-COVER] Overlap remains after exclusion pass: "
+                        f"{_c['id']} [{_c['startSec']}, {_c['endSec']}] overlaps [{_ws}, {_we}]"
+                    )
 
     storyboard = {
         "composition": {
