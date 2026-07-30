@@ -629,6 +629,17 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         text_align      = "center"
         panel_align     = "center"
         max_width_eff   = "85%"
+        # Adaptive title size — prevent vertical overflow for long texts.
+        # At 64px/~10 chars per line in a portrait zone (text area ≈ 356px),
+        # texts > 35 chars wrap to 4+ lines and risk exceeding the card height.
+        if title and not number:
+            _tc = len(title)
+            if _tc > 55:
+                title_size_eff = "32px"
+            elif _tc > 35:
+                title_size_eff = "38px"
+            elif _tc > 20:
+                title_size_eff = "56px"
 
     display_text = number if number else title
     title_size   = number_size_eff if number else title_size_eff
