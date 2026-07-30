@@ -503,11 +503,16 @@ OUTPUT: a JSON array of card objects. Each card:
     "number": "<if a stat/number is featured — for prim_stat_counter use numeric string only, e.g. '46.2' not '46,2 M€'>",
     "prefix": "<prim_stat_counter only — currency/unit BEFORE the number, e.g. '$'. Convention FR: laisser vide, mettre la devise dans suffix>",
     "suffix": "<prim_stat_counter only — unit AFTER the number, e.g. 'M€', 'K', '%'. Convention FR: suffix='€' ou 'M€', prefix vide>",
-    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"data_chart"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking"|"hand_written_note"|"speech_bubble_thought"|"calendar_date_highlight"|"percentage_split"|"red_flag_list"|"success_metric_badge"|"client_avatar_persona"|"book_recommendation"|"tool_stack"|"revenue_breakdown"|"age_milestone"|"contrarian_take"|"action_step_cta"|"story_chapter_transition"|"live_reaction_split"|"hidden_cost_reveal"|"social_proof_counter"|"timeline_prediction"|"red_thread_connector"|"silent_beat_pause"|"comment_reply_style"|"before_you_scroll"|"traffic_light_status"|"day_in_life_schedule"|"skill_tree_unlock"|"audience_poll_result"|"broken_promise_tracker"|"ingredient_list"|"resource_allocation"|"fill_in_the_blank"|"streak_counter"|"before_now_later"|"platform_stats"|"cost_comparison"|"decision_matrix"|"habit_tracker"|"income_vs_expense"|"milestone_recap"|"content_calendar"|"client_result_number"|"mistake_lesson"|"tool_comparison"|"weekly_review"|"audience_question"|"prim_stat_counter",
-    "left_label": "<comparison: left side label>",
-    "left_value": "<comparison: left side value>",
-    "right_label": "<comparison: right side label>",
-    "right_value": "<comparison: right side value>",
+    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"data_chart"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking"|"hand_written_note"|"speech_bubble_thought"|"calendar_date_highlight"|"percentage_split"|"red_flag_list"|"success_metric_badge"|"client_avatar_persona"|"book_recommendation"|"tool_stack"|"revenue_breakdown"|"age_milestone"|"contrarian_take"|"action_step_cta"|"story_chapter_transition"|"live_reaction_split"|"hidden_cost_reveal"|"social_proof_counter"|"timeline_prediction"|"red_thread_connector"|"silent_beat_pause"|"comment_reply_style"|"before_you_scroll"|"traffic_light_status"|"day_in_life_schedule"|"skill_tree_unlock"|"audience_poll_result"|"broken_promise_tracker"|"ingredient_list"|"resource_allocation"|"fill_in_the_blank"|"streak_counter"|"before_now_later"|"platform_stats"|"cost_comparison"|"decision_matrix"|"habit_tracker"|"income_vs_expense"|"milestone_recap"|"content_calendar"|"client_result_number"|"mistake_lesson"|"tool_comparison"|"weekly_review"|"audience_question"|"prim_stat_counter"|"prim_split_compare"|"prim_journey_map",
+    "left_label": "<comparison / prim_split_compare: left side label>",
+    "left_value": "<comparison: left side value (prim_split_compare does not use this)>",
+    "right_label": "<comparison / prim_split_compare: right side label>",
+    "right_value": "<comparison: right side value (prim_split_compare does not use this)>",
+    "from_city": "<prim_journey_map REQUIRED — departure city name, e.g. 'Paris'>",
+    "to_city": "<prim_journey_map REQUIRED — arrival city name, e.g. 'Bangkok'>",
+    "from_country": "<prim_journey_map optional — departure country, e.g. 'France'>",
+    "to_country": "<prim_journey_map optional — arrival country, e.g. 'Thaïlande'>",
+    "distance_km": "<prim_journey_map optional — numeric distance string, e.g. '9560'>",
     "items": ["<list/checklist: item 1>", "<list/checklist: item 2>", ...],
     "steps": ["<timeline: step 1>", "<timeline: step 2>", ...],
     "slides": ["<carousel: slide 1>", "<carousel: slide 2>", ...],
@@ -678,6 +683,10 @@ RULES:
   "comparison" — speaker contrasts two distinct things (old/new, us/them,
     method A vs method B). Exactly 2 sides required. NOT for the same
     thing before vs after a change (use before_after_image for that).
+    ABSOLUTE EXCLUSION: NEVER use when the two sides are GEOGRAPHIC LOCATIONS
+    (cities, countries, regions) connected by travel or relocation. That is
+    prim_journey_map. Example wrong: "AVANT: Paris / APRÈS: Thaïlande" on a
+    relocation story → use prim_journey_map instead.
   "stat" — a specific number or metric is featured.
   "prim_stat_counter" — animated count-up card for a single highlighted
     metric. Use when the speaker states ONE precise number that deserves
@@ -699,6 +708,31 @@ RULES:
     Zone: upper-right. Duration: 1.2–1.8 s.
     Do NOT use for percentages inside a comparative sentence (use "stat" or "comparison")
     or for lists of numbers.
+  "prim_split_compare" — fullscreen animated split card: two panels slide from opposite
+    edges to a central divider. STRICT TRIGGER — use ONLY for CONCEPTUAL oppositions:
+    rich vs poor, before vs after a non-geographic state change (mindset, status, method),
+    X vs Y qualitative contrast. ABSOLUTE EXCLUSION: NEVER use when the speaker mentions
+    TWO GEOGRAPHIC LOCATIONS connected by travel or relocation — that is prim_journey_map.
+    Test: if you could replace the two labels with two CITIES and the sentence would still
+    make sense as a trip → it is prim_journey_map, not prim_split_compare.
+    Provide "left_label" (e.g. "AVANT") and "right_label" (e.g. "APRÈS"). No left_value/right_value.
+    Optional "title" for a kicker above the card. Full-cover (fullscreen), duration 2.0–2.5s.
+  "prim_journey_map" — fullscreen flight-tracker card. Bezier arc animates from departure to
+    arrival city; trail draws progressively with glow; plane chevron follows with auto-rotation.
+    TRIGGER PATTERN (ALL of these must be present):
+      1. Movement verb — partir, s'envoler, décoller, atterrir, déménager, s'installer,
+         voyager, traverser, rallier, rejoindre, quitter [destination], fly, travel, move, relocate
+      2. TWO identifiable geographic places (cities, countries, regions)
+      3. Directionality — the speaker goes FROM one TO the other
+    PRIORITY RULE: prim_journey_map WINS over comparison, prim_split_compare, and
+    location_journey whenever a movement verb + two geographic places are present.
+    Even if the sentence also implies a life before/after contrast ("ça a tout changé"),
+    the geographic-movement pattern takes absolute priority.
+    WRONG: Paris + Thaïlande as "AVANT/APRÈS" labels → this is prim_journey_map, not prim_split_compare.
+    RIGHT: "j'ai tout quitté pour aller m'installer en Thaïlande depuis Paris" → prim_journey_map.
+    Provide "from_city" (REQUIRED), "to_city" (REQUIRED).
+    Optional: "from_country", "to_country", "distance_km".
+    Full-cover (fullscreen overlay), duration 3.5–6.0s.
   "key_phrase" — a single impactful statement (not enumerated).
   "quote" — unattributed statement the speaker emphasizes.
   "attributed_quote" — quote with a named source ("X said...").
