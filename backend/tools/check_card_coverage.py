@@ -38,13 +38,12 @@ _CATALOGUE_REQUIRED: frozenset[str] = frozenset({
     "prim_numbered_rule",
     "prim_anecdote_frame",
     "prim_split_compare",
+    "prim_journey_map",
 })
 
 # Prototype primitives: must have HTML+GSAP handlers but do NOT block CI.
 # Graduate to _CATALOGUE_REQUIRED after stable multi-run snapshot.
-_CATALOGUE_PROTOTYPE: frozenset[str] = frozenset({
-    "prim_journey_map_TEST",
-})
+_CATALOGUE_PROTOTYPE: frozenset[str] = frozenset()
 
 
 def _extract_styles(block: str) -> set[str]:

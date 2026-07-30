@@ -72,4 +72,24 @@ PRIMITIVES: dict[str, dict] = {
             "#backdrop-dim animated to solid black."
         ),
     },
+    "prim_journey_map": {
+        "_family": "full_cover",
+        "_pack": "lean_glass",
+        "zone": "fullscreen",
+        "duration_range_s": (3.5, 6.0),
+        "cover_type": "overlay",
+        "contentHints": {
+            "from_city":    "REQUIRED — departure city name, e.g. 'Paris'",
+            "to_city":      "REQUIRED — arrival city name, e.g. 'Bangkok'",
+            "from_country": "optional — departure country, e.g. 'France'",
+            "to_country":   "optional — arrival country, e.g. 'Thaïlande'",
+            "distance_km":  "optional — numeric distance string, e.g. '9560'",
+        },
+        "description": (
+            "Flight-tracker card. Bezier arc animates from departure to arrival. "
+            "Trail draws progressively with glow effect; plane chevron follows the arc "
+            "with auto-rotation from bezier tangent. City labels and dots reveal on "
+            "departure then arrival. Dark overlay (95% opacity) on video."
+        ),
+    },
 }
