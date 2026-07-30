@@ -1937,6 +1937,31 @@ def _ffmpeg_cut(src: Path, dst: Path, start_sec: float, end_sec: float) -> None:
         )
 
 
+def _declick_segment_boundaries(
+    src: Path, dst: Path,
+    boundary_times: list[float],
+    fade_ms: int = 20,
+) -> None:
+    """Symmetric micro-fades at HF segment boundaries to suppress audio clicks.
+    Video stream-copied; only audio re-encoded (AAC 192k).
+    """
+    d = fade_ms / 1000.0
+    filters = []
+    for t in boundary_times:
+        t_out = max(0.0, t - d)
+        filters.append(f"afade=t=out:st={t_out:.4f}:d={d}")
+        filters.append(f"afade=t=in:st={t:.4f}:d={d}")
+    af = ",".join(filters)
+    _run([
+        FFMPEG_PATH, "-y", "-loglevel", "error",
+        "-i", str(src),
+        "-c:v", "copy",
+        "-c:a", "aac", "-b:a", "192k",
+        "-af", af,
+        str(dst),
+    ])
+
+
 def _render_hyperframes(
     src: Path,
     transcript: dict[str, Any],
@@ -2526,6 +2551,19 @@ def _render_hyperframes(
                 f"{_concat_result.stderr.decode(errors='replace')[-300:].strip()}"
             )
         print(f"[HF-SEG] Concat done → {output_path}", flush=True)
+
+        # Suppress audio clicks at forced segment boundaries with symmetric 20ms micro-fades.
+        _boundary_ts = _seg_boundaries[1:-1]
+        if _boundary_ts:
+            _declicked = output_path.parent / (output_path.stem + "_declicked.mp4")
+            print(
+                f"[HF-SEG] Declicking audio at {len(_boundary_ts)} segment"
+                f" boundaries: {[round(t, 2) for t in _boundary_ts]}",
+                flush=True,
+            )
+            _declick_segment_boundaries(output_path, _declicked, _boundary_ts)
+            _shutil.move(str(_declicked), str(output_path))
+            print("[HF-SEG] Audio declick done.", flush=True)
 
     else:
         # ── SINGLE RUN (short video, ≤ _SEG_MAX_FRAMES frames) ─────────────
