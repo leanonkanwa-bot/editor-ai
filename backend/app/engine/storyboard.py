@@ -699,10 +699,28 @@ RULES:
     (cities, countries, regions) connected by travel or relocation. That is
     prim_journey_map. Example wrong: "AVANT: Paris / APRÈS: Thaïlande" on a
     relocation story → use prim_journey_map instead.
-  "stat" — a specific number or metric is featured.
-  "prim_stat_counter" — animated count-up card for a single highlighted
-    metric. Use when the speaker states ONE precise number that deserves
-    its own visual impact (revenue, growth %, subscriber count).
+  "stat" — a specific number or metric cited as EVIDENCE, CONTEXT, or
+    SUPPORTING DATA that illustrates a point (e.g. "le taux d'abandon est à
+    72%", "93% du contenu viral contient un visage", "en moyenne 4x plus
+    de portée"). The number backs up an argument; it is not the headline.
+    NOT prim_stat_counter: when the number is the speaker's OWN result or
+    achievement AND a structural reveal signal is present → use prim_stat_counter.
+  "prim_stat_counter" — animated count-up card. Use when BOTH conditions hold:
+    CONDITION 1 — PERSONAL METRIC: the number is the speaker's OWN result,
+      achievement, or metric (not a general/cited statistic from an external source).
+    CONDITION 2 — STRUCTURAL REVEAL SIGNAL (at least one must be present):
+      a. BREAK before the number: ellipsis, dramatic colon, or suspense phrasing
+         immediately before the number ("Le mois de novembre... 43 000 euros",
+         "le résultat : 8,7%", "et là, 46 millions").
+      b. ANNOUNCEMENT VERB: "vient d'atteindre", "a franchi", "a fait", "a généré",
+         "je vais te dire exactement ce que j'ai gagné".
+      c. DRAMATIC QUALIFIER after the number: a clause that amplifies the scale or
+         impact immediately after the number ("— le meilleur résultat depuis le
+         lancement", "en un seul mois", "en 30 jours seulement", "je n'en revenais
+         pas").
+      d. DRAMATIC REPETITION: the number is echoed or spelled out ("je répète :
+         cinq cent mille euros").
+    If neither condition 2a/b/c/d is present → use stat instead.
     NUMBER FORMATTING RULES (strict — no exceptions):
     • Always split the magnitude into number + suffix. NEVER put the unit
       inside number. Always use decimal point "." not comma.

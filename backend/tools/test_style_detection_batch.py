@@ -237,7 +237,7 @@ TEST_CASES: list[tuple[str, str]] = [
     ("objection_response", "Je t'entends — c'est trop cher. Mais dis-moi, combien te coûte de ne rien faire ?"),
 
     # ── data_bar_chart ────────────────────────────────────────────────────────
-    ("data_bar_chart", "Les chiffres par plateforme : Instagram 12 000 euros, YouTube 8 500 euros, LinkedIn 6 200 euros."),
+    ("data_bar_chart", "Résultats par produit : formation 50 000 euros, coaching 20 000 euros, affiliation 10 000 euros."),
     ("data_bar_chart", "Conversions comparées : email à 3,2%, SMS à 6,7%, notification push à 1,4%."),
 
     # ── cause_effect ──────────────────────────────────────────────────────────
