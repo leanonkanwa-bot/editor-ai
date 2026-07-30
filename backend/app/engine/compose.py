@@ -2592,6 +2592,48 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         if p.get("accent_line_glow"):
             parts.append(f'  box-shadow:{p["accent_line_glow"]};')
         parts.append('}')
+    elif content_style == "prim_journey_map_TEST":
+        # ── prim_journey_map_TEST — flight-tracker overlay (prototype) ──────────
+        parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
+        parts.append('  background:rgba(8,16,30,0.95); padding:0; overflow:hidden;')
+        parts.append('  display:flex; flex-direction:column;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .jmt-header {{')
+        parts.append('  padding:16px 14px 8px; display:flex; flex-direction:column;')
+        parts.append('  align-items:center; gap:3px; opacity:0; flex-shrink:0;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .jmt-route {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:20px; font-weight:800;')
+        parts.append(f'  color:{p["text"]}; letter-spacing:.03em;')
+        parts.append('  display:flex; align-items:center; gap:9px;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .jmt-arrow {{ color:{p["accent"]}; font-size:16px; }}')
+        parts.append(f'.card[data-card-id="{card_id}"] .jmt-sub {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:9px; font-weight:500;')
+        parts.append('  color:rgba(255,255,255,0.38); letter-spacing:.08em; text-transform:uppercase;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .jmt-sep {{')
+        parts.append(f'  height:1px; background:{p["accent"]}18; margin:0 12px; flex-shrink:0;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .jmt-map {{')
+        parts.append('  flex:1; position:relative; overflow:hidden; min-height:0;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .jmt-map svg {{')
+        parts.append('  position:absolute; inset:0; width:100%; height:100%;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .jmt-footer {{')
+        parts.append('  padding:7px 14px 13px; display:flex; justify-content:space-between;')
+        parts.append('  align-items:flex-end; opacity:0; flex-shrink:0;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .jmt-city {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:11px; font-weight:700; color:{p["text"]};')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .jmt-ctry {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:8px; font-weight:500;')
+        parts.append('  color:rgba(255,255,255,0.35); text-transform:uppercase; letter-spacing:.05em;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .accent-line {{ display:none; }}')
+        parts.append(f'.card[data-card-id="{card_id}"] .shimmer-mask {{ display:none; }}')
     parts.append('</style>')
     # Timeline: full-screen overlay, no card-panel wrapper
     if content_style == "timeline":
@@ -3743,6 +3785,77 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'      <div class="spc-label" id="{card_id}-spc-label-r">{_spc_r}</div>')
         parts.append(f'    </div>')
         parts.append(f'    <div class="spc-divider" id="{card_id}-spc-divider"></div>')
+    elif content_style == "prim_journey_map_TEST":
+        # ── prim_journey_map_TEST — hardcoded France→Thailand prototype ──────────
+        _jmt_from = _esc(hints.get("from_city", "Paris"))
+        _jmt_to   = _esc(hints.get("to_city", "Bangkok"))
+        _jmt_fc   = _esc(hints.get("from_country", "France"))
+        _jmt_tc   = _esc(hints.get("to_country", "Thaïlande"))
+        parts.append(f'  <div class="jmt-header" id="{card_id}-jmt-header">')
+        parts.append(f'    <div class="jmt-route"><span>{_jmt_from}</span><span class="jmt-arrow">&#x203A;</span><span>{_jmt_to}</span></div>')
+        parts.append(f'    <div class="jmt-sub">vol direct</div>')
+        parts.append(f'  </div>')
+        parts.append(f'  <div class="jmt-sep"></div>')
+        parts.append(f'  <div class="jmt-map">')
+        parts.append(f'    <svg id="{card_id}-jmt-svg" viewBox="0 0 400 260" xmlns="http://www.w3.org/2000/svg">')
+        parts.append(f'      <defs>')
+        parts.append(f'        <radialGradient id="{card_id}-jmt-gd" cx="50%" cy="50%" r="50%">')
+        parts.append(f'          <stop offset="0%" stop-color="{p["accent"]}" stop-opacity=".9"/>')
+        parts.append(f'          <stop offset="100%" stop-color="{p["accent"]}" stop-opacity="0"/>')
+        parts.append(f'        </radialGradient>')
+        parts.append(f'      </defs>')
+        parts.append(f'      <rect width="400" height="260" fill="#0a1525"/>')
+        # Subtle grid
+        for _gy in [65, 130, 195]:
+            parts.append(f'      <line x1="0" y1="{_gy}" x2="400" y2="{_gy}" stroke="rgba(76,201,240,.04)" stroke-width="1"/>')
+        for _gx in [100, 200, 300]:
+            parts.append(f'      <line x1="{_gx}" y1="0" x2="{_gx}" y2="260" stroke="rgba(76,201,240,.04)" stroke-width="1"/>')
+        # Simplified landmasses (hardcoded for prototype — Europe/Africa/Asia corridor)
+        parts.append('      <path d="M 30,20 L 55,15 L 80,25 L 92,38 L 86,52 L 75,62 L 58,68 L 44,65 L 28,55 L 20,40 Z" fill="#1a2e1a" stroke="#2a4a2a" stroke-width="0.5"/>')
+        parts.append('      <path d="M 42,38 L 48,32 L 52,36 L 48,46 L 42,44 Z" fill="#1a2e1a" stroke="#2a4a2a" stroke-width="0.5"/>')
+        parts.append('      <path d="M 68,8 L 78,5 L 90,10 L 88,28 L 80,35 L 70,28 Z" fill="#1a2e1a" stroke="#2a4a2a" stroke-width="0.5"/>')
+        parts.append('      <path d="M 86,52 L 130,45 L 155,50 L 162,68 L 148,80 L 120,78 L 92,72 L 80,62 Z" fill="#1a2e1a" stroke="#2a4a2a" stroke-width="0.5"/>')
+        parts.append('      <path d="M 140,8 L 320,0 L 380,18 L 400,30 L 400,65 L 360,70 L 330,80 L 290,78 L 260,70 L 220,75 L 188,82 L 162,68 L 155,50 L 140,40 Z" fill="#162416" stroke="#26402a" stroke-width="0.5"/>')
+        parts.append('      <path d="M 145,85 L 172,78 L 196,80 L 205,92 L 188,102 L 168,100 L 148,95 Z" fill="#1a2e1a" stroke="#2a4a2a" stroke-width="0.5"/>')
+        parts.append('      <path d="M 28,80 L 80,74 L 115,76 L 140,85 L 148,95 L 138,108 L 100,115 L 60,120 L 28,115 L 15,100 Z" fill="#1e2a14" stroke="#303c20" stroke-width="0.5"/>')
+        parts.append('      <path d="M 55,120 L 130,118 L 152,138 L 148,175 L 120,200 L 88,205 L 58,190 L 35,165 L 35,138 Z" fill="#1e2a14" stroke="#303c20" stroke-width="0.5"/>')
+        parts.append('      <path d="M 155,95 L 195,88 L 218,95 L 222,115 L 210,130 L 195,140 L 170,132 L 155,118 Z" fill="#1e2814" stroke="#30401e" stroke-width="0.5"/>')
+        parts.append('      <path d="M 200,78 L 245,72 L 268,78 L 272,95 L 258,110 L 232,115 L 210,110 L 200,95 Z" fill="#1e2814" stroke="#30401e" stroke-width="0.5"/>')
+        parts.append('      <path d="M 265,88 L 295,82 L 310,90 L 308,115 L 295,140 L 278,155 L 262,148 L 250,130 L 252,105 Z" fill="#1e2814" stroke="#30401e" stroke-width="0.5"/>')
+        parts.append('      <path d="M 268,25 L 355,18 L 390,28 L 400,45 L 395,68 L 368,78 L 340,80 L 310,80 L 285,78 L 272,68 L 272,45 Z" fill="#162416" stroke="#26402a" stroke-width="0.5"/>')
+        parts.append('      <path d="M 315,90 L 345,82 L 365,88 L 370,110 L 358,130 L 342,140 L 324,138 L 310,120 L 308,100 Z" fill="#1e2814" stroke="#30401e" stroke-width="0.5"/>')
+        parts.append('      <path d="M 330,142 L 340,140 L 345,158 L 338,172 L 328,168 L 325,155 Z" fill="#1e2814" stroke="#30401e" stroke-width="0.5"/>')
+        parts.append('      <path d="M 375,45 L 388,38 L 398,42 L 395,58 L 382,60 Z" fill="#1a2e1a" stroke="#2a4a2a" stroke-width="0.5"/>')
+        parts.append('      <path d="M 358,58 L 368,55 L 374,62 L 368,72 L 358,70 Z" fill="#1a2e1a" stroke="#2a4a2a" stroke-width="0.5"/>')
+        # Arc background (dashed, always visible)
+        parts.append(f'      <path d="M 71,79 C 140,28 215,40 289,152" fill="none" stroke="{p["accent"]}22" stroke-width="1.5" stroke-dasharray="5 4"/>')
+        # Trail — dasharray=265 dashoffset=265 → fully hidden initially; GSAP reduces dashoffset to 0
+        parts.append(f'      <path id="{card_id}-jmt-trail" d="M 71,79 C 140,28 215,40 289,152" fill="none" stroke="{p["accent"]}" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="265" stroke-dashoffset="265"/>')
+        # Departure dot (Paris — hardcoded at 71,79 in 400×260 map viewBox)
+        parts.append(f'      <circle id="{card_id}-jmt-df" cx="71" cy="79" r="4.5" fill="none" stroke="{p["accent"]}" stroke-width="1.5" opacity="0"/>')
+        parts.append(f'      <circle id="{card_id}-jmt-dfi" cx="71" cy="79" r="2" fill="{p["accent"]}" opacity="0"/>')
+        parts.append(f'      <circle id="{card_id}-jmt-gf" cx="71" cy="79" r="10" fill="url(#{card_id}-jmt-gd)" opacity="0"/>')
+        # Arrival dot (Bangkok — hardcoded at 289,152)
+        parts.append(f'      <circle id="{card_id}-jmt-dt" cx="289" cy="152" r="4.5" fill="none" stroke="{p["accent"]}" stroke-width="1.5" opacity="0"/>')
+        parts.append(f'      <circle id="{card_id}-jmt-dti" cx="289" cy="152" r="2" fill="{p["accent"]}" opacity="0"/>')
+        parts.append(f'      <circle id="{card_id}-jmt-gt" cx="289" cy="152" r="10" fill="url(#{card_id}-jmt-gd)" opacity="0"/>')
+        # City labels
+        parts.append(f'      <text id="{card_id}-jmt-lf" x="78" y="76" font-family="system-ui,sans-serif" font-size="10" font-weight="700" fill="{p["text"]}" opacity="0">{_jmt_from}</text>')
+        parts.append(f'      <text id="{card_id}-jmt-sf" x="78" y="87" font-family="system-ui,sans-serif" font-size="7.5" font-weight="400" fill="{p["text"]}99" opacity="0">{_jmt_fc}</text>')
+        parts.append(f'      <text id="{card_id}-jmt-lt" x="294" y="150" font-family="system-ui,sans-serif" font-size="10" font-weight="700" fill="{p["text"]}" opacity="0">{_jmt_to}</text>')
+        parts.append(f'      <text id="{card_id}-jmt-st" x="294" y="161" font-family="system-ui,sans-serif" font-size="7.5" font-weight="400" fill="{p["text"]}99" opacity="0">{_jmt_tc}</text>')
+        # Plane (polygon chevron, GSAP will move via transform attribute)
+        parts.append(f'      <g id="{card_id}-jmt-plane" transform="translate(71,79) rotate(-45)">')
+        parts.append(f'        <polygon points="0,-6 4.5,5 0,2.5 -4.5,5" fill="{p["accent"]}"/>')
+        parts.append(f'        <polygon points="-7,0 7,0 4.5,5 0,2.5 -4.5,5" fill="{p["accent"]}7a"/>')
+        parts.append(f'      </g>')
+        parts.append('    </svg>')
+        parts.append('  </div>')
+        parts.append('  <div class="jmt-sep"></div>')
+        parts.append(f'  <div class="jmt-footer" id="{card_id}-jmt-footer">')
+        parts.append(f'    <div><div class="jmt-city">{_jmt_from}</div><div class="jmt-ctry">{_jmt_fc}</div></div>')
+        parts.append(f'    <div style="text-align:right"><div class="jmt-city">{_jmt_to}</div><div class="jmt-ctry">{_jmt_tc}</div></div>')
+        parts.append(f'  </div>')
     else:
         # key_phrase, quote and any unknown style
         parts.append(f'    <div class="title" id="{card_id}-title">{_split_title_accent(display_text, accent_word_hint, card_id)}</div>')
@@ -6733,6 +6846,46 @@ def _build_timeline_js(
                 # Labels fade in after divider
                 lines.append(f'  tl.fromTo(\'{_spc_ll_sel}\', {{ opacity: 0, scale: 0.88 }}, {{ opacity: 1, scale: 1, duration: 0.260, ease: _eIn }}, {start + 0.530:.4f});')
                 lines.append(f'  tl.fromTo(\'{_spc_rl_sel}\', {{ opacity: 0, scale: 0.88 }}, {{ opacity: 1, scale: 1, duration: 0.260, ease: _eIn }}, {start + 0.580:.4f});')
+            elif content_style == "prim_journey_map_TEST":
+                # ── prim_journey_map_TEST GSAP — bezier flight, pure JS onUpdate ──────
+                _jmt_hd_sel  = f'.card[data-card-id="{card_id}"] #{card_id}-jmt-header'
+                _jmt_ft_sel  = f'.card[data-card-id="{card_id}"] #{card_id}-jmt-footer'
+                _jmt_pid     = f'{card_id}-jmt-plane'
+                _jmt_tid     = f'{card_id}-jmt-trail'
+                _jmt_flight  = max(2.2, min(dur * 0.80, 5.0))
+                _t_hd        = start
+                _t_dot       = start + 0.25
+                _t_fly       = start + 0.50
+                _t_arrive    = _t_fly + _jmt_flight
+                # Header fade in
+                lines.append(f'  tl.fromTo(\'{_jmt_hd_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.350, ease: "power2.out" }}, {_t_hd:.4f});')
+                # Departure dot
+                for _sel in (f'#{card_id}-jmt-df', f'#{card_id}-jmt-dfi'):
+                    lines.append(f'  tl.fromTo(\'{_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.250, ease: "power2.out" }}, {_t_dot:.4f});')
+                lines.append(f'  tl.fromTo(\'#{card_id}-jmt-gf\', {{ opacity: 0 }}, {{ opacity: 0.55, duration: 0.350, ease: "power2.out" }}, {_t_dot:.4f});')
+                lines.append(f'  tl.fromTo(\'#{card_id}-jmt-lf\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.200, ease: "power2.out" }}, {_t_dot + 0.05:.4f});')
+                lines.append(f'  tl.fromTo(\'#{card_id}-jmt-sf\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.200, ease: "power2.out" }}, {_t_dot + 0.08:.4f});')
+                # Bezier flight + trail via onUpdate IIFE — no external plugins needed
+                lines.append('  (function() {')
+                lines.append('    var _t = { p: 0 };')
+                lines.append(f'    var _pid = "{_jmt_pid}", _tid = "{_jmt_tid}";')
+                lines.append('    function _bx(t) { var u=1-t; return u*u*u*71+3*u*u*t*140+3*u*t*t*215+t*t*t*289; }')
+                lines.append('    function _by(t) { var u=1-t; return u*u*u*79+3*u*u*t*28+3*u*t*t*40+t*t*t*152; }')
+                lines.append('    function _ag(t) { var t2=Math.min(1,t+.002); return Math.atan2(_by(t2)-_by(t),_bx(t2)-_bx(t))*180/Math.PI; }')
+                lines.append(f'    tl.to(_t, {{ p: 1, duration: {_jmt_flight:.3f}, ease: "power1.inOut", onUpdate: function() {{')
+                lines.append('      var tp=_t.p, px=_bx(tp).toFixed(2), py=_by(tp).toFixed(2), ag=(_ag(tp)+90).toFixed(1);')
+                lines.append('      var pl=document.getElementById(_pid); if(pl) pl.setAttribute("transform","translate("+px+","+py+") rotate("+ag+")");')
+                lines.append('      var tr=document.getElementById(_tid); if(tr) tr.style.strokeDashoffset=String(265*(1-tp));')
+                lines.append(f'    }}}}, {_t_fly:.4f});')
+                lines.append('  })();')
+                # Arrival dot
+                for _sel in (f'#{card_id}-jmt-dt', f'#{card_id}-jmt-dti'):
+                    lines.append(f'  tl.fromTo(\'{_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.250, ease: "power2.out" }}, {_t_arrive:.4f});')
+                lines.append(f'  tl.fromTo(\'#{card_id}-jmt-gt\', {{ opacity: 0 }}, {{ opacity: 0.55, duration: 0.350, ease: "power2.out" }}, {_t_arrive:.4f});')
+                lines.append(f'  tl.fromTo(\'#{card_id}-jmt-lt\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.200, ease: "power2.out" }}, {_t_arrive + 0.05:.4f});')
+                lines.append(f'  tl.fromTo(\'#{card_id}-jmt-st\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.200, ease: "power2.out" }}, {_t_arrive + 0.08:.4f});')
+                # Footer fade in after arrival
+                lines.append(f'  tl.fromTo(\'{_jmt_ft_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.350, ease: "power2.out" }}, {_t_arrive + 0.20:.4f});')
             else:
                 if is_cinema:
                     lines.append(

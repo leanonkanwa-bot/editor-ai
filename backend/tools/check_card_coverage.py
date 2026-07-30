@@ -40,6 +40,12 @@ _CATALOGUE_REQUIRED: frozenset[str] = frozenset({
     "prim_split_compare",
 })
 
+# Prototype primitives: must have HTML+GSAP handlers but do NOT block CI.
+# Graduate to _CATALOGUE_REQUIRED after stable multi-run snapshot.
+_CATALOGUE_PROTOTYPE: frozenset[str] = frozenset({
+    "prim_journey_map_TEST",
+})
+
 
 def _extract_styles(block: str) -> set[str]:
     """Extract all explicit content_style branch values from a source block."""
@@ -109,13 +115,21 @@ def main() -> int:
             print(f"  {e}")
         return 1
 
-    total = len(html_styles | gsap_styles | _CATALOGUE_REQUIRED)
+    # Rule 4 (warn only): prototype styles must have both handlers but don't block CI.
+    for s in sorted(_CATALOGUE_PROTOTYPE):
+        if s not in html_styles:
+            print(f"  WARN: prototype '{s}' missing HTML handler in _build_graphic_card_html()", file=sys.stderr)
+        if s not in gsap_styles:
+            print(f"  WARN: prototype '{s}' missing GSAP handler in _build_timeline_js()", file=sys.stderr)
+
+    total = len(html_styles | gsap_styles | _CATALOGUE_REQUIRED | _CATALOGUE_PROTOTYPE)
     print(
         f"OK — {total} styles verified:\n"
         f"  HTML explicit={len(html_styles)}, "
         f"GSAP={len(gsap_styles)}, "
         f"generic-fallthrough={len(_HTML_GENERIC_FALLTHROUGH)} (intentional), "
-        f"catalogue-required={len(_CATALOGUE_REQUIRED)} (all present)"
+        f"catalogue-required={len(_CATALOGUE_REQUIRED)} (all present), "
+        f"prototype={len(_CATALOGUE_PROTOTYPE)} (warn-only)"
     )
     return 0
 
