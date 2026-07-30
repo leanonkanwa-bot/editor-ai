@@ -674,12 +674,24 @@ RULES:
 - Vary accentIndex (0-4) across cards for visual rhythm
 - Content must come from what the speaker actually says
 - CONTENT STYLE RULES (follow strictly, do not improvise):
-  "list" — speaker names 3+ distinct items/reasons/steps/fears/goals
-    in sequence. ALWAYS use list for enumerated content, never collapse
-    multiple items into a single callout or quote card.
-  "timeline" — sequential/temporal progression (events along a path
-    with dates or temporal ordering). Use timeline, not list, when
-    items have a clear chronological sequence.
+  "list" — speaker names 3+ distinct items, reasons, examples, or ideas
+    as a PARALLEL SET meant to be read as a complete group. Use when items
+    are interchangeable in position and none depends on the prior.
+    NOT for sequential process steps that build on each other → use timeline.
+    NOT for required materials/prerequisites → use ingredient_list.
+    NOT for completed actions → use checklist.
+  "timeline" — speaker narrates a PROCESS FLOW or CHRONOLOGICAL SEQUENCE
+    where each step leads to or follows the next ("d'abord X, ensuite Y, puis Z"
+    OR "en 2020 X, en 2021 Y, en 2022 Z" as a continuous narrative arc).
+    PRIORITY over list whenever sequence/order is essential to meaning.
+    DISTINCTION FROM milestone_recap: timeline is a CONTINUOUS PROGRESSION
+    (process, journey, narrative arc); milestone_recap is a RETROSPECTIVE
+    listing of discrete past ACHIEVEMENTS anchored by year/date (speaker looks
+    back on isolated milestones). Rule: year-anchored past achievements → use
+    milestone_recap. Ordered steps / narrative flow → use timeline.
+    DISTINCTION FROM list: list items are parallel and interchangeable;
+    timeline items have strict before/after dependency (order cannot be reversed).
+    Provide "steps" array (2-6 items).
   "comparison" — speaker contrasts two distinct things (old/new, us/them,
     method A vs method B). Exactly 2 sides required. NOT for the same
     thing before vs after a change (use before_after_image for that).
@@ -733,11 +745,59 @@ RULES:
     Provide "from_city" (REQUIRED), "to_city" (REQUIRED).
     Optional: "from_country", "to_country", "distance_km".
     Full-cover (fullscreen overlay), duration 3.5–6.0s.
-  "key_phrase" — a single impactful statement (not enumerated).
-  "quote" — unattributed statement the speaker emphasizes.
+  "key_phrase" — a transferable PRINCIPLE or insight the speaker states as a
+    standalone truth with pedagogical intent (e.g. "la régularité bat le
+    talent", "vends la transformation pas le produit"). Speaker is sharing
+    a lesson meant to be adopted by the viewer. TRIGGER: reads as a principle
+    that could stand as a lesson title or inspirational poster caption.
+    Distinct from quote (quote is a personal declaration specific to the
+    speaker's experience; key_phrase is a universal principle).
+  "quote" — a memorable first-person DECLARATION or observation specific to
+    the speaker's personal experience or perspective — something lived, not
+    taught (e.g. "ce jour-là m'a changé pour toujours", "je n'aurais jamais
+    cru que c'était possible", "c'était la décision la plus difficile de
+    ma vie"). The speaker is recounting or asserting something personal, not
+    extracting a universal principle.
+    DISCRIMINATION TEST: "is this a transferable lesson anyone could adopt?" →
+    key_phrase. "is this a personal statement tied to the speaker's own story
+    or moment?" → quote.
+    NOT attributed_quote (attributed_quote has a named external source).
   "attributed_quote" — quote with a named source ("X said...").
-  "carousel" — 2-4 short related statements that cycle within one
-    card window (e.g. multiple quick tips, rotating perspectives).
+  "carousel" — 2-4 short, self-contained statements that CYCLE VISUALLY
+    within one card window as individual rotating slides — each item appears
+    alone on its own slide in sequence.
+    TRIGGER: numbered tips, quick insights, or related points each short enough
+    to fill one slide in isolation (e.g. "Conseil 1 : ... Conseil 2 : ...
+    Conseil 3 : ..."). Use carousel when each item naturally stands alone on
+    its own slide.
+    DISTINCTION FROM list: list renders all items simultaneously as a visible
+    stacked group; carousel displays items one at a time in rotation. If the
+    items are numbered quick tips → carousel. If they form a complete set meant
+    to be read all at once → list. Do NOT use for items with a causal chain or
+    chronological sequence → use timeline instead.
+    Provide "slides" array (2-4 items, each ≤ 12 words).
+  "instagram-follow" — speaker explicitly directs viewers to their Instagram
+    profile with a follow or join CTA. REQUIRES: the word "Instagram" AND a
+    follow/subscribe action ("suis-moi", "abonne-toi", "rejoins", "lien dans
+    la bio", "follow"). Distinct from action_step_cta (action_step_cta is a
+    generic imperative; instagram-follow is platform-branded). Provide "title"
+    (handle, e.g. "@moncompte") + optional "detail".
+  "tiktok-follow" — speaker explicitly directs viewers to their TikTok profile
+    with a follow CTA. REQUIRES: the word "TikTok" AND a follow action
+    ("abonne-toi sur TikTok", "follow moi sur TikTok"). Distinct from
+    action_step_cta and instagram-follow. Provide "title" (handle) + optional "detail".
+  "yt-lower-third" — speaker asks viewers to subscribe to their YouTube channel,
+    activate bell notifications, or like the video. TRIGGER: subscribe/cloche/
+    pouce-bleu directive in a YouTube video context — does NOT require the word
+    "YouTube" to be literally spoken if the context is clearly a YouTube channel.
+    Distinct from action_step_cta (that is a generic content CTA, not a
+    platform-branded subscribe widget). Provide "title" (channel handle or name).
+  "news_ticker" — speaker delivers an URGENT, breaking-news style announcement
+    or time-sensitive alert. TRIGGER: explicit urgency markers ("breaking",
+    "alerte", "dernière minute", "urgent", "c'est officiel", "flash") OR a
+    statement formatted like a broadcast headline. Distinct from callout
+    (callout is neutral context; news_ticker has explicit urgency/alert energy
+    and a ticker visual). Provide "title" (the headline or alert text).
   "definition" — speaker introduces a term/concept and explains it.
     Provide "term" + "definition" fields.
   "checklist" — completed/verified action items ("things I checked",
