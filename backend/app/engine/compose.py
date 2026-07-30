@@ -6757,10 +6757,11 @@ def _build_timeline_js(
                 lines.append(f'  tl.fromTo(\'{_psc_sfx_sel}\', {{ opacity: 0, y: -6 }}, {{ opacity: 1, y: 0, duration: 0.280, ease: _eIn }}, {t_in:.4f});')
                 if _psc_val is not None:
                     _psc_dec = 1 if '.' in str(_psc_val) else 0
+                    # Number span shows ONLY the number — suffix is in the separate .psc-side span
                     _psc_fmt = (
-                        f'o.v.toFixed(1)+\'{_psc_final_sfx}\''
+                        'o.v.toFixed(1)'
                         if _psc_dec else
-                        f'Math.round(o.v).toLocaleString()+\'{_psc_final_sfx}\''
+                        'Math.round(o.v).toLocaleString()'
                     )
                     # Count-up with expo.out — rushes through low values, decelerates into target
                     lines.append(
