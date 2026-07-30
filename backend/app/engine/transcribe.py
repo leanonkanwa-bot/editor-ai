@@ -74,7 +74,7 @@ def _load_model():
             settings.whisper_model,   # reads WHISPER_MODEL env var (e.g. large-v3)
             device="cpu",
             compute_type="int8",
-            cpu_threads=8,   # 48 vCPU available — use 8 threads for faster transcription
+            cpu_threads=12,  # 48 vCPU available — use 12 threads for faster transcription
             num_workers=2,
         )
     return _model
