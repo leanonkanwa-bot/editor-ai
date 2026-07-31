@@ -108,9 +108,19 @@ _TRIGGER_TEXT_FIELD: dict[str, str] = {
 # Styles that legitimately occupy video-overlay / fullscreen in landscape (full-canvas heroes).
 # All other non-data-panel cards with these zones are remapped to landscape-tl so
 # compose.py sees a side-panel zone and derives compact=True.
+# full_cover primitives (prim_split_compare, prim_journey_map) MUST be here —
+# they require the full 1920×1080 canvas and must never be compacted to landscape-tl.
 _LANDSCAPE_HERO_STYLES: frozenset[str] = frozenset({
     "key_phrase", "quote", "question", "definition",
     "chapter_marker", "callout",
+    "prim_split_compare", "prim_journey_map",
+})
+
+# Styles whose catalogue _family is "full_cover": consume the entire canvas.
+# Injected onto card objects after LLM generation so the full-cover exclusion
+# pass and backdrop-dim dispatch can operate without importing catalogue.py.
+_FULL_COVER_STYLES: frozenset[str] = frozenset({
+    "prim_split_compare", "prim_journey_map",
 })
 
 
@@ -1623,6 +1633,13 @@ def generate_storyboard(
         language=language,
         subject_side=subject_side,
     )
+
+    # Inject _family metadata from catalogue onto full_cover primitives.
+    # catalogue.py is not imported here; this mapping mirrors its _family field
+    # so the full-cover exclusion pass and backdrop-dim dispatch work correctly.
+    for _gc in graphic_cards:
+        if _gc.get("contentHints", {}).get("style", "") in _FULL_COVER_STYLES:
+            _gc["_family"] = "full_cover"
 
     # Fix 4/5: Snap graphic card startSec to the first spoken word at or after
     # startSec — if the LLM placed the card >0.3s before any speech it references,

@@ -4121,8 +4121,9 @@ def _build_timeline_js(
             content_style = card.get("contentHints", {}).get("style", "key_phrase")
             card_zone = card.get("zone", "")
             center_zone = card_zone in _DIMMING_ZONES
-            if card.get("_family") == "full_cover" and content_style != "prim_anecdote_frame":
+            if card.get("_family") == "full_cover" and content_style not in ("prim_anecdote_frame", "prim_journey_map"):
                 # Full-cover blackout: solid black fills the canvas; video invisible.
+                # prim_journey_map excluded: cover_type=overlay, video intentionally shows through.
                 lines.append(
                     f'  tl.to("#backdrop-dim", '
                     f'{{ opacity: 1, backgroundColor: "#000", duration: 0.30, ease: _eIn }}, {start:.4f});'
