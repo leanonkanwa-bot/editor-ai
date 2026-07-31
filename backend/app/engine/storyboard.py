@@ -955,10 +955,19 @@ RULES:
     a later beat). NOT poll_question (poll is an open vote). Provide
     "qa_question" + "qa_answer".
   "chapter_marker" — speaker introduces a new major section or chapter of
-    a longer video (e.g. "on passe maintenant à la partie 2", "chapitre 3").
-    Use for structural dividers that announce a topic shift. Distinct from
-    step_number (step_number is a numbered item within a sequence; chapter_marker
-    is a top-level section break). Provide "chapter_num" + "chapter_title".
+    a longer video. REQUIRES an EXPLICIT STRUCTURAL MARKER: a chapter number,
+    section number, part label, or module name must be present or strongly
+    implied (e.g. "on passe à la partie 2", "chapitre 3", "section suivante",
+    "module 4", "deuxième bloc", "next chapter"). The transition must be
+    announced as a named structural unit, not just a topic pivot.
+    DISTINCTION FROM story_chapter_transition: story_chapter_transition is a
+    narrative beat or pivot without explicit structural labelling ("et là tout
+    a changé", "voilà ce qui s'est passé ensuite"). chapter_marker explicitly
+    names or numbers the new section. If no section label or number is present,
+    use story_chapter_transition instead.
+    Distinct from step_number (step_number is a numbered item within a process
+    sequence; chapter_marker is a top-level section break in a long video).
+    Provide "chapter_num" + "chapter_title".
   "secret_reveal" — speaker reveals a hidden insight, secret, or surprising
     answer after building suspense ("le secret c'est…", "ce que personne ne
     dit c'est…", "la réponse surprenante c'est…"). Requires REVEAL ENERGY —
@@ -971,11 +980,20 @@ RULES:
     objection_response is a direct dialogue rebuttal with first-person objection
     voice). Provide "objection_text" + "response_text".
   "data_bar_chart" — speaker cites MULTIPLE numeric values that directly
-    compare to each other (2-4 values with labels). Distinct from stat (stat is
-    a single number). Distinct from score (score is competitive ranking).
-    Distinct from trend (trend is a directional curve). Distinct from data_chart
-    (data_chart is the pre-existing hand-coded bar chart; data_bar_chart is
-    the pack-styled Wave 4 version — prefer data_bar_chart for new cards).
+    compare to each other (2-4 values with labels), suitable for a bar chart
+    visualization. Distinct from stat (stat is a single number). Distinct from
+    score (score is competitive ranking). Distinct from trend (trend is a
+    directional curve). Distinct from data_chart (data_chart is the pre-existing
+    hand-coded bar chart; data_bar_chart is the pack-styled Wave 4 version —
+    prefer data_bar_chart for new cards).
+    EXCLUSIONS (use these more specific styles instead):
+    NOT platform_stats: when the bar labels ARE social media platform names
+      (Instagram, TikTok, YouTube, LinkedIn, Facebook, Pinterest, X/Twitter,
+      Snapchat, Meta, Google) → use platform_stats.
+    NOT revenue_breakdown: when the values represent income or revenue
+      broken down by source, product, or stream → use revenue_breakdown.
+    data_bar_chart is for GENERIC comparative data (costs, rates, volumes,
+    durations, counts) whose labels are NOT platform or revenue-source names.
     Provide "bar_labels" list + "bar_values" list of float (same length, 2-4 items).
   "cause_effect" — speaker explicitly states a cause-and-effect relationship
     ("parce que X, donc Y", "X entraîne Y", "si X alors Y"). REQUIRES both
