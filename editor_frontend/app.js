@@ -1260,13 +1260,30 @@ function directUpload(file) {
   xhr.send(_xfd);
 }
 
+// ── Tab-visibility wake-up: fires the current poll sleep immediately when
+// the user returns to the tab, bypassing the browser's 60s throttle.
+let _pollWake = null;
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && _pollWake) {
+    const wake = _pollWake; _pollWake = null; wake();
+  }
+});
+
 async function poll(jobId) {
+  // Persist the active job_id so a page refresh can resume tracking.
+  localStorage.setItem("active_job_id", jobId);
+
   let consecutive5xx = 0;
   const _pollStart = Date.now();
   while (true) {
     const _elapsed = (Date.now() - _pollStart) / 1000;
     const _delay = _elapsed < 120 ? 3000 : _elapsed < 300 ? 5000 : 10000;
-    await new Promise(r => setTimeout(r, _delay));
+    // Sleep that can be interrupted by the visibility wake-up.
+    await new Promise(r => {
+      const t = setTimeout(r, _delay);
+      _pollWake = () => { clearTimeout(t); r(); };
+    });
+    _pollWake = null;
     try {
       let res;
       try { res = await apiFetch(`/api/jobs/${jobId}`); }
@@ -1328,6 +1345,7 @@ function showQuotaExceeded(usage) {
 }
 
 function fail(msg, jobId) {
+  localStorage.removeItem("active_job_id");
   if (submitBtn) { submitBtn.disabled = false; submitBtn.querySelector(".btn-label").textContent = "Éditer ma vidéo"; submitBtn.classList.remove("loading"); }
   setStatus("error", msg, 100);
   const retryBlock = $("retryBlock");
@@ -1352,6 +1370,74 @@ $("retryBtn")?.addEventListener("click", async () => {
   } catch (err) { fail(`Erreur retry: ${err.message}`); }
 });
 
+// ── Job-resume on page reload ─────────────────────────────────────────────────
+// If the user reloads while a render is in progress (or the render completed
+// while the tab was inactive), active_job_id survives in localStorage.  On
+// load we probe the server and show a non-intrusive banner so the user can
+// return to their result without re-uploading.
+(async function _resumeActiveJob() {
+  const savedJobId = localStorage.getItem("active_job_id");
+  if (!savedJobId) return;
+  let jdata;
+  try {
+    const jr = await apiFetch(`/api/jobs/${savedJobId}`);
+    if (!jr.ok) { localStorage.removeItem("active_job_id"); return; }
+    jdata = await jr.json();
+  } catch { localStorage.removeItem("active_job_id"); return; }
+  if (jdata.status === "error") { localStorage.removeItem("active_job_id"); return; }
+
+  // Build a compact banner anchored at the top of the viewport.
+  const banner = document.createElement("div");
+  banner.id = "resumeBanner";
+  banner.style.cssText = [
+    "position:fixed;top:0;left:0;right:0;z-index:9999",
+    "display:flex;align-items:center;justify-content:space-between;gap:.75rem",
+    "padding:.45rem 1rem;font-size:.8rem;font-family:var(--font)",
+    "background:#0a2318;border-bottom:1px solid rgba(34,197,94,.22)",
+    "color:rgba(34,197,94,.9);",
+  ].join(";");
+
+  const btnStyle = [
+    "background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.35)",
+    "color:rgba(34,197,94,.9);border-radius:6px;padding:.2rem .65rem",
+    "font-size:.72rem;font-weight:600;cursor:pointer;font-family:var(--font)",
+  ].join(";");
+
+  if (jdata.status === "done") {
+    // Render finished while the user was away.
+    localStorage.removeItem("active_job_id");
+    banner.innerHTML = `<span>✓ Votre vidéo est prête !</span><button id="resumeBannerBtn" style="${btnStyle}">Voir le résultat</button>`;
+    document.body.prepend(banner);
+    document.getElementById("resumeBannerBtn")?.addEventListener("click", () => {
+      banner.remove();
+      switchSection("editorArea");
+      showResult(savedJobId, jdata.result);
+    });
+  } else {
+    // Still rendering — resume polling silently; show a live-updating banner.
+    banner.innerHTML = `<span id="resumeBannerMsg">⟳ Rendu en cours…</span><button id="resumeBannerBtn" style="${btnStyle}">Suivre l'avancement</button>`;
+    document.body.prepend(banner);
+    document.getElementById("resumeBannerBtn")?.addEventListener("click", () => {
+      switchSection("editorArea");
+      resultCard?.classList.add("hidden");
+      statusCard?.classList.remove("hidden");
+      statusCard?.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.querySelector(".btn-label").textContent = "Traitement…";
+        submitBtn.classList.add("loading");
+      }
+      setStatus(jdata.status, jdata.message || "Reprise après rechargement…", jdata.progress || 0);
+    });
+    // Background poll — when done, showResult() will remove the banner and
+    // reveal the result card; the browser notification fires as usual.
+    poll(savedJobId).catch(e => {
+      console.error("poll crashed on resume:", e);
+      fail("Erreur inattendue après rechargement.");
+    });
+  }
+})();
+
 // ── Confetti ──────────────────────────────────────────────────────────────────
 function spawnConfetti() {
   const colors = ["#FF7751", "#ffb347", "#22c55e", "#60a5fa", "#f472b6", "#fff"];
@@ -1374,6 +1460,8 @@ function spawnConfetti() {
 }
 
 async function showResult(jobId, result) {
+  localStorage.removeItem("active_job_id");
+  document.getElementById("resumeBanner")?.remove();
   if (submitBtn) { submitBtn.disabled = false; submitBtn.querySelector(".btn-label").textContent = "Éditer ma vidéo"; submitBtn.classList.remove("loading"); }
   previewCard?.classList.add("hidden");
   resultCard?.classList.remove("hidden");
