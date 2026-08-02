@@ -2135,12 +2135,26 @@ def _render_hyperframes(
             _cx = (_fl + _fr) / 2
             _subject_side = "left" if _cx < 38.0 else ("right" if _cx > 62.0 else "center")
 
+    # In passthrough mode (CUT_FILLERS=false or DISABLE_CUTS=true), pretrim rendered
+    # the full source video but plan.keep_segments only covers what the LLM would have
+    # kept (~96%). Override to a single full-coverage segment so the storyboard places
+    # cards across 100% of the rendered content, not just the LLM-approved portion.
+    _keep_segs = plan.keep_segments or []
+    if timing_map.compressed_intervals is None:
+        _n_before = len(_keep_segs)
+        _keep_segs = [{"start": 0.0, "end": timing_map.output_duration, "beat": "", "score": 0}]
+        print(
+            f"[STORYBOARD] passthrough: keep_segments expanded to 100%"
+            f" ({timing_map.output_duration:.1f}s) — was {_n_before} LLM segments",
+            flush=True,
+        )
+
     storyboard = generate_storyboard(
         trimmed_duration=timing_map.output_duration,
         remapped_words=timing_map.remapped_words,
         transcript_segments=transcript.get("segments", []),
         script_structure=plan.script_structure or [],
-        keep_segments=plan.keep_segments or [],
+        keep_segments=_keep_segs,
         key_lines=plan.key_lines or [],
         caption_emphasis_words=plan.caption_emphasis_words or [],
         word_categories=plan.word_categories or {},
