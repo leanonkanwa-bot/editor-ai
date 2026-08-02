@@ -778,6 +778,11 @@ RULES:
     talent", "vends la transformation pas le produit"). Speaker is sharing
     a lesson meant to be adopted by the viewer. TRIGGER: reads as a principle
     that could stand as a lesson title or inspirational poster caption.
+    ALSO TRIGGERS on contrastive business insights that name what something
+    does vs. does not do ("tu crées du contenu et donnes de la valeur SANS
+    jamais vendre", "la vente te PERMET de capturer la valeur", "ce n'est
+    pas X qui compte, c'est Y", "X ne suffit pas — il faut Y"). If a
+    contrast has two explicitly NAMED sides → use versus_battle instead.
     Distinct from quote (quote is a personal declaration specific to the
     speaker's experience; key_phrase is a universal principle).
   "quote" — a memorable first-person DECLARATION or observation specific to
@@ -826,7 +831,14 @@ RULES:
     statement formatted like a broadcast headline. Distinct from callout
     (callout is neutral context; news_ticker has explicit urgency/alert energy
     and a ticker visual). Provide "title" (the headline or alert text).
-  "definition" — speaker introduces a term/concept and explains it.
+  "definition" — speaker introduces a term, concept, or everyday word and
+    explains what it means. Applies to BOTH business jargon (SEO, niche,
+    churn) AND everyday concepts redefined in context (e.g. "un service,
+    c'est quand tu utilises tes muscles et ton temps pour donner de la
+    valeur"). TRIGGER PATTERNS (FR + EN): "un X, c'est [quand / le fait
+    de / l'art de / la capacité de]", "X, c'est en gros / simplement /
+    littéralement", "par X j'entends", "quand je dis X, je veux dire",
+    "ce qu'on appelle X c'est", "the definition of X is", "X means".
     Provide "term" + "definition" fields.
   "checklist" — completed/verified action items ("things I checked",
     "requirements met"). Use checklist, not list, when items imply
@@ -838,8 +850,15 @@ RULES:
     scale). Provide "score_text".
   "mindmap" — a central concept with 2-3 branching related ideas.
     Provide "center" + "branches" array.
-  "callout" — supplementary context or aside (catch-all, use only
-    when no other type fits).
+  "callout" — two distinct uses: (1) supplementary aside or clarification
+    the speaker adds parenthetically ("petite précision", "note importante",
+    "attention à ce point", "quick note here"); OR (2) conceptual anchor
+    where the speaker introduces a model, logic, or principle the viewer
+    MUST grasp to follow what comes next ("si tu comprends ce modèle / cette
+    logique / ce principe, tu comprendras pourquoi…", "le principe clé ici
+    c'est", "voici comment ça marche vraiment", "et c'est là que tout
+    s'explique"). Use callout only when no more specific type fits — for a
+    universal standalone principle → use key_phrase instead.
   "dialogue" — speaker recounts an exchange between two people.
   "trend" — speaker describes a directional change (growth/decline).
   "question" — speaker poses a question and then answers it.
@@ -1052,12 +1071,15 @@ RULES:
     is a real person's review; client_avatar_persona is a composite archetype).
     Distinct from versus_battle (versus contrasts two options; client_avatar_persona
     profiles one person). Provide "persona_name" + "persona_traits" list (2-4 items).
-  "book_recommendation" — speaker explicitly names a book they recommend or
-    reference ("je te conseille de lire X", "le livre qui a changé ma vie…").
-    REQUIRES both title and author to be identifiable. Distinct from testimonial
-    (testimonial is a person's review; book_recommendation is a titled work).
-    Distinct from key_phrase (key_phrase is a statement; book_recommendation
-    frames a specific book). Provide "book_title" + "book_author".
+  "book_recommendation" — speaker references, recommends, or quotes a book
+    ("je te conseille de lire X", "le livre qui a changé ma vie", "il y a
+    un livre que j'ai lu, ça disait…", "dans son livre X il explique",
+    "j'ai lu quelque chose qui disait"). Preferred when title OR author is
+    identifiable from the transcript; if NEITHER can be extracted, use
+    key_phrase for the book's central claim instead of leaving the window
+    empty. Distinct from testimonial (testimonial is a person's review of a
+    product/service, not a book). Provide "book_title" (or "–" if untitled
+    in transcript) + "book_author" (or "" if unnamed).
   "tool_stack" — speaker enumerates a set of tools, apps, or software they use
     ("mes outils du quotidien", "la stack que j'utilise", "les logiciels que…").
     REQUIRES at least 2 named tools. Distinct from list (list is any enumeration;
