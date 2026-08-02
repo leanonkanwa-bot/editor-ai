@@ -966,6 +966,20 @@ _PUNCH_IN_ENTRY_OFFSET    = 0.15   # fire this many seconds after segment start
 _PUNCH_IN_CENTER_ZONES    = frozenset({"fullscreen", "video-overlay", "lower-third"})
 _PUNCH_IN_DATA_TYPES      = frozenset({"stat", "list", "comparison", "checklist", "score", "trend"})
 
+# ── Speech-breath zoom constants ──────────────────────────────────────────────
+_BREATH_WINDOW_MIN_S   = 2.5    # minimum seconds from previous selected point
+_BREATH_WINDOW_MAX_S   = 4.5    # maximum window to search for next candidate
+_BREATH_GAP_MIN_S      = 0.08   # minimum inter-word silence to qualify
+_BREATH_PHRASE_SCALE   = 1.007  # end-of-sentence: . ! ?
+_BREATH_CLAUSE_SCALE   = 1.005  # clause boundary: , ; : —
+_BREATH_MICRO_SCALE    = 1.003  # bare micro-pause
+_BREATH_PHRASE_DUR     = 1.6    # total tween duration (s) for sentence boundary
+_BREATH_CLAUSE_DUR     = 1.4
+_BREATH_MICRO_DUR      = 1.2
+_BREATH_IN_RATIO       = 0.4    # 40% IN, 60% OUT
+_BREATH_PUNCT_SENTENCE = frozenset(".!?")
+_BREATH_PUNCT_CLAUSE   = frozenset(",;:—")
+
 
 def _compute_speech_punch_in_times(
     script_structure: list[dict],
@@ -1074,6 +1088,101 @@ def _inject_speech_punch_in_zooms(
         result = processed
 
     return sorted(result, key=lambda e: float(e.get("start", 0)))
+
+
+def _inject_speech_breath_zooms(
+    zoom_entries: list[dict],
+    remapped_words: list,
+) -> list[dict]:
+    """Inject subliminal breath zooms (~1 per 3s) aligned to natural speech pauses.
+
+    Each breath is a slow sine.inOut movement (×1.003–×1.007, 1.2–1.6 s total)
+    that stays below conscious perception individually but gives a constant sense
+    of life. Applies to all style packs, including lean_paper.
+
+    GSAP's overwrite:"auto" on every tween handles compositing with existing
+    drift entries — no entry splitting is needed at these amplitudes.
+    """
+    if not remapped_words:
+        return list(zoom_entries)
+
+    # Build candidates: each inter-word gap ≥ 80 ms is a potential breath point.
+    # Score = gap_duration × punctuation_weight.
+    cands: list[tuple] = []  # (ts, gap, score, dur, scale)
+    for i in range(len(remapped_words) - 1):
+        w_cur  = remapped_words[i]
+        w_next = remapped_words[i + 1]
+        gap = float(w_next.start) - float(w_cur.end)
+        if gap < _BREATH_GAP_MIN_S:
+            continue
+        text    = (w_cur.text or "").rstrip()
+        last_ch = text[-1] if text else ""
+        if last_ch in _BREATH_PUNCT_SENTENCE:
+            weight, scale, dur = 2.0, _BREATH_PHRASE_SCALE, _BREATH_PHRASE_DUR
+        elif last_ch in _BREATH_PUNCT_CLAUSE:
+            weight, scale, dur = 1.5, _BREATH_CLAUSE_SCALE, _BREATH_CLAUSE_DUR
+        else:
+            weight, scale, dur = 1.0, _BREATH_MICRO_SCALE, _BREATH_MICRO_DUR
+        cands.append((round(float(w_cur.end), 4), gap, gap * weight, dur, scale))
+
+    if not cands:
+        return list(zoom_entries)
+    cands.sort(key=lambda c: c[0])
+
+    # Greedy window selection: in each [last+2.5s, last+4.5s] window, pick the
+    # highest-scoring candidate. Jump cleanly over silent/music gaps.
+    selected: list[tuple] = []  # (ts, dur, scale)
+    last_ts = -_BREATH_WINDOW_MIN_S
+    ci, N = 0, len(cands)
+
+    while ci < N:
+        window_start = last_ts + _BREATH_WINDOW_MIN_S
+        window_end   = last_ts + _BREATH_WINDOW_MAX_S
+        while ci < N and cands[ci][0] < window_start:
+            ci += 1
+        if ci >= N:
+            break
+        if cands[ci][0] > window_end:
+            # Silent gap: slide window so the next candidate becomes eligible.
+            last_ts = cands[ci][0] - _BREATH_WINDOW_MIN_S
+            continue
+        wi = ci
+        window_cands: list[tuple] = []
+        while wi < N and cands[wi][0] <= window_end:
+            window_cands.append(cands[wi])
+            wi += 1
+        best = max(window_cands, key=lambda c: c[2])
+        selected.append((best[0], best[3], best[4]))
+        last_ts = best[0]
+        ci = wi
+
+    if not selected:
+        return list(zoom_entries)
+
+    result = list(zoom_entries)
+    for ts, total_dur, scale in selected:
+        baseline = _interp_zoom_scale(ts, result)
+        scale_pk = round(baseline * scale, 6)
+        t_in     = round(ts + total_dur * _BREATH_IN_RATIO, 4)
+        t_out    = round(ts + total_dur, 4)
+        result.append({
+            "start": ts,   "end": t_in,
+            "from": round(baseline, 6), "to": scale_pk,
+            "kind": "breath", "ease": "sine.inOut",
+        })
+        result.append({
+            "start": t_in, "end": t_out,
+            "from": scale_pk, "to": round(baseline, 6),
+            "kind": "breath", "ease": "sine.inOut",
+        })
+
+    result.sort(key=lambda e: float(e.get("start", 0)))
+    print(
+        f"[BREATH] {len(selected)} breath points -> {len(selected) * 2} tweens"
+        f" (total zoom entries: {len(result)})",
+        flush=True,
+    )
+    return result
 
 
 def _interp_zoom_scale(t: float, zoom_entries: list[dict]) -> float:
@@ -2192,7 +2301,12 @@ def _render_hyperframes(
                 flush=True,
             )
 
-    # Zoom coverage audit + fill: log gaps > 8s; inject micro-bumps for gaps > 25s
+    # Inject speech-breath zooms — all packs including lean_paper.
+    # ~1 subliminal movement per 3s, aligned to natural speech pauses.
+    remapped_zoom = _inject_speech_breath_zooms(remapped_zoom, timing_map.remapped_words)
+
+    # Zoom coverage audit + fill: log gaps > 8s; inject micro-bumps for gaps > 45s
+    # of pure silence (no speech). Speech sections are now covered by breath layer.
     _zoom_audit_sorted = sorted(remapped_zoom, key=lambda z: float(z.get("start", 0)))
     _zg_prev_end = 0.0
     _zoom_gaps: list[tuple[float, float]] = []
@@ -2200,7 +2314,11 @@ def _render_hyperframes(
 
     def _zg_fill(gap_start: float, gap_end: float) -> None:
         gap = gap_end - gap_start
-        if gap <= 25.0:
+        if gap <= 45.0:
+            return
+        # Skip if any speech falls in this window — breath layer already covers it.
+        if any(float(w.end) > gap_start and float(w.start) < gap_end
+               for w in timing_map.remapped_words):
             return
         n_ideal = max(1, int(gap / 25.0))
         n = min(5, n_ideal)
