@@ -7331,8 +7331,16 @@ def compose(
         _fb = float(subject_position.get("face_bottom_pct", 65.0))
         _face_cx = (_fl + _fr) / 2   # 0–100 percent, left→right
         _face_cy = (_ft + _fb) / 2   # 0–100 percent, top→bottom
+        _face_side_log = "left" if _face_cx < 38.0 else ("right" if _face_cx > 62.0 else "center")
+        print(
+            f"[COMPOSE] face_side={_face_side_log!r} cx={_face_cx:.1f}% cy={_face_cy:.1f}%"
+            f" bbox=[{_fl:.0f},{_ft:.0f}->{_fr:.0f},{_fb:.0f}]"
+            f" excluded_zones={'portrait-center-left,portrait-center-full' if _face_side_log=='left' else ('portrait-center-right,portrait-center-full' if _face_side_log=='right' else 'none (dimming only)')}",
+            flush=True,
+        )
     else:
         _face_cx, _face_cy = 50.0, 50.0
+        print("[COMPOSE] face_side=None — using centered defaults (full rotation)", flush=True)
 
     # object-position X% to CENTER the face in the 9:16 crop window.
     # With object-fit: cover on a 16:9 source → 9:16 container, the browser

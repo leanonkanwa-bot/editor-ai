@@ -2243,6 +2243,14 @@ def _render_hyperframes(
             _fr = float(subject_position.get("face_right_pct", 75.0))
             _cx = (_fl + _fr) / 2
             _subject_side = "left" if _cx < 38.0 else ("right" if _cx > 62.0 else "center")
+        print(
+            f"[HF] subject_side={_subject_side!r}"
+            f" face_cx={((float(subject_position.get('face_left_pct',25))+float(subject_position.get('face_right_pct',75)))/2):.1f}%"
+            f" face_bbox=[{subject_position.get('face_left_pct','?')},{subject_position.get('face_top_pct','?')}→{subject_position.get('face_right_pct','?')},{subject_position.get('face_bottom_pct','?')}]",
+            flush=True,
+        )
+    else:
+        print("[HF] subject_side=None (no face data — full rotation active)", flush=True)
 
     # In passthrough mode (CUT_FILLERS=false or DISABLE_CUTS=true), pretrim rendered
     # the full source video but plan.keep_segments only covers what the LLM would have
