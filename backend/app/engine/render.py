@@ -2833,8 +2833,10 @@ def render(
     except Exception as _fe:
         print(f"[FONT] preload_style_fonts failed (non-fatal): {_fe}")
 
-    skip_captions = False
     short_form = plan.format == "short"
+    # Long format uses phrase_text cards from the storyboard (compose.py) — skip ASS burn-in.
+    # Short format keeps the existing word-by-word ASS captions.
+    skip_captions = not short_form
     if short_form:
         caption_style = "twolevel"
     fps = 30

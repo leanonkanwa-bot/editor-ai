@@ -1738,6 +1738,114 @@ def _extract_beat_cards(
     return beat_cards
 
 
+def _extract_phrase_text_cards(
+    remapped_words: list[WordTiming],
+    graphic_cards: list[dict],
+    trimmed_duration: float,
+) -> list[dict]:
+    """Full-coverage phrase-text caption cards for long format.
+
+    Replaces ASS subtitle burn-in. One card per detected phrase, contiguous
+    timing (endSec = next phrase start), no G2/G3 guards. Phrases that START
+    inside any graphic card window are SKIPPED (not delayed) — phrases already
+    active when a graphic card starts are left to fade naturally via compose.py.
+    Minimum 2 words per phrase.
+    """
+    if not remapped_words:
+        return []
+
+    # Window lookup: skip phrases that start inside any graphic card window
+    # (beat cards included — prevents GSAP opacity conflicts at identical startSec)
+    graphic_windows: list[tuple[float, float]] = [
+        (float(c.get("startSec", 0)), float(c.get("endSec", 0)))
+        for c in graphic_cards
+    ]
+
+    def _in_window(t: float) -> bool:
+        for cs, ce in graphic_windows:
+            if cs <= t < ce:
+                return True
+        return False
+
+    # Phrase detection: same boundary rules as _extract_beat_cards
+    phrases: list[tuple[float, float, list[WordTiming]]] = []
+    ph_start_t = remapped_words[0].start
+    ph_words: list[WordTiming] = []
+
+    for i, w in enumerate(remapped_words):
+        ph_words.append(w)
+        boundary = False
+
+        stripped = w.text.strip().rstrip("»\")'\\]")
+        if stripped and stripped[-1] in ".?!,:;":
+            boundary = True
+
+        if not boundary and i + 1 < len(remapped_words):
+            nw = remapped_words[i + 1]
+            if nw.start - w.end >= _BEAT_PAUSE_THRESHOLD_S:
+                boundary = True
+
+        if boundary or i == len(remapped_words) - 1:
+            if len(ph_words) >= 2:
+                phrases.append((ph_start_t, w.end, list(ph_words)))
+            ph_start_t = (
+                remapped_words[i + 1].start if i + 1 < len(remapped_words)
+                else trimmed_duration
+            )
+            ph_words = []
+
+    # Build phrase_text cards with contiguous timing and skip filter
+    n_raw = len(phrases)
+    n_skipped = 0
+    _APOS_CHARS = ("'", "’")  # straight + right single quotation mark
+    cards: list[dict] = []
+
+    for idx, (ph_start, _ph_end, pw) in enumerate(phrases):
+        if _in_window(ph_start):
+            n_skipped += 1
+            continue
+
+        # Contiguous timing: extend to next phrase's start
+        next_start = phrases[idx + 1][0] if idx + 1 < len(phrases) else trimmed_duration
+        end_sec = min(next_start, trimmed_duration)
+
+        # Apostrophe merge on WordTiming list (Whisper splits "qu'en" → ["qu'", "en"])
+        merged_pw: list[WordTiming] = []
+        for _w in pw:
+            if merged_pw and (
+                any(_w.text.startswith(_a) for _a in _APOS_CHARS)
+                or any(merged_pw[-1].text.endswith(_a) for _a in _APOS_CHARS)
+            ):
+                prev = merged_pw[-1]
+                merged_pw[-1] = WordTiming(
+                    text=prev.text + _w.text, start=prev.start, end=_w.end
+                )
+            else:
+                merged_pw.append(_w)
+
+        word_dicts = [
+            {"text": _w.text, "emphasis": False, "start": _w.start, "end": _w.end}
+            for _w in merged_pw
+        ]
+
+        cards.append({
+            "id": f"pt-{len(cards) + 1:03d}",
+            "type": "caption",
+            "beat": "phrase_text",
+            "startSec": round(ph_start, 3),
+            "endSec": round(end_sec, 3),
+            "zone": "phrase-text",
+            "words": word_dicts,
+        })
+
+    print(
+        f"[PHRASE-TEXT] {n_raw} phrases | skipped={n_skipped} (in graphic window)"
+        f" | generated={len(cards)}",
+        flush=True,
+    )
+    return cards
+
+
 def _tokenize_text(text: str) -> frozenset[str]:
     """Lowercase + split at punctuation → frozen token set. Skips 1-char tokens.
 
@@ -2140,14 +2248,21 @@ def generate_storyboard(
     # Re-enable and redesign when a real speaker-ID data source is available.
 
     # Generate caption cards mechanically
-    caption_cards = _segment_captions(
-        remapped_words=remapped_words,
-        transcript_segments=transcript_segments,
-        timing_map=timing_map,
-        emphasis_words=caption_emphasis_words,
-        word_categories=word_categories,
-        max_words=4 if format_hint == "short" else _MAX_WORDS,
-    )
+    if format_hint == "long":
+        caption_cards = _extract_phrase_text_cards(
+            remapped_words=remapped_words,
+            graphic_cards=graphic_cards,
+            trimmed_duration=trimmed_duration,
+        )
+    else:
+        caption_cards = _segment_captions(
+            remapped_words=remapped_words,
+            transcript_segments=transcript_segments,
+            timing_map=timing_map,
+            emphasis_words=caption_emphasis_words,
+            word_categories=word_categories,
+            max_words=4 if format_hint == "short" else _MAX_WORDS,
+        )
 
     print(f"[STORYBOARD] {len(graphic_cards)} graphic + {len(caption_cards)} caption cards", flush=True)
 

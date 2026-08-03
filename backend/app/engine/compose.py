@@ -25,6 +25,7 @@ _COMP_ID = "graphic-overlays"
 _ZONE_BOUNDS_LANDSCAPE = {
     "fullscreen":       {"left": 0,    "top": 0,   "width": 1920, "height": 1080},
     "lower-third":      {"left": 0,    "top": 756, "width": 1920, "height": 324},
+    "phrase-text":      {"left": 0,    "top": 842, "width": 1920, "height": 160},  # 78% of 1080, long-format phrase layer
     "side-panel":       {"left": 0,    "top": 0,   "width": 806,  "height": 1080},
     "side-panel-left":  {"left": 0,    "top": 0,   "width": 806,  "height": 1080},
     "side-panel-right": {"left": 1114, "top": 0,   "width": 806,  "height": 1080},
@@ -80,6 +81,7 @@ _ZONE_BOUNDS_PORTRAIT = {
     "portrait-bottom-left":  {"left": 30,  "top": 1070, "width": 500, "height": 250},
     "portrait-bottom-right": {"left": 540, "top": 1070, "width": 500, "height": 250},
     "lower-third":          {"left": 0,   "top": 1344, "width": 1080, "height": 288},   # captions ONLY
+    "phrase-text":          {"left": 0,   "top": 1498, "width": 1080, "height": 200},   # 78% of 1920, long-format phrase layer
     "lower-third-name":     {"left": 0,   "top": 1150, "width": 1080, "height": 140},   # speaker ID above captions
     "side-panel":     {"left": 540, "top": 100,  "width": 500,  "height": 320},   # alias → upper-right
     "side-panel-top": {"left": 0,   "top": 0,    "width": 1080, "height": 288},
@@ -3887,6 +3889,7 @@ def _build_caption_card_html(card: dict, pack: dict | None = None, layout: str =
     card_id = card["id"]
     words = card.get("words", [])
     p = pack or _LEAN_GLASS
+    is_phrase_text = card.get("beat") == "phrase_text"
 
     word_spans = []
     for w in words:
@@ -3902,14 +3905,24 @@ def _build_caption_card_html(card: dict, pack: dict | None = None, layout: str =
         f'}}\n'
     )
 
+    if is_phrase_text:
+        # Phrase-text: smaller, semi-bold — reads like a subtitle, not a headline
+        font_size = "38px" if layout == "portrait" else "32px"
+        font_weight = "600"
+        padding = "10px 32px"
+    else:
+        font_size = "62px" if layout == "portrait" else "48px"
+        font_weight = "700"
+        padding = "16px 24px"
+
     return (
         f'<div class="card caption-card" data-card-id="{card_id}">\n'
         f'<style>\n'
         f'.card[data-card-id="{card_id}"] .cap-line {{\n'
         f'  display: flex; flex-wrap: wrap; justify-content: center; align-items: center;\n'
-        f'  gap: 0.3em; padding: 16px 24px;\n'
+        f'  gap: 0.3em; padding: {padding};\n'
         f'  font-family: {p["font"]};\n'
-        f'  font-size: {"62px" if layout == "portrait" else "48px"}; font-weight: 700; color: #FFFFFF;\n'
+        f'  font-size: {font_size}; font-weight: {font_weight}; color: #FFFFFF;\n'
         f'  text-shadow: 0 2px 8px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9);\n'
         f'  text-align: center; line-height: 1.4;\n'
         f'}}\n'
@@ -7038,14 +7051,18 @@ def _build_timeline_js(
         lines.append(f'  }} catch(_e) {{ console.warn("card {card_id} animation error:", _e); }}')
         lines.append("")
 
-    # Caption suppression: fade captions out while graphic cards are visible
+    # Caption suppression: fade captions out while graphic cards are visible.
+    # phrase_text cards are excluded — they sit at the bottom zone (y≥78%) and
+    # don't visually overlap graphic cards; they manage their own visibility via
+    # the skip filter in _extract_phrase_text_cards().
     graphic_windows = [
         (round(float(c.get("startSec", 0)), 3), round(float(c.get("endSec", 0)), 3))
         for c in cards if c.get("type") != "caption"
     ]
     caption_ids = [
         _esc_js(str(cid))
-        for c in cards if c.get("type") == "caption"
+        for c in cards
+        if c.get("type") == "caption" and c.get("beat") != "phrase_text"
         for cid in [c.get("id", "")]
         if cid  # skip captions with missing/empty id — sel would be invalid
     ]
