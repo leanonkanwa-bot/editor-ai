@@ -3910,14 +3910,28 @@ def _build_caption_card_html(card: dict, pack: dict | None = None, layout: str =
     )
 
     if is_phrase_text:
-        # Phrase-text: smaller, semi-bold — reads like a subtitle, not a headline
         font_size = "38px" if layout == "portrait" else "32px"
-        font_weight = "600"
-        padding = "10px 32px"
+        padding   = "10px 32px"
+        pack_id   = p.get("id", "lean_glass")
+        if pack_id == "lean_glass":
+            # Soft drop shadow handles contrast; slightly-off-white avoids harsh pure white.
+            font_weight = "600"
+            css_color   = "#F1F1F1"
+            css_shadow  = "0 1px 6px rgba(0,0,0,0.70), 0 2px 16px rgba(0,0,0,0.50)"
+            css_scrim   = ""
+        else:
+            # Other packs: generic fallback until individually validated.
+            font_weight = "600"
+            css_color   = "#FFFFFF"
+            css_shadow  = "0 2px 8px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9)"
+            css_scrim   = ""
     else:
-        font_size = "62px" if layout == "portrait" else "48px"
+        font_size   = "62px" if layout == "portrait" else "48px"
         font_weight = "700"
-        padding = "16px 24px"
+        padding     = "16px 24px"
+        css_color   = "#FFFFFF"
+        css_shadow  = "0 2px 8px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9)"
+        css_scrim   = ""
 
     return (
         f'<div class="card caption-card" data-card-id="{card_id}">\n'
@@ -3926,9 +3940,10 @@ def _build_caption_card_html(card: dict, pack: dict | None = None, layout: str =
         f'  display: flex; flex-wrap: wrap; justify-content: center; align-items: center;\n'
         f'  gap: 0.3em; padding: {padding};\n'
         f'  font-family: {p["font"]};\n'
-        f'  font-size: {font_size}; font-weight: {font_weight}; color: #FFFFFF;\n'
-        f'  text-shadow: 0 2px 8px rgba(0,0,0,0.8), 0 0 2px rgba(0,0,0,0.9);\n'
+        f'  font-size: {font_size}; font-weight: {font_weight}; color: {css_color};\n'
+        f'  text-shadow: {css_shadow};\n'
         f'  text-align: center; line-height: 1.4;\n'
+        f'{css_scrim}'
         f'}}\n'
         f'{style_extra}'
         f'</style>\n'

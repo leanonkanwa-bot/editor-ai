@@ -1822,7 +1822,7 @@ def _extract_phrase_text_cards(
     _APOS_CHARS = ("’", "’")  # straight + right single quotation mark
 
     def _build_word_dicts(pw: list[WordTiming]) -> list[dict]:
-        """Apostrophe-merge then convert to caption word dicts."""
+        """Apostrophe-merge then convert to caption word dicts, with one emphasis word."""
         merged: list[WordTiming] = []
         for _w in pw:
             if merged and (
@@ -1835,10 +1835,18 @@ def _extract_phrase_text_cards(
                 )
             else:
                 merged.append(_w)
-        return [
+        word_dicts = [
             {"text": _w.text, "emphasis": False, "start": _w.start, "end": _w.end}
             for _w in merged
         ]
+        # Mark the rightmost content word (≥3 chars, not a French stopword) as emphasis.
+        # In French, the final noun or verb carries the semantic weight of the phrase.
+        for i in range(len(word_dicts) - 1, -1, -1):
+            token = re.sub(r"[^\w]", "", word_dicts[i]["text"]).lower()
+            if len(token) >= 3 and token not in _FR_STOPWORDS:
+                word_dicts[i]["emphasis"] = True
+                break
+        return word_dicts
 
     def _make_card(start: float, end: float, word_dicts: list[dict]) -> dict:
         return {
