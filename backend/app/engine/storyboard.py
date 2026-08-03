@@ -55,7 +55,7 @@ _ANCHOR_LEAD_S           = 0.20       # card appears this many seconds before th
 # Automatic key_phrase cards extracted from Whisper word boundaries to
 # achieve ~150-200 total cards per 11-min video (1 per 3-4s).
 _BEAT_CARD_DISPLAY_SEC    = 2.8       # fixed display window for every beat card
-_BEAT_MIN_WORDS           = 4         # G2: phrase too short → skip (4 words ≈ "vends la transformation vraiment")
+_BEAT_MIN_WORDS           = 5         # G2: phrase too short → skip; 5 keeps quality (4 let through bare 4-word facts)
 _BEAT_MAX_WORDS           = 15        # G2: phrase too long for 2.8s → skip
 _BEAT_EXCLUSION_RADIUS_S  = 1.0       # G1: no beat card within ±Xs of any LLM card window edge
 _BEAT_PAUSE_THRESHOLD_S   = 0.20      # inter-word gap (s) that triggers a phrase boundary (clause-level)
@@ -1658,8 +1658,19 @@ def _extract_beat_cards(
             n_gap_filtered += 1
             continue
 
-        # Build display title
-        raw = " ".join(pw)
+        # Build display title — merge apostrophe-split tokens first (Whisper splits
+        # "qu'en" → ["qu'", "en"]; joining with space gives "qu' en").
+        _APOS_CHARS = ("'", "’")  # straight + right single quotation mark
+        merged_pw: list[str] = []
+        for _tok in pw:
+            if merged_pw and (
+                any(_tok.startswith(_a) for _a in _APOS_CHARS) or
+                any(merged_pw[-1].endswith(_a) for _a in _APOS_CHARS)
+            ):
+                merged_pw[-1] += _tok
+            else:
+                merged_pw.append(_tok)
+        raw = " ".join(merged_pw)
         if len(raw) > _BEAT_TITLE_MAX_CHARS:
             trunc = raw[:_BEAT_TITLE_MAX_CHARS]
             cut = trunc.rfind(" ")

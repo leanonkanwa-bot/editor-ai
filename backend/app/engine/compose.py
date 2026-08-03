@@ -629,10 +629,17 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         text_align      = "center"
         panel_align     = "center"
         max_width_eff   = "85%"
+        # Beat cards (auto-generated key_phrase from Whisper phrases) display full
+        # spoken sentences — intentionally styled at a fixed citation size regardless
+        # of char count, so they look coherent as a "running quote" tier rather than
+        # going through the rich-card adaptive logic that produces 32-38px.
+        is_beat_card = card.get("beat") == "beat"
+        if is_beat_card:
+            title_size_eff = "40px"  # fixed citation size — large enough to read, smaller than rich cards
         # Adaptive title size — prevent vertical overflow for long texts.
         # At 64px/~10 chars per line in a portrait zone (text area ≈ 356px),
         # texts > 35 chars wrap to 4+ lines and risk exceeding the card height.
-        if title and not number:
+        elif title and not number:
             _tc = len(title)
             if _tc > 55:
                 title_size_eff = "32px"
@@ -760,8 +767,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         use_vertical = total_label_chars > 60 or avg_label_len > 18 or n_steps > 4
         if use_vertical:
             parts.append(f'.card[data-card-id="{card_id}"] .tl-track {{')
-            parts.append(f'  display: flex; flex-direction: column; gap: 20px; width: 100%;')
-            parts.append(f'  position: relative; padding: 16px 0;')
+            parts.append(f'  display: flex; flex-direction: column; gap: 28px; width: 100%;')
+            parts.append(f'  position: relative; padding: 20px 0;')
             parts.append('}')
             parts.append(f'.card[data-card-id="{card_id}"] .tl-line {{')
             parts.append(f'  position: absolute; left: 9px; top: 0; width: 3px; height: 0;')
@@ -771,7 +778,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
                 parts.append(f'  background: transparent; width: 0;')
             parts.append('}')
             parts.append(f'.card[data-card-id="{card_id}"] .tl-step {{')
-            parts.append(f'  display: flex; align-items: center; gap: 16px; z-index: 1;')
+            parts.append(f'  display: flex; align-items: center; gap: 20px; z-index: 1;')
             parts.append('}')
         else:
             parts.append(f'.card[data-card-id="{card_id}"] .tl-track {{')
@@ -794,7 +801,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  background: {p["text_secondary"]}; flex-shrink: 0;')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .tl-label {{')
-        parts.append(f'  font-family: {p["font"]}; font-size: 20px;')
+        parts.append(f'  font-family: {p["font"]}; font-size: 20px; line-height: 1.4;')
         parts.append(f'  font-weight: {p["font_weight"]}; color: {p["text"]};')
         if use_vertical:
             parts.append(f'  text-align: left;')
