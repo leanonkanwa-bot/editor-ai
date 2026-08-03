@@ -700,6 +700,7 @@ ZONES — where the card sits on screen:
 {f"SUBJECT POSITION: the speaker occupies the {subject_side} side of the frame. Place data-heavy cards (stat, list, comparison) on the OPPOSITE side so they don't obscure the face." if subject_side and subject_side != "center" else ""}
 RULES:
 - CARD COUNT CEILING: {target_cards} cards maximum for a {trimmed_duration:.0f}s video. This is a hard ceiling, not a target — only place a card when the moment genuinely deserves one. A video with 5 high-quality cards is better than one with 10 forced cards. Never invent or pad cards just to approach the ceiling.
+- DUAL-CARD BEATS: When a single speech segment contains BOTH (a) a vivid, memorable, or funny formulation that stands on its own as a key_phrase AND (b) one or more distinct numeric facts (stat), generate TWO separate cards with startSec offset by 1-2s: the stat card anchors to when the number is spoken, the key_phrase card anchors to the memorable phrase. Only split when both elements are genuinely strong independently — do not split weak content.
 - Card startSec/endSec must be within [0, {trimmed_duration:.1f}]
 - Cards should NOT overlap each other in time
 - Most cards should last 3-8 seconds
@@ -727,6 +728,12 @@ RULES:
     milestone_recap. Ordered steps / narrative flow → use timeline.
     DISTINCTION FROM list: list items are parallel and interchangeable;
     timeline items have strict before/after dependency (order cannot be reversed).
+    IMPLICIT CAUSAL SEQUENCES: Also triggers when the speaker recounts a chain
+    of past events in causal order WITHOUT explicit "d'abord/ensuite/puis"
+    markers — detectable when each clause in past tense directly CAUSES or
+    ENABLES the next ("j'avais investi dans X → c'est comme ça qu'on s'est
+    rencontré → en l'observant j'ai réalisé → on en est venu à créer Y").
+    Criterion: would reversing two steps break the story? If yes → timeline.
     Provide "steps" array (2-6 items).
   "comparison" — speaker contrasts two distinct things (old/new, us/them,
     method A vs method B). Exactly 2 sides required. NOT for the same
@@ -1128,18 +1135,23 @@ RULES:
     is a specific date; age_milestone is an age or duration). Distinct from
     step_number (step_number is a process step; age_milestone is a personal
     milestone age). Provide "age_value" + "age_context".
-  "contrarian_take" — speaker EXPLICITLY flags that they are voicing an unpopular
-    or taboo opinion by stepping outside the content to comment on its provocativeness:
-    "voici ce que personne ne dit", "j'ai une opinion impopulaire", "la vérité que
-    tu ne veux pas entendre", "je vais dire quelque chose que personne n'ose dire",
-    or equivalent meta-commentary framing. REQUIRES this explicit signaling — do NOT
-    use when the speaker makes a bold, surprising, or counter-intuitive claim without
-    first announcing it as controversial (use callout or key_phrase for those). Do NOT
-    use for warnings or cautions (use warning_soft or red_flag_list). Uses pack accent
-    color unchanged — signals tension through typography only. Distinct from warning_soft
-    (warning_soft is a caution without opinion framing; contrarian_take requires the
-    speaker to call out the take as controversial). Distinct from callout (callout is
-    neutral context; contrarian_take has explicit editorial tension framing). Provide "take_text".
+  "contrarian_take" — speaker voices a provocative opinion, either by EXPLICITLY
+    flagging it ("voici ce que personne ne dit", "j'ai une opinion impopulaire",
+    "la vérité que tu ne veux pas entendre", "je vais dire quelque chose que
+    personne n'ose dire", or equivalent meta-commentary), OR by using a clearly
+    IRONIC framing where a positive word is deployed sarcastically in a context
+    that makes its literal reading absurd. IRONY RULE: triggers when (1) the
+    speaker uses a manifestly positive term (paradis, idéal, génial, parfait,
+    formidable, c'est super) AND (2) the immediately preceding sentence contained
+    a negative fact or figure that makes the positive reading impossible (e.g.,
+    "un chef d'entreprise passe 190h par an à faire des papiers… c'est vraiment
+    un paradis la France"). In the irony case, set take_text = the sarcastic
+    positive statement and expected_text = the negative fact it responds to.
+    Do NOT use for bold but sincere claims without irony or explicit framing
+    (use callout or key_phrase for those). Do NOT use for warnings or cautions
+    (use warning_soft or red_flag_list). Distinct from warning_soft (warning_soft
+    is a caution without opinion framing). Distinct from callout (callout is neutral
+    context). Provide "take_text".
   "action_step_cta" — speaker gives a direct imperative call to action or a
     concrete next step for the viewer ("maintenant voici ce que tu dois faire",
     "passe à l'action", "fais X dès aujourd'hui"). Distinct from callout
@@ -1154,13 +1166,17 @@ RULES:
     fluid narrative beat without numbering). Distinct from timeline
     (timeline is a sequence of events; story_chapter_transition is one
     pivot-beat separator). Provide "transition_label".
-  "live_reaction_split" — speaker contrasts what people expected with what
-    actually happened ("on pensait que X… mais en réalité Y"). REQUIRES both
-    sides to be stated. Distinct from before_after_image (that is a transformation
-    over time; live_reaction_split is expectation vs outcome). Distinct from
-    versus_battle (versus contrasts two options; live_reaction_split is
-    expected-vs-reality). Trigger-style: the reveal of reality must be literally
-    spoken. Provide "expected_text" + "reality_text".
+  "live_reaction_split" — speaker contrasts what was expected or believed with
+    what actually turned out to be true. REQUIRES both sides to be stated. Works
+    with collective OR first-person framing: "on pensait que X… mais en réalité Y"
+    AND "je pensais que X… en réalité Y" AND "j'imaginais X mais maintenant je
+    réalise Y" AND "j'aurais pas cru que X, et pourtant en réalité Y". The
+    expected belief may be the speaker's own past misconception. Distinct from
+    before_after_image (that is a transformation over time; live_reaction_split is
+    expectation vs outcome). Distinct from versus_battle (versus contrasts two
+    options; live_reaction_split is expected-vs-reality). Trigger-style: the reveal
+    of reality must be literally spoken. Provide "expected_text" (what was believed
+    before) + "reality_text" (what the speaker now knows is true).
   "hidden_cost_reveal" — speaker reveals a hidden or total cost that differs
     from the advertised price ("le prix affiché c'est X… mais le coût réel
     c'est Y"). REQUIRES both prices. Distinct from income_reveal (single number;
@@ -1336,15 +1352,26 @@ RULES:
     platform_stats shows multiple platforms side-by-side). Distinct from stat (stat
     is a single metric; platform_stats is a multi-platform grid). Provide "platforms"
     list + "values" list (same length, 2-5 items).
-  "cost_comparison" — speaker presents MULTIPLE pricing options side-by-side ("le
-    plan basique à 0€, le pro à 29€/mois, l'enterprise à 99€"). REQUIRES at least
-    2 named options each with a price. Distinct from price_tag (price_tag is a SINGLE
-    price point; cost_comparison shows 2+ options). Distinct from comparison (comparison
-    is a qualitative contrast; cost_comparison is specifically a pricing grid). Distinct
-    from income_vs_expense (income_vs_expense is binary income/outflow; cost_comparison
-    is 2+ buying options). Provide "option_labels" list + "option_prices" list (same
-    length, 2-4 items). Optionally set "best_index" (0-based) to highlight the recommended
-    option — defaults to the last option.
+  "cost_comparison" — speaker presents MULTIPLE options side-by-side with an
+    associated cost, tax rate, or financial value for each. Canonical use case:
+    pricing tiers ("le plan basique à 0€, le pro à 29€/mois, l'enterprise à 99€").
+    EXTENDED USE: also triggers for COUNTRY-BY-COUNTRY FISCAL COMPARISONS where
+    the speaker names N>=2 countries each with a stated tax rate, net amount, or
+    cost — e.g., "en France tu prends 300 000, tu vas en Grèce tu prends 100 000,
+    au Portugal c'était zéro, en Belgique capé à 10%". In this case option_labels =
+    country names in order of citation, option_prices = the stated fiscal amount or
+    rate (use values as spoken: "300 000€", "100 000€", "0€", "10%"), best_index =
+    index of the lowest-cost / most favourable option. Values may be heterogeneous
+    (mix of absolute amounts and percentages) — use them as spoken.
+    REQUIRES at least 2 named options each with a stated value. Distinct from
+    price_tag (price_tag is a SINGLE price point; cost_comparison shows 2+ options).
+    Distinct from comparison (comparison is qualitative, exactly 2 sides; cost_comparison
+    is a pricing/fiscal grid with 2-4 options). Distinct from income_vs_expense
+    (income_vs_expense is binary income/outflow; cost_comparison is 2+ options).
+    Distinct from data_bar_chart (data_bar_chart requires homogeneous float values;
+    cost_comparison handles heterogeneous units). Provide "option_labels" list +
+    "option_prices" list (same length, 2-4 items). Optionally set "best_index"
+    (0-based) to highlight the recommended option — defaults to the last option.
   "decision_matrix" — speaker introduces a 2×2 framework to classify actions or
     choices ("urgent/important, urgent/pas important, pas urgent/important, pas urgent/
     pas important"). REQUIRES exactly 4 quadrant labels. Distinct from comparison
