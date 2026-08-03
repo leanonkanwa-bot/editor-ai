@@ -1745,29 +1745,53 @@ def _extract_phrase_text_cards(
 ) -> list[dict]:
     """Full-coverage phrase-text caption cards for long format.
 
-    Replaces ASS subtitle burn-in. One card per detected phrase, contiguous
-    timing (endSec = next phrase start), no G2/G3 guards. Phrases that START
-    inside any graphic card window are SKIPPED (not delayed) — phrases already
-    active when a graphic card starts are left to fade naturally via compose.py.
-    Minimum 2 words per phrase.
+    Replaces ASS subtitle burn-in. Algorithm (Option B — DELAY):
+      1. Detect phrase boundaries (sentence-end or pause ≥ 0.20s), min 2 words.
+      2. Phrases that START inside a graphic card window are queued (not dropped).
+      3. When the window ends, the most RECENT queued phrases that fit in the
+         available slot (window_end → next_natural_phrase.start) are shown at
+         their natural speech duration. Older phrases that don’t fit are dropped.
+      4. Phrases outside windows use contiguous timing (endSec = next phrase start).
     """
     if not remapped_words:
         return []
 
-    # Window lookup: skip phrases that start inside any graphic card window
-    # (beat cards included — prevents GSAP opacity conflicts at identical startSec)
-    graphic_windows: list[tuple[float, float]] = [
+    # Build and merge graphic windows (adjacent windows within 0.3s treated as one).
+    # merged_wins: ALL graphic cards (beats + LLM) — used for the DELAY queue logic.
+    # llm_wins: LLM/rich cards only (beat cards excluded) — used to cap phrase-text
+    # endSec.  Beat cards overlay the centre zone only and don't duplicate content
+    # with phrase_text, so we must not cut phrase_text short during beat windows.
+    _raw_wins = sorted(
         (float(c.get("startSec", 0)), float(c.get("endSec", 0)))
         for c in graphic_cards
-    ]
+    )
+    merged_wins: list[list[float]] = []
+    for ws, we in _raw_wins:
+        if merged_wins and ws <= merged_wins[-1][1] + 0.3:
+            merged_wins[-1][1] = max(merged_wins[-1][1], we)
+        else:
+            merged_wins.append([ws, we])
 
-    def _in_window(t: float) -> bool:
-        for cs, ce in graphic_windows:
-            if cs <= t < ce:
-                return True
-        return False
+    _llm_raw = sorted(
+        (float(c.get("startSec", 0)), float(c.get("endSec", 0)))
+        for c in graphic_cards
+        if c.get("beat") != "beat"
+    )
+    llm_wins: list[list[float]] = []
+    for ws, we in _llm_raw:
+        if llm_wins and ws <= llm_wins[-1][1] + 0.3:
+            llm_wins[-1][1] = max(llm_wins[-1][1], we)
+        else:
+            llm_wins.append([ws, we])
 
-    # Phrase detection: same boundary rules as _extract_beat_cards
+    def _window_end(t: float) -> float | None:
+        """Return the end of the window containing t, or None if t is free."""
+        for ws, we in merged_wins:
+            if ws <= t < we:
+                return we
+        return None
+
+    # ── Phrase detection ────────────────────────────────────────────────────
     phrases: list[tuple[float, float, list[WordTiming]]] = []
     ph_start_t = remapped_words[0].start
     ph_words: list[WordTiming] = []
@@ -1776,7 +1800,7 @@ def _extract_phrase_text_cards(
         ph_words.append(w)
         boundary = False
 
-        stripped = w.text.strip().rstrip("»\")'\\]")
+        stripped = w.text.strip().rstrip("»\")’\\]")
         if stripped and stripped[-1] in ".?!,:;":
             boundary = True
 
@@ -1794,53 +1818,104 @@ def _extract_phrase_text_cards(
             )
             ph_words = []
 
-    # Build phrase_text cards with contiguous timing and skip filter
-    n_raw = len(phrases)
-    n_skipped = 0
-    _APOS_CHARS = ("'", "’")  # straight + right single quotation mark
-    cards: list[dict] = []
+    # ── Card generation with DELAY (Option B) ──────────────────────────────
+    _APOS_CHARS = ("’", "’")  # straight + right single quotation mark
 
-    for idx, (ph_start, _ph_end, pw) in enumerate(phrases):
-        if _in_window(ph_start):
-            n_skipped += 1
-            continue
-
-        # Contiguous timing: extend to next phrase's start
-        next_start = phrases[idx + 1][0] if idx + 1 < len(phrases) else trimmed_duration
-        end_sec = min(next_start, trimmed_duration)
-
-        # Apostrophe merge on WordTiming list (Whisper splits "qu'en" → ["qu'", "en"])
-        merged_pw: list[WordTiming] = []
+    def _build_word_dicts(pw: list[WordTiming]) -> list[dict]:
+        """Apostrophe-merge then convert to caption word dicts."""
+        merged: list[WordTiming] = []
         for _w in pw:
-            if merged_pw and (
+            if merged and (
                 any(_w.text.startswith(_a) for _a in _APOS_CHARS)
-                or any(merged_pw[-1].text.endswith(_a) for _a in _APOS_CHARS)
+                or any(merged[-1].text.endswith(_a) for _a in _APOS_CHARS)
             ):
-                prev = merged_pw[-1]
-                merged_pw[-1] = WordTiming(
+                prev = merged[-1]
+                merged[-1] = WordTiming(
                     text=prev.text + _w.text, start=prev.start, end=_w.end
                 )
             else:
-                merged_pw.append(_w)
-
-        word_dicts = [
+                merged.append(_w)
+        return [
             {"text": _w.text, "emphasis": False, "start": _w.start, "end": _w.end}
-            for _w in merged_pw
+            for _w in merged
         ]
 
-        cards.append({
+    def _make_card(start: float, end: float, word_dicts: list[dict]) -> dict:
+        return {
             "id": f"pt-{len(cards) + 1:03d}",
             "type": "caption",
             "beat": "phrase_text",
-            "startSec": round(ph_start, 3),
-            "endSec": round(end_sec, 3),
+            "startSec": round(start, 3),
+            "endSec": round(end, 3),
             "zone": "phrase-text",
             "words": word_dicts,
-        })
+        }
+
+    n_raw = len(phrases)
+    n_delayed = 0
+    n_flushed = 0
+    n_dropped = 0
+    cards: list[dict] = []
+    delayed_queue: list[tuple[float, float, list[WordTiming]]] = []
+    active_win_end: float | None = None
+
+    def _flush_queue(flush_from: float, slot_end: float) -> None:
+        """Emit most-recent delayed phrases that fit in [flush_from, slot_end]."""
+        nonlocal n_flushed, n_dropped
+        available = slot_end - flush_from
+        if available <= 0:
+            n_dropped += len(delayed_queue)
+            return
+        # Greedy from most recent: collect until cumulative duration overflows
+        selected: list[tuple[float, float, list[WordTiming], float]] = []
+        cumulative = 0.0
+        for dps, dpe, dpw in reversed(delayed_queue):
+            dur = dpe - dps  # natural speech duration, uncompressed
+            if cumulative + dur <= available:
+                selected.append((dps, dpe, dpw, dur))
+                cumulative += dur
+            else:
+                n_dropped += 1
+                break  # older phrases don’t fit — stop (they go further back in time)
+        n_dropped += len(delayed_queue) - len(selected) - (1 if len(selected) < len(delayed_queue) else 0)
+        n_flushed += len(selected)
+        selected.reverse()  # restore chronological order
+        t = flush_from
+        for _dps, _dpe, dpw, dur in selected:
+            cards.append(_make_card(t, t + dur, _build_word_dicts(dpw)))
+            t += dur
+
+    for idx, (ph_start, ph_end, pw) in enumerate(phrases):
+        win_end = _window_end(ph_start)
+
+        if win_end is not None:
+            # Phrase starts inside a graphic window → queue for later
+            delayed_queue.append((ph_start, ph_end, pw))
+            active_win_end = win_end
+            n_delayed += 1
+            continue
+
+        # We’re outside a window. Flush any pending queue.
+        if delayed_queue and active_win_end is not None:
+            _flush_queue(flush_from=active_win_end, slot_end=ph_start)
+            delayed_queue = []
+            active_win_end = None
+
+        # Normal phrase: contiguous timing, capped before the next LLM card window.
+        # This prevents phrase_text from extending into a rich-card window and
+        # showing the same content twice (the duplication bug).
+        next_start = phrases[idx + 1][0] if idx + 1 < len(phrases) else trimmed_duration
+        next_llm_win = next((ws for ws, _we in llm_wins if ws > ph_start), trimmed_duration)
+        end_sec = min(next_start, next_llm_win, trimmed_duration)
+        cards.append(_make_card(ph_start, end_sec, _build_word_dicts(pw)))
+
+    # Flush any remaining queue at video end
+    if delayed_queue and active_win_end is not None:
+        _flush_queue(flush_from=active_win_end, slot_end=trimmed_duration)
 
     print(
-        f"[PHRASE-TEXT] {n_raw} phrases | skipped={n_skipped} (in graphic window)"
-        f" | generated={len(cards)}",
+        f"[PHRASE-TEXT] {n_raw} phrases | delayed={n_delayed} | "
+        f"flushed={n_flushed} | dropped={n_dropped} | generated={len(cards)}",
         flush=True,
     )
     return cards

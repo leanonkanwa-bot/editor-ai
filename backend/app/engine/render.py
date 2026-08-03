@@ -839,7 +839,7 @@ def _build_zoom_t_expr(
     """Build an FFmpeg time-based expression for zoom factor Z(t).
 
     Uses `t` (seconds) instead of frame numbers. Returns a nested if()
-    expression with cosine ease-in-out for drift, quadratic for punch_in.
+    expression with cosine ease-in-out for drift, ease-OUT for punch_in, ease-IN for pull_out.
     """
     if not zoom_entries:
         return str(default_zoom)
@@ -856,8 +856,10 @@ def _build_zoom_t_expr(
         ed = max(0.001, ee - es)
 
         p = f"(t-{es:.4f})/{ed:.4f}"
-        if kind == "punch_in" or kind == "pull_out":
-            ease = f"{zf}+({zt}-{zf})*{p}*{p}"
+        if kind == "punch_in":
+            ease = f"{zf}+({zt}-{zf})*(2*{p}-{p}*{p})"  # ease-OUT: fast entry, soft settle
+        elif kind == "pull_out":
+            ease = f"{zf}+({zt}-{zf})*{p}*{p}"           # ease-IN: gradual release
         else:
             ease = f"{zf}+({zt}-{zf})*(1-cos({p}*PI))/2"
 
@@ -959,7 +961,7 @@ def _zoom_filter_for_level(zoom_level: int, target_w: int, target_h: int) -> str
 # ── Speech-moment punch-in constants ──────────────────────────────────────────
 _PUNCH_IN_STRONG_BEATS    = frozenset({"realization", "payoff", "amplify", "principle"})
 _PUNCH_IN_SPEECH_SCALE    = 1.060   # 6% scale bump
-_PUNCH_IN_SPEECH_DUR      = 0.25    # seconds each for IN and OUT phases
+_PUNCH_IN_SPEECH_DUR      = 0.40    # seconds each for IN and OUT phases (≥12 frames for perceived fluidity)
 _PUNCH_IN_BUDGET_S        = 13.0   # minimum seconds between two punch-ins
 _PUNCH_IN_SEGMENT_MIN_DUR = 2.0    # source segment must be this long to qualify
 _PUNCH_IN_ENTRY_OFFSET    = 0.15   # fire this many seconds after segment start

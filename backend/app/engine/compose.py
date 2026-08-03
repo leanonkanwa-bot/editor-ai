@@ -114,10 +114,14 @@ _DATA_PANEL_TYPES = {"stat", "list", "comparison", "checklist", "score", "trend"
 _CENTER_ZONES = {"fullscreen", "video-overlay"}
 _SIDE_PANEL_ZONES = {"side-panel", "side-panel-left", "side-panel-right", "side-panel-top", "upper-data", "upper-right", "upper-left-data", "upper-left-data-sm", "upper-right-data-tall", "portrait-bottom-left", "portrait-bottom-right", "portrait-center-left", "portrait-center-right", "landscape-tl", "landscape-tr", "landscape-cl", "landscape-cr", "landscape-cf", "landscape-tl-tall", "landscape-tr-tall"}
 # Zones where the backdrop-dim overlay fires — card overlaps the speaker face.
-# Portrait center-* zones are excluded: per-card portrait scrims handle dimming there.
+# Portrait centre zones added as safety net: backdrop-dim fires IN ADDITION to
+# per-card portrait scrims, ensuring consistent dimming regardless of face detection.
+# Upper landscape zones (landscape-tl/tr) intentionally excluded — they sit above the
+# speaker and dimming would cover unrelated content.
 _DIMMING_ZONES = frozenset({
     "fullscreen", "video-overlay",
     "landscape-cf",
+    "portrait-center-full", "portrait-center-left", "portrait-center-right",
 })
 
 # Subset of _DATA_PANEL_TYPES that render 4-6 stacked rows.  In portrait these are
@@ -4139,7 +4143,19 @@ def _build_timeline_js(
             # is not composited by SwiftShader on Railway.
             content_style = card.get("contentHints", {}).get("style", "key_phrase")
             card_zone = card.get("zone", "")
-            center_zone = card_zone in _DIMMING_ZONES
+            # For portrait, replicate the _build_card_host() remapping so that cards
+            # the LLM assigned to upper/side zones (but that visually land in the
+            # portrait-center-full slot) also trigger backdrop-dim as a safety net.
+            if layout == "portrait" and card.get("type") != "caption":
+                if card_zone not in ("video-overlay", "fullscreen",
+                                     "portrait-center-full",
+                                     "portrait-center-left", "portrait-center-right"):
+                    _effective_zone = "portrait-center-full"
+                else:
+                    _effective_zone = card_zone
+            else:
+                _effective_zone = card_zone
+            center_zone = _effective_zone in _DIMMING_ZONES
             if card.get("_family") == "full_cover" and content_style not in ("prim_anecdote_frame", "prim_journey_map"):
                 # Full-cover blackout: solid black fills the canvas; video invisible.
                 # prim_journey_map excluded: cover_type=overlay, video intentionally shows through.
@@ -7081,6 +7097,35 @@ def _build_timeline_js(
                 f'  tl.to(\'{cap_sel}\', '
                 f'{{ opacity: 1, duration: 0.20, ease: "power2.out" }}, '
                 f'{ge:.4f});'
+            )
+        lines.append("")
+
+    # phrase_text suppression during full-cover cards only.
+    # phrase_text (z-index:20) must not float above full-cover cards (z-index:10)
+    # that fill the entire canvas.  Beat and LLM graphic cards don't cover the
+    # bottom zone (y≥78%), so phrase_text stays visible during those windows.
+    fullcover_windows = [
+        (round(float(c.get("startSec", 0)), 3), round(float(c.get("endSec", 0)), 3))
+        for c in cards if c.get("_family") == "full_cover"
+    ]
+    phrase_text_ids = [
+        _esc_js(str(cid))
+        for c in cards
+        if c.get("type") == "caption" and c.get("beat") == "phrase_text"
+        for cid in [c.get("id", "")]
+        if cid
+    ]
+    if fullcover_windows and phrase_text_ids:
+        lines.append("  // ── phrase_text hidden during full-cover cards ──")
+        pt_sel = ", ".join(f'.card-host[data-card-id="{cid}"]' for cid in phrase_text_ids)
+        for fs, fe in fullcover_windows:
+            lines.append(
+                f'  tl.to(\'{pt_sel}\', '
+                f'{{ opacity: 0, duration: 0.15, ease: "power2.in" }}, {fs:.4f});'
+            )
+            lines.append(
+                f'  tl.to(\'{pt_sel}\', '
+                f'{{ opacity: 1, duration: 0.20, ease: "power2.out" }}, {fe:.4f});'
             )
         lines.append("")
 
