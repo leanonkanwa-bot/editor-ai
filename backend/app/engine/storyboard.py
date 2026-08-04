@@ -516,7 +516,7 @@ OUTPUT: a JSON array of card objects. Each card:
     "number": "<if a stat/number is featured — for prim_stat_counter use numeric string only, e.g. '46.2' not '46,2 M€'>",
     "prefix": "<prim_stat_counter only — currency/unit BEFORE the number, e.g. '$'. Convention FR: laisser vide, mettre la devise dans suffix>",
     "suffix": "<prim_stat_counter only — unit AFTER the number, e.g. 'M€', 'K', '%'. Convention FR: suffix='€' ou 'M€', prefix vide>",
-    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking"|"hand_written_note"|"speech_bubble_thought"|"calendar_date_highlight"|"percentage_split"|"red_flag_list"|"success_metric_badge"|"client_avatar_persona"|"book_recommendation"|"tool_stack"|"revenue_breakdown"|"age_milestone"|"contrarian_take"|"action_step_cta"|"story_chapter_transition"|"live_reaction_split"|"hidden_cost_reveal"|"social_proof_counter"|"timeline_prediction"|"red_thread_connector"|"silent_beat_pause"|"comment_reply_style"|"before_you_scroll"|"traffic_light_status"|"day_in_life_schedule"|"skill_tree_unlock"|"audience_poll_result"|"broken_promise_tracker"|"ingredient_list"|"resource_allocation"|"fill_in_the_blank"|"streak_counter"|"before_now_later"|"platform_stats"|"cost_comparison"|"decision_matrix"|"habit_tracker"|"income_vs_expense"|"milestone_recap"|"content_calendar"|"client_result_number"|"mistake_lesson"|"tool_comparison"|"weekly_review"|"audience_question"|"prim_stat_counter"|"prim_split_compare"|"prim_journey_map",
+    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking"|"hand_written_note"|"speech_bubble_thought"|"calendar_date_highlight"|"percentage_split"|"red_flag_list"|"success_metric_badge"|"client_avatar_persona"|"book_recommendation"|"tool_stack"|"revenue_breakdown"|"age_milestone"|"contrarian_take"|"action_step_cta"|"story_chapter_transition"|"live_reaction_split"|"hidden_cost_reveal"|"social_proof_counter"|"timeline_prediction"|"red_thread_connector"|"silent_beat_pause"|"comment_reply_style"|"before_you_scroll"|"traffic_light_status"|"day_in_life_schedule"|"skill_tree_unlock"|"audience_poll_result"|"broken_promise_tracker"|"ingredient_list"|"resource_allocation"|"fill_in_the_blank"|"streak_counter"|"before_now_later"|"platform_stats"|"cost_comparison"|"decision_matrix"|"habit_tracker"|"income_vs_expense"|"milestone_recap"|"content_calendar"|"client_result_number"|"mistake_lesson"|"tool_comparison"|"weekly_review"|"audience_question"|"prim_stat_counter"|"prim_split_compare"|"prim_journey_map"|"number_hero",
     "left_label": "<comparison / prim_split_compare: left side label>",
     "left_value": "<comparison: left side value (prim_split_compare does not use this)>",
     "right_label": "<comparison / prim_split_compare: right side label>",
@@ -665,7 +665,10 @@ OUTPUT: a JSON array of card objects. Each card:
     "tool_features": ["<tool_comparison: feature comparison row 1, e.g. 'Prix: Gratuit | 5€/mois'>", "<row 2>"],
     "review_categories": ["<weekly_review: category name 1, e.g. 'Contenu', 'Prospection', 'Santé'>"],
     "review_scores": ["<weekly_review: score or assessment for category 1, e.g. '8/10', '✓', '⚠️'>"],
-    "question_text": "<audience_question: the single question posed to the audience — no answer included>"
+    "question_text": "<audience_question: the single question posed to the audience — no answer included>",
+    "nh_number": "<number_hero: the main number/value to display as-is, e.g. '12 000 €/mois', '500K abonnés', '×3 CA'>",
+    "nh_kicker": "<number_hero: small caps label above the lines, e.g. 'RÉSULTAT DU MOIS', 'CLIENT #47', 'EN 90 JOURS'>",
+    "nh_detail": "<number_hero: muted context below the lines, e.g. 'en affiliation organique', 'de chiffre d\\'affaires net'>"
   }}
 }}
 
@@ -1011,6 +1014,27 @@ RULES:
     financial figure. Distinct from stat (stat is informational; income_reveal
     has suspense/reveal energy). Provide "income_value" (the number string)
     + "income_context" (brief qualifier).
+  "number_hero" — the SINGLE most important number in the entire video, given
+    full visual staging: centered spotlight, mirror accent lines above and below
+    the number, cinematic 3-act reveal animation.
+    BUDGET: ONE per video maximum. If several numbers compete, use stat or
+    prim_stat_counter for the others; reserve number_hero for the one number
+    the speaker would put on a book cover.
+    TRIGGER — all three must hold simultaneously:
+      (a) SINGULAR DOMINANCE: this number is the credibility anchor of the whole video.
+      (b) PERSONAL RESULT: the speaker's own achievement or a direct client outcome.
+      (c) CLIMACTIC PLACEMENT: the speaker treats it as a peak moment — dramatic pause,
+          "voilà le résultat", "ce que ça m'a rapporté", not a passing figure in a list.
+    DISTINCTION FROM income_reveal: income_reveal is a blur-reveal text card (no spotlight,
+      no mirror lines). number_hero is a full visual spectacle — use income_reveal when
+      the reveal energy is present but the number is not the dominant climax of the video.
+    DISTINCTION FROM prim_stat_counter: prim_stat_counter is a count-up animation for any
+      speaker metric with a structural reveal signal; number_hero is for the ONE number that
+      anchors the entire video's credibility argument — not every strong stat qualifies.
+    DISTINCTION FROM stat: stat is informational data without personal climactic energy.
+    Provide "nh_number" (display string, e.g. "12 000 €/mois") +
+    "nh_kicker" (e.g. "RÉSULTAT DU MOIS") + "nh_detail" (e.g. "en affiliation organique").
+    Zone: fullscreen. Duration: 2.0–3.0s.
   "question_answer_pair" — speaker poses a question AND immediately answers
     it in the same breath (e.g. "Qu'est-ce que c'est ? C'est une méthode
     en 3 étapes"). BOTH question and answer are present in the same segment.

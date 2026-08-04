@@ -229,6 +229,13 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
                 f" chars={_tc} -> {_dyn_h}px",
                 flush=True,
             )
+        # number_hero: centered spotlight + mirror lines — 420px for breathing room.
+        if _dyn_style == "number_hero":
+            bounds = {**bounds, "height": 420}
+            print(
+                f"[COMPOSE] number-hero-height {card.get('id', '?')} -> 420px",
+                flush=True,
+            )
 
     if is_caption:
         inner = _build_caption_card_html(card, pack=pack, layout=layout)
@@ -2670,6 +2677,56 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'.card[data-card-id="{card_id}"] .kicker {{ text-shadow:0 1px 10px rgba(0,0,0,0.9); }}')
         parts.append(f'.card[data-card-id="{card_id}"] .accent-line {{ display:none; }}')
         parts.append(f'.card[data-card-id="{card_id}"] .shimmer-mask {{ display:none; }}')
+    # ── number_hero CSS ──────────────────────────────────────────────────────
+    if content_style == "number_hero":
+        # Tighten panel padding — scene needs vertical room for 3-act layout
+        parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{ padding:20px 40px; }}')
+        # Suppress standard kicker (nh-kicker is inside .nh-scene instead)
+        parts.append(f'.card[data-card-id="{card_id}"] .kicker {{ display:none; }}')
+        parts.append(f'.card[data-card-id="{card_id}"] .accent-line {{ display:none; }}')
+        parts.append(f'.card[data-card-id="{card_id}"] .shimmer-mask {{ display:none; }}')
+        # Scene: flex column, fills card-panel, centers the 6-element stack
+        parts.append(f'.card[data-card-id="{card_id}"] .nh-scene {{')
+        parts.append('  display:flex; flex-direction:column; align-items:center;')
+        parts.append('  justify-content:center; position:relative; width:100%; flex:1; gap:0;')
+        parts.append('}')
+        # Spotlight: radial-gradient circle absolutely centered behind content
+        _nh_is_glow = p["id"] in ("lean_glass", "lean_vibe")
+        _nh_spot_alpha = "24" if _nh_is_glow else "10"
+        parts.append(f'.card[data-card-id="{card_id}"] .nh-spotlight {{')
+        parts.append('  position:absolute; width:460px; height:460px; border-radius:50%;')
+        parts.append('  top:50%; left:50%; transform:translate(-50%,-50%);')
+        parts.append(f'  background:radial-gradient(circle, {p["accent"]}{_nh_spot_alpha} 0%, transparent 70%);')
+        parts.append('  pointer-events:none; opacity:0; z-index:0;')
+        parts.append('}')
+        # Kicker: small caps above the lines
+        parts.append(f'.card[data-card-id="{card_id}"] .nh-kicker {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{p["kicker_size"]}; font-weight:600;')
+        parts.append(f'  color:{p["text_secondary"]}; letter-spacing:0.16em; text-transform:uppercase;')
+        parts.append('  text-align:center; opacity:0; margin-bottom:14px; position:relative; z-index:1;')
+        parts.append('}')
+        # Mirror accent lines — block-level + resolved width so scaleX works (HF rule 7)
+        parts.append(f'.card[data-card-id="{card_id}"] .nh-line {{')
+        parts.append('  display:block; width:100%; height:2px; border-radius:1px;')
+        parts.append(f'  background:{p["accent"]}; transform-origin:center; transform:scaleX(0);')
+        parts.append('  position:relative; z-index:1;')
+        if p["accent_line_glow"]:
+            parts.append(f'  box-shadow:{p["accent_line_glow"]};')
+        parts.append('}')
+        # Hero number: 160px, accent-adjacent coloring, optional glow on Glass/Vibe
+        parts.append(f'.card[data-card-id="{card_id}"] .nh-number {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:160px; font-weight:900;')
+        parts.append(f'  line-height:1; letter-spacing:-0.02em; color:{p["text"]};')
+        parts.append('  text-align:center; margin:16px 0; opacity:0; position:relative; z-index:1;')
+        if p["title_glow"]:
+            parts.append(f'  text-shadow:{p["title_glow"]};')
+        parts.append('}')
+        # Detail: muted context label below lines
+        parts.append(f'.card[data-card-id="{card_id}"] .nh-detail {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{p["detail_size"]}; font-weight:500;')
+        parts.append(f'  color:{p["text_secondary"]}; text-align:center; opacity:0;')
+        parts.append('  margin-top:14px; position:relative; z-index:1;')
+        parts.append('}')
     parts.append('</style>')
     # Timeline: full-screen overlay, no card-panel wrapper
     if content_style == "timeline":
@@ -3866,6 +3923,20 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'    <div><div class="jmt-city">{_jmt_from}</div><div class="jmt-ctry">{_jmt_fc}</div></div>')
         parts.append(f'    <div style="text-align:right"><div class="jmt-city">{_jmt_to}</div><div class="jmt-ctry">{_jmt_tc}</div></div>')
         parts.append(f'  </div>')
+    elif content_style == "number_hero":
+        _nh_number_t  = _esc(hints.get("nh_number", ""))
+        _nh_kicker_t  = _esc(hints.get("nh_kicker", "") or kicker or "")
+        _nh_detail_t  = _esc(hints.get("nh_detail", "") or detail or "")
+        parts.append(f'    <div class="nh-scene">')
+        parts.append(f'      <div class="nh-spotlight" id="{card_id}-nh-spotlight"></div>')
+        if _nh_kicker_t:
+            parts.append(f'      <div class="nh-kicker" id="{card_id}-nh-kicker">{_nh_kicker_t}</div>')
+        parts.append(f'      <div class="nh-line" id="{card_id}-nh-line-top"></div>')
+        parts.append(f'      <div class="nh-number" id="{card_id}-nh-number">{_nh_number_t}</div>')
+        parts.append(f'      <div class="nh-line" id="{card_id}-nh-line-bottom"></div>')
+        if _nh_detail_t:
+            parts.append(f'      <div class="nh-detail" id="{card_id}-nh-detail">{_nh_detail_t}</div>')
+        parts.append(f'    </div>')
     else:
         # key_phrase, quote and any unknown style
         parts.append(f'    <div class="title" id="{card_id}-title">{_split_title_accent(display_text, accent_word_hint, card_id)}</div>')
@@ -6921,6 +6992,37 @@ def _build_timeline_js(
                 lines.append(f'  tl.fromTo(\'#{card_id}-jmt-st\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.200, ease: "power2.out" }}, {_t_arrive + 0.08:.4f});')
                 # Footer fade in after arrival
                 lines.append(f'  tl.fromTo(\'{_jmt_ft_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.350, ease: "power2.out" }}, {_t_arrive + 0.20:.4f});')
+            # ── number_hero GSAP — 3-act cinematic reveal ────────────────────
+            elif content_style == "number_hero":
+                _nh_spot_s = f'.card[data-card-id="{card_id}"] #{card_id}-nh-spotlight'
+                _nh_kck_s  = f'.card[data-card-id="{card_id}"] #{card_id}-nh-kicker'
+                _nh_lt_s   = f'.card[data-card-id="{card_id}"] #{card_id}-nh-line-top'
+                _nh_lb_s   = f'.card[data-card-id="{card_id}"] #{card_id}-nh-line-bottom'
+                _nh_num_s  = f'.card[data-card-id="{card_id}"] #{card_id}-nh-number'
+                _nh_det_s  = f'.card[data-card-id="{card_id}"] #{card_id}-nh-detail'
+                _nh_hints  = card.get("contentHints", {})
+                _nh_has_kicker = bool(_nh_hints.get("nh_kicker") or kicker)
+                _nh_has_detail = bool(_nh_hints.get("nh_detail") or detail)
+                # Act 1: spotlight scale(0)→(1) + opacity, sine.out (t_in + 0.0–0.5)
+                lines.append(f'  tl.fromTo(\'{_nh_spot_s}\', {{ opacity: 0, scale: 0 }}, {{ opacity: 1, scale: 1, duration: 0.500, ease: "sine.out" }}, {t_in:.4f});')
+                # Act 2: number scale(2.0)→(1.0) + blur(20px)→(0), power4.out (t_in + 0.3–0.9)
+                lines.append(f'  tl.fromTo(\'{_nh_num_s}\', {{ opacity: 0, scale: 2.0, filter: "blur(20px)" }}, {{ opacity: 1, scale: 1.0, filter: "blur(0px)", duration: 0.600, ease: "power4.out" }}, {t_in + 0.3:.4f});')
+                # Act 3: mirror accent lines scaleX(0)→(1), power2.out, +0.1s offset (t_in + 0.8–1.3)
+                lines.append(f'  tl.fromTo(\'{_nh_lt_s}\', {{ scaleX: 0 }}, {{ scaleX: 1, duration: 0.400, ease: "power2.out" }}, {t_in + 0.8:.4f});')
+                lines.append(f'  tl.fromTo(\'{_nh_lb_s}\', {{ scaleX: 0 }}, {{ scaleX: 1, duration: 0.400, ease: "power2.out" }}, {t_in + 0.9:.4f});')
+                # Act 4: kicker + detail fade-rise with y offset (t_in + 1.0–1.5)
+                if _nh_has_kicker:
+                    lines.append(f'  tl.fromTo(\'{_nh_kck_s}\', {{ opacity: 0, y: 20 }}, {{ opacity: 1, y: 0, duration: 0.400, ease: _eIn }}, {t_in + 1.0:.4f});')
+                if _nh_has_detail:
+                    lines.append(f'  tl.fromTo(\'{_nh_det_s}\', {{ opacity: 0, y: 15 }}, {{ opacity: 1, y: 0, duration: 0.400, ease: _eIn }}, {t_in + 1.1:.4f});')
+                # Act 5: glow burst on Glass/Vibe packs only (t_in + 1.5–1.8)
+                if p.get("title_glow_intense") and p.get("title_glow"):
+                    lines.append(
+                        f'  tl.fromTo(\'{_nh_num_s}\', '
+                        f'{{ textShadow: "{_esc_js(p["title_glow"])}" }}, '
+                        f'{{ textShadow: "{_esc_js(p["title_glow_intense"])}", duration: 0.150, ease: "power2.out", yoyo: true, repeat: 1 }}, '
+                        f'{t_in + 1.5:.4f});'
+                    )
             else:
                 if is_cinema:
                     lines.append(
@@ -7495,6 +7597,11 @@ def compose(
                     flush=True,
                 )
                 return {**card, "zone": target_zone}
+            return card
+
+        # number_hero: spotlight layout is always portrait-center-full (centered).
+        # Remapping to left/right would clip the 1000px-wide scene. Skip catch-all.
+        if style == "number_hero":
             return card
 
         # Catch-all for all remaining types (timeline, versus_battle, dialogue,
