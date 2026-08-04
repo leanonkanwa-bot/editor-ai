@@ -4127,6 +4127,9 @@ def _build_timeline_js(
                     f'  tl.to("#backdrop-dim", '
                     f'{{ opacity: 0, backgroundColor: "rgba(0,0,0,0.45)", duration: 0.18, ease: _eOut }}, {end - 0.18:.4f});'
                 )
+                lines.append(
+                    f'  tl.set("#backdrop-dim", {{ opacity: 0, backgroundColor: "rgba(0,0,0,0.45)" }}, {end:.4f});'
+                )
             elif center_zone:
                 lines.append(
                     f'  tl.to("#backdrop-dim", '
@@ -4135,6 +4138,9 @@ def _build_timeline_js(
                 lines.append(
                     f'  tl.to("#backdrop-dim", '
                     f'{{ opacity: 0, duration: 0.18, ease: _eOut }}, {end - 0.18:.4f});'
+                )
+                lines.append(
+                    f'  tl.set("#backdrop-dim", {{ opacity: 0 }}, {end:.4f});'
                 )
                 # Punch-in is handled as independent zoom entries via
                 # _build_punch_in_zoom_entries() — not wired to card entry events.
