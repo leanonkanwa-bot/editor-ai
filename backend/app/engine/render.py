@@ -18,6 +18,7 @@ browser-use/video-use's helpers/render.py, which is the proven shape.
 
 from __future__ import annotations
 
+import random
 import shlex
 import subprocess
 import time
@@ -972,9 +973,10 @@ _PUNCH_IN_DATA_TYPES      = frozenset({"stat", "list", "comparison", "checklist"
 _BREATH_WINDOW_MIN_S   = 2.5    # minimum seconds from previous selected point
 _BREATH_WINDOW_MAX_S   = 4.5    # maximum window to search for next candidate
 _BREATH_GAP_MIN_S      = 0.08   # minimum inter-word silence to qualify
-_BREATH_PHRASE_SCALE   = 1.007  # end-of-sentence: . ! ?
-_BREATH_CLAUSE_SCALE   = 1.005  # clause boundary: , ; : —
-_BREATH_MICRO_SCALE    = 1.003  # bare micro-pause
+_BREATH_PHRASE_SCALE   = 1.012  # end-of-sentence: . ! ?
+_BREATH_CLAUSE_SCALE   = 1.008  # clause boundary: , ; : —
+_BREATH_MICRO_SCALE    = 1.005  # bare micro-pause
+_BREATH_SCALE_JITTER   = 0.125  # ±12.5% variance on delta — breaks mechanical uniformity
 _BREATH_PHRASE_DUR     = 1.6    # total tween duration (s) for sentence boundary
 _BREATH_CLAUSE_DUR     = 1.4
 _BREATH_MICRO_DUR      = 1.2
@@ -1098,9 +1100,9 @@ def _inject_speech_breath_zooms(
 ) -> list[dict]:
     """Inject subliminal breath zooms (~1 per 3s) aligned to natural speech pauses.
 
-    Each breath is a slow sine.inOut movement (×1.003–×1.007, 1.2–1.6 s total)
-    that stays below conscious perception individually but gives a constant sense
-    of life. Applies to all style packs, including lean_paper.
+    Each breath is a slow sine.inOut movement (×1.005–×1.012 ±12.5% organic jitter,
+    1.2–1.6 s total) — perceptible but not consciously visible as a zoom.
+    Applies to all style packs, including lean_paper.
 
     GSAP's overwrite:"auto" on every tween handles compositing with existing
     drift entries — no entry splitting is needed at these amplitudes.
@@ -1164,7 +1166,8 @@ def _inject_speech_breath_zooms(
     result = list(zoom_entries)
     for ts, total_dur, scale in selected:
         baseline = _interp_zoom_scale(ts, result)
-        scale_pk = round(baseline * scale, 6)
+        _jitter = 1.0 + (scale - 1.0) * random.uniform(1.0 - _BREATH_SCALE_JITTER, 1.0 + _BREATH_SCALE_JITTER)
+        scale_pk = round(baseline * _jitter, 6)
         t_in     = round(ts + total_dur * _BREATH_IN_RATIO, 4)
         t_out    = round(ts + total_dur, 4)
         result.append({
