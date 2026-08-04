@@ -1513,10 +1513,11 @@ Design graphic overlay cards for this video — up to {target_cards} maximum. Pl
             cards = json.loads(_repair_json(raw))
         if not isinstance(cards, list):
             cards = cards.get("cards", [])
-        # Clamp to video duration
+        # Clamp to video duration; 0.5s floor prevents zero-duration cards only.
+        # Per-category minimums (2.5/3.0/3.5s) are applied below with anti-overlap clamp.
         for card in cards:
             card["startSec"] = max(0, min(float(card.get("startSec", 0) or 0), trimmed_duration - 1))
-            card["endSec"] = max(card["startSec"] + 1, min(float(card.get("endSec", 0) or 0), trimmed_duration))
+            card["endSec"] = max(card["startSec"] + 0.5, min(float(card.get("endSec", 0) or 0), trimmed_duration))
         # Defensive duration cap: contrarian_take is a brief verbal signal, not a
         # long window. Cap at 2.5s to prevent swallowing adjacent content types
         # if classification fired on paraphrased planning output rather than
@@ -1528,6 +1529,44 @@ Design graphic overlay cards for this video — up to {target_cards} maximum. Pl
                 if _end - _start > 2.5:
                     card["endSec"] = round(_start + 2.5, 2)
                     print(f"[STORYBOARD] contrarian_take cap: {_start:.2f}-{_end:.2f}s → {_start:.2f}-{card['endSec']}s", flush=True)
+        # Duration extension: lift short cards to per-category minimums.
+        # Sorted first so the anti-overlap clamp (next_card.startSec) is accurate.
+        _MULTI_ITEM_STYLES = frozenset({
+            "list", "timeline", "checklist", "pros_cons", "data_bar_chart",
+            "carousel", "mindmap", "roadmap_milestone", "tool_stack",
+            "revenue_breakdown", "tool_comparison", "decision_matrix",
+            "day_in_life_schedule", "milestone_recap", "content_calendar",
+            "weekly_review", "ingredient_list", "resource_allocation",
+            "platform_stats", "cost_comparison", "broken_promise_tracker",
+            "percentage_split", "habit_tracker",
+        })
+        _ANIMATED_STYLES = frozenset({
+            "prim_stat_counter", "prim_split_compare", "prim_journey_map",
+            "social_proof_counter", "before_after_image", "countdown",
+            "progress_bar", "traffic_light_status",
+        })
+        _sorted_dur = sorted(cards, key=lambda c: float(c.get("startSec", 0)))
+        for _di, _dc in enumerate(_sorted_dur):
+            _style = _dc.get("contentHints", {}).get("style", "")
+            _ds = float(_dc["startSec"])
+            _de = float(_dc["endSec"])
+            _dur = _de - _ds
+            if _style in _MULTI_ITEM_STYLES:
+                _min_dur = 3.5
+            elif _style in _ANIMATED_STYLES:
+                _min_dur = 3.0
+            else:
+                _min_dur = 2.5
+            if _dur < _min_dur:
+                _next_s = float(_sorted_dur[_di + 1]["startSec"]) if _di + 1 < len(_sorted_dur) else trimmed_duration
+                _new_end = min(_ds + _min_dur, _next_s - 0.05, trimmed_duration)
+                if _new_end > _de:
+                    _dc["endSec"] = round(_new_end, 3)
+                    print(
+                        f"[STORYBOARD] DUR-EXT {_dc.get('id','?')} style={_style!r} "
+                        f"{_dur:.2f}s→{_new_end - _ds:.2f}s (floor {_min_dur}s)",
+                        flush=True,
+                    )
         # Landscape zone guard: video-overlay and fullscreen in landscape leave compact=False
         # for any card not in _DATA_PANEL_TYPES (those are rotated later by _remap_zone in
         # compose.py). Hero styles (key_phrase, quote, etc.) legitimately need the full canvas;
@@ -1736,197 +1775,6 @@ def _extract_beat_cards(
         flush=True,
     )
     return beat_cards
-
-
-def _extract_phrase_text_cards(
-    remapped_words: list[WordTiming],
-    graphic_cards: list[dict],
-    trimmed_duration: float,
-) -> list[dict]:
-    """Full-coverage phrase-text caption cards for long format.
-
-    Replaces ASS subtitle burn-in. Algorithm (Option B — DELAY):
-      1. Detect phrase boundaries (sentence-end or pause ≥ 0.20s), min 2 words.
-      2. Phrases that START inside a graphic card window are queued (not dropped).
-      3. When the window ends, the most RECENT queued phrases that fit in the
-         available slot (window_end → next_natural_phrase.start) are shown at
-         their natural speech duration. Older phrases that don’t fit are dropped.
-      4. Phrases outside windows use contiguous timing (endSec = next phrase start).
-    """
-    if not remapped_words:
-        return []
-
-    # Build and merge graphic windows (adjacent windows within 0.3s treated as one).
-    # merged_wins: ALL graphic cards (beats + LLM) — used for the DELAY queue logic.
-    # llm_wins: LLM/rich cards only (beat cards excluded) — used to cap phrase-text
-    # endSec.  Beat cards overlay the centre zone only and don't duplicate content
-    # with phrase_text, so we must not cut phrase_text short during beat windows.
-    _raw_wins = sorted(
-        (float(c.get("startSec", 0)), float(c.get("endSec", 0)))
-        for c in graphic_cards
-    )
-    merged_wins: list[list[float]] = []
-    for ws, we in _raw_wins:
-        if merged_wins and ws <= merged_wins[-1][1] + 0.3:
-            merged_wins[-1][1] = max(merged_wins[-1][1], we)
-        else:
-            merged_wins.append([ws, we])
-
-    _llm_raw = sorted(
-        (float(c.get("startSec", 0)), float(c.get("endSec", 0)))
-        for c in graphic_cards
-        if c.get("beat") != "beat"
-    )
-    llm_wins: list[list[float]] = []
-    for ws, we in _llm_raw:
-        if llm_wins and ws <= llm_wins[-1][1] + 0.3:
-            llm_wins[-1][1] = max(llm_wins[-1][1], we)
-        else:
-            llm_wins.append([ws, we])
-
-    def _window_end(t: float) -> float | None:
-        """Return the end of the window containing t, or None if t is free."""
-        for ws, we in merged_wins:
-            if ws <= t < we:
-                return we
-        return None
-
-    # ── Phrase detection ────────────────────────────────────────────────────
-    phrases: list[tuple[float, float, list[WordTiming]]] = []
-    ph_start_t = remapped_words[0].start
-    ph_words: list[WordTiming] = []
-
-    for i, w in enumerate(remapped_words):
-        ph_words.append(w)
-        boundary = False
-
-        stripped = w.text.strip().rstrip("»\")’\\]")
-        if stripped and stripped[-1] in ".?!,:;":
-            boundary = True
-
-        if not boundary and i + 1 < len(remapped_words):
-            nw = remapped_words[i + 1]
-            if nw.start - w.end >= _BEAT_PAUSE_THRESHOLD_S:
-                boundary = True
-
-        if boundary or i == len(remapped_words) - 1:
-            if len(ph_words) >= 2:
-                phrases.append((ph_start_t, w.end, list(ph_words)))
-            ph_start_t = (
-                remapped_words[i + 1].start if i + 1 < len(remapped_words)
-                else trimmed_duration
-            )
-            ph_words = []
-
-    # ── Card generation with DELAY (Option B) ──────────────────────────────
-    _APOS_CHARS = ("’", "’")  # straight + right single quotation mark
-
-    def _build_word_dicts(pw: list[WordTiming]) -> list[dict]:
-        """Apostrophe-merge then convert to caption word dicts, with one emphasis word."""
-        merged: list[WordTiming] = []
-        for _w in pw:
-            if merged and (
-                any(_w.text.startswith(_a) for _a in _APOS_CHARS)
-                or any(merged[-1].text.endswith(_a) for _a in _APOS_CHARS)
-            ):
-                prev = merged[-1]
-                merged[-1] = WordTiming(
-                    text=prev.text + _w.text, start=prev.start, end=_w.end
-                )
-            else:
-                merged.append(_w)
-        word_dicts = [
-            {"text": _w.text, "emphasis": False, "start": _w.start, "end": _w.end}
-            for _w in merged
-        ]
-        # Mark the rightmost content word (≥3 chars, not a French stopword) as emphasis.
-        # In French, the final noun or verb carries the semantic weight of the phrase.
-        for i in range(len(word_dicts) - 1, -1, -1):
-            token = re.sub(r"[^\w]", "", word_dicts[i]["text"]).lower()
-            if len(token) >= 3 and token not in _FR_STOPWORDS:
-                word_dicts[i]["emphasis"] = True
-                break
-        return word_dicts
-
-    def _make_card(start: float, end: float, word_dicts: list[dict]) -> dict:
-        return {
-            "id": f"pt-{len(cards) + 1:03d}",
-            "type": "caption",
-            "beat": "phrase_text",
-            "startSec": round(start, 3),
-            "endSec": round(end, 3),
-            "zone": "phrase-text",
-            "words": word_dicts,
-        }
-
-    n_raw = len(phrases)
-    n_delayed = 0
-    n_flushed = 0
-    n_dropped = 0
-    cards: list[dict] = []
-    delayed_queue: list[tuple[float, float, list[WordTiming]]] = []
-    active_win_end: float | None = None
-
-    def _flush_queue(flush_from: float, slot_end: float) -> None:
-        """Emit most-recent delayed phrases that fit in [flush_from, slot_end]."""
-        nonlocal n_flushed, n_dropped
-        available = slot_end - flush_from
-        if available <= 0:
-            n_dropped += len(delayed_queue)
-            return
-        # Greedy from most recent: collect until cumulative duration overflows
-        selected: list[tuple[float, float, list[WordTiming], float]] = []
-        cumulative = 0.0
-        for dps, dpe, dpw in reversed(delayed_queue):
-            dur = dpe - dps  # natural speech duration, uncompressed
-            if cumulative + dur <= available:
-                selected.append((dps, dpe, dpw, dur))
-                cumulative += dur
-            else:
-                n_dropped += 1
-                break  # older phrases don’t fit — stop (they go further back in time)
-        n_dropped += len(delayed_queue) - len(selected) - (1 if len(selected) < len(delayed_queue) else 0)
-        n_flushed += len(selected)
-        selected.reverse()  # restore chronological order
-        t = flush_from
-        for _dps, _dpe, dpw, dur in selected:
-            cards.append(_make_card(t, t + dur, _build_word_dicts(dpw)))
-            t += dur
-
-    for idx, (ph_start, ph_end, pw) in enumerate(phrases):
-        win_end = _window_end(ph_start)
-
-        if win_end is not None:
-            # Phrase starts inside a graphic window → queue for later
-            delayed_queue.append((ph_start, ph_end, pw))
-            active_win_end = win_end
-            n_delayed += 1
-            continue
-
-        # We’re outside a window. Flush any pending queue.
-        if delayed_queue and active_win_end is not None:
-            _flush_queue(flush_from=active_win_end, slot_end=ph_start)
-            delayed_queue = []
-            active_win_end = None
-
-        # Normal phrase: contiguous timing, capped before the next LLM card window.
-        # This prevents phrase_text from extending into a rich-card window and
-        # showing the same content twice (the duplication bug).
-        next_start = phrases[idx + 1][0] if idx + 1 < len(phrases) else trimmed_duration
-        next_llm_win = next((ws for ws, _we in llm_wins if ws > ph_start), trimmed_duration)
-        end_sec = min(next_start, next_llm_win, trimmed_duration)
-        cards.append(_make_card(ph_start, end_sec, _build_word_dicts(pw)))
-
-    # Flush any remaining queue at video end
-    if delayed_queue and active_win_end is not None:
-        _flush_queue(flush_from=active_win_end, slot_end=trimmed_duration)
-
-    print(
-        f"[PHRASE-TEXT] {n_raw} phrases | delayed={n_delayed} | "
-        f"flushed={n_flushed} | dropped={n_dropped} | generated={len(cards)}",
-        flush=True,
-    )
-    return cards
 
 
 def _tokenize_text(text: str) -> frozenset[str]:
@@ -2330,13 +2178,9 @@ def generate_storyboard(
     #      on-screen text since _beat.get("beat") was used as the "title" param.
     # Re-enable and redesign when a real speaker-ID data source is available.
 
-    # Generate caption cards mechanically
+    # Generate caption cards mechanically (long format: no captions)
     if format_hint == "long":
-        caption_cards = _extract_phrase_text_cards(
-            remapped_words=remapped_words,
-            graphic_cards=graphic_cards,
-            trimmed_duration=trimmed_duration,
-        )
+        caption_cards = []
     else:
         caption_cards = _segment_captions(
             remapped_words=remapped_words,

@@ -1,0 +1,296 @@
+#!/usr/bin/env python3
+"""
+Coverage test on the COMBINED bank (v1 + v2).
+
+Loads trigger_bank.json and trigger_bank_v2.json, merges them,
+classifies all phrases via Claude, and produces the full precision report.
+
+Usage:
+    python backend/tools/test_trigger_bank_coverage_v2.py
+    python backend/tools/test_trigger_bank_coverage_v2.py --save results_bank_v3.json
+    python backend/tools/test_trigger_bank_coverage_v2.py --v2-only   # test only new phrases
+    python backend/tools/test_trigger_bank_coverage_v2.py --tier3-only # test only Tier 3
+"""
+
+import json
+import re
+import sys
+from collections import defaultdict
+from pathlib import Path
+
+ROOT       = Path(__file__).parent.parent.parent
+BANK_V1    = Path(__file__).parent / "trigger_bank.json"
+BANK_V2    = Path(__file__).parent / "trigger_bank_v2.json"
+BATCH_SIZE = 300
+
+import os
+_env_file = ROOT / "backend" / ".env"
+if _env_file.exists() and not os.environ.get("ANTHROPIC_API_KEY"):
+    for _line in _env_file.read_text(encoding="utf-8").splitlines():
+        if _line.startswith("ANTHROPIC_API_KEY="):
+            os.environ["ANTHROPIC_API_KEY"] = _line.split("=", 1)[1].strip()
+            break
+
+from anthropic import Anthropic  # noqa: E402
+
+
+def _extract_style_defs() -> str:
+    src = (ROOT / "backend" / "app" / "engine" / "storyboard.py").read_text(encoding="utf-8")
+    s = src.find("- CONTENT STYLE RULES (follow strictly, do not improvise):")
+    e = src.find("- VERBATIM GROUNDING")
+    if s == -1 or e == -1:
+        raise RuntimeError("Cannot locate style-definition boundaries in storyboard.py")
+    return src[s:e].strip()
+
+
+def _load_combined(v2_only: bool = False, tier3_only: bool = False) -> list[tuple[str, str, str, str]]:
+    """Return list of (expected_style, tier, phrase, source) where source is 'v1' or 'v2'."""
+    cases = []
+
+    if not v2_only and BANK_V1.exists():
+        bank_v1 = json.loads(BANK_V1.read_text(encoding="utf-8"))
+        for style, entry in bank_v1.items():
+            for tier in ("tier1", "tier2", "tier3"):
+                if tier3_only and tier != "tier3":
+                    continue
+                for phrase in entry.get(tier, []):
+                    cases.append((style, tier, phrase, "v1"))
+
+    if BANK_V2.exists():
+        bank_v2 = json.loads(BANK_V2.read_text(encoding="utf-8"))
+        for style, entry in bank_v2.items():
+            for tier in ("tier1", "tier2", "tier3"):
+                if tier3_only and tier != "tier3":
+                    continue
+                for phrase in entry.get(tier, []):
+                    cases.append((style, tier, phrase, "v2"))
+
+    return cases
+
+
+def _classify_batch(
+    client: Anthropic,
+    batch: list[tuple[str, str, str, str]],
+    style_defs: str,
+    offset: int,
+) -> list[dict]:
+    numbered = "\n".join(
+        f"{offset + i + 1}. {phrase}"
+        for i, (_, _, phrase, _) in enumerate(batch)
+    )
+
+    system = [
+        {
+            "type": "text",
+            "text": (
+                "You are a precise content-style classifier.\n\n"
+                "STYLE DEFINITIONS (source of truth — use these exactly):\n\n"
+                f"{style_defs}\n\n"
+                "Rules:\n"
+                "- Choose the MOST SPECIFIC style whose trigger conditions are satisfied.\n"
+                "- Never invent style names — only use names from the definitions above.\n"
+                "- Return ONLY a compact JSON array, no markdown, no explanation:\n"
+                '  [{"id":1,"style":"style_name"},{"id":2,"style":"style_name"},...]'
+            ),
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+
+    user = (
+        f"Classify each of the following {len(batch)} phrases. "
+        "Return exactly one JSON object per phrase, in order, "
+        "with 'id' (matching the number shown) and 'style'.\n\n"
+        + numbered
+    )
+
+    resp = client.messages.create(
+        model="claude-opus-4-7",
+        max_tokens=8192,
+        system=system,
+        messages=[{"role": "user", "content": user}],
+    )
+
+    raw = resp.content[0].text.strip()
+    if raw.startswith("```"):
+        raw = re.sub(r"^```(?:json)?\s*", "", raw)
+        raw = re.sub(r"\s*```$", "", raw)
+
+    raw_results: list[dict] = json.loads(raw)
+
+    if len(raw_results) != len(batch):
+        print(
+            f"  WARNING: expected {len(batch)} results, got {len(raw_results)}",
+            flush=True,
+        )
+
+    results = []
+    for i, (expected, tier, phrase, source) in enumerate(batch):
+        assigned = raw_results[i]["style"] if i < len(raw_results) else "MISSING"
+        results.append({
+            "id":       offset + i + 1,
+            "expected": expected,
+            "tier":     tier,
+            "source":   source,
+            "assigned": assigned,
+            "phrase":   phrase,
+            "correct":  assigned == expected,
+        })
+    return results
+
+
+def generate_report(all_results: list[dict], mode_label: str = "COMBINED v1+v2") -> None:
+    by_style: dict[str, dict] = defaultdict(lambda: {
+        "tier1": {"total": 0, "correct": 0, "collisions": []},
+        "tier2": {"total": 0, "correct": 0, "collisions": []},
+        "tier3": {"total": 0, "correct": 0, "collisions": []},
+    })
+
+    for r in all_results:
+        td = by_style[r["expected"]][r["tier"]]
+        td["total"]   += 1
+        td["correct"] += int(r["correct"])
+        if not r["correct"]:
+            td["collisions"].append(r["assigned"])
+
+    rows = []
+    for style, tiers in by_style.items():
+        total   = sum(t["total"]   for t in tiers.values())
+        correct = sum(t["correct"] for t in tiers.values())
+        rate    = correct / total * 100 if total else 0
+
+        t1, t2, t3 = tiers["tier1"], tiers["tier2"], tiers["tier3"]
+        all_coll = t1["collisions"] + t2["collisions"] + t3["collisions"]
+        coll_str = ", ".join(
+            f"{s}({all_coll.count(s)}x)" for s in sorted(set(all_coll))
+        ) if all_coll else ""
+
+        rows.append((rate, style, total, correct, t1, t2, t3, coll_str))
+
+    rows.sort(key=lambda r: (r[0], r[1]))
+
+    total_correct = sum(1 for r in all_results if r["correct"])
+    total_phrases = len(all_results)
+    n_styles      = len(by_style)
+
+    # Separate report for v2-only phrases to see the incremental stress
+    v2_results  = [r for r in all_results if r.get("source") == "v2"]
+    v2_correct  = sum(1 for r in v2_results if r["correct"])
+    v2_total    = len(v2_results)
+
+    W = 130
+    print(f"\n{'='*W}")
+    print(
+        f"TRIGGER BANK COVERAGE REPORT  [{mode_label}]  —  "
+        f"{total_phrases} phrases  |  {n_styles} styles  |  model: claude-opus-4-7"
+    )
+    if v2_total:
+        print(
+            f"  v2-only stress test: {v2_correct}/{v2_total} correct "
+            f"({v2_correct/v2_total*100:.1f}%)  "
+            f"| T3-only in v2: see per-style breakdown"
+        )
+    print(f"{'='*W}")
+    hdr = f"{'STYLE':<36} {'TOT':>4} {'OK':>4} {'RATE':>5}   T1%  T2%  T3%   COLLISIONS"
+    print(hdr)
+    print(f"{'-'*W}")
+
+    weak_styles = []
+    for rate, style, total_s, correct_s, t1, t2, t3, coll_str in rows:
+        r1 = t1["correct"] / t1["total"] * 100 if t1["total"] else 0
+        r2 = t2["correct"] / t2["total"] * 100 if t2["total"] else 0
+        r3 = t3["correct"] / t3["total"] * 100 if t3["total"] else 0
+        flag = "⚠  " if rate < 80 else "   "
+        print(
+            f"{flag}{style:<33} {total_s:>4} {correct_s:>4} {rate:>4.0f}%"
+            f"  {r1:>3.0f}% {r2:>3.0f}% {r3:>3.0f}%   {coll_str}"
+        )
+        if rate < 80:
+            weak_styles.append((style, rate, t1, t2, t3, coll_str))
+
+    print(f"{'-'*W}")
+    print(f"OVERALL: {total_correct}/{total_phrases} correct ({total_correct/total_phrases*100:.1f}%)")
+    print(f"{'='*W}\n")
+
+    if weak_styles:
+        print(f"⚠  STYLES BELOW 80% — enrichment candidates ({len(weak_styles)} types):\n")
+        for style, rate, t1, t2, t3, coll_str in weak_styles:
+            print(f"  {style}  ({rate:.0f}%)  — collisions: {coll_str or 'none'}")
+            failures = [r for r in all_results if r["expected"] == style and not r["correct"]]
+            for f in failures[:4]:
+                preview = f["phrase"][:100] + ("…" if len(f["phrase"]) > 100 else "")
+                print(f"    [{f['tier']}|{f.get('source','?')}] → got [{f['assigned']}]  \"{preview}\"")
+        print()
+    else:
+        print("All styles ≥ 80% — no enrichment needed.\n")
+
+    # Tier 3 stress summary (v2 only)
+    if v2_results:
+        t3_v2 = [r for r in v2_results if r["tier"] == "tier3"]
+        if t3_v2:
+            t3_correct = sum(1 for r in t3_v2 if r["correct"])
+            print(
+                f"TIER 3 STRESS (v2 phrases only): "
+                f"{t3_correct}/{len(t3_v2)} correct ({t3_correct/len(t3_v2)*100:.1f}%)"
+            )
+            # Worst 10 T3 styles
+            t3_by_style = defaultdict(lambda: {"total": 0, "correct": 0})
+            for r in t3_v2:
+                t3_by_style[r["expected"]]["total"] += 1
+                t3_by_style[r["expected"]]["correct"] += int(r["correct"])
+            t3_ranked = sorted(
+                t3_by_style.items(),
+                key=lambda x: x[1]["correct"] / x[1]["total"]
+            )
+            print("  Worst 10 T3 styles (v2 bank):")
+            for style, d in t3_ranked[:10]:
+                rate = d["correct"] / d["total"] * 100
+                print(f"    {rate:>3.0f}%  {style}  ({d['correct']}/{d['total']})")
+            print()
+
+
+def main() -> None:
+    v2_only    = "--v2-only" in sys.argv
+    tier3_only = "--tier3-only" in sys.argv
+
+    if not BANK_V2.exists():
+        print(f"ERROR: {BANK_V2} not found — run generate_trigger_bank_v2.py first.")
+        sys.exit(1)
+
+    mode_label = "v2 ONLY" if v2_only else ("T3 ONLY" if tier3_only else "COMBINED v1+v2")
+    print(f"Loading banks [{mode_label}]…", flush=True)
+    cases = _load_combined(v2_only=v2_only, tier3_only=tier3_only)
+    print(
+        f"  {len(cases)} phrases across "
+        f"{len(set(c[0] for c in cases))} styles.",
+        flush=True,
+    )
+
+    print("Extracting style definitions…", flush=True)
+    style_defs = _extract_style_defs()
+
+    client  = Anthropic()
+    batches = [cases[i:i+BATCH_SIZE] for i in range(0, len(cases), BATCH_SIZE)]
+    print(f"  Classifying in {len(batches)} batch(es) of ≤{BATCH_SIZE}…\n", flush=True)
+
+    all_results: list[dict] = []
+    for batch_num, batch in enumerate(batches, 1):
+        offset = (batch_num - 1) * BATCH_SIZE
+        print(f"Batch {batch_num}/{len(batches)} ({len(batch)} phrases)…", flush=True)
+        batch_results = _classify_batch(client, batch, style_defs, offset)
+        correct = sum(1 for r in batch_results if r["correct"])
+        print(f"  → {correct}/{len(batch)} correct ({correct/len(batch)*100:.1f}%)", flush=True)
+        all_results.extend(batch_results)
+
+    if "--save" in sys.argv:
+        idx      = sys.argv.index("--save")
+        out_path = Path(sys.argv[idx + 1])
+        out_path.write_text(
+            json.dumps(all_results, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        print(f"\nRaw results saved → {out_path}")
+
+    generate_report(all_results, mode_label=mode_label)
+
+
+if __name__ == "__main__":
+    main()
