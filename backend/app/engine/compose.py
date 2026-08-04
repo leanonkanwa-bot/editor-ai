@@ -7322,7 +7322,7 @@ def compose(
         _fb = float(subject_position.get("face_bottom_pct", 65.0))
         _face_cx = (_fl + _fr) / 2   # 0–100 percent, left→right
         _face_cy = (_ft + _fb) / 2   # 0–100 percent, top→bottom
-        _face_side_log = "left" if _face_cx < 38.0 else ("right" if _face_cx > 62.0 else "center")
+        _face_side_log = "left" if _face_cx < 44.0 else ("right" if _face_cx > 56.0 else "center")
         print(
             f"[COMPOSE] face_side={_face_side_log!r} cx={_face_cx:.1f}% cy={_face_cy:.1f}%"
             f" bbox=[{_fl:.0f},{_ft:.0f}->{_fr:.0f},{_fb:.0f}]"
@@ -7351,12 +7351,12 @@ def compose(
         # Index resets per-job (data_card_idx is initialised to 0 below).
         #
         # Portrait (9:16) — face-aware:
-        #   Face centred (38 ≤ cx ≤ 62): full 5-position rotation; existing scrim
+        #   Face centred (44 ≤ cx ≤ 56): full 5-position rotation; existing scrim
         #     dimming handles face overlap for center-zone cards.
-        #   Face LEFT (cx < 38): portrait-center-left and portrait-center-full excluded
+        #   Face LEFT (cx < 44): portrait-center-left and portrait-center-full excluded
         #     (both overlap the left side). Rotation collapses to top corners +
         #     portrait-center-right only. No dimming needed — face zone is avoided.
-        #   Face RIGHT (cx > 62): symmetric — portrait-center-right and
+        #   Face RIGHT (cx > 56): symmetric — portrait-center-right and
         #     portrait-center-full excluded; portrait-center-left is safe.
         #
         # Landscape (16:9):
@@ -7369,7 +7369,7 @@ def compose(
         _POS_NAMES = ("top-left", "top-right", "center-left", "center-right", "center-full")
 
         # Face-side derived from _face_cx (closure variable set in the outer compose() scope).
-        _face_side = "left" if _face_cx < 38.0 else ("right" if _face_cx > 62.0 else "center")
+        _face_side = "left" if _face_cx < 44.0 else ("right" if _face_cx > 56.0 else "center")
 
         if _face_side == "left":
             # portrait-center-left (x:20-620) and portrait-center-full (x:40-1040)
@@ -7461,7 +7461,22 @@ def compose(
                 return {**card, "zone": target_zone}
             return card
 
-        # Non-data-panel, non-hero types: respect Claude's zone assignment unchanged.
+        # Catch-all for all remaining types (timeline, versus_battle, dialogue,
+        # testimonial, roadmap_milestone, secret_reveal, mindmap, etc.): apply
+        # face-aware portrait-centre displacement. These types previously bypassed
+        # remapping and could overlap the face when the LLM placed them in a centre zone.
+        # video-overlay and fullscreen are intentional full-cover designs — skip them.
+        if layout == "portrait" and _has_face and _face_side != "center" and zone in {
+            "portrait-center-full", "portrait-center-left", "portrait-center-right",
+        }:
+            target_zone = "portrait-center-right" if _face_side == "left" else "portrait-center-left"
+            if zone != target_zone:
+                print(
+                    f"[COMPOSE] BYPASS-ZONE-REMAP {card.get('id', '?')}"
+                    f" face={_face_side!r} ({style}) {zone!r} -> {target_zone!r}",
+                    flush=True,
+                )
+                return {**card, "zone": target_zone}
         return card
 
     # Separate counters: data cards and hero cards each have independent rotation indices.

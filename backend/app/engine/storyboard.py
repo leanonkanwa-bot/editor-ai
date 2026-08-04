@@ -453,7 +453,10 @@ def _generate_graphic_cards(
     elif trimmed_duration < 600:
         base_pace = 16
     elif trimmed_duration < 1800:
-        base_pace = 28
+        # Linear interpolation 16→28 across 600–1800s: eliminates the hard
+        # drop at 600s (599s→37 cards vs 601s→21 cards with flat pace=28).
+        # At 660s (11 min): pace≈16.6 → ~40 cards; at 1200s: pace≈22 → ~54.
+        base_pace = 16 + 12 * (trimmed_duration - 600) / 1200
     else:
         base_pace = 28
 
@@ -673,7 +676,7 @@ ZONES — where the card sits on screen:
   NEVER use "lower-third" — that zone is reserved for captions only.
 {f"SUBJECT POSITION: the speaker occupies the {subject_side} side of the frame. Place data-heavy cards (stat, list, comparison) on the OPPOSITE side so they don't obscure the face." if subject_side and subject_side != "center" else ""}
 RULES:
-- CARD COUNT CEILING: {target_cards} cards maximum for a {trimmed_duration:.0f}s video. This is a hard ceiling, not a target — only place a card when the moment genuinely deserves one. A video with 5 high-quality cards is better than one with 10 forced cards. Never invent or pad cards just to approach the ceiling.
+- CARD COUNT BUDGET: {target_cards} cards maximum for a {trimmed_duration:.0f}s video. Ceiling means: never pad or force cards beyond what the content genuinely deserves. It does NOT mean: aim for the minimum. On longer videos, under-coverage is its own quality failure — a viewer watching 10+ minutes without visual reinforcement loses engagement. Treat the budget as the number of genuine moments this video contains: most well-structured videos will use 70–90% of it. Place a card whenever the speaker teaches, reveals, contrasts, enumerates, or drives home a point worth remembering. If you are at 40% of the budget with half the video left and no good reason to stop, look harder for moments you may have missed.
 - DUAL-CARD BEATS: When a single speech segment contains BOTH (a) a vivid, memorable, or funny formulation that stands on its own as a key_phrase AND (b) one or more distinct numeric facts (stat), generate TWO separate cards with startSec offset by 1-2s: the stat card anchors to when the number is spoken, the key_phrase card anchors to the memorable phrase. Only split when both elements are genuinely strong independently — do not split weak content.
 - Card startSec/endSec must be within [0, {trimmed_duration:.1f}]
 - Cards should NOT overlap each other in time
@@ -872,15 +875,28 @@ RULES:
     scale). Provide "score_text".
   "mindmap" — a central concept with 2-3 branching related ideas.
     Provide "center" + "branches" array.
-  "callout" — two distinct uses: (1) supplementary aside or clarification
-    the speaker adds parenthetically ("petite précision", "note importante",
-    "attention à ce point", "quick note here"); OR (2) conceptual anchor
-    where the speaker introduces a model, logic, or principle the viewer
-    MUST grasp to follow what comes next ("si tu comprends ce modèle / cette
-    logique / ce principe, tu comprendras pourquoi…", "le principe clé ici
-    c'est", "voici comment ça marche vraiment", "et c'est là que tout
-    s'explique"). Use callout only when no more specific type fits — for a
-    universal standalone principle → use key_phrase instead.
+  "callout" — the speaker pauses to ensure the viewer grasps a building
+    block that makes what follows easier to understand. Two functional
+    signatures: (1) PARENTHETICAL ASIDE — speaker interrupts to add a
+    clarification or caveat ("note importante", "petite précision", "juste
+    pour être clair ici", "quick note here"); (2) CONCEPTUAL ANCHOR —
+    speaker states a model, rule, or mechanism the viewer must hold in
+    mind to follow the next section ("le principe clé c'est", "si tu
+    retiens une chose de cette partie", "comprends bien ce mécanisme",
+    "et c'est là que tout s'explique").
+    FUNCTION TEST: would removing this sentence make the next 30 seconds
+    harder to follow? If yes → callout. If the statement stands alone and
+    the speaker moves on without depending on it → consider key_phrase.
+    DISCRIMINATORS:
+    - vs key_phrase: key_phrase stands alone as a transferable lesson;
+      callout is conceptual glue that holds the surrounding explanation.
+    - vs secret_reveal: secret_reveal reveals surprising information the
+      viewer never would have found independently; callout explains a
+      mechanism the viewer NEEDS to follow the argument.
+    - vs stat: when a number or ratio is cited as a working model or
+      allocation principle ("80% de tes résultats viennent de 20% de tes
+      efforts" as a rule for how to prioritise) rather than as a factual
+      data point about a specific real-world scenario → use callout, not stat.
   "dialogue" — speaker recounts an exchange between two people.
   "trend" — speaker describes a directional change (growth/decline).
   "question" — speaker poses a question and then answers it.

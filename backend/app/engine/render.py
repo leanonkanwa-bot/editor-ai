@@ -1044,7 +1044,7 @@ def _inject_speech_punch_in_zooms(
 ) -> list[dict]:
     """Inject 1.0->1.06->1.0 bumps at speech punch-in times, composited with drift.
 
-    Each event: IN 0.25s power2.out, OUT 0.25s power2.out.
+    Each event: IN 0.40s power2.out (fast snap in), OUT 0.40s power2.in (smooth return).
     Drift entries spanning the IN window are split at t_punch; the post-punch
     portion resumes at t_end from the baseline scale.
     """
@@ -1088,7 +1088,7 @@ def _inject_speech_punch_in_zooms(
                            "kind": "punch_in", "ease": "power2.out"})
         processed.append({"start": t_peak, "end": t_end,
                            "from": scale_in, "to": round(baseline, 4),
-                           "kind": "punch_in", "ease": "power2.out"})
+                           "kind": "punch_in", "ease": "power2.in"})
         result = processed
 
     return sorted(result, key=lambda e: float(e.get("start", 0)))
