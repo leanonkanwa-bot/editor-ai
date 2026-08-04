@@ -159,15 +159,21 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
         flush=True,
     )
 
-    # Portrait centering: every non-canvas zone → portrait-center-full.
-    # portrait-center-left and portrait-center-right are kept so face-aware
-    # rotation (see _remap_zone) can place cards on the safe side of an
-    # off-centre face without crushing them into the full-width center band.
-    # Must run AFTER compact is computed so styling scales stay correct.
+    # Portrait centering: every zone → portrait-center-full, EXCEPT:
+    # - portrait-center-left/right (set by face-aware _remap_zone rotation)
+    # - portrait-center-full (already correct)
+    # - fullscreen for full-cover primitives (prim_split_compare, prim_journey_map)
+    #
+    # CRITICAL: fullscreen and video-overlay must NOT pass through for hero cards —
+    # their lean_glass background (85% opaque) would cover the entire canvas and hide
+    # the video source. Only full-cover primitives that need the complete canvas are exempt.
     if layout == "portrait" and not is_caption:
-        if zone not in ("video-overlay", "fullscreen",
-                        "portrait-center-full",
-                        "portrait-center-left", "portrait-center-right"):
+        _is_portrait_full_cover = card.get("contentHints", {}).get("style", "") in (
+            "prim_split_compare", "prim_journey_map"
+        )
+        if not _is_portrait_full_cover and zone not in (
+            "portrait-center-full", "portrait-center-left", "portrait-center-right"
+        ):
             zone = "portrait-center-full"
 
     bounds = _zone_bounds(zone, layout)
@@ -4141,9 +4147,11 @@ def _build_timeline_js(
             # the LLM assigned to upper/side zones (but that visually land in the
             # portrait-center-full slot) also trigger backdrop-dim as a safety net.
             if layout == "portrait" and card.get("type") != "caption":
-                if card_zone not in ("video-overlay", "fullscreen",
-                                     "portrait-center-full",
-                                     "portrait-center-left", "portrait-center-right"):
+                _pfc_style = card.get("contentHints", {}).get("style", "")
+                _is_pfc = _pfc_style in ("prim_split_compare", "prim_journey_map")
+                if not _is_pfc and card_zone not in (
+                    "portrait-center-full", "portrait-center-left", "portrait-center-right"
+                ):
                     _effective_zone = "portrait-center-full"
                 else:
                     _effective_zone = card_zone
@@ -7477,14 +7485,39 @@ def compose(
                 return {**card, "zone": target_zone}
             return card
 
-        # Non-data-panel types: respect Claude's zone assignment unchanged.
+        # Hero cards in portrait: alternate portrait-center-left / portrait-center-right.
+        # Prevents two consecutive hero cards (key_phrase, quote, etc.) from landing
+        # on the same zone — which stacks them visually in one half of the frame.
+        _PORTRAIT_HERO_STYLES = frozenset({
+            "key_phrase", "quote", "attributed_quote", "question", "definition",
+            "chapter_marker", "callout", "quote_carousel", "silent_beat_pause",
+        })
+        if layout == "portrait" and style in _PORTRAIT_HERO_STYLES:
+            idx = _hero_card_idx[0]
+            _hero_card_idx[0] += 1
+            if _face_side == "left":
+                target_zone = "portrait-center-right"
+            elif _face_side == "right":
+                target_zone = "portrait-center-left"
+            else:
+                target_zone = "portrait-center-left" if idx % 2 == 0 else "portrait-center-right"
+            if zone != target_zone:
+                print(
+                    f"[COMPOSE] HERO-ZONE-ROTATE {card.get('id', '?')}"
+                    f" idx={idx} face={_face_side!r} ({style}) {zone!r} -> {target_zone!r}",
+                    flush=True,
+                )
+                return {**card, "zone": target_zone}
+            return card
+
+        # Non-data-panel, non-hero types: respect Claude's zone assignment unchanged.
         return card
 
-    # Counter increments only for data-panel cards; non-data-panel cards do not
-    # consume a rotation slot (so key_phrase, quote etc. never skew parity).
-    # segment_data_card_offset initialises the counter to its correct global
-    # value when composing a later segment, so zone rotation stays continuous.
+    # Separate counters: data cards and hero cards each have independent rotation indices.
+    # Hero counter starts at 0 per composition (no segment offset needed — hero cards
+    # are rare enough that stacking across segments is not a problem).
     _data_card_idx = segment_data_card_offset
+    _hero_card_idx = [0]  # mutable for closure mutation inside _remap_zone
     _remapped_cards: list[dict] = []
     for _c in graphic_cards:
         _c_style = _c.get("contentHints", {}).get("style", "")
