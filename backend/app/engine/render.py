@@ -840,7 +840,8 @@ def _build_zoom_t_expr(
     """Build an FFmpeg time-based expression for zoom factor Z(t).
 
     Uses `t` (seconds) instead of frame numbers. Returns a nested if()
-    expression with cosine ease-in-out for drift, ease-OUT for punch_in, ease-IN for pull_out.
+    expression dispatched on "kind": cosine ease-in-out for drift/breath,
+    ease-OUT (2p-p²) for punch_in, ease-IN (p²) for pull_out.
     """
     if not zoom_entries:
         return str(default_zoom)
@@ -973,9 +974,9 @@ _PUNCH_IN_DATA_TYPES      = frozenset({"stat", "list", "comparison", "checklist"
 _BREATH_WINDOW_MIN_S   = 2.5    # minimum seconds from previous selected point
 _BREATH_WINDOW_MAX_S   = 4.5    # maximum window to search for next candidate
 _BREATH_GAP_MIN_S      = 0.08   # minimum inter-word silence to qualify
-_BREATH_PHRASE_SCALE   = 1.024  # end-of-sentence: . ! ? — 23px / 14.4 px/s on 1920px
-_BREATH_CLAUSE_SCALE   = 1.016  # clause boundary: , ; : — — 15.4px / 11.0 px/s
-_BREATH_MICRO_SCALE    = 1.010  # bare micro-pause — 9.6px / 8.0 px/s
+_BREATH_PHRASE_SCALE   = 1.041  # end-of-sentence: . ! ? — 13.8 px/s on 1080p portrait
+_BREATH_CLAUSE_SCALE   = 1.026  # clause boundary: , ; : — — 10.0 px/s
+_BREATH_MICRO_SCALE    = 1.016  # bare micro-pause — 7.2 px/s
 _BREATH_SCALE_JITTER   = 0.125  # ±12.5% variance on delta — breaks mechanical uniformity
 _BREATH_PHRASE_DUR     = 1.6    # total tween duration (s) for sentence boundary
 _BREATH_CLAUSE_DUR     = 1.4
@@ -1044,9 +1045,15 @@ def _inject_speech_punch_in_zooms(
 ) -> list[dict]:
     """Inject 1.0->1.06->1.0 bumps at speech punch-in times, composited with drift.
 
-    Each event: IN 0.40s power2.out (fast snap in), OUT 0.40s power2.in (smooth return).
-    Drift entries spanning the IN window are split at t_punch; the post-punch
-    portion resumes at t_end from the baseline scale.
+    Each event: IN 0.40s ease-OUT (kind="punch_in"), OUT 0.40s ease-IN (kind="pull_out").
+    _build_zoom_t_expr() dispatches on kind — the "ease" field is never read.
+
+    Three cases for existing entries spanning or touching [t_punch, t_end]:
+      1. Entry straddles t_punch (start < t_punch < end): split at t_punch. The
+         post-punch portion (if it extends past t_end) resumes from baseline.
+      2. Entry starts during [t_punch, t_end) but ends after t_end: trim start to
+         t_end and set from=baseline to avoid a jump when pull-out returns to baseline.
+      3. Entry ends during [t_punch, t_end]: silently dropped — punch-in covers that window.
     """
     result = list(zoom_entries)
 
@@ -1064,31 +1071,38 @@ def _inject_speech_punch_in_zooms(
             zto    = float(ze.get("to",    zfrom))
             kind   = ze.get("kind", "drift")
 
-            if kind in ("jump_cut", "punch_in"):
+            if kind in ("jump_cut", "punch_in", "pull_out"):
                 processed.append(ze)
                 continue
 
             if zs < t_punch < ze_end:
+                # Case 1: entry spans t_punch — split it.
                 dur = ze_end - zs
                 frac = (t_punch - zs) / dur
                 scale_at = round(zfrom + (zto - zfrom) * frac, 4)
                 processed.append({**ze, "end": round(t_punch, 4), "to": scale_at})
                 if ze_end > t_end:
-                    processed.append({
-                        **ze,
-                        "start": t_end,
-                        "from": round(baseline, 4),
-                        "to": zto,
-                    })
+                    # Post-punch portion: resume from baseline (= zoom at t_punch = zoom
+                    # at t_end since the pull-out returns exactly to baseline).
+                    processed.append({**ze, "start": t_end,
+                                      "from": round(baseline, 4), "to": zto})
+                # Entries ending within [t_punch, t_end] are dropped — punch covers window.
+            elif t_punch <= zs < t_end and ze_end > t_end:
+                # Case 2: entry starts during punch window but extends past t_end.
+                # Trim to [t_end, end] and reset from=baseline to avoid a zoom jump:
+                # without this, a breath descent that started mid-punch would resume
+                # from its original peak (e.g. 1.3312) instead of the baseline (1.310),
+                # creating a visible +9px discontinuity.
+                processed.append({**ze, "start": t_end, "from": round(baseline, 4)})
             else:
                 processed.append(ze)
 
         processed.append({"start": round(t_punch, 4), "end": t_peak,
                            "from": round(baseline, 4), "to": scale_in,
-                           "kind": "punch_in", "ease": "power2.out"})
+                           "kind": "punch_in"})
         processed.append({"start": t_peak, "end": t_end,
                            "from": scale_in, "to": round(baseline, 4),
-                           "kind": "punch_in", "ease": "power2.in"})
+                           "kind": "pull_out"})
         result = processed
 
     return sorted(result, key=lambda e: float(e.get("start", 0)))
