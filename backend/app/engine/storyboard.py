@@ -1518,14 +1518,25 @@ KEY LINES (most memorable moments):
 
 Design graphic overlay cards for this video — up to {target_cards} maximum. Place a card only at moments that genuinely earn one: a key claim, a surprising stat, a narrative turning point, or a concept the viewer needs to see to understand. Skip the moment if no card adds value. Quality and narrative relevance always take priority over reaching the card count ceiling."""
 
+    # Scale max_tokens with target_cards so long-video responses are never truncated.
+    # ~150 tokens/card average (JSON overhead + complex types like list/tool_comparison).
+    # Minimum 4096 preserves short-video behaviour; cap at 16384 (claude-opus-4-7 limit is 32k).
+    _max_tok = max(4096, min(16384, target_cards * 150))
+
     client = Anthropic()
     try:
         response = client.messages.create(
             model=settings.anthropic_model,
-            max_tokens=4096,
+            max_tokens=_max_tok,
             system=system_prompt,
             messages=[{"role": "user", "content": user_msg}],
         )
+        if response.stop_reason == "max_tokens":
+            print(
+                f"[STORYBOARD] WARN: LLM hit max_tokens={_max_tok} "
+                f"(target_cards={target_cards}) — response truncated",
+                flush=True,
+            )
         raw = response.content[0].text.strip()
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
