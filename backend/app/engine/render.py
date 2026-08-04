@@ -2608,6 +2608,65 @@ def _render_hyperframes(
             flush=True,
         )
 
+        # ── Keyframe alignment pass ────────────────────────────────────────
+        # _ffmpeg_cut uses input seeking (-ss before -i) which snaps to the
+        # nearest keyframe ≤ start_sec.  With 1-s keyframe intervals in the
+        # trimmed video, each cut can start up to 1 s early — that content
+        # also ends segment N-1, so it appears TWICE in the concat output
+        # (visible as a brief video repetition at every segment boundary).
+        # Fix: re-encode trimmed once with forced keyframes at the exact
+        # boundary positions so stream-copy cuts land on the right frame.
+        _kf_positions = [t for t in _seg_boundaries[1:-1] if t > 0.0]
+        if _kf_positions:
+            _kf_str = ",".join(f"{t:.3f}" for t in _kf_positions)
+            _trimmed_kf = work_dir / "trimmed_segkf.mp4"
+            print(
+                f"[HF-SEG] Keyframe pass: forcing {len(_kf_positions)} boundary "
+                f"keyframe(s) in trimmed video...",
+                flush=True,
+            )
+            _t_kf = time.perf_counter()
+            # Detect pix_fmt to mirror the pretrim encoder choice
+            _kf_pf_probe = subprocess.run(
+                [FFPROBE_PATH, "-v", "error", "-select_streams", "v:0",
+                 "-show_entries", "stream=pix_fmt",
+                 "-of", "default=noprint_wrappers=1:nokey=1", str(trimmed)],
+                capture_output=True, text=True,
+            )
+            _kf_pf = _kf_pf_probe.stdout.strip()
+            if "10" in _kf_pf:
+                _kf_venc = ["-c:v", "libx265", "-x265-params", "log-level=error",
+                            "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p10le"]
+            else:
+                _kf_venc = ["-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                            "-pix_fmt", "yuv420p"]
+            _kf_result = subprocess.run(
+                [
+                    FFMPEG_PATH, "-y",
+                    "-i", str(trimmed),
+                    *_kf_venc,
+                    "-g", "30", "-keyint_min", "1",
+                    "-force_key_frames", _kf_str,
+                    "-c:a", "copy",
+                    str(_trimmed_kf),
+                ],
+                capture_output=True, timeout=1200,
+            )
+            if _kf_result.returncode == 0:
+                trimmed = _trimmed_kf
+                print(
+                    f"[HF-SEG] Keyframe pass done in {time.perf_counter()-_t_kf:.1f}s"
+                    f" → {_trimmed_kf.name}",
+                    flush=True,
+                )
+            else:
+                print(
+                    f"[HF-SEG] WARN: keyframe pass failed ({_kf_result.returncode}) "
+                    f"— boundary overlap may occur: "
+                    f"{_kf_result.stderr.decode(errors='replace')[-200:].strip()}",
+                    flush=True,
+                )
+
         _all_graphic = [c for c in storyboard.get("cards", []) if c.get("type") != "caption"]
         _seg_raws: list[Path] = []
 
