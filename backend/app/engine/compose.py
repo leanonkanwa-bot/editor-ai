@@ -639,17 +639,10 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         text_align      = "center"
         panel_align     = "center"
         max_width_eff   = "85%"
-        # Beat cards (auto-generated key_phrase from Whisper phrases) display full
-        # spoken sentences — intentionally styled at a fixed citation size regardless
-        # of char count, so they look coherent as a "running quote" tier rather than
-        # going through the rich-card adaptive logic that produces 32-38px.
-        is_beat_card = card.get("beat") == "beat"
-        if is_beat_card:
-            title_size_eff = "40px"  # fixed citation size — large enough to read, smaller than rich cards
         # Adaptive title size — prevent vertical overflow for long texts.
         # At 64px/~10 chars per line in a portrait zone (text area ≈ 356px),
         # texts > 35 chars wrap to 4+ lines and risk exceeding the card height.
-        elif title and not number:
+        if title and not number:
             _tc = len(title)
             if _tc > 55:
                 title_size_eff = "32px"

@@ -6,7 +6,7 @@ timing map and transcript, produces a storyboard JSON that compose.py
 (Stage 3) assembles into a HyperFrames composition.
 
 Two distinct card types in one storyboard:
-  - Graphic cards: designed by Claude API, sparse, beat-driven
+  - Graphic cards: designed by Claude API, narrative-driven LLM selection
   - Caption cards: mechanically generated from transcript words,
     dense, every spoken word guaranteed, no LLM variability
 """
@@ -50,39 +50,6 @@ _GROUNDING_WINDOW_PRE_S  = 0.5        # seconds before startSec included in the 
 _GROUNDING_WINDOW_POST_S = 3.0        # seconds after  startSec included in the speech window
 _ANCHOR_SEARCH_FORWARD_S = 6.0        # how far ahead to scan for trigger keyword position
 _ANCHOR_LEAD_S           = 0.20       # card appears this many seconds before the trigger word
-
-# ── Beat card (pulse layer) constants ─────────────────────────────────
-# Automatic key_phrase cards extracted from Whisper word boundaries to
-# achieve ~150-200 total cards per 11-min video (1 per 3-4s).
-_BEAT_CARD_DISPLAY_SEC    = 2.8       # fixed display window for every beat card
-_BEAT_MIN_WORDS           = 5         # G2: phrase too short → skip; 5 keeps quality (4 let through bare 4-word facts)
-_BEAT_MAX_WORDS           = 15        # G2: phrase too long for 2.8s → skip
-_BEAT_EXCLUSION_RADIUS_S  = 1.0       # G1: no beat card within ±Xs of any LLM card window edge
-_BEAT_PAUSE_THRESHOLD_S   = 0.20      # inter-word gap (s) that triggers a phrase boundary (clause-level)
-_BEAT_MIN_GAP_S           = 2.0       # minimum seconds between consecutive accepted beat cards
-_BEAT_JACCARD_THRESHOLD   = 0.55      # G3: drop shorter card when word-set overlap ≥ this
-_BEAT_TITLE_MAX_CHARS     = 60        # truncate phrase at last word ≤ this char limit
-_LLM_KEY_PHRASE_CAP_FRAC  = 0.20      # max fraction of LLM target_cards that may be key_phrase
-
-_BEAT_LIST_MARKERS: frozenset[str] = frozenset({
-    "premièrement", "deuxièmement", "troisièmement",
-    "d'abord", "primo", "secundo", "tertio",
-    "firstly", "secondly", "thirdly", "fourthly",
-})
-_BEAT_ISOLATED_PRONOUNS: frozenset[str] = frozenset({
-    "je", "tu", "il", "elle", "on", "nous", "vous", "ils", "elles",
-    "i", "he", "she", "they", "we", "you",
-})
-# G2-d: French subordinating starters that produce dependent-clause fragments
-# ("pour créer de la richesse", "parce que tu travailles", "quand tu fais ça")
-# A beat card opening with these words is never a standalone principle.
-_BEAT_SUBORDINATE_STARTERS: frozenset[str] = frozenset({
-    "pour", "afin",                           # purpose / infinitive clauses
-    "parce", "car",                            # causal subordinates
-    "quand", "lorsque", "dès",                 # temporal subordinates
-    "dont", "lequel", "laquelle",              # relative clauses
-    "lesquels", "lesquelles", "auquel", "duquel",
-})
 
 # French stopwords stripped before grounding overlap computation so that invented phrases
 # sharing only function words with genuine speech (e.g. "je vais dire que…" vs "je vais
@@ -478,18 +445,15 @@ def _generate_graphic_cards(
 
     # Compute card density per graphic-overlays formula.
     # Short format (<60s) gets a denser ceiling (~1 card per 4.5s) to improve
-    # watch-time retention. Long format keeps its original pace tiers unchanged.
-    # base_pace halved vs original to give the LLM ~2× more room for rich/structured
-    # cards (list, definition, stat, versus_battle, etc.). The beat layer (_extract_beat_cards)
-    # adds automatic key_phrase cards on top, reaching 150-200 total cards per 11-min video.
+    # watch-time retention. Original pace tiers — only LLM rich cards, no beat layer.
     if trimmed_duration < 60:
         base_pace = 4.5 if format_hint == "short" else 7
     elif trimmed_duration < 180:
-        base_pace = 6
-    elif trimmed_duration < 600:
         base_pace = 10
-    elif trimmed_duration < 1800:
+    elif trimmed_duration < 600:
         base_pace = 16
+    elif trimmed_duration < 1800:
+        base_pace = 28
     else:
         base_pace = 28
 
@@ -1618,201 +1582,11 @@ Design graphic overlay cards for this video — up to {target_cards} maximum. Pl
                             f" (landscape non-hero guard)",
                             flush=True,
                         )
-        # Cap LLM key_phrase cards to _LLM_KEY_PHRASE_CAP_FRAC of target_cards.
-        # Beat layer (_extract_beat_cards) fills the remaining pulse density.
-        _kp_cap = max(3, round(target_cards * _LLM_KEY_PHRASE_CAP_FRAC))
-        _kp_seen = 0
-        for _c in cards:
-            if _c.get("contentHints", {}).get("style") == "key_phrase":
-                _kp_seen += 1
-                if _kp_seen > _kp_cap:
-                    _c["contentHints"]["style"] = "callout"
-                    print(
-                        f"[STORYBOARD] key_phrase cap ({_kp_cap}): "
-                        f"card {_c.get('id','?')} -> callout",
-                        flush=True,
-                    )
-        print(f"[STORYBOARD] Generated {len(cards)} graphic cards (key_phrase cap={_kp_cap})", flush=True)
+        print(f"[STORYBOARD] Generated {len(cards)} graphic cards", flush=True)
         return cards
     except Exception as e:
         print(f"[STORYBOARD] Claude API error: {e}", flush=True)
         return []
-
-
-def _extract_beat_cards(
-    remapped_words: list[WordTiming],
-    llm_cards: list[dict],
-    trimmed_duration: float,
-) -> list[dict]:
-    """Extract pulse beat cards aligned to natural phrase boundaries in the transcript.
-
-    Algorithm (three-guard pipeline):
-      1. Walk remapped_words, detect phrase boundaries via sentence-end punctuation
-         or inter-word pause ≥ _BEAT_PAUSE_THRESHOLD_S.
-      2. G2 filter: phrase must be 5-15 words, must not start with an isolated
-         pronoun or a list-order marker (those segments belong to richer LLM types).
-      3. G1 filter: phrase start must not fall inside any LLM card window ± radius.
-      4. Minimum-gap gate: enforce ≥ _BEAT_MIN_GAP_S between consecutive accepted cards.
-      5. G3 Jaccard dedup: when two cards share ≥ 60% of their word sets, keep the
-         shorter/earlier and drop the other.
-
-    Returns a list of key_phrase beat card dicts ready to merge into graphic_cards.
-    """
-    if not remapped_words:
-        return []
-
-    # G1 helper: check if timestamp t falls inside any LLM card window (± radius)
-    def _near_llm(t: float) -> bool:
-        for _c in llm_cards:
-            _cs = float(_c.get("startSec", 0))
-            _ce = float(_c.get("endSec", 0))
-            if _cs - _BEAT_EXCLUSION_RADIUS_S <= t <= _ce + _BEAT_EXCLUSION_RADIUS_S:
-                return True
-        return False
-
-    # --- Phrase detection ---
-    # Group consecutive words into phrases, breaking at sentence-end punctuation
-    # or a pause ≥ _BEAT_PAUSE_THRESHOLD_S between two words.
-    phrases: list[tuple[float, float, list[str]]] = []  # (start_t, end_t, words)
-    ph_start_t = remapped_words[0].start
-    ph_words: list[str] = []
-
-    for i, w in enumerate(remapped_words):
-        ph_words.append(w.text)
-        boundary = False
-
-        # Phrase/clause boundary: sentence-end OR comma/semicolon/colon (clause-level)
-        stripped = w.text.strip().rstrip("»\")']")
-        if stripped and stripped[-1] in ".?!,:;":
-            boundary = True
-
-        if not boundary and i + 1 < len(remapped_words):
-            nw = remapped_words[i + 1]
-            if nw.start - w.end >= _BEAT_PAUSE_THRESHOLD_S:
-                boundary = True
-
-        if boundary or i == len(remapped_words) - 1:
-            if ph_words:
-                phrases.append((ph_start_t, w.end, list(ph_words)))
-            ph_start_t = remapped_words[i + 1].start if i + 1 < len(remapped_words) else trimmed_duration
-            ph_words = []
-
-    # --- G2 filter + G1 exclusion + minimum-gap gate ---
-    n_raw = len(phrases)
-    n_g2 = 0
-    n_g1_excluded = 0
-    n_gap_filtered = 0
-    candidates: list[dict] = []  # {startSec, endSec, title, _words}
-    last_t = -_BEAT_MIN_GAP_S - 1.0
-
-    for ph_start, ph_end, pw in phrases:
-        # G2-a: word count
-        if not (_BEAT_MIN_WORDS <= len(pw) <= _BEAT_MAX_WORDS):
-            continue
-
-        # G2-b: isolated pronoun start
-        first_tok = pw[0].strip().lower().rstrip("'\"")
-        if first_tok in _BEAT_ISOLATED_PRONOUNS:
-            continue
-
-        # G2-c: list-order marker start
-        if first_tok in _BEAT_LIST_MARKERS:
-            continue
-
-        # G2-d: subordinate-clause starter → dependent fragment, never a standalone insight
-        if first_tok in _BEAT_SUBORDINATE_STARTERS:
-            continue
-
-        n_g2 += 1
-
-        # G1: not inside any LLM card window
-        if _near_llm(ph_start):
-            n_g1_excluded += 1
-            continue
-
-        # Minimum inter-card gap
-        if ph_start - last_t < _BEAT_MIN_GAP_S:
-            n_gap_filtered += 1
-            continue
-
-        # Build display title — merge apostrophe-split tokens first (Whisper splits
-        # "qu'en" → ["qu'", "en"]; joining with space gives "qu' en").
-        _APOS_CHARS = ("'", "’")  # straight + right single quotation mark
-        merged_pw: list[str] = []
-        for _tok in pw:
-            if merged_pw and (
-                any(_tok.startswith(_a) for _a in _APOS_CHARS) or
-                any(merged_pw[-1].endswith(_a) for _a in _APOS_CHARS)
-            ):
-                merged_pw[-1] += _tok
-            else:
-                merged_pw.append(_tok)
-        raw = " ".join(merged_pw)
-        if len(raw) > _BEAT_TITLE_MAX_CHARS:
-            trunc = raw[:_BEAT_TITLE_MAX_CHARS]
-            cut = trunc.rfind(" ")
-            raw = (trunc[:cut] if cut > 0 else trunc) + "…"
-        title = raw.rstrip(".,;:")
-
-        # Collect content words (>2 chars, no punctuation) for G3 Jaccard
-        cw = frozenset(
-            _t for _t in (re.sub(r"[^\w]", "", _tok.lower()) for _tok in pw)
-            if len(_t) > 2
-        )
-
-        candidates.append({
-            "startSec": round(ph_start, 3),
-            "endSec": round(min(ph_start + _BEAT_CARD_DISPLAY_SEC, trimmed_duration), 3),
-            "title": title,
-            "_words": cw,
-        })
-        last_t = ph_start
-
-    # --- G3 Jaccard semantic deduplication ---
-    n_g3_dropped = 0
-    final: list[dict] = []
-    for cand in candidates:
-        dup = False
-        cw_c = cand["_words"]
-        for existing in final:
-            cw_e = existing["_words"]
-            if cw_c and cw_e:
-                union = cw_c | cw_e
-                if union and len(cw_c & cw_e) / len(union) >= _BEAT_JACCARD_THRESHOLD:
-                    dup = True
-                    n_g3_dropped += 1
-                    break
-        if not dup:
-            final.append(cand)
-
-    # Build proper card dicts
-    beat_cards: list[dict] = []
-    for idx, f in enumerate(final):
-        beat_cards.append({
-            "id": f"beat-{idx + 1:03d}",
-            "beat": "beat",
-            "intent": "pulse beat card",
-            "startSec": f["startSec"],
-            "endSec": f["endSec"],
-            "accentIndex": idx % 5,
-            "zone": "video-overlay",
-            "contentHints": {
-                "style": "key_phrase",
-                "title": f["title"],
-                "detail": None,
-            },
-        })
-
-    print(
-        f"[BEAT] {n_raw} phrases"
-        f" | G2_pass={n_g2}"
-        f" | G1_excl={n_g1_excluded}"
-        f" | gap_skip={n_gap_filtered}"
-        f" | G3_drop={n_g3_dropped}"
-        f" | beat_cards={len(beat_cards)}",
-        flush=True,
-    )
-    return beat_cards
 
 
 def _tokenize_text(text: str) -> frozenset[str]:
@@ -2170,22 +1944,6 @@ def generate_storyboard(
                 f"first nearby word='{_near[0].text}'@{_near[0].start:.2f}s",
                 flush=True,
             )
-
-    # Beat card injection — pulse layer on top of LLM rich cards.
-    # Beat cards are key_phrase cards anchored to Whisper phrase boundaries,
-    # targeting ~120-160 auto cards that fill the gaps between LLM cards.
-    # They skip snap/anchor/grounding passes (already Whisper-anchored).
-    _beat_cards = _extract_beat_cards(remapped_words, graphic_cards, trimmed_duration)
-    if _beat_cards:
-        graphic_cards = sorted(
-            graphic_cards + _beat_cards,
-            key=lambda c: float(c.get("startSec", 0)),
-        )
-        print(
-            f"[BEAT] merged total: {len(graphic_cards)} graphic cards"
-            f" ({len(_beat_cards)} beat + {len(graphic_cards) - len(_beat_cards)} llm)",
-            flush=True,
-        )
 
     # Generative B-roll auto-injection is disabled.
     # The engine (broll_generative.py + broll_primitive.py) drove card selection via internal
