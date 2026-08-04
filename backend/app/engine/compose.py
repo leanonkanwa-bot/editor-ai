@@ -693,6 +693,14 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
                 title_size_eff = "38px"
             elif _tc > 50:
                 title_size_eff = "48px"
+        elif content_style == "before_after_image":
+            _tc = len(hints.get("before_label", "")) + len(hints.get("after_label", ""))
+            if _tc > 60:
+                title_size_eff = "32px"
+            elif _tc > 40:
+                title_size_eff = "38px"
+            elif _tc > 20:
+                title_size_eff = "48px"
 
     display_text = number if number else title
     title_size   = number_size_eff if number else title_size_eff
@@ -1138,7 +1146,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .ba-side {{')
         parts.append('  flex:1; display:flex; flex-direction:column; align-items:center;')
-        parts.append('  justify-content:center; gap:10px; padding:18px; opacity:0;')
+        parts.append('  justify-content:center; gap:10px; padding:18px; opacity:0; overflow:hidden; min-width:0;')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .ba-badge {{')
         parts.append(f'  font-family:{p["font"]}; font-size:{kicker_size_eff};')
@@ -1147,6 +1155,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'.card[data-card-id="{card_id}"] .ba-text {{')
         parts.append(f'  font-family:{p["font"]}; font-size:{title_size_eff};')
         parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]}; text-align:center;')
+        parts.append('  overflow-wrap:break-word; word-break:break-word; width:100%;')
         parts.append('}')
         if p["id"] == "lean_craft":
             parts.append(f'.card[data-card-id="{card_id}"] .ba-div {{')
@@ -2713,11 +2722,15 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         if p["accent_line_glow"]:
             parts.append(f'  box-shadow:{p["accent_line_glow"]};')
         parts.append('}')
-        # Hero number: 160px, accent-adjacent coloring, optional glow on Glass/Vibe
+        # Hero number: scale font-size to prevent overflow.
+        # Content area ≈ 770px (850px panel − 80px padding). At 160px bold,
+        # each char ≈ 90px → safe up to ~8 chars. Scale down for longer strings.
+        _nh_raw_str = hints.get("nh_number", "")
+        _nh_fsize   = max(60, min(160, int(770 * 160 // (90 * max(8, len(_nh_raw_str))))))
         parts.append(f'.card[data-card-id="{card_id}"] .nh-number {{')
-        parts.append(f'  font-family:{p["font"]}; font-size:160px; font-weight:900;')
+        parts.append(f'  font-family:{p["font"]}; font-size:{_nh_fsize}px; font-weight:900;')
         parts.append(f'  line-height:1; letter-spacing:-0.02em; color:{p["text"]};')
-        parts.append('  text-align:center; white-space:nowrap; margin:16px 0; opacity:0; position:relative; z-index:1;')
+        parts.append('  text-align:center; white-space:nowrap; max-width:100%; overflow:hidden; margin:16px 0; opacity:0; position:relative; z-index:1;')
         if p["title_glow"]:
             parts.append(f'  text-shadow:{p["title_glow"]};')
         parts.append('}')
