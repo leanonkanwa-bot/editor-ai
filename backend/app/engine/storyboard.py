@@ -1770,6 +1770,176 @@ def _apply_segment_clamp(
     return clamped
 
 
+def _find_fill_gaps(
+    sorted_cards: list[dict],
+    remapped_words: list[WordTiming],
+    trimmed_duration: float,
+    threshold_s: float = 20.0,
+    min_words: int = 25,
+    max_gaps: int = 8,
+) -> list[tuple[float, float, list[WordTiming]]]:
+    """Identify speech-filled gaps above threshold_s between existing cards.
+
+    Returns list of (gap_start, gap_end, words_in_gap) sorted by descending duration,
+    capped at max_gaps entries (largest first so the budget goes to the most impactful gaps).
+    """
+    gaps: list[tuple[float, float, list[WordTiming]]] = []
+    prev_end = 0.0
+    for card in sorted_cards:
+        gap_start = prev_end
+        gap_end = float(card["startSec"])
+        if gap_end - gap_start >= threshold_s:
+            words = [w for w in remapped_words if gap_start <= w.start < gap_end]
+            if len(words) >= min_words:
+                gaps.append((gap_start, gap_end, words))
+        prev_end = max(prev_end, float(card["endSec"]))
+    # Tail gap
+    if trimmed_duration - prev_end >= threshold_s:
+        words = [w for w in remapped_words if w.start >= prev_end]
+        if len(words) >= min_words:
+            gaps.append((prev_end, trimmed_duration, words))
+    gaps.sort(key=lambda g: g[1] - g[0], reverse=True)
+    return gaps[:max_gaps]
+
+
+# Narrative types allowed in gap-fill: require no special structural signals.
+# Excludes stat / prim_stat_counter / income_reveal / number_hero (need explicit data).
+_GF_ALLOWED_STYLES: frozenset[str] = frozenset({
+    "callout", "key_phrase", "quote", "cause_effect",
+    "contrarian_take", "question", "attributed_quote",
+})
+
+
+def _gap_fill_call(
+    gap_start: float,
+    gap_end: float,
+    gap_words: list[WordTiming],
+    trimmed_duration: float,
+    language: str,
+    card_idx: int,
+) -> dict | None:
+    """Launch a focused second LLM call to find the best card moment in a speech gap.
+
+    Returns a single card dict or None when the LLM abstains ({}) or the call fails.
+    Each returned card still needs to pass the full quality chain in generate_storyboard().
+    """
+    from anthropic import Anthropic
+    from app.core.config import settings
+
+    gap_dur = gap_end - gap_start
+    n_words = len(gap_words)
+
+    # Build timestamped passage: group words in 10s chunks for temporal reference
+    passage_lines: list[str] = []
+    chunk_start: float | None = None
+    chunk_words: list[str] = []
+    for w in gap_words:
+        if chunk_start is None:
+            chunk_start = w.start
+        if w.start - chunk_start >= 10.0:
+            if chunk_words:
+                passage_lines.append(f"[{chunk_start:.1f}s] {' '.join(chunk_words)}")
+            chunk_start = w.start
+            chunk_words = [w.text]
+        else:
+            chunk_words.append(w.text)
+    if chunk_words and chunk_start is not None:
+        passage_lines.append(f"[{chunk_start:.1f}s] {' '.join(chunk_words)}")
+    passage_text = "\n".join(passage_lines)
+
+    lang_label = "French" if language.startswith("fr") else ("English" if language.startswith("en") else language)
+
+    system_prompt = f"""You are a video card classifier. A specific passage from a coaching/entrepreneur video has NO graphic overlay card despite having substantive spoken content. Your task: find THE SINGLE BEST card moment in this passage — the moment with the highest insight density.
+
+AVAILABLE TYPES (narrative-focused, no special structural signal required):
+- "callout"         : conceptual anchor — the one idea the viewer must grasp to follow the next 30s
+- "key_phrase"      : transferable principle stated as a standalone truth
+- "quote"           : powerful first-person statement about the speaker's own experience or conviction
+- "cause_effect"    : explicit causal chain (X → Y, "because X, so Y")
+- "contrarian_take" : speaker challenges what the audience likely assumes
+- "question"        : rhetorical question the speaker poses and immediately answers
+- "attributed_quote": citation from a named book, person, or external source
+
+STRICT RULES:
+1. anchor_word: ONE word that appears LITERALLY in the passage text
+2. startSec / endSec: must be within [{gap_start:.1f}, {gap_end:.1f}]
+3. Duration: 3–8s recommended
+4. title: in {lang_label}, extracted from what the speaker actually says — no invention
+5. kicker: optional short UPPERCASE label (e.g. "L'INSIGHT CLÉ", "RETENIR ÇA")
+
+ABSTAIN RULE: If no moment in this passage genuinely earns a card (content too thin,
+purely transitional, no extractable insight), return exactly: {{}}
+
+Return ONE JSON object — a card or {{}}, nothing else:
+{{"startSec": X, "endSec": Y, "contentHints": {{"style": "...", "title": "...", "kicker": "...", "anchor_word": "..."}}}}"""
+
+    user_msg = (
+        f"PASSAGE [{gap_start:.1f}s–{gap_end:.1f}s | {gap_dur:.0f}s | {n_words} words]:\n"
+        f"{passage_text}\n\n"
+        f"Find the single best card moment in this passage, or return {{}} if none earns a card."
+    )
+
+    client = Anthropic(api_key=settings.anthropic_api_key)
+    try:
+        response = client.messages.create(
+            model=settings.anthropic_model,
+            max_tokens=256,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_msg}],
+        )
+        raw = response.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+
+        data = json.loads(raw)
+
+        # Abstain: LLM returned {} or non-dict
+        if not data or not isinstance(data, dict) or "contentHints" not in data:
+            print(
+                f"[GAP-FILL] Abstained on gap {gap_start:.1f}–{gap_end:.1f}s ({gap_dur:.0f}s)",
+                flush=True,
+            )
+            return None
+
+        # Clamp times to gap bounds
+        _s = max(gap_start, min(float(data.get("startSec", gap_start)), gap_end - 2.0))
+        _e = max(_s + 2.5, min(float(data.get("endSec", _s + 4.0)), gap_end, trimmed_duration))
+
+        card: dict = {
+            "id": f"gf-{card_idx:02d}",
+            "type": "graphic",
+            "startSec": round(_s, 3),
+            "endSec": round(_e, 3),
+            "zone": "fullscreen",
+            "contentHints": data["contentHints"],
+        }
+
+        # Enforce allowed-style list; reclassify unknown types to callout
+        _style = card["contentHints"].get("style", "")
+        if _style not in _GF_ALLOWED_STYLES:
+            print(
+                f"[GAP-FILL] Style {_style!r} not in allowed list — reclassified to callout",
+                flush=True,
+            )
+            card["contentHints"]["style"] = "callout"
+
+        print(
+            f"[GAP-FILL] card {card['id']} style={card['contentHints'].get('style')!r}"
+            f" title={str(card['contentHints'].get('title',''))[:40]!r}"
+            f" anchor={card['contentHints'].get('anchor_word','?')!r}"
+            f" startSec={_s:.2f}s",
+            flush=True,
+        )
+        return card
+
+    except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
+        print(f"[GAP-FILL] Parse error gap {gap_start:.1f}–{gap_end:.1f}s: {e}", flush=True)
+        return None
+    except Exception as e:
+        print(f"[GAP-FILL] API error gap {gap_start:.1f}–{gap_end:.1f}s: {e}", flush=True)
+        return None
+
+
 def generate_storyboard(
     trimmed_duration: float,
     remapped_words: list[WordTiming],
@@ -2071,6 +2241,155 @@ def generate_storyboard(
         )
     else:
         print("[DEAD-ZONE] No card gaps > 12s — full coverage OK", flush=True)
+
+    # ── Gap-fill: targeted second LLM calls for speech deserts ───────────────
+    # After the dead-zone audit we know exactly which spans lack card coverage.
+    # For each qualifying gap (≥ 20s, ≥ 25 speech words) we fire a focused call
+    # that sees only that passage and may abstain (returns None/{}). Each survivor
+    # runs the full quality chain identical to main cards.
+    from math import ceil as _math_ceil
+
+    _gf_max = min(_math_ceil(trimmed_duration / 90), 8)
+    _gf_gaps = _find_fill_gaps(
+        _sorted_gc, remapped_words, trimmed_duration,
+        threshold_s=20.0, min_words=25, max_gaps=_gf_max,
+    )
+    print(
+        f"[GAP-FILL] {len(_gf_gaps)} qualifying gap(s) (max={_gf_max} calls)",
+        flush=True,
+    )
+
+    _gf_new: list[dict] = []
+    _gf_idx = 0
+
+    for _gf_start, _gf_end, _gf_words in _gf_gaps:
+        _gf_idx += 1
+        print(
+            f"[GAP-FILL] Evaluating gap [{_gf_start:.1f}–{_gf_end:.1f}s]"
+            f" ({_gf_end - _gf_start:.0f}s | {len(_gf_words)} words)",
+            flush=True,
+        )
+        _gf_card = _gap_fill_call(
+            _gf_start, _gf_end, _gf_words, trimmed_duration, language, _gf_idx
+        )
+        if _gf_card is None:
+            continue  # abstained or error
+
+        # 1. Trigger-style anchor ─────────────────────────────────────────────
+        _gf_style = _gf_card.get("contentHints", {}).get("style", "")
+        if _gf_style in _TRIGGER_STYLES:
+            _gf_anchor = _find_trigger_anchor(_gf_card, remapped_words)
+            if _gf_anchor is not None and _gf_anchor > float(_gf_card.get("startSec", 0)):
+                _gf_orig = float(_gf_card["startSec"])
+                _gf_card["startSec"] = _gf_anchor
+                if float(_gf_card.get("endSec", 0)) < _gf_anchor + 1.5:
+                    _gf_card["endSec"] = round(_gf_anchor + 3.0, 3)
+                print(
+                    f"[GAP-FILL] TRIGGER-ANCHOR {_gf_card['id']}"
+                    f" {_gf_orig:.2f}→{_gf_card['startSec']:.2f}s",
+                    flush=True,
+                )
+
+        # 2. Title-based semantic anchor (non-trigger cards) ──────────────────
+        else:
+            _gf_title = _gf_card.get("contentHints", {}).get("title", "")
+            _gf_title_cw = _content_words(_gf_title) if _gf_title else frozenset()
+            if _gf_title_cw:
+                _gf_s0 = float(_gf_card.get("startSec", 0))
+                _gf_lo = _gf_s0 - _GROUNDING_WINDOW_PRE_S
+                _gf_hi = _gf_s0 + _ANCHOR_SEARCH_FORWARD_S
+                _gf_matched: float | None = None
+                _gf_matched_word = ""
+                for _gfw in remapped_words:
+                    if _gfw.start < _gf_lo:
+                        continue
+                    if _gfw.start > _gf_hi:
+                        break
+                    if _content_words(_gfw.text) & _gf_title_cw:
+                        _gf_matched = _gfw.start
+                        _gf_matched_word = _gfw.text
+                        break
+                if _gf_matched is not None and _gf_matched - _gf_s0 > 0.5:
+                    _gf_prev = _gf_s0
+                    _gf_card["startSec"] = round(
+                        max(_gf_matched - _ANCHOR_LEAD_S, _gf_s0), 3
+                    )
+                    if float(_gf_card.get("endSec", 0)) < _gf_card["startSec"] + 1.5:
+                        _gf_card["endSec"] = round(_gf_card["startSec"] + 3.0, 3)
+                    print(
+                        f"[GAP-FILL] TITLE-ANCHOR {_gf_card['id']}"
+                        f" {_gf_prev:.2f}→{_gf_card['startSec']:.2f}s"
+                        f" ('{_gf_matched_word}'@{_gf_matched:.2f}s)",
+                        flush=True,
+                    )
+
+        # 3. Grounding guard ───────────────────────────────────────────────────
+        _gf_style = _gf_card.get("contentHints", {}).get("style", "")
+        if _gf_style in _TRIGGER_STYLES:
+            _gf_overlap = _grounding_overlap(_gf_card, remapped_words)
+            if _gf_overlap < _GROUNDING_OVERLAP_THRESHOLD:
+                _gf_title = _gf_card.get("contentHints", {}).get("title", "")
+                _gf_card["contentHints"]["style"] = "key_phrase" if _gf_title else "callout"
+                print(
+                    f"[GAP-FILL] GROUNDING REJECT {_gf_card['id']}"
+                    f" {_gf_style!r}→{_gf_card['contentHints']['style']!r}"
+                    f" overlap={int(_gf_overlap * 100)}%",
+                    flush=True,
+                )
+
+        # 4. Segment-boundary clamp ────────────────────────────────────────────
+        _apply_segment_clamp([_gf_card], _seg_out)
+
+        # 5. Re-clamp card to its originating gap ─────────────────────────────
+        # Ensures _apply_segment_clamp hasn't moved the card past the gap boundary.
+        _gf_card["startSec"] = round(
+            max(_gf_start, min(float(_gf_card["startSec"]), _gf_end - 2.0)), 3
+        )
+        _gf_card["endSec"] = round(
+            min(
+                _gf_end,
+                max(float(_gf_card["endSec"]), float(_gf_card["startSec"]) + 2.5),
+            ),
+            3,
+        )
+
+        # 6. Anti-overlap — must not touch any placed card (main or gap-fill) ─
+        _gf_all_placed = graphic_cards + _gf_new
+        _gf_conflict = [
+            c for c in _gf_all_placed
+            if float(c.get("startSec", 0)) < float(_gf_card["endSec"])
+            and float(c.get("endSec", 0)) > float(_gf_card["startSec"])
+        ]
+        if _gf_conflict:
+            _gfc0 = _gf_conflict[0]
+            print(
+                f"[GAP-FILL] OVERLAP REJECT {_gf_card['id']}"
+                f" [{_gf_card['startSec']:.2f}–{_gf_card['endSec']:.2f}s]"
+                f" overlaps {_gfc0.get('id','?')}"
+                f" [{_gfc0.get('startSec','?')}–{_gfc0.get('endSec','?')}s]",
+                flush=True,
+            )
+            continue
+
+        _gf_new.append(_gf_card)
+        print(
+            f"[GAP-FILL] ACCEPTED {_gf_card['id']}"
+            f" style={_gf_card['contentHints'].get('style')!r}"
+            f" [{_gf_card['startSec']:.2f}–{_gf_card['endSec']:.2f}s]",
+            flush=True,
+        )
+
+    if _gf_new:
+        graphic_cards = sorted(
+            graphic_cards + _gf_new,
+            key=lambda c: float(c.get("startSec", 0)),
+        )
+        print(
+            f"[GAP-FILL] Merged {len(_gf_new)} card(s) — total: {len(graphic_cards)}",
+            flush=True,
+        )
+    else:
+        print("[GAP-FILL] No new cards inserted", flush=True)
 
     # ── Full-cover exclusion pass ─────────────────────────────────────────────
     # Drop card_overlay cards that overlap a full_cover window. full_cover cards
