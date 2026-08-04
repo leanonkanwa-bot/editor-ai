@@ -208,6 +208,27 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
                 f" n={_n_items} -> {_dyn_h}px",
                 flush=True,
             )
+        # Dual-text hero types: portrait-center zones (height 360-420px) overflow
+        # when two full-size text blocks together exceed the container height.
+        # Dynamic height prevents symmetric clipping at both top and bottom.
+        _DUAL_TEXT_HERO_TYPES = frozenset({"myth_vs_fact", "objection_response"})
+        if _dyn_style in _DUAL_TEXT_HERO_TYPES:
+            _dyn_hints = card.get("contentHints", {})
+            if _dyn_style == "myth_vs_fact":
+                _tc = (len(_dyn_hints.get("myth_text", ""))
+                       + len(_dyn_hints.get("fact_text", "")))
+            else:
+                _tc = (len(_dyn_hints.get("objection_text", ""))
+                       + len(_dyn_hints.get("response_text", "")))
+            # ~5px per char at 64px font (2 blocks) + 300px base (padding + gaps + badge).
+            # Base 300 ensures even very short combined texts (≤30 chars) have room.
+            _dyn_h = max(360, min(_tc * 5 + 300, 680))
+            bounds = {**bounds, "height": _dyn_h}
+            print(
+                f"[COMPOSE] dual-text-dyn-height {card.get('id', '?')} ({_dyn_style})"
+                f" chars={_tc} -> {_dyn_h}px",
+                flush=True,
+            )
 
     if is_caption:
         inner = _build_caption_card_html(card, pack=pack, layout=layout)
@@ -650,6 +671,21 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
                 title_size_eff = "38px"
             elif _tc > 20:
                 title_size_eff = "56px"
+        # Dual-text-block types: myth_vs_fact and objection_response render two
+        # separate text blocks both using title_size_eff. Their combined length
+        # drives vertical height, not the title field — apply separate reduction.
+        if content_style == "myth_vs_fact":
+            _tc = len(hints.get("myth_text", "")) + len(hints.get("fact_text", ""))
+            if _tc > 80:
+                title_size_eff = "38px"
+            elif _tc > 50:
+                title_size_eff = "48px"
+        elif content_style == "objection_response":
+            _tc = len(hints.get("objection_text", "")) + len(hints.get("response_text", ""))
+            if _tc > 80:
+                title_size_eff = "38px"
+            elif _tc > 50:
+                title_size_eff = "48px"
 
     display_text = number if number else title
     title_size   = number_size_eff if number else title_size_eff
