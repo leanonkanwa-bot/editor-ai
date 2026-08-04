@@ -4152,6 +4152,12 @@ def _build_timeline_js(
 
     if zoom_entries:
         lines.append("  // ── Zoom/pan on video wrapper ──")
+        # Seed the initial scale so tl.to() below always starts from the
+        # authored baseline rather than the element's CSS default (scale:1).
+        _first_ze = next((ze for ze in zoom_entries if ze.get("kind", "drift") != "jump_cut"), None)
+        if _first_ze:
+            _init_scale = float(_first_ze.get("from", 1.0))
+            lines.append(f'  tl.set("#video-wrap", {{ scale: {_init_scale:.4f} }}, 0);')
         for ze in zoom_entries:
             zs = float(ze.get("start", 0))
             ze_end = float(ze.get("end", zs + 1))
@@ -4178,9 +4184,13 @@ def _build_timeline_js(
                     ease = '"power2.in"'
                 else:
                     ease = '"sine.inOut"'
+                # tl.to() (not fromTo) — continues from current animated value.
+                # tl.fromTo() forced the 'from' scale at the tween's start time,
+                # creating a visible snap when adjacent entries had mismatched
+                # boundary values (e.g. drift ending at 1.20, pull_out declaring
+                # from:1.08 → 0.12 snap at t=32.54s in job 45bf7899).
                 lines.append(
-                    f'  tl.fromTo("#video-wrap", '
-                    f'{{ scale: {zfrom:.4f} }}, '
+                    f'  tl.to("#video-wrap", '
                     f'{{ scale: {zto:.4f}, duration: {zdur:.4f}, ease: {ease}, '
                     f'transformOrigin: "{transform_origin}", overwrite: "auto" }}, '
                     f'{zs:.4f});'
