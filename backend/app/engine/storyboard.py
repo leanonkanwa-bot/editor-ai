@@ -677,6 +677,7 @@ ZONES — where the card sits on screen:
 {f"SUBJECT POSITION: the speaker occupies the {subject_side} side of the frame. Place data-heavy cards (stat, list, comparison) on the OPPOSITE side so they don't obscure the face." if subject_side and subject_side != "center" else ""}
 RULES:
 - CARD COUNT BUDGET: {target_cards} cards maximum for a {trimmed_duration:.0f}s video. Ceiling means: never pad or force cards beyond what the content genuinely deserves. It does NOT mean: aim for the minimum. On longer videos, under-coverage is its own quality failure — a viewer watching 10+ minutes without visual reinforcement loses engagement. Treat the budget as the number of genuine moments this video contains: most well-structured videos will use 70–90% of it. Place a card whenever the speaker teaches, reveals, contrasts, enumerates, or drives home a point worth remembering. If you are at 40% of the budget with half the video left and no good reason to stop, look harder for moments you may have missed.
+- DEAD ZONE RULE: Any 60+ second stretch of active speech with no card is a failure mode — even on pure narrative passages with no explicit enumeration, statistic, or comparison. On reflective, elaborative, or storytelling content, use these types: contrarian_take (the speaker challenges what the audience likely assumes), cause_effect (explicit or implied causal chain: "X → Y", "parce que X, donc Y"), quote (powerful first-person statement about the speaker's own experience or perspective), callout (conceptual anchor for the section — what the viewer must grasp to follow what comes next), question (rhetorical question the speaker poses and then answers). "No obvious structural peak" is not a reason to skip — it is a reason to look harder for the underlying insight.
 - DUAL-CARD BEATS: When a single speech segment contains BOTH (a) a vivid, memorable, or funny formulation that stands on its own as a key_phrase AND (b) one or more distinct numeric facts (stat), generate TWO separate cards with startSec offset by 1-2s: the stat card anchors to when the number is spoken, the key_phrase card anchors to the memorable phrase. Only split when both elements are genuinely strong independently — do not split weak content.
 - Card startSec/endSec must be within [0, {trimmed_duration:.1f}]
 - Cards should NOT overlap each other in time
@@ -810,6 +811,11 @@ RULES:
     — Topic announcements: "voici comment", "je vais vous expliquer", "parlons de"
     — Paraphrases of common beliefs the speaker is about to refute:
       "beaucoup pensent que…", "la plupart croient que…"
+    DIVERSITY WARNING: key_phrase must not become the default escape hatch for
+    all well-phrased moments. If more than 2 of every 5 cards placed so far
+    are key_phrase, stop — those remaining moments should be: callout
+    (conceptual anchor), quote (personal declaration), contrarian_take
+    (challenged assumption), or cause_effect (narrative causal link).
   "quote" — a memorable first-person DECLARATION or observation specific to
     the speaker's personal experience or perspective — something lived, not
     taught (e.g. "ce jour-là m'a changé pour toujours", "je n'aurais jamais

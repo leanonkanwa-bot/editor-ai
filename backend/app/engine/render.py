@@ -2636,9 +2636,9 @@ def _render_hyperframes(
             _kf_pf = _kf_pf_probe.stdout.strip()
             if "10" in _kf_pf:
                 _kf_venc = ["-c:v", "libx265", "-x265-params", "log-level=error",
-                            "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p10le"]
+                            "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p10le"]
             else:
-                _kf_venc = ["-c:v", "libx264", "-preset", "fast", "-crf", "18",
+                _kf_venc = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
                             "-pix_fmt", "yuv420p"]
             _kf_result = subprocess.run(
                 [
