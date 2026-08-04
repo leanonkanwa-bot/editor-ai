@@ -114,9 +114,6 @@ TEST_CASES: list[tuple[str, str]] = [
     ("mindmap", "La croissance d'une marque repose sur trois axes : la visibilité, la confiance, et la conversion."),
     ("mindmap", "Mon business gravite autour de trois pôles : la formation, le coaching, et l'affiliation."),
 
-    # ── data_chart ────────────────────────────────────────────────────────────
-    ("data_chart", "Voici les données comparatives entre nos trois produits sur les six derniers mois."),
-
     # ── instagram-follow ──────────────────────────────────────────────────────
     ("instagram-follow", "Suis-moi sur Instagram pour plus de contenu comme celui-là, tous les jours."),
     ("instagram-follow", "Rejoins ma communauté sur Instagram — lien dans la bio."),

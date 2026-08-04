@@ -975,31 +975,6 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  width: 2px; height: 0; background: {p["accent"]};')
         parts.append(f'  opacity: 0.6; margin: 0 auto;')
         parts.append('}')
-    # data_chart — animated bar chart (replaces trend for stat/score beats)
-    if content_style == "data_chart":
-        parts.append(f'.card[data-card-id="{card_id}"] .dc-wrap {{')
-        parts.append(f'  width: 100%; display: flex; flex-direction: column; gap: 8px;')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .dc-row {{')
-        parts.append(f'  display: flex; align-items: center; gap: 10px; opacity: 0;')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .dc-label {{')
-        parts.append(f'  font-family: {p["font"]}; font-size: {("12px" if compact else "14px")};')
-        parts.append(f'  font-weight: 600; color: {p["text_secondary"]}; width: 80px;')
-        parts.append(f'  flex-shrink: 0; text-align: right;')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .dc-track {{')
-        parts.append(f'  flex: 1; height: 10px; background: rgba(255,255,255,0.08);')
-        parts.append(f'  border-radius: 5px; overflow: hidden;')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .dc-fill {{')
-        parts.append(f'  height: 100%; width: 0%; background: {p["accent"]};')
-        parts.append(f'  border-radius: 5px;')
-        parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .dc-val {{')
-        parts.append(f'  font-family: {p["font"]}; font-size: {("12px" if compact else "14px")};')
-        parts.append(f'  font-weight: 700; color: {p["accent"]}; width: 48px; flex-shrink: 0;')
-        parts.append('}')
     # News-ticker: full-width horizontal crawl bar
     if content_style == "news_ticker":
         bg_solid = p.get("bg", "#0f0f13") if "gradient" not in p.get("bg","") else "#0f0f13"
@@ -1551,7 +1526,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         if p["title_glow"]:
             parts.append(f'  text-shadow:{p["title_glow"]};')
         parts.append('}')
-    if content_style == "data_bar_chart":
+    if content_style in ("data_bar_chart", "data_chart"):
         _dbc_bg = "rgba(0,0,0,0.06)" if p["id"] in ("lean_paper", "lean_craft") else "rgba(255,255,255,0.08)"
         _dbc_fill_r = "3px 2px 5px 2px" if p["id"] == "lean_craft" else "8px"
         parts.append(f'.card[data-card-id="{card_id}"] .dbc-wrap {{')
@@ -2816,35 +2791,6 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'      <div class="fc-arrow" id="{card_id}-fc-arrow-{i}" style="height:0"></div>')
             parts.append(f'      <div class="fc-node" id="{card_id}-fc-{i}">{_esc(str(br))}</div>')
         parts.append(f'    </div>')
-    elif content_style == "data_chart":
-        chart_items = hints.get("items", [])
-        if not chart_items and hints.get("branches"):
-            chart_items = hints.get("branches", [])
-        # items can be "Label: value" strings or plain strings
-        rows: list[tuple[str, float]] = []
-        max_v = 1.0
-        for raw in chart_items[:5]:
-            parts_split = str(raw).split(":", 1)
-            if len(parts_split) == 2:
-                lbl, val_s = parts_split
-                try:
-                    val = float(val_s.strip().replace("%", "").replace(",", "."))
-                except ValueError:
-                    val = float(len(rows) + 1)
-            else:
-                lbl, val = str(raw), float(len(rows) + 1)
-            rows.append((lbl.strip(), val))
-            if val > max_v:
-                max_v = val
-        parts.append(f'    <div class="dc-wrap">')
-        for i, (lbl, val) in enumerate(rows):
-            pct = round(val / max_v * 100, 1)
-            parts.append(f'      <div class="dc-row" id="{card_id}-dc-{i}">')
-            parts.append(f'        <div class="dc-label">{_esc(lbl)}</div>')
-            parts.append(f'        <div class="dc-track"><div class="dc-fill" id="{card_id}-dc-fill-{i}" data-pct="{pct}"></div></div>')
-            parts.append(f'        <div class="dc-val">{val:g}</div>')
-            parts.append(f'      </div>')
-        parts.append(f'    </div>')
     elif content_style in ("instagram-follow", "tiktok-follow", "yt-lower-third"):
         handle = _esc(hints.get("title", kicker or "@handle"))
         if content_style == "instagram-follow":
@@ -3211,9 +3157,21 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'      <div class="or-resp-hdr" id="{card_id}-or-resp-hdr">&#x2713; R&#xe9;ponse</div>')
         parts.append(f'      <div class="or-resp" id="{card_id}-or-resp">{_or_resp}</div>')
         parts.append(f'    </div>')
-    elif content_style == "data_bar_chart":
+    elif content_style in ("data_bar_chart", "data_chart"):
         _dbc_labels = hints.get("bar_labels", [])
         _dbc_values = hints.get("bar_values", [])
+        # data_chart compat: legacy "items" format ["Label: value", ...]
+        if not _dbc_labels and hints.get("items"):
+            for _dc_raw in hints.get("items", [])[:4]:
+                _dc_ps = str(_dc_raw).split(":", 1)
+                _dbc_labels.append(_dc_ps[0].strip() if len(_dc_ps) == 2 else str(_dc_raw))
+                if len(_dc_ps) == 2:
+                    try:
+                        _dbc_values.append(float(_dc_ps[1].strip().replace("%", "").replace(",", ".")))
+                    except ValueError:
+                        _dbc_values.append(float(len(_dbc_labels)))
+                else:
+                    _dbc_values.append(float(len(_dbc_labels)))
         _dbc_rows: list[tuple[str, float]] = []
         for _dbc_i in range(min(len(_dbc_labels), len(_dbc_values), 4)):
             try:
@@ -4731,23 +4689,6 @@ def _build_timeline_js(
                         f'{{ opacity: 0, y: 6 }}, '
                         f'{{ opacity: 1, y: 0, duration: 0.22, ease: _eIn }}, '
                         f'{round(br_t + 0.10, 4):.4f});')
-            elif content_style == "data_chart":
-                chart_items = card.get("contentHints", {}).get("items",
-                              card.get("contentHints", {}).get("branches", []))
-                n_rows = min(len(chart_items), 5)
-                for ri in range(n_rows):
-                    row_sel  = f'.card[data-card-id="{card_id}"] #{card_id}-dc-{ri}'
-                    fill_sel = f'.card[data-card-id="{card_id}"] #{card_id}-dc-fill-{ri}'
-                    row_t = round(t_in + ri * 0.14, 4)
-                    lines.append(
-                        f'  tl.fromTo(\'{row_sel}\', '
-                        f'{{ opacity: 0, x: -8 }}, '
-                        f'{{ opacity: 1, x: 0, duration: 0.22, ease: _eIn }}, '
-                        f'{row_t:.4f});')
-                    lines.append(
-                        f'  tl.to(\'{fill_sel}\', '
-                        f'{{ width: "100%", duration: 0.50, ease: "power2.out" }}, '
-                        f'{round(row_t + 0.15, 4):.4f});')
             elif content_style in ("instagram-follow", "tiktok-follow", "yt-lower-third"):
                 so_sel = f'.card[data-card-id="{card_id}"] #{card_id}-so'
                 lines.append(
@@ -5499,10 +5440,21 @@ def _build_timeline_js(
                     if p["title_glow"]:
                         _w4_or_tg = _esc_js(p["title_glow"])
                         lines.append(f'  tl.to(\'{_w4_or_resp}\', {{ textShadow: "{_w4_or_tg}", duration: 0.20 }}, {t_in + 1.10:.4f});')
-            elif content_style == "data_bar_chart":
+            elif content_style in ("data_bar_chart", "data_chart"):
                 _w4_dbc_h = card.get("contentHints", {})
-                _w4_dbc_labels = _w4_dbc_h.get("bar_labels", [])
-                _w4_dbc_values = _w4_dbc_h.get("bar_values", [])
+                _w4_dbc_labels = list(_w4_dbc_h.get("bar_labels", []))
+                _w4_dbc_values = list(_w4_dbc_h.get("bar_values", []))
+                if not _w4_dbc_labels and _w4_dbc_h.get("items"):
+                    for _w4_dc_raw in _w4_dbc_h.get("items", [])[:4]:
+                        _w4_dc_ps = str(_w4_dc_raw).split(":", 1)
+                        _w4_dbc_labels.append(_w4_dc_ps[0].strip() if len(_w4_dc_ps) == 2 else str(_w4_dc_raw))
+                        if len(_w4_dc_ps) == 2:
+                            try:
+                                _w4_dbc_values.append(float(_w4_dc_ps[1].strip().replace("%", "").replace(",", ".")))
+                            except ValueError:
+                                _w4_dbc_values.append(float(len(_w4_dbc_labels)))
+                        else:
+                            _w4_dbc_values.append(float(len(_w4_dbc_labels)))
                 _w4_dbc_n = min(len(_w4_dbc_labels), len(_w4_dbc_values), 4)
                 _w4_dbc_max = max((float(v) for v in _w4_dbc_values[:_w4_dbc_n] if v is not None), default=1.0) or 1.0
                 for _w4_di in range(_w4_dbc_n):
