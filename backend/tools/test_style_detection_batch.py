@@ -441,6 +441,14 @@ TEST_CASES: list[tuple[str, str]] = [
     ("prim_journey_map", "J'ai quitté la France pour m'installer à Bangkok — un trajet de 9 500 kilomètres."),
     ("prim_journey_map", "On a tout plaqué à Lyon pour déménager à Lisbonne. C'était la meilleure décision de notre vie."),
     ("prim_journey_map", "Je suis parti de Montréal pour rejoindre Tokyo — une aventure qui a duré deux ans."),
+
+    # ── prim_cinematic_reveal — manifesto card, ONE per video, phrase as thesis ──
+    # Boundary: capstone declaration, not a tip or intermediate key_phrase
+    ("prim_cinematic_reveal", "Ce que j'ai compris ce jour-là, c'est que tout repose sur la confiance — et rien d'autre."),
+    # Boundary: personal creed / absolute truth — not a how-to step
+    ("prim_cinematic_reveal", "Arrête de vendre des produits. Vends une transformation. C'est tout."),
+    # Boundary: transformational declaration — not a stat or number
+    ("prim_cinematic_reveal", "Le vrai levier, celui que personne ne te dit, c'est de devenir quelqu'un d'autre."),
 ]
 
 

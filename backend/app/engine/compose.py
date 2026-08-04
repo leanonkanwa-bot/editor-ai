@@ -169,7 +169,7 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
     # the video source. Only full-cover primitives that need the complete canvas are exempt.
     if layout == "portrait" and not is_caption:
         _is_portrait_full_cover = card.get("contentHints", {}).get("style", "") in (
-            "prim_split_compare", "prim_journey_map"
+            "prim_split_compare", "prim_journey_map", "prim_cinematic_reveal"
         )
         if not _is_portrait_full_cover and zone not in (
             "portrait-center-full", "portrait-center-left", "portrait-center-right"
@@ -2727,6 +2727,73 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  color:{p["text_secondary"]}; text-align:center; opacity:0;')
         parts.append('  margin-top:14px; position:relative; z-index:1;')
         parts.append('}')
+    # ── prim_cinematic_reveal CSS ────────────────────────────────────────────
+    if content_style == "prim_cinematic_reveal":
+        # Light-pack text override: bg_full is always #000; pack text may be dark.
+        _pcr_text = (
+            "rgba(255,255,255,0.92)"
+            if p["id"] in ("lean_craft", "lean_paper")
+            else p["text"]
+        )
+        _pcr_secondary = (
+            "rgba(255,255,255,0.55)"
+            if p["id"] in ("lean_craft", "lean_paper")
+            else p["text_secondary"]
+        )
+        parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
+        parts.append('  width:100%; height:100%; max-width:none; padding:0;')
+        parts.append('  display:flex; align-items:center; justify-content:center;')
+        parts.append(f'  background:{p.get("bg_full", "#000")};')
+        parts.append('}')
+        # Suppress generic kicker / accent-line / shimmer (own pcr-* elements take over)
+        parts.append(f'.card[data-card-id="{card_id}"] .kicker {{ display:none; }}')
+        parts.append(f'.card[data-card-id="{card_id}"] .accent-line {{ display:none; }}')
+        parts.append(f'.card[data-card-id="{card_id}"] .shimmer-mask {{ display:none; }}')
+        # Scene: perspective wrapper, full width, centered flex column
+        parts.append(f'.card[data-card-id="{card_id}"] .pcr-scene {{')
+        parts.append('  position:relative; display:flex; flex-direction:column;')
+        parts.append('  align-items:center; justify-content:center; gap:0;')
+        parts.append('  width:100%; padding:72px 80px; box-sizing:border-box;')
+        parts.append('}')
+        # Background geometric: diamond ring (square rotated 45°) — GSAP owns transform
+        parts.append(f'.card[data-card-id="{card_id}"] .pcr-bg {{')
+        parts.append(f'  position:absolute; width:360px; height:360px;')
+        parts.append(f'  border:1.5px solid {p["accent"]}; border-radius:3px;')
+        parts.append('  opacity:0; pointer-events:none; transform-origin:center center;')
+        parts.append('}')
+        # Eyebrow kicker: small-caps label, perspective-flip entry via GSAP
+        parts.append(f'.card[data-card-id="{card_id}"] .pcr-kicker {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:18px;')
+        parts.append('  font-weight:600; letter-spacing:0.18em; text-transform:uppercase;')
+        parts.append(f'  color:{_pcr_secondary}; text-align:center; opacity:0;')
+        parts.append('  position:relative; z-index:1; margin-bottom:18px;')
+        parts.append('}')
+        # Main title: scale+rotateY approach via GSAP (expo.out)
+        parts.append(f'.card[data-card-id="{card_id}"] .pcr-title {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{p["title_size"]};')
+        parts.append(f'  font-weight:{p["font_weight"]}; color:{_pcr_text};')
+        parts.append('  text-align:center; line-height:1.15; opacity:0;')
+        parts.append('  position:relative; z-index:1; max-width:100%;')
+        if p.get("title_glow"):
+            parts.append(f'  text-shadow:{p["title_glow"]};')
+        parts.append('}')
+        # Accent line: left-anchored scaleX growth via GSAP (power2.inOut)
+        # Block-level with explicit width required so scaleX is not a no-op (HF rule 7).
+        parts.append(f'.card[data-card-id="{card_id}"] .pcr-line {{')
+        parts.append('  display:block; height:3px; border-radius:1.5px;')
+        parts.append(f'  background:{p["accent"]}; width:calc(100% - 120px); max-width:480px;')
+        parts.append('  opacity:0; position:relative; z-index:1;')
+        parts.append('  transform-origin:left center; margin-top:22px;')
+        if p.get("accent_line_glow"):
+            parts.append(f'  box-shadow:{p["accent_line_glow"]};')
+        parts.append('}')
+        # Optional detail: muted sub-text, y-rise entry via GSAP
+        parts.append(f'.card[data-card-id="{card_id}"] .pcr-detail {{')
+        parts.append(f'  font-family:{p.get("font_detail", p["font"])}; font-size:{p["detail_size"]};')
+        parts.append(f'  font-weight:400; color:{_pcr_secondary};')
+        parts.append('  text-align:center; opacity:0; position:relative; z-index:1;')
+        parts.append('  margin-top:16px; max-width:80%; line-height:1.4;')
+        parts.append('}')
     parts.append('</style>')
     # Timeline: full-screen overlay, no card-panel wrapper
     if content_style == "timeline":
@@ -3923,6 +3990,21 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'    <div><div class="jmt-city">{_jmt_from}</div><div class="jmt-ctry">{_jmt_fc}</div></div>')
         parts.append(f'    <div style="text-align:right"><div class="jmt-city">{_jmt_to}</div><div class="jmt-ctry">{_jmt_tc}</div></div>')
         parts.append(f'  </div>')
+    elif content_style == "prim_cinematic_reveal":
+        # ── prim_cinematic_reveal HTML — multi-layer depth reveal ─────────────
+        # Generic .kicker is suppressed via CSS (display:none); pcr-kicker is explicit.
+        _pcr_title_t  = _esc(hints.get("title", ""))
+        _pcr_kicker_t = _esc(hints.get("kicker", ""))
+        _pcr_detail_t = _esc(hints.get("detail", ""))
+        parts.append(f'    <div class="pcr-scene">')
+        parts.append(f'      <div class="pcr-bg" id="{card_id}-pcr-bg"></div>')
+        if _pcr_kicker_t:
+            parts.append(f'      <div class="pcr-kicker" id="{card_id}-pcr-kicker">{_pcr_kicker_t}</div>')
+        parts.append(f'      <div class="pcr-title" id="{card_id}-pcr-title">{_pcr_title_t}</div>')
+        parts.append(f'      <div class="pcr-line" id="{card_id}-pcr-line"></div>')
+        if _pcr_detail_t:
+            parts.append(f'      <div class="pcr-detail" id="{card_id}-pcr-detail">{_pcr_detail_t}</div>')
+        parts.append(f'    </div>')
     elif content_style == "number_hero":
         _nh_number_t  = _esc(hints.get("nh_number", ""))
         _nh_kicker_t  = _esc(hints.get("nh_kicker", "") or kicker or "")
@@ -4206,7 +4288,7 @@ def _build_timeline_js(
             # portrait-center-full slot) also trigger backdrop-dim as a safety net.
             if layout == "portrait" and card.get("type") != "caption":
                 _pfc_style = card.get("contentHints", {}).get("style", "")
-                _is_pfc = _pfc_style in ("prim_split_compare", "prim_journey_map")
+                _is_pfc = _pfc_style in ("prim_split_compare", "prim_journey_map", "prim_cinematic_reveal")
                 if not _is_pfc and card_zone not in (
                     "portrait-center-full", "portrait-center-left", "portrait-center-right"
                 ):
@@ -6992,6 +7074,58 @@ def _build_timeline_js(
                 lines.append(f'  tl.fromTo(\'#{card_id}-jmt-st\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.200, ease: "power2.out" }}, {_t_arrive + 0.08:.4f});')
                 # Footer fade in after arrival
                 lines.append(f'  tl.fromTo(\'{_jmt_ft_sel}\', {{ opacity: 0 }}, {{ opacity: 1, duration: 0.350, ease: "power2.out" }}, {_t_arrive + 0.20:.4f});')
+            # ── prim_cinematic_reveal GSAP — 4-layer depth reveal ───────────────
+            elif content_style == "prim_cinematic_reveal":
+                _pcr_bg_s   = f'.card[data-card-id="{card_id}"] #{card_id}-pcr-bg'
+                _pcr_kck_s  = f'.card[data-card-id="{card_id}"] #{card_id}-pcr-kicker'
+                _pcr_tit_s  = f'.card[data-card-id="{card_id}"] #{card_id}-pcr-title'
+                _pcr_lin_s  = f'.card[data-card-id="{card_id}"] #{card_id}-pcr-line'
+                _pcr_det_s  = f'.card[data-card-id="{card_id}"] #{card_id}-pcr-detail'
+                _pcr_hints  = card.get("contentHints", {})
+                _pcr_has_kicker = bool(_pcr_hints.get("kicker"))
+                _pcr_has_detail = bool(_pcr_hints.get("detail"))
+                # Layer 0 — diamond ring: slow atmospheric scale from 0.58, sine.inOut
+                # rotation holds at 45° (from:50→to:45 — 5° settle over 0.9s, invisible)
+                # Easing choice: sine.inOut = pure S-curve, starts imperceptibly → peak → ends imperceptibly.
+                # Creates "world breathing open" sensation that contextualises the main reveal.
+                lines.append(f'  tl.fromTo(\'{_pcr_bg_s}\', '
+                             f'{{ rotation: 50, scale: 0.58, opacity: 0 }}, '
+                             f'{{ rotation: 45, scale: 1.0, opacity: 0.22, duration: 0.900, ease: "sine.inOut" }}, '
+                             f'{start:.4f});')
+                # Layer 1 — kicker: perspective flip from rotateX(-52°)+y(-16px), power3.out
+                # Easing choice: power3.out = 3rd-power deceleration, solid weighted arrival.
+                # Like a title-card element gliding into position with physical mass.
+                if _pcr_has_kicker:
+                    lines.append(f'  tl.fromTo(\'{_pcr_kck_s}\', '
+                                 f'{{ opacity: 0, rotateX: -52, y: -16, transformPerspective: 800 }}, '
+                                 f'{{ opacity: 1, rotateX: 0, y: 0, transformPerspective: 800, duration: 0.360, ease: "power3.out" }}, '
+                                 f'{start + 0.16:.4f});')
+                # Layer 2 — title: scale(0.88)+rotateY(7°) → full, expo.out
+                # Easing choice: expo.out = explosive onset that halts with surgical precision.
+                # Mimics a camera snapping to subject and locking focus — zero overshoot,
+                # zero spring. The abrupt deceleration signals intentionality.
+                lines.append(f'  tl.fromTo(\'{_pcr_tit_s}\', '
+                             f'{{ opacity: 0, scale: 0.88, rotateY: 7, transformPerspective: 1100 }}, '
+                             f'{{ opacity: 1, scale: 1.0, rotateY: 0, transformPerspective: 1100, duration: 0.520, ease: "expo.out" }}, '
+                             f'{start + 0.28:.4f});')
+                # Glow burst on Glass/Vibe at title landing
+                if p.get("title_glow_intense") and p.get("title_glow"):
+                    lines.append(f'  tl.fromTo(\'{_pcr_tit_s}\', '
+                                 f'{{ textShadow: "{_esc_js(p["title_glow"])}" }}, '
+                                 f'{{ textShadow: "{_esc_js(p["title_glow_intense"])}", duration: 0.130, ease: "power2.out", yoyo: true, repeat: 1 }}, '
+                                 f'{start + 0.72:.4f});')
+                # Layer 3 — accent line: scaleX left→right, power2.inOut
+                # Block-level + explicit width ensures scaleX is non-trivial (HF rule 7).
+                lines.append(f'  tl.fromTo(\'{_pcr_lin_s}\', '
+                             f'{{ scaleX: 0, opacity: 0 }}, '
+                             f'{{ scaleX: 1, opacity: 1, duration: 0.260, ease: "power2.inOut" }}, '
+                             f'{start + 0.58:.4f});')
+                # Layer 4 — optional detail: y-rise fade, power2.out
+                if _pcr_has_detail:
+                    lines.append(f'  tl.fromTo(\'{_pcr_det_s}\', '
+                                 f'{{ opacity: 0, y: 12 }}, '
+                                 f'{{ opacity: 1, y: 0, duration: 0.300, ease: "power2.out" }}, '
+                                 f'{start + 0.72:.4f});')
             # ── number_hero GSAP — 3-act cinematic reveal ────────────────────
             elif content_style == "number_hero":
                 _nh_spot_s = f'.card[data-card-id="{card_id}"] #{card_id}-nh-spotlight'

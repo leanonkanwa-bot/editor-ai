@@ -113,14 +113,14 @@ _TRIGGER_TEXT_FIELD: dict[str, str] = {
 _LANDSCAPE_HERO_STYLES: frozenset[str] = frozenset({
     "key_phrase", "quote", "question", "definition",
     "chapter_marker", "callout",
-    "prim_split_compare", "prim_journey_map",
+    "prim_split_compare", "prim_journey_map", "prim_cinematic_reveal",
 })
 
 # Styles whose catalogue _family is "full_cover": consume the entire canvas.
 # Injected onto card objects after LLM generation so the full-cover exclusion
 # pass and backdrop-dim dispatch can operate without importing catalogue.py.
 _FULL_COVER_STYLES: frozenset[str] = frozenset({
-    "prim_split_compare", "prim_journey_map",
+    "prim_split_compare", "prim_journey_map", "prim_cinematic_reveal",
 })
 
 
@@ -516,7 +516,7 @@ OUTPUT: a JSON array of card objects. Each card:
     "number": "<if a stat/number is featured — for prim_stat_counter use numeric string only, e.g. '46.2' not '46,2 M€'>",
     "prefix": "<prim_stat_counter only — currency/unit BEFORE the number, e.g. '$'. Convention FR: laisser vide, mettre la devise dans suffix>",
     "suffix": "<prim_stat_counter only — unit AFTER the number, e.g. 'M€', 'K', '%'. Convention FR: suffix='€' ou 'M€', prefix vide>",
-    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking"|"hand_written_note"|"speech_bubble_thought"|"calendar_date_highlight"|"percentage_split"|"red_flag_list"|"success_metric_badge"|"client_avatar_persona"|"book_recommendation"|"tool_stack"|"revenue_breakdown"|"age_milestone"|"contrarian_take"|"action_step_cta"|"story_chapter_transition"|"live_reaction_split"|"hidden_cost_reveal"|"social_proof_counter"|"timeline_prediction"|"red_thread_connector"|"silent_beat_pause"|"comment_reply_style"|"before_you_scroll"|"traffic_light_status"|"day_in_life_schedule"|"skill_tree_unlock"|"audience_poll_result"|"broken_promise_tracker"|"ingredient_list"|"resource_allocation"|"fill_in_the_blank"|"streak_counter"|"before_now_later"|"platform_stats"|"cost_comparison"|"decision_matrix"|"habit_tracker"|"income_vs_expense"|"milestone_recap"|"content_calendar"|"client_result_number"|"mistake_lesson"|"tool_comparison"|"weekly_review"|"audience_question"|"prim_stat_counter"|"prim_split_compare"|"prim_journey_map"|"number_hero",
+    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking"|"hand_written_note"|"speech_bubble_thought"|"calendar_date_highlight"|"percentage_split"|"red_flag_list"|"success_metric_badge"|"client_avatar_persona"|"book_recommendation"|"tool_stack"|"revenue_breakdown"|"age_milestone"|"contrarian_take"|"action_step_cta"|"story_chapter_transition"|"live_reaction_split"|"hidden_cost_reveal"|"social_proof_counter"|"timeline_prediction"|"red_thread_connector"|"silent_beat_pause"|"comment_reply_style"|"before_you_scroll"|"traffic_light_status"|"day_in_life_schedule"|"skill_tree_unlock"|"audience_poll_result"|"broken_promise_tracker"|"ingredient_list"|"resource_allocation"|"fill_in_the_blank"|"streak_counter"|"before_now_later"|"platform_stats"|"cost_comparison"|"decision_matrix"|"habit_tracker"|"income_vs_expense"|"milestone_recap"|"content_calendar"|"client_result_number"|"mistake_lesson"|"tool_comparison"|"weekly_review"|"audience_question"|"prim_stat_counter"|"prim_split_compare"|"prim_journey_map"|"number_hero"|"prim_cinematic_reveal",
     "left_label": "<comparison / prim_split_compare: left side label>",
     "left_value": "<comparison: left side value (prim_split_compare does not use this)>",
     "right_label": "<comparison / prim_split_compare: right side label>",
@@ -1038,6 +1038,30 @@ RULES:
     Provide "nh_number" (display string, e.g. "12 000 €/mois") +
     "nh_kicker" (e.g. "RÉSULTAT DU MOIS") + "nh_detail" (e.g. "en affiliation organique").
     Zone: fullscreen. Duration: 2.0–3.0s.
+  "prim_cinematic_reveal" — the single most important PHRASE of the entire video,
+    staged as a full-screen cinematic multi-layer depth reveal on a pure black canvas.
+    Three layers enter with distinct premium easings (sine.inOut / power3.out / expo.out)
+    at staggered offsets — no filter:blur, depth created purely via 3D transforms.
+    BUDGET: ONE per video maximum — the manifesto card.
+    TRIGGER — all three must hold simultaneously:
+      (a) PINNACLE STATEMENT: this phrase is THE one takeaway the speaker wants
+          imprinted. It functions as the video's tagline or thesis, not a tip
+          or intermediate observation.
+      (b) DECLARATIVE CONVICTION: speaker delivers it as an absolute truth,
+          a personal creed, or a transformational declaration — "tout repose
+          sur la confiance", "c'est ça qui change tout", "le vrai levier c'est X".
+      (c) STAND-ALONE POWER: phrase works as full-screen text with no chart or
+          stat needed. Maximum 60 characters.
+    DISTINCTION FROM key_phrase: key_phrase is a recurring pedagogical principle
+      (can appear 3-5× per video); prim_cinematic_reveal is the ONE capstone moment.
+    DISTINCTION FROM number_hero: number_hero is for the climactic NUMBER;
+      prim_cinematic_reveal is for the climactic PHRASE.
+    DISTINCTION FROM chapter_marker: chapter_marker introduces a section;
+      prim_cinematic_reveal delivers the video's ultimate message.
+    Provide "title" (REQUIRED — the phrase, max 60 chars),
+      "kicker" (optional — eyebrow label, e.g. "MA CONVICTION", max 30 chars),
+      "detail" (optional — one-line amplifier below the title).
+    Zone: fullscreen. Duration: 2.0–3.5s.
   "question_answer_pair" — speaker poses a question AND immediately answers
     it in the same breath (e.g. "Qu'est-ce que c'est ? C'est une méthode
     en 3 étapes"). BOTH question and answer are present in the same segment.
@@ -1589,6 +1613,7 @@ Design graphic overlay cards for this video — up to {target_cards} maximum. Pl
         })
         _ANIMATED_STYLES = frozenset({
             "prim_stat_counter", "prim_split_compare", "prim_journey_map",
+            "prim_cinematic_reveal",
             "social_proof_counter", "before_after_image", "countdown",
             "progress_bar", "traffic_light_status",
         })

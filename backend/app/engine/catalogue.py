@@ -92,4 +92,26 @@ PRIMITIVES: dict[str, dict] = {
             "departure then arrival. Dark overlay (95% opacity) on video."
         ),
     },
+    "prim_cinematic_reveal": {
+        "_family": "full_cover",
+        "_pack": "lean_glass",
+        "zone": "fullscreen",
+        "duration_range_s": (2.0, 3.5),
+        "cover_type": "blackout",
+        "contentHints": {
+            "title":  "REQUIRED — main phrase to reveal (max 60 chars)",
+            "kicker": "optional — small eyebrow label above the title (max 30 chars)",
+            "detail": "optional — softer one-line amplifier below",
+        },
+        "description": (
+            "Multi-layer cinematic depth reveal on a full-cover black canvas. "
+            "Three layers enter at staggered offsets with distinct signature easings: "
+            "Layer 0 — diamond ring background scales from 0.58 with sine.inOut (slow, atmospheric). "
+            "Layer 1 — kicker flips from rotateX(-52°) via power3.out (weighted, decisive). "
+            "Layer 2 — title approaches from scale(0.88)+rotateY(7°) via expo.out (fast, cinematic). "
+            "Layer 3 — accent line scaleX grows left→right via power2.inOut. "
+            "Layer 4 — detail fades with y rise via power2.out. "
+            "No filter:blur anywhere — depth illusion is purely from 3D transforms + stagger."
+        ),
+    },
 }
