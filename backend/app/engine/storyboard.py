@@ -1042,8 +1042,36 @@ RULES:
     staged as a full-screen cinematic multi-layer depth reveal on a pure black canvas.
     Three layers enter with distinct premium easings (sine.inOut / power3.out / expo.out)
     at staggered offsets — no filter:blur, depth created purely via 3D transforms.
-    BUDGET: ONE per video maximum — the manifesto card.
-    TRIGGER — all three must hold simultaneously:
+    BUDGET: HARD LIMIT — exactly ONE per video, no exceptions. If multiple moments
+      seem to qualify, pick the single strongest by these criteria (in priority order):
+        1. Climactic placement — the moment where the video's full argument converges
+        2. Highest declarative conviction — absolute truth, creed-level claim, not a tip
+        3. Best stand-alone power — phrase is self-contained, needs no context, ≤60 chars
+      Tiebreak between hook and payoff: ALWAYS prefer the PAYOFF — it lands with the
+      accumulated weight of everything the video has built. Only choose the hook when
+      its phrase is demonstrably stronger than any payoff moment in the script.
+      NEVER generate two prim_cinematic_reveal cards in the same video.
+    PLACEMENT — two valid contexts (choose based on script structure, not position):
+      OPTION A — STRONG HOOK (typically 0–30s): the speaker opens with the video's
+        core thesis as a direct declaration — bold, quotable, self-contained. The
+        viewer grasps the full promise from this one phrase alone without any build-up.
+        Hook signals: "ce que j'ai mis X ans à comprendre", "la seule chose qui change
+        vraiment tout", "si tu ne retiens qu'une chose de cette vidéo", "la vérité que
+        personne ne dit", "je vais te donner la seule chose qui a vraiment changé mon
+        parcours", phrasing where the THESIS itself is the hook, not a description of it.
+        NOT a valid hook: generic open questions ("vous allez voir pourquoi…") or pure
+        content announcements ("je vais vous montrer comment…") — those are callout.
+      OPTION B — PAYOFF MOMENT (typically 60–90% through the video): the culminating
+        revelation the entire narrative was building toward. The speaker delivers their
+        definitive, quotable conviction after the evidence has been fully laid out.
+        Payoff signals: "voilà ce qui a tout changé", "et là j'ai compris", "le résultat ?",
+        "si je devais résumer tout ça en une phrase", "c'est ça qui change tout",
+        "en fin de compte", "tout repose sur [X]", "le vrai levier c'est [X]",
+        conclusion of a transformation arc that ends in a first-person creed or
+        a universal truth stated with personal conviction after lived evidence.
+        NOT a valid payoff: an intermediate lesson, a tip within a sequence,
+        or a general principle without revelation energy → key_phrase instead.
+    TRIGGER — all FOUR must hold simultaneously:
       (a) PINNACLE STATEMENT: this phrase is THE one takeaway the speaker wants
           imprinted. It functions as the video's tagline or thesis, not a tip
           or intermediate observation.
@@ -1052,12 +1080,47 @@ RULES:
           sur la confiance", "c'est ça qui change tout", "le vrai levier c'est X".
       (c) STAND-ALONE POWER: phrase works as full-screen text with no chart or
           stat needed. Maximum 60 characters.
-    DISTINCTION FROM key_phrase: key_phrase is a recurring pedagogical principle
-      (can appear 3-5× per video); prim_cinematic_reveal is the ONE capstone moment.
+      (d) EXPLICIT LINGUISTIC MARKER (at least one MUST be present in the phrase
+          itself — this is the hard discriminator against key_phrase):
+          Revelation/payoff markers (FR):
+            "voilà ce qui a (tout) changé", "c'est ça qui a tout changé",
+            "et là j'ai compris / réalisé", "j'ai compris ce jour-là",
+            "le résultat :", "en fin de compte", "après tout ce chemin",
+            "si je devais résumer tout ça en une phrase",
+            "tout repose sur [X]", "le vrai levier c'est [X]",
+            "ma conviction (profonde / après X ans)", "voilà ce que ça m'a appris",
+            "ce que j'ai mis X ans à comprendre", "le levier final",
+            "résultat de X ans", "j'ai tout compris", "au bout de X ans",
+            "voilà la vérité après tout ça", "une seule conviction"
+          Hook markers (when used as a thesis in the opening):
+            "si tu ne retiens qu'une chose", "la seule chose / vérité qui change vraiment",
+            "je vais te partager la conviction qui a tout changé",
+            "ce que j'aurais voulu qu'on me dise au départ",
+            "je vais te donner la seule chose qui a vraiment changé mon parcours",
+            "la conviction qui a tout changé"
+          WITHOUT at least one of these markers → use key_phrase instead of
+          prim_cinematic_reveal, even if the phrase is very strong.
+          OVERRIDE RULE: when an explicit marker IS present, prim_cinematic_reveal
+          takes priority over key_phrase even if the underlying principle is transferable.
+    DISQUALIFIERS — do NOT use prim_cinematic_reveal for:
+      — Questions or teasers: "vous allez comprendre pourquoi…", "saviez-vous que…"
+        (→ question or callout instead)
+      — Content announcements without a conviction attached: "je vais vous montrer
+        comment…", "voici la méthode en 3 étapes" (→ callout)
+      — Tips within a sequence: "conseil n°2", "voici ce qu'il faut faire…" (→ key_phrase)
+      — Number-anchored climaxes: phrase contains or requires a figure to land
+        (→ number_hero or prim_stat_counter)
+      — Structural transitions without personal conviction: "passons à la suite"
+        (→ chapter_marker or story_chapter_transition)
+    DISTINCTION FROM key_phrase: key_phrase is a recurring pedagogical principle that
+      can appear 3-5× per video; prim_cinematic_reveal is the ONE capstone moment —
+      the thesis the whole video serves. Decisive test: if removing this one card left
+      the viewer without the video's central message → prim_cinematic_reveal. If other
+      key_phrases already cover that core message → this is just another key_phrase.
     DISTINCTION FROM number_hero: number_hero is for the climactic NUMBER;
-      prim_cinematic_reveal is for the climactic PHRASE.
+      prim_cinematic_reveal is for the climactic PHRASE with no figure required.
     DISTINCTION FROM chapter_marker: chapter_marker introduces a section;
-      prim_cinematic_reveal delivers the video's ultimate message.
+      prim_cinematic_reveal delivers the video's ultimate manifesto.
     Provide "title" (REQUIRED — the phrase, max 60 chars),
       "kicker" (optional — eyebrow label, e.g. "MA CONVICTION", max 30 chars),
       "detail" (optional — one-line amplifier below the title).

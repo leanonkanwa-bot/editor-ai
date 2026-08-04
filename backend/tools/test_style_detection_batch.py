@@ -442,13 +442,95 @@ TEST_CASES: list[tuple[str, str]] = [
     ("prim_journey_map", "On a tout plaqué à Lyon pour déménager à Lisbonne. C'était la meilleure décision de notre vie."),
     ("prim_journey_map", "Je suis parti de Montréal pour rejoindre Tokyo — une aventure qui a duré deux ans."),
 
-    # ── prim_cinematic_reveal — manifesto card, ONE per video, phrase as thesis ──
-    # Boundary: capstone declaration, not a tip or intermediate key_phrase
+    # ── prim_cinematic_reveal — TIER 1: PAYOFF FORT (révélation finale, climax) ──
+    # Classic culminating revelation — "voilà ce qui a changé", "j'ai compris", "le résultat"
+    # Original 3 baseline cases:
     ("prim_cinematic_reveal", "Ce que j'ai compris ce jour-là, c'est que tout repose sur la confiance — et rien d'autre."),
-    # Boundary: personal creed / absolute truth — not a how-to step
     ("prim_cinematic_reveal", "Arrête de vendre des produits. Vends une transformation. C'est tout."),
-    # Boundary: transformational declaration — not a stat or number
     ("prim_cinematic_reveal", "Le vrai levier, celui que personne ne te dit, c'est de devenir quelqu'un d'autre."),
+    # Extended Tier 1 — strong payoff signal + declarative conviction:
+    ("prim_cinematic_reveal", "Voilà ce qui a tout changé : j'ai arrêté de courir après les clients."),
+    ("prim_cinematic_reveal", "Et là, j'ai réalisé — le problème n'a jamais été le marché. C'était moi."),
+    ("prim_cinematic_reveal", "C'est ça qui a tout changé pour moi : servir avant de vendre."),
+    ("prim_cinematic_reveal", "Si je devais résumer tout ce que j'ai appris en une phrase : sers d'abord, facture ensuite."),
+    ("prim_cinematic_reveal", "Le résultat de ces cinq ans n'est pas l'argent. C'est la clarté."),
+    ("prim_cinematic_reveal", "En fin de compte, le seul levier qui compte vraiment : la confiance."),
+    ("prim_cinematic_reveal", "Ce que j'ai mis des années à comprendre : la liberté vient de la clarté, pas de l'argent."),
+    ("prim_cinematic_reveal", "Et la conclusion après tout ce chemin — ce n'est pas le talent. C'est la décision."),
+    ("prim_cinematic_reveal", "Ce que j'ai compris ce jour-là : le vrai actif, c'est ce qu'on représente."),
+    ("prim_cinematic_reveal", "Voilà ma conviction après dix ans : l'authenticité vend mieux que toute tactique."),
+    ("prim_cinematic_reveal", "J'ai compris que le vrai problème n'était pas l'audience — c'était l'alignement."),
+    ("prim_cinematic_reveal", "Tout s'est mis en place quand j'ai arrêté de vouloir plaire à tout le monde."),
+    ("prim_cinematic_reveal", "Voilà ce qui fait la différence : l'action imparfaite bat l'inaction parfaite."),
+    ("prim_cinematic_reveal", "Si je résume en une seule phrase : la cohérence construit ce que le talent seul ne peut bâtir."),
+    ("prim_cinematic_reveal", "Le moment le plus important : quand j'ai réalisé que ma différence était ma force."),
+    ("prim_cinematic_reveal", "Et si je devais tout recommencer ? Je ferais une seule chose différemment : choisir mon marché d'abord."),
+    ("prim_cinematic_reveal", "Voilà la vérité après tout ça : tu n'as pas besoin de tout maîtriser. Tu as besoin de ta conviction."),
+    ("prim_cinematic_reveal", "Ce que personne ne m'avait dit : le vrai produit que tu vends, c'est toi."),
+    ("prim_cinematic_reveal", "Résultat de trois ans d'expériences : la relation prime sur le reach, toujours."),
+    ("prim_cinematic_reveal", "Et là j'ai tout compris : ce n'est pas la méthode qui manque. C'est la clarté sur soi."),
+    ("prim_cinematic_reveal", "Le levier final ? Arrêter de copier et commencer à incarner ce qu'on croit vraiment."),
+
+    # ── prim_cinematic_reveal — TIER 2: HOOK FORT (accroche ouverture, thèse directe) ──
+    # Video opens with its core thesis as a bold declarative — not a teaser, not a question
+    ("prim_cinematic_reveal", "Ce que j'ai mis cinq ans à comprendre, je te le donne en dix minutes."),
+    ("prim_cinematic_reveal", "La seule chose qui sépare ceux qui réussissent de ceux qui stagnent : l'engagement total."),
+    ("prim_cinematic_reveal", "Si tu ne retiens qu'une chose de ce que je vais partager : commence imparfait, améliore en chemin."),
+    ("prim_cinematic_reveal", "Ce n'est pas une méthode supplémentaire qu'il te faut. C'est ta propre conviction."),
+    ("prim_cinematic_reveal", "Je vais te donner la seule chose qui a vraiment changé mon parcours — et ce n'est pas une tactique."),
+    ("prim_cinematic_reveal", "L'unique vérité qu'on ne m'a jamais dite au départ : personne ne peut construire ta vision à ta place."),
+    ("prim_cinematic_reveal", "Ce que j'aurais voulu qu'on me dise à 25 ans : ta différence est ta plus grande force."),
+    ("prim_cinematic_reveal", "Avant de te montrer comment, laisse-moi te dire pourquoi tout le reste ne fonctionne pas sans ça."),
+    ("prim_cinematic_reveal", "La conviction qui a tout changé dans mon business : les gens n'achètent pas ce que tu fais, ils achètent pourquoi tu le fais."),
+    ("prim_cinematic_reveal", "Ce que personne ne te dit quand tu commences : ton histoire est ton meilleur produit."),
+    ("prim_cinematic_reveal", "Tout ce que tu vas apprendre dans cette vidéo repose sur une seule idée : la confiance se construit avant la vente."),
+    ("prim_cinematic_reveal", "Il y a une seule chose qui distingue les créateurs qui durent de ceux qui disparaissent — et c'est l'authenticité."),
+    ("prim_cinematic_reveal", "Voilà ma thèse, et toute cette vidéo est là pour la prouver : la régularité bat le talent sur dix ans."),
+    ("prim_cinematic_reveal", "Ce que j'ai appris à la dure : tu ne peux pas construire un business sur une identité que tu n'es pas."),
+    ("prim_cinematic_reveal", "Je vais te partager la seule conviction qui a structuré toutes mes décisions ces cinq dernières années."),
+
+    # ── prim_cinematic_reveal — TIER 3: FRONTIÈRE DURE (vs key_phrase / quote / callout) ──
+    # Has revelation energy AND stand-alone power but boundary with recurring key_phrase
+    ("prim_cinematic_reveal", "Ce n'est pas la quantité de contenu qui fait la différence. C'est la profondeur de la connexion."),
+    ("prim_cinematic_reveal", "Le jour où j'ai arrêté d'imiter et commencé à créer depuis moi — tout a vraiment démarré."),
+    ("prim_cinematic_reveal", "Après tout ce chemin, une seule conviction : un seul client qui croit en toi vaut mille followers."),
+    ("prim_cinematic_reveal", "Ce que j'aurais voulu savoir plus tôt : la clarté est le seul raccourci qui existe vraiment."),
+    ("prim_cinematic_reveal", "Et finalement, ce que tout ça m'a appris : bâtir lentement est la croissance la plus solide."),
+    ("prim_cinematic_reveal", "Le moment où tout a basculé pour moi : quand j'ai compris que la vente, c'est du service."),
+    ("prim_cinematic_reveal", "Ma conviction profonde, celle qui sous-tend tout ce que je fais : la valeur réelle précède toujours le revenu."),
+    ("prim_cinematic_reveal", "Et si j'avais une seule chose à te transmettre de tout ce parcours — ce serait ça : ose être spécifique."),
+    ("prim_cinematic_reveal", "Tout repose sur une chose que la plupart des créateurs négligent : se connaître avant de se vendre."),
+    ("prim_cinematic_reveal", "Voilà ce que cette expérience m'a gravé pour toujours : l'intégrité est la meilleure stratégie de rétention."),
+
+    # ── prim_cinematic_reveal — NÉGATIFS: phrases similaires mais AUTRE style attendu ──
+    # Ces cas doivent être classifiés DANS LEUR VRAI STYLE (key_phrase / number_hero / etc.)
+    # Ils valident que le LLM ne tire pas prim_cinematic_reveal sur tout principe fort.
+
+    # key_phrase: principes récurrents pédagogiques — pas LE manifeste de la vidéo
+    ("key_phrase", "La régularité construit la confiance — et la confiance construit le business."),
+    ("key_phrase", "Le meilleur moment pour commencer était hier. Le deuxième meilleur, c'est maintenant."),
+    ("key_phrase", "Ce n'est pas la vitesse qui fait la différence sur le long terme. C'est la direction."),
+    ("key_phrase", "Tu ne vends pas un produit. Tu vends une transformation de vie."),
+    ("key_phrase", "Fais moins de choses, mais fais-les avec une intensité totale."),
+    ("key_phrase", "La visibilité sans offre claire ne génère que du bruit — pas du revenu."),
+
+    # number_hero: climax de chiffre — pas une phrase standalone
+    ("number_hero", "Et le résultat final de cinq ans de travail et dix pivots — deux millions d'euros de CA."),
+    ("number_hero", "Le chiffre que personne n'attendait — douze mille euros en un seul mois, sans publicité."),
+
+    # question: posed to audience — not a conviction
+    ("question", "Et si la vraie raison pour laquelle tu bloques, c'était simplement la peur du jugement ?"),
+
+    # quote: personal declaration tied to speaker's own experience — not a universal thesis
+    ("quote", "Ce voyage m'a appris plus sur moi-même que dix années de formation professionnelle."),
+    ("quote", "Je n'aurais jamais cru que l'échec pouvait être le meilleur investissement de ma vie."),
+
+    # callout: strong point but not a capstone thesis — no revelation energy
+    ("callout", "Ce que peu de gens réalisent : la cohérence bat la qualité sur le long terme."),
+    ("callout", "Une info capitale que la plupart ignorent : répondre aux commentaires dans la première heure triple la portée."),
+
+    # secret_reveal: has reveal energy BUT trigger requires "secret/personne ne dit" framing
+    ("secret_reveal", "Le secret que personne ne partage dans cette industrie : les meilleurs créateurs recyclent 80% de leur contenu."),
 ]
 
 
@@ -466,6 +548,9 @@ def run_batch_test(cases: list[tuple[str, str]], style_defs: str) -> list[dict]:
         "Rules:\n"
         "- Choose the MOST SPECIFIC style whose trigger conditions are satisfied.\n"
         "- Never invent style names — use only names that appear in the definitions above.\n"
+        "- BUDGET CONSTRAINTS (e.g. 'ONE per video', 'HARD LIMIT'): these apply per VIDEO.\n"
+        "  Each phrase in this test comes from a DIFFERENT independent video — budget\n"
+        "  limits reset for each phrase. Do NOT apply budget constraints across phrases.\n"
         "- Return ONLY a compact JSON array, no markdown, no explanation:\n"
         '  [{"id":1,"style":"style_name"},{"id":2,"style":"style_name"},...]'
     )
