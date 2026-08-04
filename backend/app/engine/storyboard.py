@@ -765,10 +765,13 @@ RULES:
   "prim_split_compare" — fullscreen animated split card: two panels slide from opposite
     edges to a central divider. STRICT TRIGGER — use ONLY for CONCEPTUAL oppositions:
     rich vs poor, before vs after a non-geographic state change (mindset, status, method),
-    X vs Y qualitative contrast. ABSOLUTE EXCLUSION: NEVER use when the speaker mentions
-    TWO GEOGRAPHIC LOCATIONS connected by travel or relocation — that is prim_journey_map.
-    Test: if you could replace the two labels with two CITIES and the sentence would still
-    make sense as a trip → it is prim_journey_map, not prim_split_compare.
+    X vs Y qualitative contrast.
+    ABSOLUTE EXCLUSION — NEVER use if ANY of the following apply:
+      (a) Either label contains or quotes a number, currency, percentage, or revenue amount
+          (e.g. "500€", "+12 000€/mois", "+47%", "0 → 500K") → use before_after_image instead.
+      (b) Speaker mentions two geographic locations connected by travel → prim_journey_map.
+    Test: if either left_label or right_label IS or CONTAINS a number/amount/metric
+    → before_after_image, not prim_split_compare.
     Provide "left_label" (e.g. "AVANT") and "right_label" (e.g. "APRÈS"). No left_value/right_value.
     Optional "title" for a kicker above the card. Full-cover (fullscreen), duration 2.0–2.5s.
   "prim_journey_map" — fullscreen flight-tracker card. Bezier arc animates from departure to

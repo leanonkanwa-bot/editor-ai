@@ -2717,7 +2717,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'.card[data-card-id="{card_id}"] .nh-number {{')
         parts.append(f'  font-family:{p["font"]}; font-size:160px; font-weight:900;')
         parts.append(f'  line-height:1; letter-spacing:-0.02em; color:{p["text"]};')
-        parts.append('  text-align:center; margin:16px 0; opacity:0; position:relative; z-index:1;')
+        parts.append('  text-align:center; white-space:nowrap; margin:16px 0; opacity:0; position:relative; z-index:1;')
         if p["title_glow"]:
             parts.append(f'  text-shadow:{p["title_glow"]};')
         parts.append('}')
