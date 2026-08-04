@@ -73,6 +73,16 @@ _BEAT_ISOLATED_PRONOUNS: frozenset[str] = frozenset({
     "je", "tu", "il", "elle", "on", "nous", "vous", "ils", "elles",
     "i", "he", "she", "they", "we", "you",
 })
+# G2-d: French subordinating starters that produce dependent-clause fragments
+# ("pour créer de la richesse", "parce que tu travailles", "quand tu fais ça")
+# A beat card opening with these words is never a standalone principle.
+_BEAT_SUBORDINATE_STARTERS: frozenset[str] = frozenset({
+    "pour", "afin",                           # purpose / infinitive clauses
+    "parce", "car",                            # causal subordinates
+    "quand", "lorsque", "dès",                 # temporal subordinates
+    "dont", "lequel", "laquelle",              # relative clauses
+    "lesquels", "lesquelles", "auquel", "duquel",
+})
 
 # French stopwords stripped before grounding overlap computation so that invented phrases
 # sharing only function words with genuine speech (e.g. "je vais dire que…" vs "je vais
@@ -818,6 +828,21 @@ RULES:
     contrast has two explicitly NAMED sides → use versus_battle instead.
     Distinct from quote (quote is a personal declaration specific to the
     speaker's experience; key_phrase is a universal principle).
+    MANDATORY QUALITY GATE — all three must be true before creating this card:
+    (a) COMPLETE THOUGHT: the phrase makes sense in total isolation, without
+        any surrounding context. A subordinate clause is never a complete
+        thought ("pour créer de la richesse" ✗, "afin de réussir" ✗).
+    (b) SPECIFIC CONTENT: the phrase states WHAT or HOW, not merely the topic.
+        "la richesse vient d'un système qui crée et capture de la valeur" ✓
+        "pour créer de la richesse" ✗ — topic announcement, no actual claim.
+    (c) MEMORABLE AS-IS: a viewer seeing only this phrase (no video context)
+        immediately understands the lesson. Could stand on an inspirational
+        poster unchanged.
+    DISQUALIFIERS — do NOT create a key_phrase card for:
+    — Purpose clauses: "pour [infinitive]…", "afin de…"
+    — Topic announcements: "voici comment", "je vais vous expliquer", "parlons de"
+    — Paraphrases of common beliefs the speaker is about to refute:
+      "beaucoup pensent que…", "la plupart croient que…"
   "quote" — a memorable first-person DECLARATION or observation specific to
     the speaker's personal experience or perspective — something lived, not
     taught (e.g. "ce jour-là m'a changé pour toujours", "je n'aurais jamais
@@ -1681,6 +1706,10 @@ def _extract_beat_cards(
 
         # G2-c: list-order marker start
         if first_tok in _BEAT_LIST_MARKERS:
+            continue
+
+        # G2-d: subordinate-clause starter → dependent fragment, never a standalone insight
+        if first_tok in _BEAT_SUBORDINATE_STARTERS:
             continue
 
         n_g2 += 1
