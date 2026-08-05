@@ -534,7 +534,7 @@ OUTPUT: a JSON array of card objects. Each card:
     "number": "<if a stat/number is featured — for prim_stat_counter use numeric string only, e.g. '46.2' not '46,2 M€'>",
     "prefix": "<prim_stat_counter only — currency/unit BEFORE the number, e.g. '$'. Convention FR: laisser vide, mettre la devise dans suffix>",
     "suffix": "<prim_stat_counter only — unit AFTER the number, e.g. 'M€', 'K', '%'. Convention FR: suffix='€' ou 'M€', prefix vide>",
-    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking"|"hand_written_note"|"speech_bubble_thought"|"calendar_date_highlight"|"percentage_split"|"red_flag_list"|"success_metric_badge"|"client_avatar_persona"|"book_recommendation"|"tool_stack"|"revenue_breakdown"|"age_milestone"|"contrarian_take"|"action_step_cta"|"story_chapter_transition"|"live_reaction_split"|"hidden_cost_reveal"|"social_proof_counter"|"timeline_prediction"|"red_thread_connector"|"silent_beat_pause"|"comment_reply_style"|"before_you_scroll"|"traffic_light_status"|"day_in_life_schedule"|"skill_tree_unlock"|"audience_poll_result"|"broken_promise_tracker"|"ingredient_list"|"resource_allocation"|"fill_in_the_blank"|"streak_counter"|"before_now_later"|"platform_stats"|"cost_comparison"|"decision_matrix"|"habit_tracker"|"income_vs_expense"|"milestone_recap"|"content_calendar"|"client_result_number"|"mistake_lesson"|"tool_comparison"|"weekly_review"|"audience_question"|"prim_stat_counter"|"prim_split_compare"|"prim_journey_map"|"number_hero"|"prim_cinematic_reveal",
+    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking"|"hand_written_note"|"speech_bubble_thought"|"calendar_date_highlight"|"percentage_split"|"red_flag_list"|"success_metric_badge"|"client_avatar_persona"|"book_recommendation"|"tool_stack"|"revenue_breakdown"|"age_milestone"|"contrarian_take"|"action_step_cta"|"story_chapter_transition"|"live_reaction_split"|"hidden_cost_reveal"|"social_proof_counter"|"timeline_prediction"|"red_thread_connector"|"silent_beat_pause"|"comment_reply_style"|"before_you_scroll"|"traffic_light_status"|"day_in_life_schedule"|"skill_tree_unlock"|"audience_poll_result"|"broken_promise_tracker"|"ingredient_list"|"resource_allocation"|"fill_in_the_blank"|"streak_counter"|"before_now_later"|"platform_stats"|"cost_comparison"|"decision_matrix"|"habit_tracker"|"income_vs_expense"|"milestone_recap"|"content_calendar"|"client_result_number"|"mistake_lesson"|"tool_comparison"|"weekly_review"|"audience_question"|"prim_stat_counter"|"prim_split_compare"|"prim_journey_map"|"number_hero"|"prim_cinematic_reveal"|"prim_ascension_reveal",
     "left_label": "<comparison / prim_split_compare: left side label>",
     "left_value": "<comparison: left side value (prim_split_compare does not use this)>",
     "right_label": "<comparison / prim_split_compare: right side label>",
@@ -1060,15 +1060,19 @@ RULES:
     staged as a full-screen cinematic multi-layer depth reveal on a pure black canvas.
     Three layers enter with distinct premium easings (sine.inOut / power3.out / expo.out)
     at staggered offsets — no filter:blur, depth created purely via 3D transforms.
-    BUDGET: HARD LIMIT — exactly ONE per video, no exceptions. If multiple moments
-      seem to qualify, pick the single strongest by these criteria (in priority order):
+    BUDGET: HARD LIMIT — exactly ONE of {prim_cinematic_reveal, prim_ascension_reveal}
+      per video, no exceptions. These two primitives share a single "climax slot".
+      If multiple moments seem to qualify, pick the single strongest by these criteria
+      (in priority order):
         1. Climactic placement — the moment where the video's full argument converges
         2. Highest declarative conviction — absolute truth, creed-level claim, not a tip
         3. Best stand-alone power — phrase is self-contained, needs no context, ≤60 chars
       Tiebreak between hook and payoff: ALWAYS prefer the PAYOFF — it lands with the
       accumulated weight of everything the video has built. Only choose the hook when
       its phrase is demonstrably stronger than any payoff moment in the script.
-      NEVER generate two prim_cinematic_reveal cards in the same video.
+      NEVER generate two cards from {prim_cinematic_reveal, prim_ascension_reveal} in the
+      same video. If both a conviction phrase AND a result phrase compete for this slot,
+      compare their climactic weight by the criteria above.
     PLACEMENT — two valid contexts (choose based on script structure, not position):
       OPTION A — STRONG HOOK (typically 0–30s): the speaker opens with the video's
         core thesis as a direct declaration — bold, quotable, self-contained. The
@@ -1142,6 +1146,52 @@ RULES:
     Provide "title" (REQUIRED — the phrase, max 60 chars),
       "kicker" (optional — eyebrow label, e.g. "MA CONVICTION", max 30 chars),
       "detail" (optional — one-line amplifier below the title).
+    Zone: fullscreen. Duration: 2.0–3.5s.
+  "prim_ascension_reveal" — the single most important RESULT PHRASE in the entire
+    video: a statement where the speaker's proven result — expressed as a concrete
+    figure embedded in a full phrase — functions as the climactic proof. Staged as
+    a full-screen depth reveal with a 5-layer choreography: halo glow, horizon line,
+    3D title entry (back.out overshoot), ring pulse, kicker. No filter:blur.
+    BUDGET: SHARED with prim_cinematic_reveal — exactly ONE of these two per video.
+      NEVER generate prim_ascension_reveal if prim_cinematic_reveal is already used.
+    TRIGGER — all FOUR must hold simultaneously:
+      (a) RESULT ANCHOR: the phrase contains a concrete figure (client count, revenue
+          amount, percentage, timeframe) that is the climactic proof of the video.
+          The number is embedded inside a full sentence — it is the anchor, not the
+          whole message. "j'ai accompagné 47 entrepreneurs vers leur 1er 10k€/mois"
+          is PAR; "12 000 €" alone is number_hero.
+      (b) SOCIAL PROOF / RESULT ENERGY: this is the culminating revelation of what the
+          speaker has concretely achieved or enabled — the "voilà ce que ça a produit"
+          of the video. The phrase radiates accomplished fact, not theoretical principle.
+      (c) PHRASE FORMAT: the figure is embedded in a longer statement (subject + verb +
+          result). Maximum 60 characters total.
+      (d) EXPLICIT RESULT MARKER (at least one must be present in the phrase or its
+          immediate context — this is the hard discriminator against key_phrase):
+          Social proof / result markers (FR):
+            "j'ai accompagné X", "X clients / entrepreneurs / personnes ont…",
+            "X% de mes clients ont atteint", "le bilan : X",
+            "voilà ce que ça a donné concrètement", "au total X",
+            "depuis le lancement : X", "le chiffre que j'ai atteint",
+            "résultat : X [unité]", "X en [durée]",
+            "j'ai généré X", "X abonnés / ventes / euros en [durée]",
+            "le taux de réussite : X%", "X succès sur Y tentatives"
+    DISQUALIFIERS — do NOT use prim_ascension_reveal for:
+      — Conviction/manifesto phrases without a figure → prim_cinematic_reveal
+      — Single standalone number as the hero → number_hero
+      — Count-up animation reveal → prim_stat_counter
+      — Intermediate lesson or data point without climax energy → stat or key_phrase
+    DISTINCTION FROM prim_cinematic_reveal: PCR is for pure conviction ("tout repose
+      sur la confiance", "c'est ça qui change tout") — no figure required or central.
+      PAR is for conviction anchored in a concrete proven result figure. When both a
+      conviction phrase and a result phrase exist, compare climactic weight: the one
+      that delivers the video's ULTIMATE message wins the shared climax slot.
+    DISTINCTION FROM number_hero: number_hero spotlights a SINGLE number on a visual
+      spotlight (e.g. "12 000 €"). PAR reveals a FULL SENTENCE where the figure is
+      the proof inside a phrase (e.g. "j'ai accompagné 47 entrepreneurs…").
+    DISTINCTION FROM prim_stat_counter: prim_stat_counter animates a count-up for any
+      speaker metric; PAR is a static depth reveal for the ultimate result phrase.
+    Provide "title" (REQUIRED — the result phrase, max 60 chars),
+      "kicker" (optional — eyebrow label, e.g. "LE BILAN", "RÉSULTAT FINAL", max 30 chars).
     Zone: fullscreen. Duration: 2.0–3.5s.
   "question_answer_pair" — speaker poses a question AND immediately answers
     it in the same breath (e.g. "Qu'est-ce que c'est ? C'est une méthode
@@ -1694,7 +1744,7 @@ Design graphic overlay cards for this video — up to {target_cards} maximum. Pl
         })
         _ANIMATED_STYLES = frozenset({
             "prim_stat_counter", "prim_split_compare", "prim_journey_map",
-            "prim_cinematic_reveal",
+            "prim_cinematic_reveal", "prim_ascension_reveal",
             "social_proof_counter", "before_after_image", "countdown",
             "progress_bar", "traffic_light_status",
         })
@@ -1720,6 +1770,22 @@ Design graphic overlay cards for this video — up to {target_cards} maximum. Pl
                         f"{_dur:.2f}s→{_new_end - _ds:.2f}s (floor {_min_dur}s)",
                         flush=True,
                     )
+        # Budget=1 guard: PCR + PAR share a single "climax slot" — keep at most one.
+        # Tiebreak: prefer the card with the latest startSec (payoff > hook).
+        _CLIMAX_PRIMS = frozenset({"prim_cinematic_reveal", "prim_ascension_reveal"})
+        _climax_cards = [c for c in cards if c.get("contentHints", {}).get("style", "") in _CLIMAX_PRIMS]
+        if len(_climax_cards) > 1:
+            _climax_cards.sort(key=lambda c: float(c.get("startSec", 0)), reverse=True)
+            _keep_climax = _climax_cards[0]
+            for _rc in _climax_cards[1:]:
+                cards.remove(_rc)
+                print(
+                    f"[STORYBOARD] CLIMAX-BUDGET evicted {_rc.get('id','?')}"
+                    f" style={_rc.get('contentHints',{}).get('style','?')!r}"
+                    f" t={_rc.get('startSec','?')}s"
+                    f" (budget=1 PCR+PAR shared, kept {_keep_climax.get('id','?')})",
+                    flush=True,
+                )
         # Landscape zone guard: video-overlay and fullscreen in landscape leave compact=False
         # for any card not in _DATA_PANEL_TYPES (those are rotated later by _remap_zone in
         # compose.py). Hero styles (key_phrase, quote, etc.) legitimately need the full canvas;
