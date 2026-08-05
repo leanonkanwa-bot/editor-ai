@@ -317,7 +317,7 @@ _LEAN_PAPER = {
     "detail_size": "26px",
     "border": "1px solid rgba(0,0,0,0.16)",
     "radius": "12px",
-    "shadow": "0 3px 10px rgba(0,0,0,0.10), 0 8px 32px rgba(0,0,0,0.14)",
+    "shadow": "0 2px 8px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.12), 0 20px 60px rgba(0,0,0,0.07)",
     "shadow_inset": "",
     "panel_filter": "",
     "title_glow": "",
@@ -342,7 +342,7 @@ _LEAN_VIBE = {
     "number_size": "96px",
     "kicker_size": "22px",
     "detail_size": "26px",
-    "border": "3px solid #FFFFFF",
+    "border": "3px solid rgba(255,255,255,0.55)",
     "radius": "24px",
     "shadow": "0 8px 32px rgba(255,107,157,0.3), 0 4px 16px rgba(0,0,0,0.15)",
     "shadow_inset": "",
@@ -401,7 +401,7 @@ _LEAN_CRAFT = {
     "detail_size": "22px",
     "border": "1.5px solid rgba(217,119,87,0.25)",
     "radius": "12px 8px 10px 14px",
-    "shadow": "0 3px 16px rgba(61,43,31,0.1)",
+    "shadow": "0 3px 16px rgba(61,43,31,0.28), 0 8px 32px rgba(61,43,31,0.12)",
     "shadow_inset": "",
     "panel_filter": "",
     "title_glow": "",
@@ -4315,7 +4315,9 @@ def _build_timeline_js(
                 ze_ease_raw = ze.get("ease")
                 if ze_ease_raw:
                     ease = f'"{ze_ease_raw}"'
-                elif kind in ("punch_in", "pull_out"):
+                elif kind == "punch_in":
+                    ease = '"power2.out"'
+                elif kind == "pull_out":
                     ease = '"power2.in"'
                 else:
                     ease = '"sine.inOut"'
@@ -4380,36 +4382,64 @@ def _build_timeline_js(
             # Caption: plain text, accent colour on emphasis words only — no boxes.
         else:
             panel_sel = f'.card[data-card-id="{card_id}"] .card-panel'
+            # full_cover cinematic beat: backdrop fires first, card enters after _fc_offset.
+            _fc_excl_style = card.get("contentHints", {}).get("style", "")
+            _is_fc = (card.get("_family") == "full_cover"
+                      and _fc_excl_style not in ("prim_anecdote_frame", "prim_journey_map"))
+            if _is_fc and is_paper:              # Piste A — cut sec + fade power2.out
+                _fc_offset, _fc_bd_dur = 0.20, 0.22
+                _fc_host_from = '{ opacity: 0 }'
+                _fc_host_to   = '{ opacity: 1, duration: 0.400, ease: "power2.out" }'
+            elif _is_fc and (is_vibe or is_craft or is_cinema):  # Piste B — scale-through
+                _fc_offset, _fc_bd_dur = 0.18, 0.25
+                _fc_host_from = '{ opacity: 0, scale: 1.08, transformOrigin: "center center" }'
+                _fc_host_to   = '{ opacity: 1, scale: 1, duration: 0.500, ease: "power2.out" }'
+            elif _is_fc:                         # Piste C — iris vertical (glass + ledger)
+                _fc_offset, _fc_bd_dur = 0.15, 0.20
+                _fc_host_from = '{ opacity: 0, clipPath: "inset(45% 0 45% 0)" }'
+                _fc_host_to   = '{ opacity: 1, clipPath: "inset(0% 0 0% 0)", duration: 0.550, ease: "power2.out" }'
+            else:
+                _fc_offset = 0
             ent_dur = 0.550 if is_cinema else 0.320
-            lines.append(
-                f'  tl.fromTo(\'{sel}\', '
-                f'{{ opacity: 0 }}, '
-                f'{{ opacity: 1, duration: {ent_dur:.3f}, ease: _eIn }}, '
-                f'{start:.4f});'
-            )
+            if _is_fc:
+                lines.append(
+                    f'  tl.fromTo(\'{sel}\', '
+                    f'{_fc_host_from}, '
+                    f'{_fc_host_to}, '
+                    f'{start + _fc_offset:.4f});'
+                )
+            else:
+                lines.append(
+                    f'  tl.fromTo(\'{sel}\', '
+                    f'{{ opacity: 0 }}, '
+                    f'{{ opacity: 1, duration: {ent_dur:.3f}, ease: _eIn }}, '
+                    f'{start:.4f});'
+                )
             # Per-pack panel entry (the card-panel slides/scales into view).
             # timeline and news_ticker are full-screen overlays built without a
             # .card-panel div, so skip the panel tween for those types.
             # content_style isn't assigned until ~line 2762, so look it up here.
             _early_style = card.get("contentHints", {}).get("style", "")
             if _early_style not in ("timeline", "news_ticker"):
+                _p_t = start + _fc_offset  # shifted to match host entry for full_cover beat
                 if is_cinema:
                     pass  # cinema: slow opacity only, no panel movement
                 elif is_ledger:
-                    # Scan down: clip from top (matches ledger's terminal aesthetic)
-                    lines.append(
-                        f'  tl.fromTo(\'{panel_sel}\', '
-                        f'{{ clipPath: "inset(100% 0 0% 0)" }}, '
-                        f'{{ clipPath: "inset(0% 0 0% 0)", duration: 0.350, ease: _eIn }}, '
-                        f'{start:.4f});'
-                    )
+                    if not _is_fc:  # iris host covers the reveal — skip conflicting panel clip
+                        # Scan down: clip from top (matches ledger's terminal aesthetic)
+                        lines.append(
+                            f'  tl.fromTo(\'{panel_sel}\', '
+                            f'{{ clipPath: "inset(100% 0 0% 0)" }}, '
+                            f'{{ clipPath: "inset(0% 0 0% 0)", duration: 0.350, ease: _eIn }}, '
+                            f'{_p_t:.4f});'
+                        )
                 elif is_vibe:
                     # Bouncy: more scale, more y, slight tilt
                     lines.append(
                         f'  tl.fromTo(\'{panel_sel}\', '
                         f'{{ scale: 1.08, y: 20, rotation: -1.5 }}, '
                         f'{{ scale: 1, y: 0, rotation: 0, duration: 0.400, ease: _eIn }}, '
-                        f'{start:.4f});'
+                        f'{_p_t:.4f});'
                     )
                 elif is_craft:
                     # Handwritten tilt: slight rotation on entry
@@ -4417,7 +4447,7 @@ def _build_timeline_js(
                         f'  tl.fromTo(\'{panel_sel}\', '
                         f'{{ scale: 1.05, y: 10, rotation: 1 }}, '
                         f'{{ scale: 1, y: 0, rotation: 0, duration: 0.450, ease: _eIn }}, '
-                        f'{start:.4f});'
+                        f'{_p_t:.4f});'
                     )
                 elif is_paper:
                     # Minimal: barely perceptible scale (clean aesthetic)
@@ -4425,7 +4455,7 @@ def _build_timeline_js(
                         f'  tl.fromTo(\'{panel_sel}\', '
                         f'{{ scale: 1.01, y: 6 }}, '
                         f'{{ scale: 1, y: 0, duration: 0.300, ease: _eIn }}, '
-                        f'{start:.4f});'
+                        f'{_p_t:.4f});'
                     )
                 else:
                     # lean_glass (default) — restrained entry, premium/authoritative read
@@ -4433,7 +4463,7 @@ def _build_timeline_js(
                         f'  tl.fromTo(\'{panel_sel}\', '
                         f'{{ scale: 1.015, y: 8 }}, '
                         f'{{ scale: 1, y: 0, duration: 0.350, ease: _eIn }}, '
-                        f'{start:.4f});'
+                        f'{_p_t:.4f});'
                     )
 
             # Premium backdrop dim: cards that overlap the speaker face dim the video.
@@ -4456,12 +4486,12 @@ def _build_timeline_js(
             else:
                 _effective_zone = card_zone
             center_zone = _effective_zone in _DIMMING_ZONES
-            if card.get("_family") == "full_cover" and content_style not in ("prim_anecdote_frame", "prim_journey_map"):
-                # Full-cover blackout: solid black fills the canvas; video invisible.
-                # prim_journey_map excluded: cover_type=overlay, video intentionally shows through.
+            if _is_fc:
+                # Full-cover blackout: backdrop fires at start (before card entry by _fc_offset).
+                # prim_journey_map / prim_anecdote_frame excluded via _is_fc above.
                 lines.append(
                     f'  tl.to("#backdrop-dim", '
-                    f'{{ opacity: 1, backgroundColor: "#000", duration: 0.30, ease: _eIn }}, {start:.4f});'
+                    f'{{ opacity: 1, backgroundColor: "#000", duration: {_fc_bd_dur:.2f}, ease: "power2.in" }}, {start:.4f});'
                 )
                 lines.append(
                     f'  tl.to("#backdrop-dim", '
