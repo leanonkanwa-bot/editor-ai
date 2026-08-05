@@ -655,6 +655,15 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         text_align      = "left"
         panel_align     = "flex-start"
         max_width_eff   = "92%"
+        # before_after_image: adaptive ba-text size in compact landscape (zone 660×300px)
+        if content_style == "before_after_image" and layout == "landscape":
+            _tc = len(hints.get("before_label", "")) + len(hints.get("after_label", ""))
+            if _tc > 50:
+                title_size_eff = "22px"
+            elif _tc > 30:
+                title_size_eff = "26px"
+            elif _tc > 15:
+                title_size_eff = "30px"
     else:
         title_size_eff  = p["title_size"]
         number_size_eff = p["number_size"]
@@ -1873,7 +1882,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('  display:flex; flex-direction:column; align-items:center; gap:8px; width:100%;')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .am-number {{')
-        _am_sz = "72px" if compact else "96px"
+        _am_sz = "52px" if (compact and layout == "landscape") else "72px" if compact else "96px"
         parts.append(f'  font-family:{p["font"]}; font-size:{_am_sz};')
         parts.append(f'  font-weight:900; color:{p["accent"]}; line-height:1; text-align:center; opacity:0;')
         if p["title_glow_intense"]:
@@ -1881,8 +1890,13 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         elif p["title_glow"]:
             parts.append(f'  text-shadow:{p["title_glow"]};')
         parts.append('}')
+        if compact and layout == "landscape":
+            _am_ctx_tc = len(hints.get("age_context", hints.get("detail", "")))
+            _am_ctx_sz = "20px" if _am_ctx_tc > 40 else "24px" if _am_ctx_tc > 25 else title_size_eff
+        else:
+            _am_ctx_sz = title_size_eff
         parts.append(f'.card[data-card-id="{card_id}"] .am-ctx {{')
-        parts.append(f'  font-family:{p["font"]}; font-size:{title_size_eff};')
+        parts.append(f'  font-family:{p["font"]}; font-size:{_am_ctx_sz};')
         parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]}; text-align:center; opacity:0;')
         parts.append('}')
     if content_style == "contrarian_take":
@@ -2534,6 +2548,10 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         _psc_zone_w = _zone_bounds(card.get("zone", "upper-right"), layout).get("width", 500)
         _psc_num_sz  = "46px" if _psc_zone_w < 400 else "62px" if _psc_zone_w < 560 else "80px"
         _psc_side_sz = "22px" if _psc_zone_w < 400 else "28px" if _psc_zone_w < 560 else "36px"
+        # In compact landscape (660×300px) zone-width gives 80px/36px which overflows vertically
+        if compact and layout == "landscape":
+            _psc_num_sz  = "54px"
+            _psc_side_sz = "24px"
         # Glassmorphism panel: genuine blur on dark packs (lean_glass, lean_ledger, lean_cinema)
         if p.get("id") in ("lean_glass", "lean_ledger", "lean_cinema", "lean_vibe"):
             parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
@@ -2702,17 +2720,21 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         # Spotlight: radial-gradient circle absolutely centered behind content
         _nh_is_glow = p["id"] in ("lean_glass", "lean_vibe")
         _nh_spot_alpha = "24" if _nh_is_glow else "10"
+        _nh_is_compact_ls = compact and layout == "landscape"
+        _nh_spot_dim = "180px" if _nh_is_compact_ls else "460px"
         parts.append(f'.card[data-card-id="{card_id}"] .nh-spotlight {{')
-        parts.append('  position:absolute; width:460px; height:460px; border-radius:50%;')
+        parts.append(f'  position:absolute; width:{_nh_spot_dim}; height:{_nh_spot_dim}; border-radius:50%;')
         parts.append('  top:50%; left:50%; transform:translate(-50%,-50%);')
         parts.append(f'  background:radial-gradient(circle, {p["accent"]}{_nh_spot_alpha} 0%, transparent 70%);')
         parts.append('  pointer-events:none; opacity:0; z-index:0;')
         parts.append('}')
         # Kicker: small caps above the lines
+        _nh_kicker_sz = kicker_size_eff if _nh_is_compact_ls else p["kicker_size"]
+        _nh_kicker_mb = "6px" if _nh_is_compact_ls else "14px"
         parts.append(f'.card[data-card-id="{card_id}"] .nh-kicker {{')
-        parts.append(f'  font-family:{p["font"]}; font-size:{p["kicker_size"]}; font-weight:600;')
+        parts.append(f'  font-family:{p["font"]}; font-size:{_nh_kicker_sz}; font-weight:600;')
         parts.append(f'  color:{p["text_secondary"]}; letter-spacing:0.16em; text-transform:uppercase;')
-        parts.append('  text-align:center; opacity:0; margin-bottom:14px; position:relative; z-index:1;')
+        parts.append(f'  text-align:center; opacity:0; margin-bottom:{_nh_kicker_mb}; position:relative; z-index:1;')
         parts.append('}')
         # Mirror accent lines — block-level + resolved width so scaleX works (HF rule 7)
         parts.append(f'.card[data-card-id="{card_id}"] .nh-line {{')
@@ -2723,22 +2745,29 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'  box-shadow:{p["accent_line_glow"]};')
         parts.append('}')
         # Hero number: scale font-size to prevent overflow.
-        # Content area ≈ 770px (850px panel − 80px padding). At 160px bold,
-        # each char ≈ 90px → safe up to ~8 chars. Scale down for longer strings.
+        # Portrait: content area ≈ 770px (850px panel − 80px padding). At 160px bold,
+        # each char ≈ 90px → safe up to ~8 chars.
+        # Compact landscape (660×300px): content width ≈ 580px, height budget ≈ 120px.
         _nh_raw_str = hints.get("nh_number", "")
-        _nh_fsize   = max(60, min(160, int(770 * 160 // (90 * max(8, len(_nh_raw_str))))))
+        if _nh_is_compact_ls:
+            _nh_fsize = max(40, min(88, int(560 * 88 // (78 * max(6, len(_nh_raw_str))))))
+        else:
+            _nh_fsize = max(60, min(160, int(770 * 160 // (90 * max(8, len(_nh_raw_str))))))
+        _nh_num_margin = "8px 0" if _nh_is_compact_ls else "16px 0"
         parts.append(f'.card[data-card-id="{card_id}"] .nh-number {{')
         parts.append(f'  font-family:{p["font"]}; font-size:{_nh_fsize}px; font-weight:900;')
         parts.append(f'  line-height:1; letter-spacing:-0.02em; color:{p["text"]};')
-        parts.append('  text-align:center; white-space:nowrap; max-width:100%; overflow:hidden; margin:16px 0; opacity:0; position:relative; z-index:1;')
+        parts.append(f'  text-align:center; white-space:nowrap; max-width:100%; overflow:hidden; margin:{_nh_num_margin}; opacity:0; position:relative; z-index:1;')
         if p["title_glow"]:
             parts.append(f'  text-shadow:{p["title_glow"]};')
         parts.append('}')
         # Detail: muted context label below lines
+        _nh_detail_sz = detail_size_eff if _nh_is_compact_ls else p["detail_size"]
+        _nh_detail_mt = "6px" if _nh_is_compact_ls else "14px"
         parts.append(f'.card[data-card-id="{card_id}"] .nh-detail {{')
-        parts.append(f'  font-family:{p["font"]}; font-size:{p["detail_size"]}; font-weight:500;')
+        parts.append(f'  font-family:{p["font"]}; font-size:{_nh_detail_sz}; font-weight:500;')
         parts.append(f'  color:{p["text_secondary"]}; text-align:center; opacity:0;')
-        parts.append('  margin-top:14px; position:relative; z-index:1;')
+        parts.append(f'  margin-top:{_nh_detail_mt}; position:relative; z-index:1;')
         parts.append('}')
     # ── prim_cinematic_reveal CSS ────────────────────────────────────────────
     if content_style == "prim_cinematic_reveal":
