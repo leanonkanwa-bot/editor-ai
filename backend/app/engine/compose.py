@@ -170,7 +170,7 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
     if layout == "portrait" and not is_caption:
         _is_portrait_full_cover = card.get("contentHints", {}).get("style", "") in (
             "prim_split_compare", "prim_journey_map", "prim_cinematic_reveal",
-            "prim_ascension_reveal",
+            "prim_ascension_reveal", "prim_shatter_truth",
         )
         if not _is_portrait_full_cover and zone not in (
             "portrait-center-full", "portrait-center-left", "portrait-center-right"
@@ -2929,6 +2929,96 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  color:{_par_secondary}; text-align:center; opacity:0;')
         parts.append('  position:relative; z-index:2; margin-top:20px;')
         parts.append('}')
+    # ── prim_shatter_truth CSS ───────────────────────────────────────────────
+    if content_style == "prim_shatter_truth":
+        # Light-pack override: bg_full is always #000; craft/paper text is dark.
+        _pst_text = (
+            "rgba(255,255,255,0.95)"
+            if p["id"] in ("lean_craft", "lean_paper")
+            else p["text"]
+        )
+        # Card-panel: full-cover black canvas, relative for absolute children
+        parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
+        parts.append('  width:100%; height:100%; max-width:none; padding:0;')
+        parts.append('  position:relative;')
+        parts.append(f'  background:{p.get("bg_full", "#000")};')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .kicker {{ display:none; }}')
+        parts.append(f'.card[data-card-id="{card_id}"] .accent-line {{ display:none; }}')
+        parts.append(f'.card[data-card-id="{card_id}"] .shimmer-mask {{ display:none; }}')
+        # Scene: absolute overlay; all children positioned within it
+        parts.append(f'.card[data-card-id="{card_id}"] .pst-scene {{')
+        parts.append('  position:absolute; inset:0; overflow:hidden;')
+        parts.append('}')
+        # Layer wrappers: each covers full scene, flex-centered — avoids GSAP/CSS transform conflict
+        parts.append(f'.card[data-card-id="{card_id}"] .pst-layer {{')
+        parts.append('  position:absolute; inset:0;')
+        parts.append('  display:flex; align-items:center; justify-content:center;')
+        parts.append('}')
+        # Myth-wrap: auto-sized to text, establishes positioning context for frags
+        parts.append(f'.card[data-card-id="{card_id}"] .pst-myth-wrap {{')
+        parts.append('  position:relative; width:84%; max-width:900px;')
+        parts.append('}')
+        # Font size for myth: adaptive by char count (max 50 chars)
+        _pst_myth_raw = hints.get("myth_text", hints.get("title", ""))
+        _pst_mchars   = len(_pst_myth_raw)
+        _pst_mfsize   = (
+            "72px" if _pst_mchars <= 15 else
+            "60px" if _pst_mchars <= 28 else
+            "50px" if _pst_mchars <= 40 else
+            "42px"
+        )
+        # Shared font rules — myth text and each fragment must be pixel-identical
+        _pst_font_common = [
+            f'  font-family:{p["font"]}; font-size:{_pst_mfsize};',
+            f'  font-weight:{p["font_weight"]}; color:{_pst_text};',
+            '  text-align:center; line-height:1.2;',
+            '  overflow-wrap:break-word; word-break:break-word;',
+        ]
+        # L0 — Myth text (in-flow, sizes myth-wrap)
+        parts.append(f'.card[data-card-id="{card_id}"] .pst-myth {{')
+        parts.extend(_pst_font_common)
+        parts.append('  opacity:0; position:relative; z-index:1;')
+        if p.get("title_glow"):
+            parts.append(f'  text-shadow:{p["title_glow"]};')
+        parts.append('}')
+        # L1 — Fragment container: absolute overlay matching myth-wrap bounds
+        parts.append(f'.card[data-card-id="{card_id}"] .pst-frags {{')
+        parts.append('  position:absolute; inset:0; pointer-events:none; z-index:2;')
+        parts.append('}')
+        # L1 — Individual fragments: identical style + position → clip-path cuts horizontal bands
+        # HF rule 7: position:absolute + inset:0 → block-level + sized → transforms non-trivial.
+        # display:flex + center mirrors myth text layout for pixel-accurate clip alignment.
+        parts.append(f'.card[data-card-id="{card_id}"] .pst-frag {{')
+        parts.extend(_pst_font_common)
+        parts.append('  position:absolute; inset:0;')
+        parts.append('  display:flex; align-items:center; justify-content:center;')
+        parts.append('  opacity:0;')
+        if p.get("title_glow"):
+            parts.append(f'  text-shadow:{p["title_glow"]};')
+        parts.append('}')
+        # L2 — Flash: white punch above frags (z:10), invisible by default
+        parts.append(f'.card[data-card-id="{card_id}"] .pst-flash {{')
+        parts.append('  position:absolute; inset:0; background:#FFFFFF;')
+        parts.append('  opacity:0; pointer-events:none; z-index:10;')
+        parts.append('}')
+        # L3 — Truth text: accent-colored, back.out(1.3) entry — no existing transform
+        _pst_truth_raw = hints.get("truth_text", "")
+        _pst_tchars    = len(_pst_truth_raw)
+        _pst_tfsize    = (
+            "68px" if _pst_tchars <= 20 else
+            "54px" if _pst_tchars <= 40 else
+            "44px"
+        )
+        parts.append(f'.card[data-card-id="{card_id}"] .pst-truth {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{_pst_tfsize};')
+        parts.append(f'  font-weight:{p["font_weight"]}; color:{p["accent"]};')
+        parts.append('  text-align:center; line-height:1.2; opacity:0;')
+        parts.append('  width:84%; max-width:900px;')
+        parts.append('  overflow-wrap:break-word; word-break:break-word;')
+        if p.get("title_glow_intense"):
+            parts.append(f'  text-shadow:{p["title_glow_intense"]};')
+        parts.append('}')
     parts.append('</style>')
     # Timeline: full-screen overlay, no card-panel wrapper
     if content_style == "timeline":
@@ -4153,6 +4243,28 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         if _par_kicker_t:
             parts.append(f'      <div class="par-kicker" id="{card_id}-par-kicker">{_par_kicker_t}</div>')
         parts.append(f'    </div>')
+    elif content_style == "prim_shatter_truth":
+        # prim_shatter_truth HTML — myth + 5 fragment shards + flash + truth
+        _pst_myth_t  = _esc(hints.get("myth_text", hints.get("title", "")))
+        _pst_truth_t = _esc(hints.get("truth_text", ""))
+        parts.append(f'    <div class="pst-scene">')
+        # Layer A — myth text + clip-path fragment shards (stacked in myth-wrap)
+        parts.append(f'      <div class="pst-layer">')
+        parts.append(f'        <div class="pst-myth-wrap">')
+        parts.append(f'          <div class="pst-myth" id="{card_id}-pst-myth">{_pst_myth_t}</div>')
+        parts.append(f'          <div class="pst-frags">')
+        for _pst_i in range(5):
+            parts.append(f'            <div class="pst-frag" id="{card_id}-pst-frag-{_pst_i}">{_pst_myth_t}</div>')
+        parts.append(f'          </div>')
+        parts.append(f'        </div>')
+        parts.append(f'      </div>')
+        # Flash: scene-level, z-index:10, covers all layers at impact
+        parts.append(f'      <div class="pst-flash" id="{card_id}-pst-flash"></div>')
+        # Layer B — truth text (centered by flex parent, no transform conflict)
+        parts.append(f'      <div class="pst-layer">')
+        parts.append(f'        <div class="pst-truth" id="{card_id}-pst-truth">{_pst_truth_t}</div>')
+        parts.append(f'      </div>')
+        parts.append(f'    </div>')
     elif content_style == "number_hero":
         _nh_number_t  = _esc(hints.get("nh_number", ""))
         _nh_kicker_t  = _esc(hints.get("nh_kicker", "") or kicker or "")
@@ -4476,7 +4588,7 @@ def _build_timeline_js(
             # portrait-center-full slot) also trigger backdrop-dim as a safety net.
             if layout == "portrait" and card.get("type") != "caption":
                 _pfc_style = card.get("contentHints", {}).get("style", "")
-                _is_pfc = _pfc_style in ("prim_split_compare", "prim_journey_map", "prim_cinematic_reveal", "prim_ascension_reveal")
+                _is_pfc = _pfc_style in ("prim_split_compare", "prim_journey_map", "prim_cinematic_reveal", "prim_ascension_reveal", "prim_shatter_truth")
                 if not _is_pfc and card_zone not in (
                     "portrait-center-full", "portrait-center-left", "portrait-center-right"
                 ):
@@ -7366,6 +7478,67 @@ def _build_timeline_js(
                                  f'{{ opacity: 0, y: 10 }}, '
                                  f'{{ opacity: 1, y: 0, duration: 0.400, ease: "power2.out" }}, '
                                  f'{start + 1.100:.4f});')
+            # ── prim_shatter_truth GSAP — myth trembles → shatters → truth ──
+            elif content_style == "prim_shatter_truth":
+                _pst_myth_s  = f'.card[data-card-id="{card_id}"] #{card_id}-pst-myth'
+                _pst_flash_s = f'.card[data-card-id="{card_id}"] #{card_id}-pst-flash'
+                _pst_truth_s = f'.card[data-card-id="{card_id}"] #{card_id}-pst-truth'
+                _pst_frag_sels = [
+                    f'.card[data-card-id="{card_id}"] #{card_id}-pst-frag-{_pst_i}'
+                    for _pst_i in range(5)
+                ]
+                # Irregular horizontal strip clips — non-uniform widths mimic organic fracture
+                _pst_clips = [
+                    "inset(0% 0% 75% 0%)",
+                    "inset(25% 0% 55% 0%)",
+                    "inset(45% 0% 32% 0%)",
+                    "inset(68% 0% 15% 0%)",
+                    "inset(85% 0% 0% 0%)",
+                ]
+                # Radial scatter vectors: (tx px, ty px, rotation deg) — each shard flies outward
+                _pst_scatter = [
+                    ( 28, -90, -8),
+                    (-55, -52, 12),
+                    ( 62,  18, -6),
+                    (-42,  60, 10),
+                    ( 24,  88, -5),
+                ]
+                # Phase 1 — stable entry: myth scales in quickly
+                lines.append(f'  tl.fromTo(\'{_pst_myth_s}\', '
+                             f'{{ opacity: 0, scale: 0.96 }}, '
+                             f'{{ opacity: 1, scale: 1, duration: 0.250, ease: "power2.out" }}, '
+                             f'{start:.4f});')
+                # Phase 2 — micro-vibration: ±1px translateX, 6 steps sine.inOut
+                lines.append(f'  tl.to(\'{_pst_myth_s}\', {{ x: 1, duration: 0.025, ease: "sine.inOut" }}, {start + 0.600:.4f});')
+                lines.append(f'  tl.to(\'{_pst_myth_s}\', {{ x: -1, duration: 0.025, ease: "sine.inOut" }}, {start + 0.625:.4f});')
+                lines.append(f'  tl.to(\'{_pst_myth_s}\', {{ x: 1, duration: 0.025, ease: "sine.inOut" }}, {start + 0.650:.4f});')
+                lines.append(f'  tl.to(\'{_pst_myth_s}\', {{ x: -1, duration: 0.025, ease: "sine.inOut" }}, {start + 0.675:.4f});')
+                lines.append(f'  tl.to(\'{_pst_myth_s}\', {{ x: 1, duration: 0.025, ease: "sine.inOut" }}, {start + 0.700:.4f});')
+                lines.append(f'  tl.to(\'{_pst_myth_s}\', {{ x: 0, duration: 0.025, ease: "sine.inOut" }}, {start + 0.725:.4f});')
+                # Phase 3 — flash: expo.out rise (0→0.15) then power2.in fall
+                lines.append(f'  tl.fromTo(\'{_pst_flash_s}\', '
+                             f'{{ opacity: 0 }}, '
+                             f'{{ opacity: 0.15, duration: 0.065, ease: "expo.out" }}, '
+                             f'{start + 0.720:.4f});')
+                lines.append(f'  tl.to(\'{_pst_flash_s}\', '
+                             f'{{ opacity: 0, duration: 0.065, ease: "power2.in" }}, '
+                             f'{start + 0.785:.4f});')
+                # Phase 4 — shatter: myth disappears, 5 fragment shards scatter radially
+                lines.append(f'  tl.to(\'{_pst_myth_s}\', {{ opacity: 0, duration: 0.001 }}, {start + 0.750:.4f});')
+                for _fi, (_frag_s, _clip, (_tx, _ty, _rot)) in enumerate(
+                    zip(_pst_frag_sels, _pst_clips, _pst_scatter)
+                ):
+                    _fdelay = round(start + 0.750 + _fi * 0.020, 4)
+                    lines.append(f'  tl.set(\'{_frag_s}\', {{ clipPath: "{_clip}" }}, {_fdelay:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_frag_s}\', '
+                                 f'{{ x: 0, y: 0, rotation: 0, opacity: 1 }}, '
+                                 f'{{ x: {_tx}, y: {_ty}, rotation: {_rot}, opacity: 0, duration: 0.400, ease: "power4.out" }}, '
+                                 f'{_fdelay:.4f});')
+                # Phase 5 — truth imposes itself with back.out(1.3) weight
+                lines.append(f'  tl.fromTo(\'{_pst_truth_s}\', '
+                             f'{{ opacity: 0, scale: 0.92 }}, '
+                             f'{{ opacity: 1, scale: 1, duration: 0.500, ease: "back.out(1.3)" }}, '
+                             f'{start + 0.850:.4f});')
             # ── number_hero GSAP — 3-act cinematic reveal ────────────────────
             elif content_style == "number_hero":
                 _nh_spot_s = f'.card[data-card-id="{card_id}"] #{card_id}-nh-spotlight'
@@ -7451,7 +7624,7 @@ def _build_timeline_js(
             _NO_ACCENT_SPAN_TYPES = frozenset({
                 "prim_cinematic_reveal", "prim_ascension_reveal", "number_hero", "prim_stat_counter",
                 "prim_split_compare", "prim_journey_map", "prim_anecdote_frame",
-                "prim_numbered_rule",
+                "prim_numbered_rule", "prim_shatter_truth",
             })
             _aw = card.get("contentHints", {}).get("accent_word", "")
             _ch_ref = card.get("contentHints", {})

@@ -114,4 +114,25 @@ PRIMITIVES: dict[str, dict] = {
             "No filter:blur anywhere — depth illusion is purely from 3D transforms + stagger."
         ),
     },
+    "prim_shatter_truth": {
+        "_family": "full_cover",
+        "_pack": "lean_glass",
+        "zone": "fullscreen",
+        "duration_range_s": (2.0, 3.0),
+        "cover_type": "blackout",
+        "contentHints": {
+            "myth_text":  "REQUIRED — false belief / myth / excuse to shatter (max 50 chars)",
+            "truth_text": "REQUIRED — the truth that replaces it (max 60 chars)",
+        },
+        "description": (
+            "Confrontation primitive: a myth text appears stable (0–0.6s), then "
+            "micro-vibrates (0.6–0.75s, sine.inOut ±1px), shatters into 5 horizontal "
+            "fragments that scatter radially (power4.out). A white flash punctuates "
+            "the impact. The truth imposes itself via back.out(1.3). "
+            "All depth via transforms + opacity, zero filter:blur. "
+            "Narrative: confrontation / demolition of false belief. "
+            "Independent budget: 1 per video — distinct from prim_cinematic_reveal "
+            "and prim_ascension_reveal (those are climax-of-pride / result moments)."
+        ),
+    },
 }

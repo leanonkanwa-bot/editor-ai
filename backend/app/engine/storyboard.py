@@ -138,7 +138,7 @@ _LANDSCAPE_HERO_STYLES: frozenset[str] = frozenset({
 # pass and backdrop-dim dispatch can operate without importing catalogue.py.
 _FULL_COVER_STYLES: frozenset[str] = frozenset({
     "prim_split_compare", "prim_journey_map", "prim_cinematic_reveal",
-    "prim_ascension_reveal",
+    "prim_ascension_reveal", "prim_shatter_truth",
 })
 
 
