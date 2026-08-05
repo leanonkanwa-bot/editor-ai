@@ -169,7 +169,8 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
     # the video source. Only full-cover primitives that need the complete canvas are exempt.
     if layout == "portrait" and not is_caption:
         _is_portrait_full_cover = card.get("contentHints", {}).get("style", "") in (
-            "prim_split_compare", "prim_journey_map", "prim_cinematic_reveal"
+            "prim_split_compare", "prim_journey_map", "prim_cinematic_reveal",
+            "prim_ascension_reveal",
         )
         if not _is_portrait_full_cover and zone not in (
             "portrait-center-full", "portrait-center-left", "portrait-center-right"
@@ -2836,6 +2837,84 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('  text-align:center; opacity:0; position:relative; z-index:1;')
         parts.append('  margin-top:16px; max-width:80%; line-height:1.4;')
         parts.append('}')
+    # ── prim_ascension_reveal CSS ─────────────────────────────────────────────
+    if content_style == "prim_ascension_reveal":
+        # Light-pack text override: bg_full is always #000; pack text may be dark.
+        _par_text = (
+            "rgba(255,255,255,0.92)"
+            if p["id"] in ("lean_craft", "lean_paper")
+            else p["text"]
+        )
+        _par_secondary = (
+            "rgba(255,255,255,0.55)"
+            if p["id"] in ("lean_craft", "lean_paper")
+            else p["text_secondary"]
+        )
+        parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
+        parts.append('  width:100%; height:100%; max-width:none; padding:0;')
+        parts.append('  display:flex; align-items:center; justify-content:center;')
+        parts.append(f'  background:{p.get("bg_full", "#000")};')
+        parts.append('}')
+        # Suppress generic elements (par-* take over)
+        parts.append(f'.card[data-card-id="{card_id}"] .kicker {{ display:none; }}')
+        parts.append(f'.card[data-card-id="{card_id}"] .accent-line {{ display:none; }}')
+        parts.append(f'.card[data-card-id="{card_id}"] .shimmer-mask {{ display:none; }}')
+        # Scene: perspective on parent enables rotateX on .par-title (L2 layer)
+        parts.append(f'.card[data-card-id="{card_id}"] .par-scene {{')
+        parts.append('  position:relative; display:flex; flex-direction:column;')
+        parts.append('  align-items:center; justify-content:center; gap:0;')
+        parts.append('  width:100%; padding:64px 80px; box-sizing:border-box;')
+        parts.append('  perspective:1400px;')
+        parts.append('}')
+        # L0 — Halo: radial gradient glow, no filter:blur (SwiftShader constraint)
+        _par_halo_alpha = "26" if p["id"] in ("lean_glass", "lean_vibe") else "1A"
+        parts.append(f'.card[data-card-id="{card_id}"] .par-halo {{')
+        parts.append('  position:absolute; width:640px; height:640px; border-radius:50%;')
+        parts.append('  top:50%; left:50%; transform:translate(-50%,-50%);')
+        parts.append(f'  background:radial-gradient(circle, {p["accent"]}{_par_halo_alpha} 0%, transparent 65%);')
+        parts.append('  pointer-events:none; opacity:0; z-index:0;')
+        parts.append('}')
+        # L1 — Horizon: HF rule 7 — display:block + explicit width so scaleX is non-trivial
+        parts.append(f'.card[data-card-id="{card_id}"] .par-horizon {{')
+        parts.append('  display:block; height:2px; border-radius:1px;')
+        parts.append('  width:calc(100% - 160px); max-width:440px;')
+        parts.append(f'  background:{p["accent"]}; transform-origin:center; transform:scaleX(0);')
+        parts.append('  opacity:0; position:relative; z-index:1; margin-bottom:24px;')
+        if p.get("accent_line_glow"):
+            parts.append(f'  box-shadow:{p["accent_line_glow"]};')
+        parts.append('}')
+        # L2 — Main title: adaptive font size by character count (chiffres/résultats cibles)
+        _par_raw   = hints.get("title", "")
+        _par_chars = len(_par_raw)
+        _par_fsize = (
+            "120px" if _par_chars <= 8  else
+            "88px"  if _par_chars <= 18 else
+            "64px"  if _par_chars <= 35 else
+            "48px"
+        )
+        parts.append(f'.card[data-card-id="{card_id}"] .par-title {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:{_par_fsize};')
+        parts.append(f'  font-weight:900; color:{_par_text};')
+        parts.append('  text-align:center; line-height:1.1; opacity:0;')
+        parts.append('  position:relative; z-index:2; max-width:100%;')
+        parts.append('  overflow-wrap:break-word; word-break:break-word;')
+        if p.get("title_glow"):
+            parts.append(f'  text-shadow:{p["title_glow"]};')
+        parts.append('}')
+        # L3 — Ring pulse: border ellipse around title area, single-cycle expand-fade
+        parts.append(f'.card[data-card-id="{card_id}"] .par-ring {{')
+        parts.append('  position:absolute; border-radius:50%;')
+        parts.append('  width:360px; height:160px;')
+        parts.append(f'  border:1.5px solid {p["accent"]}66;')
+        parts.append('  opacity:0; pointer-events:none; z-index:1;')
+        parts.append('}')
+        # L4 — Kicker: sub-text context, fade-rise entry via GSAP
+        parts.append(f'.card[data-card-id="{card_id}"] .par-kicker {{')
+        parts.append(f'  font-family:{p.get("font_detail", p["font"])}; font-size:{p["kicker_size"]};')
+        parts.append('  font-weight:600; letter-spacing:0.12em; text-transform:uppercase;')
+        parts.append(f'  color:{_par_secondary}; text-align:center; opacity:0;')
+        parts.append('  position:relative; z-index:2; margin-top:20px;')
+        parts.append('}')
     parts.append('</style>')
     # Timeline: full-screen overlay, no card-panel wrapper
     if content_style == "timeline":
@@ -4047,6 +4126,19 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         if _pcr_detail_t:
             parts.append(f'      <div class="pcr-detail" id="{card_id}-pcr-detail">{_pcr_detail_t}</div>')
         parts.append(f'    </div>')
+    elif content_style == "prim_ascension_reveal":
+        # ── prim_ascension_reveal HTML — 5-layer ascension reveal ─────────────
+        # Generic .kicker suppressed via CSS (display:none); par-kicker is explicit.
+        _par_title_t  = _esc(hints.get("title", ""))
+        _par_kicker_t = _esc(hints.get("kicker", ""))
+        parts.append(f'    <div class="par-scene">')
+        parts.append(f'      <div class="par-halo"  id="{card_id}-par-halo"></div>')
+        parts.append(f'      <div class="par-ring"  id="{card_id}-par-ring"></div>')
+        parts.append(f'      <div class="par-horizon" id="{card_id}-par-horizon"></div>')
+        parts.append(f'      <div class="par-title" id="{card_id}-par-title">{_par_title_t}</div>')
+        if _par_kicker_t:
+            parts.append(f'      <div class="par-kicker" id="{card_id}-par-kicker">{_par_kicker_t}</div>')
+        parts.append(f'    </div>')
     elif content_style == "number_hero":
         _nh_number_t  = _esc(hints.get("nh_number", ""))
         _nh_kicker_t  = _esc(hints.get("nh_kicker", "") or kicker or "")
@@ -4340,7 +4432,7 @@ def _build_timeline_js(
             # portrait-center-full slot) also trigger backdrop-dim as a safety net.
             if layout == "portrait" and card.get("type") != "caption":
                 _pfc_style = card.get("contentHints", {}).get("style", "")
-                _is_pfc = _pfc_style in ("prim_split_compare", "prim_journey_map", "prim_cinematic_reveal")
+                _is_pfc = _pfc_style in ("prim_split_compare", "prim_journey_map", "prim_cinematic_reveal", "prim_ascension_reveal")
                 if not _is_pfc and card_zone not in (
                     "portrait-center-full", "portrait-center-left", "portrait-center-right"
                 ):
@@ -7180,6 +7272,56 @@ def _build_timeline_js(
                                  f'{{ opacity: 0, y: 12 }}, '
                                  f'{{ opacity: 1, y: 0, duration: 0.300, ease: "power2.out" }}, '
                                  f'{start + 0.72:.4f});')
+            # ── prim_ascension_reveal GSAP — 5-layer ascension reveal ────────
+            elif content_style == "prim_ascension_reveal":
+                _par_halo_s = f'.card[data-card-id="{card_id}"] #{card_id}-par-halo'
+                _par_hor_s  = f'.card[data-card-id="{card_id}"] #{card_id}-par-horizon'
+                _par_tit_s  = f'.card[data-card-id="{card_id}"] #{card_id}-par-title'
+                _par_ring_s = f'.card[data-card-id="{card_id}"] #{card_id}-par-ring'
+                _par_kck_s  = f'.card[data-card-id="{card_id}"] #{card_id}-par-kicker'
+                _par_hints      = card.get("contentHints", {})
+                _par_has_kicker = bool(_par_hints.get("kicker"))
+                # L0 — Halo: organic respiration, two-phase (0→1.4s total)
+                # Phase 1 (0→0.7s): scale 0.7→1.15, opacity 0→0.30, sine.inOut "world opening"
+                lines.append(f'  tl.fromTo(\'{_par_halo_s}\', '
+                             f'{{ opacity: 0, scale: 0.7 }}, '
+                             f'{{ opacity: 0.30, scale: 1.15, duration: 0.700, ease: "sine.inOut" }}, '
+                             f'{start:.4f});')
+                # Phase 2 (0.7→1.4s): settle 1.15→1.0, opacity 0.30→0.22
+                lines.append(f'  tl.to(\'{_par_halo_s}\', '
+                             f'{{ opacity: 0.22, scale: 1.0, duration: 0.700, ease: "sine.inOut" }}, '
+                             f'{start + 0.700:.4f});')
+                # L1 — Horizon: scaleX(0)→(1), center-origin, power4.out (0.1→0.5s)
+                # HF rule 7: display:block + explicit width set in CSS — scaleX non-trivial.
+                lines.append(f'  tl.fromTo(\'{_par_hor_s}\', '
+                             f'{{ scaleX: 0, opacity: 0 }}, '
+                             f'{{ scaleX: 1, opacity: 1, duration: 0.400, ease: "power4.out" }}, '
+                             f'{start + 0.100:.4f});')
+                # L2 — Title: translateY(60)+rotateX(-25°)→rest, back.out(1.4) (0.35→1.1s)
+                # Overshoot ≈4%: intentional "poids qui se pose" physical landing sensation.
+                # transformPerspective on element mirrors perspective:1400px on .par-scene.
+                lines.append(f'  tl.fromTo(\'{_par_tit_s}\', '
+                             f'{{ opacity: 0, y: 60, rotateX: -25, transformPerspective: 1400 }}, '
+                             f'{{ opacity: 1, y: 0, rotateX: 0, transformPerspective: 1400, duration: 0.750, ease: "back.out(1.4)" }}, '
+                             f'{start + 0.350:.4f});')
+                # Glow burst on Glass/Vibe packs at title landing (t = start+1.0s)
+                if p.get("title_glow_intense") and p.get("title_glow"):
+                    lines.append(f'  tl.fromTo(\'{_par_tit_s}\', '
+                                 f'{{ textShadow: "{_esc_js(p["title_glow"])}" }}, '
+                                 f'{{ textShadow: "{_esc_js(p["title_glow_intense"])}", duration: 0.120, ease: "power2.out", yoyo: true, repeat: 1 }}, '
+                                 f'{start + 1.000:.4f});')
+                # L3 — Ring pulse: scale(1)→(1.4), opacity(0.4)→(0), single cycle (0.85→1.35s)
+                # expo.out: explosive onset stoping abruptly — sonar-ping residual after impact.
+                lines.append(f'  tl.fromTo(\'{_par_ring_s}\', '
+                             f'{{ scale: 1, opacity: 0.4 }}, '
+                             f'{{ scale: 1.4, opacity: 0, duration: 0.500, ease: "expo.out" }}, '
+                             f'{start + 0.850:.4f});')
+                # L4 — Kicker: y(10)→(0), opacity 0→1, power2.out (1.1→1.5s)
+                if _par_has_kicker:
+                    lines.append(f'  tl.fromTo(\'{_par_kck_s}\', '
+                                 f'{{ opacity: 0, y: 10 }}, '
+                                 f'{{ opacity: 1, y: 0, duration: 0.400, ease: "power2.out" }}, '
+                                 f'{start + 1.100:.4f});')
             # ── number_hero GSAP — 3-act cinematic reveal ────────────────────
             elif content_style == "number_hero":
                 _nh_spot_s = f'.card[data-card-id="{card_id}"] #{card_id}-nh-spotlight'
@@ -7263,7 +7405,7 @@ def _build_timeline_js(
             # _split_title_accent() and therefore never generate #card-id-accent
             # (prim_* primitives, number_hero use their own element IDs).
             _NO_ACCENT_SPAN_TYPES = frozenset({
-                "prim_cinematic_reveal", "number_hero", "prim_stat_counter",
+                "prim_cinematic_reveal", "prim_ascension_reveal", "number_hero", "prim_stat_counter",
                 "prim_split_compare", "prim_journey_map", "prim_anecdote_frame",
                 "prim_numbered_rule",
             })
