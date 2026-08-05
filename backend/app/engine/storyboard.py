@@ -48,7 +48,9 @@ _TRIGGER_STYLES: frozenset[str] = frozenset({
 _GROUNDING_OVERLAP_THRESHOLD = 0.40   # fraction of trigger content-words that must match speech
 _GROUNDING_WINDOW_PRE_S  = 0.5        # seconds before startSec included in the speech window
 _GROUNDING_WINDOW_POST_S = 3.0        # seconds after  startSec included in the speech window
-_ANCHOR_SEARCH_FORWARD_S = 6.0        # how far ahead to scan for trigger keyword position
+_ANCHOR_SEARCH_FORWARD_S      = 6.0    # how far ahead to scan for trigger keyword position
+_DATA_ANCHOR_SEARCH_FORWARD_S = 12.0  # wider window for data cards (number/age/result) whose
+                                       # LLM startSec can be 4-9s before the spoken value
 _ANCHOR_LEAD_S           = 0.20       # card appears this many seconds before the trigger word
 
 # French stopwords stripped before grounding overlap computation so that invented phrases
@@ -103,6 +105,20 @@ _TRIGGER_TEXT_FIELD: dict[str, str] = {
     "before_you_scroll":   "hook_text",     # the hook phrase is what must be verbatim in speech
     # Wave 8
     "broken_promise_tracker": "promises",  # promise list joined — speaker must name these literally
+}
+
+# Maps data-card styles to the primary contentHints field used for Whisper anchor search.
+# These styles don't populate 'title' — their key spoken content lives in a type-specific
+# field. Without this, TITLE-ANCHOR skips them (title="") and they stay at the LLM's
+# original startSec, which can be 3-8s before the content is actually spoken.
+# Confirmed cases from job 45bf7899: number_hero 8.54s early, age_milestone 3.94s,
+# client_result_number 3.76s — all fixed by anchoring to the primary data field.
+_DATA_ANCHOR_FIELDS: dict[str, str] = {
+    "number_hero":          "nh_number",       # e.g. "12 000 €/mois"
+    "age_milestone":        "age_value",        # e.g. "3 ans", "34"
+    "client_result_number": "result_value",     # e.g. "+340%", "10k abonnés"
+    "income_reveal":        "ir_amount",        # primary revenue number
+    "prim_stat_counter":    "stat_value",       # animated counter target
 }
 
 # Styles that legitimately occupy video-overlay / fullscreen in landscape (full-canvas heroes).
@@ -2135,7 +2151,21 @@ def generate_storyboard(
         _style = _gc.get("contentHints", {}).get("style", "")
         if _style in _TRIGGER_STYLES:
             continue  # already handled by _find_trigger_anchor above
-        _title = _gc.get("contentHints", {}).get("title", "")
+        _hints = _gc.get("contentHints", {})
+        _title = _hints.get("title", "")
+        # Data cards (number_hero, age_milestone, …) store their spoken content in
+        # a style-specific field, not in 'title'. Fall back to that field so these
+        # cards get anchored to when their number/value is actually spoken, not just
+        # to the segment start (which can be 4-9s before the content is stated).
+        _used_data_fallback = False
+        if not _title:
+            _data_field = _DATA_ANCHOR_FIELDS.get(_style, "")
+            if _data_field:
+                _data_val = _hints.get(_data_field) or ""
+                if isinstance(_data_val, list):
+                    _data_val = " ".join(str(x) for x in _data_val)
+                _title = str(_data_val)
+                _used_data_fallback = bool(_title)
         if not _title:
             continue
         _title_cw = _content_words(_title)
@@ -2143,7 +2173,10 @@ def generate_storyboard(
             continue
         _start_s = float(_gc.get("startSec", 0))
         _lo = _start_s - _GROUNDING_WINDOW_PRE_S
-        _hi = _start_s + _ANCHOR_SEARCH_FORWARD_S
+        # Data-field fallback uses a wider search window: the LLM startSec for
+        # data cards can be 4-9s before the spoken value (confirmed 8.54s on
+        # number_hero in job 45bf7899), which is outside the standard 6s window.
+        _hi = _start_s + (_DATA_ANCHOR_SEARCH_FORWARD_S if _used_data_fallback else _ANCHOR_SEARCH_FORWARD_S)
         _matched: float | None = None
         _matched_word: str = ""
         for _w in remapped_words:
@@ -2160,10 +2193,11 @@ def generate_storyboard(
             _gc["startSec"] = round(max(_matched - _ANCHOR_LEAD_S, _start_s), 3)
             if float(_gc.get("endSec", 0)) < _gc["startSec"] + 1.5:
                 _gc["endSec"] = round(_gc["startSec"] + 3.0, 3)
+            _anchor_tag = "DATA-ANCHOR" if _used_data_fallback else "TITLE-ANCHOR"
             print(
-                f"[STORYBOARD] TITLE-ANCHOR card {_gc.get('id','?')} style={_style!r} "
+                f"[STORYBOARD] {_anchor_tag} card {_gc.get('id','?')} style={_style!r} "
                 f"startSec {_orig_start:.2f}→{_gc['startSec']:.2f}s "
-                f"(title keyword '{_matched_word}'@{_matched:.2f}s matched in Whisper)",
+                f"(keyword '{_matched_word}'@{_matched:.2f}s matched in Whisper)",
                 flush=True,
             )
 
