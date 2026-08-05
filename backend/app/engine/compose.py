@@ -660,11 +660,13 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         if content_style == "before_after_image" and layout == "landscape":
             _tc = len(hints.get("before_label", "")) + len(hints.get("after_label", ""))
             if _tc > 50:
-                title_size_eff = "22px"
+                title_size_eff = "20px"
             elif _tc > 30:
-                title_size_eff = "26px"
+                title_size_eff = "24px"
             elif _tc > 15:
-                title_size_eff = "30px"
+                title_size_eff = "28px"
+            else:
+                title_size_eff = "32px"
     else:
         title_size_eff  = p["title_size"]
         number_size_eff = p["number_size"]
@@ -821,6 +823,10 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         if p["title_glow"]:
             parts.append(f'  box-shadow: {p["accent_line_glow"]};')
         parts.append('}')
+        # Force definite width on .card-panel so flex children can resolve width:100%.
+        # Without this, align-items:center in .root causes the panel to intrinsically size
+        # to text max-content, making overflow-wrap:break-word never trigger on .cmp-value.
+        parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{ width: 100%; box-sizing: border-box; }}')
     # Timeline: adaptive layout (horizontal or vertical based on label length)
     if content_style == "timeline":
         is_paper_tl = p["id"] == "lean_paper"
@@ -1167,6 +1173,10 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]}; text-align:center;')
         parts.append('  overflow-wrap:break-word; word-break:break-word; width:100%;')
         parts.append('}')
+        # Force definite width on .card-panel so flex children can resolve width:100%.
+        # Without this, align-items:center in .root causes the panel to intrinsically size
+        # to text max-content, making overflow-wrap:break-word never trigger on .ba-text.
+        parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{ width: 100%; box-sizing: border-box; }}')
         if p["id"] == "lean_craft":
             parts.append(f'.card[data-card-id="{card_id}"] .ba-div {{')
             parts.append('  width:24px; flex-shrink:0; display:flex; align-items:center; justify-content:center;')
@@ -4877,9 +4887,9 @@ def _build_timeline_js(
                 n_slides = min(len(slides), 4)
                 if n_slides > 0:
                     # Distribute available card time evenly from t_in.
-                    # tl.set pins every slide's initial state explicitly so GSAP
-                    # doesn't rely on CSS alone — fixes the "first slide frozen"
-                    # symptom where fromTo failed to re-apply from-state on slides 1+.
+                    # tl.set at t=0 (not t_in) pins the hidden state from timeline start —
+                    # prevents slides from escaping opacity:0 during GSAP seek initialization
+                    # before the card's own t_in fires (was the "all slides visible" bug).
                     avail = max(0.1, end - t_in)
                     each_dur = round(avail / n_slides, 3)
                     for si in range(n_slides):
@@ -4889,7 +4899,7 @@ def _build_timeline_js(
                             break
                         sl_out = round(min(sl_in + each_dur - 0.22, end - 0.06), 4)
                         if is_paper:
-                            lines.append(f'  tl.set(\'{sl_sel}\', {{ opacity: 0 }}, {t_in:.4f});')
+                            lines.append(f'  tl.set(\'{sl_sel}\', {{ opacity: 0 }}, 0);')
                             lines.append(
                                 f'  tl.to(\'{sl_sel}\', '
                                 f'{{ opacity: 1, duration: 0.25, ease: _eIn }}, '
@@ -4899,7 +4909,7 @@ def _build_timeline_js(
                                 f'{{ opacity: 0, duration: 0.20, ease: _eOut }}, '
                                 f'{sl_out:.4f});')
                         elif is_vibe:
-                            lines.append(f'  tl.set(\'{sl_sel}\', {{ opacity: 0, y: 10 }}, {t_in:.4f});')
+                            lines.append(f'  tl.set(\'{sl_sel}\', {{ opacity: 0, y: 10 }}, 0);')
                             lines.append(
                                 f'  tl.to(\'{sl_sel}\', '
                                 f'{{ opacity: 1, y: 0, duration: 0.25, ease: _eIn }}, '
@@ -4909,7 +4919,7 @@ def _build_timeline_js(
                                 f'{{ opacity: 0, y: -10, duration: 0.20, ease: _eOut }}, '
                                 f'{sl_out:.4f});')
                         else:
-                            lines.append(f'  tl.set(\'{sl_sel}\', {{ opacity: 0, x: 12 }}, {t_in:.4f});')
+                            lines.append(f'  tl.set(\'{sl_sel}\', {{ opacity: 0, x: 12 }}, 0);')
                             lines.append(
                                 f'  tl.to(\'{sl_sel}\', '
                                 f'{{ opacity: 1, x: 0, duration: 0.25, ease: _eIn }}, '
