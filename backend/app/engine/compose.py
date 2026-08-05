@@ -777,7 +777,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('}')
     parts.append(f'.card[data-card-id="{card_id}"] .accent-line {{')
     parts.append(f'  width: 0; height: 3px; background: {p["accent"]};')
-    parts.append(f'  border-radius: 2px; box-shadow: {p["accent_line_glow"]};')
+    parts.append(f'  border-radius: 999px; box-shadow: {p["accent_line_glow"]};')
     parts.append('}')
     parts.append(f'.card[data-card-id="{card_id}"] .card-panel .shimmer-mask {{')
     parts.append(f'  position: absolute; top: 0; left: 0; width: 100%; height: 100%;')
@@ -819,7 +819,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .cmp-sep {{')
         parts.append(f'  width: 2px; height: 0; background: {p["accent"]};')
-        parts.append(f'  border-radius: 1px; flex-shrink: 0;')
+        parts.append(f'  border-radius: 999px; flex-shrink: 0;')
         if p["title_glow"]:
             parts.append(f'  box-shadow: {p["accent_line_glow"]};')
         parts.append('}')
@@ -1042,6 +1042,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  width:100%; height:100%; display:flex; align-items:center;')
         parts.append(f'  background:{bg_solid}; overflow:hidden; position:relative;')
         parts.append('}')
+        _ticker_br = p["radius"].split()[0]
         parts.append(f'.card[data-card-id="{card_id}"] .ticker-label {{')
         parts.append(f'  flex-shrink:0; padding:0 20px; font-family:{p["font"]};')
         parts.append(f'  font-size:{("14px" if compact else "16px")}; font-weight:800;')
@@ -1049,7 +1050,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  background:{p["accent"]}; height:100%;')
         parts.append(f'  display:flex; align-items:center;')
         parts.append(f'  white-space:nowrap; letter-spacing:0.10em; text-transform:uppercase;')
-        parts.append(f'  z-index:2;')
+        parts.append(f'  z-index:2; border-radius:0 {_ticker_br} {_ticker_br} 0;')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .ticker-track {{')
         parts.append(f'  display:flex; will-change:transform;')
@@ -1184,6 +1185,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         else:
             parts.append(f'.card[data-card-id="{card_id}"] .ba-div {{')
             parts.append(f'  width:3px; background:{p["accent"]}; align-self:stretch; flex-shrink:0;')
+            parts.append('  border-radius:999px; margin:4px 0;')
             if p["accent_line_glow"]:
                 parts.append(f'  box-shadow:{p["accent_line_glow"]};')
             parts.append('}')
@@ -1461,6 +1463,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .pc-div {{')
         parts.append(f'  width:1px; background:{p["accent"]}; align-self:stretch; flex-shrink:0;')
+        parts.append('  border-radius:999px; margin:4px 0;')
         parts.append('  transform-origin:top; transform:scaleY(0);')
         if p["accent_line_glow"]:
             parts.append(f'  box-shadow:{p["accent_line_glow"]};')
@@ -1519,7 +1522,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  color:{p["accent"]}; opacity:0;')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .qap-div {{')
-        parts.append(f'  width:0; height:2px; background:{p["accent"]}; border-radius:1px;')
+        parts.append(f'  width:0; height:2px; background:{p["accent"]}; border-radius:999px;')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .qap-a {{')
         parts.append(f'  font-family:{p["font"]}; font-size:{title_size_eff};')
@@ -1538,7 +1541,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'  text-shadow:{p["title_glow_intense"]};')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .cm-line {{')
-        parts.append(f'  width:0; height:3px; background:{p["accent"]}; border-radius:2px;')
+        parts.append(f'  width:0; height:3px; background:{p["accent"]}; border-radius:999px;')
         if p["accent_line_glow"]:
             parts.append(f'  box-shadow:{p["accent_line_glow"]};')
         parts.append('}')
@@ -1576,7 +1579,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  color:{p["text_secondary"]}; font-style:italic; opacity:0;')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .or-div {{')
-        parts.append(f'  width:100%; height:2px; background:{p["accent"]}; transform:scaleX(0); transform-origin:left;')
+        parts.append(f'  width:100%; height:2px; background:{p["accent"]}; border-radius:999px; transform:scaleX(0); transform-origin:left;')
         if p["accent_line_glow"]:
             parts.append(f'  box-shadow:{p["accent_line_glow"]};')
         parts.append('}')
@@ -1686,7 +1689,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'  text-shadow:{p["title_glow"]};')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .hwn-underline {{')
-        parts.append(f'  width:0; height:2px; background:{p["accent"]}; margin-top:8px; border-radius:1px;')
+        parts.append(f'  width:0; height:2px; background:{p["accent"]}; margin-top:8px; border-radius:999px;')
         if p["accent_line_glow"]:
             parts.append(f'  box-shadow:{p["accent_line_glow"]};')
         parts.append('}')
@@ -1921,7 +1924,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'  text-shadow:{p["title_glow"]};')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .ct-rule {{')
-        parts.append(f'  width:0; height:2px; background:{p["accent"]}; border-radius:1px;')
+        parts.append(f'  width:0; height:2px; background:{p["accent"]}; border-radius:999px;')
         if p["accent_line_glow"]:
             parts.append(f'  box-shadow:{p["accent_line_glow"]};')
         parts.append('}')
@@ -1938,7 +1941,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'  text-shadow:{p["title_glow"]};')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .asc-rule {{')
-        parts.append(f'  width:0; height:3px; background:{p["accent"]}; border-radius:2px;')
+        parts.append(f'  width:0; height:3px; background:{p["accent"]}; border-radius:999px;')
         if p["accent_line_glow"]:
             parts.append(f'  box-shadow:{p["accent_line_glow"]};')
         parts.append('}')
@@ -1955,7 +1958,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'  text-shadow:{p["title_glow"]};')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .sct-rule {{')
-        parts.append(f'  width:0; height:1px; background:{p["accent"]}; border-radius:1px;')
+        parts.append(f'  width:0; height:1px; background:{p["accent"]}; border-radius:999px;')
         if p["accent_line_glow"]:
             parts.append(f'  box-shadow:{p["accent_line_glow"]};')
         parts.append('}')
@@ -1979,6 +1982,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .lrs-divider {{')
         parts.append(f'  width:2px; background:{p["accent"]}; align-self:stretch; opacity:0;')
+        parts.append('  border-radius:999px; margin:4px 0;')
         if p["accent_line_glow"]:
             parts.append(f'  box-shadow:{p["accent_line_glow"]};')
         parts.append('}')
@@ -2103,7 +2107,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'  text-shadow:{p["title_glow"]};')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .bys-rule {{')
-        parts.append(f'  width:0; height:3px; background:{p["accent"]}; border-radius:2px;')
+        parts.append(f'  width:0; height:3px; background:{p["accent"]}; border-radius:999px;')
         if p["accent_line_glow"]:
             parts.append(f'  box-shadow:{p["accent_line_glow"]};')
         parts.append('}')
@@ -2665,7 +2669,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'.card[data-card-id="{card_id}"] .spc-divider {{')
         parts.append('  position:absolute; left:50%; top:0; bottom:0; width:3px;')
         parts.append(f'  background:{p["accent"]}; transform:translateX(-50%) scaleY(0);')
-        parts.append('  transform-origin:top center;')
+        parts.append('  transform-origin:top center; border-radius:999px;')
         if p.get("accent_line_glow"):
             parts.append(f'  box-shadow:{p["accent_line_glow"]};')
         parts.append('}')
@@ -2833,7 +2837,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         # Accent line: left-anchored scaleX growth via GSAP (power2.inOut)
         # Block-level with explicit width required so scaleX is not a no-op (HF rule 7).
         parts.append(f'.card[data-card-id="{card_id}"] .pcr-line {{')
-        parts.append('  display:block; height:3px; border-radius:1.5px;')
+        parts.append('  display:block; height:3px; border-radius:999px;')
         parts.append(f'  background:{p["accent"]}; width:calc(100% - 120px); max-width:480px;')
         parts.append('  opacity:0; position:relative; z-index:1;')
         parts.append('  transform-origin:left center; margin-top:22px;')
@@ -2886,7 +2890,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('}')
         # L1 — Horizon: HF rule 7 — display:block + explicit width so scaleX is non-trivial
         parts.append(f'.card[data-card-id="{card_id}"] .par-horizon {{')
-        parts.append('  display:block; height:2px; border-radius:1px;')
+        parts.append('  display:block; height:2px; border-radius:999px;')
         parts.append('  width:calc(100% - 160px); max-width:440px;')
         parts.append(f'  background:{p["accent"]}; transform-origin:center; transform:scaleX(0);')
         parts.append('  opacity:0; position:relative; z-index:1; margin-bottom:24px;')
