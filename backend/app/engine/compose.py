@@ -6960,9 +6960,11 @@ def _build_timeline_js(
                 _psc_count_dur = min(0.90, max(0.40, dur * 0.55))
                 _psc_val, _psc_auto_sfx = _safe_number(_psc_raw)
                 _psc_final_sfx = _psc_sfx_raw or _esc_js(_psc_auto_sfx)
-                # Prefix and suffix: slide up simultaneously
-                lines.append(f'  tl.fromTo(\'{_psc_pfx_sel}\', {{ opacity: 0, y: -6 }}, {{ opacity: 1, y: 0, duration: 0.280, ease: _eIn }}, {t_in:.4f});')
-                lines.append(f'  tl.fromTo(\'{_psc_sfx_sel}\', {{ opacity: 0, y: -6 }}, {{ opacity: 1, y: 0, duration: 0.280, ease: _eIn }}, {t_in:.4f});')
+                # Prefix and suffix: slide up simultaneously (only when element exists in DOM)
+                if _psc_pfx_raw:
+                    lines.append(f'  tl.fromTo(\'{_psc_pfx_sel}\', {{ opacity: 0, y: -6 }}, {{ opacity: 1, y: 0, duration: 0.280, ease: _eIn }}, {t_in:.4f});')
+                if _psc_sfx_raw:
+                    lines.append(f'  tl.fromTo(\'{_psc_sfx_sel}\', {{ opacity: 0, y: -6 }}, {{ opacity: 1, y: 0, duration: 0.280, ease: _eIn }}, {t_in:.4f});')
                 if _psc_val is not None:
                     _psc_dec = 1 if '.' in str(_psc_val) else 0
                     # Number span shows ONLY the number — suffix is in the separate .psc-side span

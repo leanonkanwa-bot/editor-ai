@@ -1912,6 +1912,37 @@ def _verify_caption_sync(
     return valid
 
 
+def _dedup_whisper_repeated_tokens(
+    words: list["WordTiming"],
+    max_gap_s: float = 0.5,
+) -> list["WordTiming"]:
+    """Drop Whisper hallucination runs: consecutive identical tokens within max_gap_s.
+
+    Whisper sometimes emits the same token 2-4x in a short window when it loses
+    confidence on noise or silence (e.g. 'a'x4, 'que'x3 at t=38-42s). The
+    signature is same normalised text, consecutive, small gap.
+    """
+    import logging as _lg
+    _log = _lg.getLogger(__name__)
+    if not words:
+        return words
+    kept: list["WordTiming"] = [words[0]]
+    dropped: list[str] = []
+    for w in words[1:]:
+        prev = kept[-1]
+        if (
+            w.text.strip().lower() == prev.text.strip().lower()
+            and (w.start - prev.end) <= max_gap_s
+        ):
+            dropped.append(f"'{w.text}'@{w.start:.3f}s")
+            continue
+        kept.append(w)
+    if dropped:
+        _log.warning("[WHISPER-DEDUP] dropped %d repeated tokens: %s", len(dropped), dropped[:20])
+        print(f"[WHISPER-DEDUP] dropped {len(dropped)} repeated tokens: {dropped[:20]}", flush=True)
+    return kept
+
+
 def _health_check(src: Path) -> None:
     """Verify render preconditions before any ffmpeg work begins."""
     import os as _os
@@ -3465,6 +3496,10 @@ def render(
     # VERIFICATION: drop caption words outside the edited video duration and log
     # any sync anomalies so mismatches are visible in server logs.
     remapped_words = _verify_caption_sync(remapped_words, total_duration)
+
+    # Deduplicate Whisper hallucination runs (same token repeated consecutively
+    # within 0.5s) before they reach ASS/GSAP rendering.
+    remapped_words = _dedup_whisper_repeated_tokens(remapped_words)
 
     # FIX 4 -- Caption sync verification
     print(f"[SYNC CHECK] Video duration: {total_duration:.3f}s")
