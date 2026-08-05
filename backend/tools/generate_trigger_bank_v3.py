@@ -20,6 +20,12 @@ import sys
 import time
 from pathlib import Path
 
+# Force UTF-8 stdout/stderr on Windows (default cp1252 can't encode accents/arrows).
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 ROOT = Path(__file__).parent.parent.parent
 
 import os
@@ -270,7 +276,7 @@ def main() -> None:
     else:
         client  = Anthropic()
         batches = [remaining[i:i+BATCH_SIZE] for i in range(0, len(remaining), BATCH_SIZE)]
-        print(f"  {len(remaining)} styles → {len(batches)} batch(es).\n", flush=True)
+        print(f"  {len(remaining)} styles -> {len(batches)} batch(es).\n", flush=True)
 
         for batch_num, batch in enumerate(batches, 1):
             print(f"Batch {batch_num}/{len(batches)}: {batch}", flush=True)
