@@ -1060,7 +1060,7 @@ RULES:
     staged as a full-screen cinematic multi-layer depth reveal on a pure black canvas.
     Three layers enter with distinct premium easings (sine.inOut / power3.out / expo.out)
     at staggered offsets — no filter:blur, depth created purely via 3D transforms.
-    BUDGET: HARD LIMIT — exactly ONE of {prim_cinematic_reveal, prim_ascension_reveal}
+    BUDGET: HARD LIMIT — exactly ONE of {{prim_cinematic_reveal, prim_ascension_reveal}}
       per video, no exceptions. These two primitives share a single "climax slot".
       If multiple moments seem to qualify, pick the single strongest by these criteria
       (in priority order):
@@ -1070,7 +1070,7 @@ RULES:
       Tiebreak between hook and payoff: ALWAYS prefer the PAYOFF — it lands with the
       accumulated weight of everything the video has built. Only choose the hook when
       its phrase is demonstrably stronger than any payoff moment in the script.
-      NEVER generate two cards from {prim_cinematic_reveal, prim_ascension_reveal} in the
+      NEVER generate two cards from {{prim_cinematic_reveal, prim_ascension_reveal}} in the
       same video. If both a conviction phrase AND a result phrase compete for this slot,
       compare their climactic weight by the criteria above.
     PLACEMENT — two valid contexts (choose based on script structure, not position):
