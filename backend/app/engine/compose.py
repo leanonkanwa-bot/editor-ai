@@ -7230,10 +7230,22 @@ def _build_timeline_js(
             # Mirror _split_title_accent(): the id="{card_id}-accent" span only exists
             # when accent_word is found in display_text (= number || title). Skip the
             # tween when the word is absent from the rendered text (avoids GSAP warning).
+            # Also skip for types with custom HTML structures that never call
+            # _split_title_accent() and therefore never generate #card-id-accent
+            # (prim_* primitives, number_hero use their own element IDs).
+            _NO_ACCENT_SPAN_TYPES = frozenset({
+                "prim_cinematic_reveal", "number_hero", "prim_stat_counter",
+                "prim_split_compare", "prim_journey_map", "prim_anecdote_frame",
+                "prim_numbered_rule",
+            })
             _aw = card.get("contentHints", {}).get("accent_word", "")
             _ch_ref = card.get("contentHints", {})
             _display_ref = _ch_ref.get("number") or _ch_ref.get("title", "")
-            _accent_in_dom = bool(_aw) and _aw.lower() in _display_ref.lower()
+            _accent_in_dom = (
+                bool(_aw)
+                and _aw.lower() in _display_ref.lower()
+                and content_style not in _NO_ACCENT_SPAN_TYPES
+            )
             if _accent_in_dom:
                 _aw_sel = f'.card[data-card-id="{card_id}"] #{card_id}-accent'
                 lines.extend(_accent_treatment(p, _aw_sel, t_in + 0.40))
