@@ -1330,9 +1330,10 @@ def run_render_phase(job_id: str, src: Path) -> None:
         print(f"[PIPELINE] job {job_id}: render semaphore acquired — starting", flush=True)
     try:
         _t_phase2 = time.perf_counter()
-        plan_data   = job.plan_data or {}
-        transcript  = job.transcript or {}
-        subject_pos = job.subject_pos
+        plan_data     = job.plan_data or {}
+        transcript    = job.transcript or {}
+        subject_pos   = job.subject_pos
+        _energy_prof  = job.energy_profile or []
         params      = job.params or {}
 
         # Disk-space guard: estimate temp file footprint before committing to
@@ -1466,6 +1467,7 @@ def run_render_phase(job_id: str, src: Path) -> None:
             filler_drops=filler_drops,
             virtual_drops=virtual_drops,
             source_words=source_words,
+            energy_profile=_energy_prof,
         )
 
         print(f"[TIMING] render: {time.perf_counter()-_t:.1f}s", flush=True)

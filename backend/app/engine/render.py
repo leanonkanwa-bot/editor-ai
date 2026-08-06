@@ -2146,6 +2146,7 @@ def _render_hyperframes(
     filler_drops: list | None = None,
     virtual_drops: list | None = None,
     source_words: list | None = None,
+    energy_profile: list | None = None,
 ) -> dict[str, Any]:
     """Full HyperFrames pipeline: pre-trim -> storyboard -> compose -> render."""
     from app.engine.pretrim import pretrim
@@ -2333,6 +2334,7 @@ def _render_hyperframes(
         language=transcript.get("language", "en"),
         style_pack=style_pack,
         subject_side=_subject_side,
+        energy_profile=energy_profile,
     )
     n_graphic = sum(1 for c in storyboard.get("cards", []) if c.get("type") != "caption")
     n_caption = sum(1 for c in storyboard.get("cards", []) if c.get("type") == "caption")
@@ -2886,6 +2888,7 @@ def render(
     filler_drops: list | None = None,
     virtual_drops: list | None = None,
     source_words: list | None = None,
+    energy_profile: list | None = None,
 ) -> dict[str, Any]:
     work_dir.mkdir(parents=True, exist_ok=True)
 
@@ -2903,6 +2906,7 @@ def render(
                 filler_drops=filler_drops,
                 virtual_drops=virtual_drops,
                 source_words=source_words,
+                energy_profile=energy_profile,
             )
         except Exception as _hf_err:
             import traceback as _tb

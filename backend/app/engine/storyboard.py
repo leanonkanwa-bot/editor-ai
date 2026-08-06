@@ -13,6 +13,7 @@ Two distinct card types in one storyboard:
 from __future__ import annotations
 
 import json
+import math
 import re
 from typing import Any
 
@@ -440,6 +441,110 @@ def _segment_captions(
     return cards
 
 
+# ── Prosodic emphasis helpers ──────────────────────────────────────────────────
+
+def _prost_median(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    s = sorted(values)
+    mid = len(s) // 2
+    return s[mid] if len(s) % 2 else (s[mid - 1] + s[mid]) / 2.0
+
+
+def _prost_std(values: list[float]) -> float:
+    if len(values) < 2:
+        return 1.0
+    mean = sum(values) / len(values)
+    return (sum((v - mean) ** 2 for v in values) / len(values)) ** 0.5
+
+
+def _compute_prosodic_scores(
+    keep_segments: list[dict],
+    transcript_words: list[dict],
+    energy_profile: list[dict],
+) -> dict[float, float]:
+    """Compute 0-1 prosodic emphasis score per keep_segment (source timeline).
+
+    Combines three signals — all zero-dependency, source-space:
+      pause_before (0.40) — gap before segment's first word vs speaker median
+      slowdown     (0.35) — avg word duration in segment vs speaker median
+      rms_delta    (0.25) — RMS level in energy window vs median (from energy_detector)
+
+    Returns {src_start: score}.
+    """
+    if not keep_segments or not transcript_words:
+        return {}
+
+    words = sorted(transcript_words, key=lambda w: float(w.get("start", 0)))
+
+    # Global baseline: median word duration
+    durs = [float(w.get("end", 0)) - float(w.get("start", 0))
+            for w in words
+            if float(w.get("end", 0)) - float(w.get("start", 0)) > 0.02]
+    if not durs:
+        return {}
+    median_word_dur = _prost_median(durs)
+
+    raw: dict[float, dict] = {}
+    for seg in keep_segments:
+        s_start = float(seg.get("start", 0))
+        s_end   = float(seg.get("end", s_start + 1))
+
+        seg_words = [w for w in words
+                     if float(w.get("start", 0)) >= s_start - 0.1
+                     and float(w.get("start", 0)) < s_end]
+        if not seg_words:
+            raw[s_start] = {"pause": 0.0, "slowdown": 1.0, "rms": None}
+            continue
+
+        # Pause before first word of this segment
+        first_ws = float(seg_words[0].get("start", s_start))
+        prev_ends = [float(w.get("end", 0)) for w in words
+                     if float(w.get("end", 0)) <= first_ws + 0.05
+                     and float(w.get("end", 0)) > first_ws - 5.0]
+        pause = max(0.0, first_ws - max(prev_ends)) if prev_ends else 0.0
+
+        # Slowdown: avg word duration in segment vs global median
+        sdurs = [float(w.get("end", 0)) - float(w.get("start", 0))
+                 for w in seg_words
+                 if float(w.get("end", 0)) - float(w.get("start", 0)) > 0.02]
+        avg_dur  = sum(sdurs) / len(sdurs) if sdurs else median_word_dur
+        slowdown = avg_dur / max(median_word_dur, 0.001)
+
+        # RMS from energy_profile 3s window covering s_start
+        rms = None
+        for ep in energy_profile:
+            ep_at  = float(ep.get("at", 0))
+            ep_dur = float(ep.get("duration", 3.0))
+            if ep_at <= s_start < ep_at + ep_dur:
+                rms = float(ep.get("rms_db", -40.0))
+                break
+
+        raw[s_start] = {"pause": pause, "slowdown": slowdown, "rms": rms}
+
+    pauses    = [v["pause"]    for v in raw.values()]
+    slowdowns = [v["slowdown"] for v in raw.values()]
+    rms_vals  = [v["rms"]      for v in raw.values() if v["rms"] is not None]
+
+    p_med, p_std = _prost_median(pauses),    _prost_std(pauses)
+    s_med, s_std = _prost_median(slowdowns), _prost_std(slowdowns)
+    r_med        = _prost_median(rms_vals) if rms_vals else -40.0
+    r_std        = _prost_std(rms_vals)    if rms_vals else 5.0
+
+    def _z(val: float, med: float, std: float) -> float:
+        return max(-2.5, min(2.5, (val - med) / max(std, 0.001)))
+
+    result: dict[float, float] = {}
+    for s_start, v in raw.items():
+        zp = _z(v["pause"],    p_med, p_std)
+        zs = _z(v["slowdown"], s_med, s_std)
+        zr = _z(v["rms"] if v["rms"] is not None else r_med, r_med, r_std)
+        combined = 0.40 * zp + 0.35 * zs + 0.25 * zr
+        result[s_start] = round(1.0 / (1.0 + math.exp(-combined)), 3)
+
+    return result
+
+
 def _generate_graphic_cards(
     trimmed_duration: float,
     script_structure: list[dict],
@@ -490,14 +595,22 @@ def _generate_graphic_cards(
         out_end = timing_map.source_to_output(src_end)
         if out_end <= out_start:
             continue
-        beat_summary.append({
+        _beat_entry: dict = {
             "beat": seg.get("beat", ""),
             "outStart": round(out_start, 2),
             "outEnd": round(out_end, 2),
             "reason": seg.get("reason", ""),
             "retention_note": seg.get("retention_note", ""),
             "score": seg.get("score", 0),
-        })
+        }
+        # Prosodic enrichment — only present when computed (zero-cost otherwise)
+        if seg.get("emphasis_score") is not None:
+            _beat_entry["emphasis_score"] = seg["emphasis_score"]
+        if seg.get("prosodic_peak"):
+            _beat_entry["prosodic_peak"] = True
+        if seg.get("energy_level"):
+            _beat_entry["energy_level"] = seg["energy_level"]
+        beat_summary.append(_beat_entry)
 
     # Remap script_structure to output timeline
     script_out = []
@@ -1673,6 +1786,23 @@ BRAND: accent color {brand_color}, content type: {content_type}, style: {editing
 
 Reply with ONLY a JSON array, no explanation."""
 
+    # Append prosodic block when signal is available (branchement fix + Option B)
+    if any(b.get("emphasis_score") is not None for b in beat_summary):
+        system_prompt += """
+
+## Prosodic signal (audio-derived — source-independent of transcript text)
+Some beats carry "emphasis_score" (0-1): computed from pause before the segment,
+speech slowdown, and RMS volume delta relative to the speaker's baseline.
+Higher = the speaker physically paused, slowed down, and spoke louder there.
+"prosodic_peak":true = strongest prosodic signal in the second half of the video.
+"energy_level":"HIGH"|"MEDIUM"|"LOW" = 3-second window energy classification.
+
+USE FOR CLIMAX CARD SELECTION (prim_cinematic_reveal / prim_ascension_reveal):
+When multiple beats satisfy the linguistic trigger conditions, prefer the beat with
+the highest emphasis_score / prosodic_peak:true. The prosodic signal confirms the
+speaker's physical emphasis — it does NOT replace linguistic requirements. Never
+assign a climax card based on prosodic_peak alone if the linguistic conditions fail."""
+
     user_msg = f"""VIDEO DURATION: {trimmed_duration:.1f}s
 
 BEAT SPINE (the narrative structure):
@@ -2132,6 +2262,7 @@ def generate_storyboard(
     language: str = "en",
     style_pack: str = "lean_glass",
     subject_side: str | None = None,
+    energy_profile: list | None = None,
 ) -> dict:
     """Generate a complete storyboard: graphic cards + caption cards.
 
@@ -2139,6 +2270,41 @@ def generate_storyboard(
     """
     width, height = (1080, 1920) if format_hint == "short" else (1920, 1080)
     layout = "portrait" if format_hint == "short" else "landscape"
+
+    # Compute prosodic emphasis scores and enrich keep_segments in-place
+    if energy_profile:
+        _scores = _compute_prosodic_scores(keep_segments, transcript_segments, energy_profile)
+        if _scores:
+            _top_score = max(_scores.values())
+            _top_start = next(k for k, v in _scores.items() if v == _top_score)
+            _half = trimmed_duration * 0.5
+            for seg in keep_segments:
+                _sc = _scores.get(seg.get("src_start", seg.get("start", -1)))
+                if _sc is not None:
+                    seg["emphasis_score"] = _sc
+                    seg["prosodic_peak"] = (
+                        _sc == _top_score and seg.get("src_start", seg.get("start")) >= _half
+                    )
+            _log_seg = next(
+                (s for s in keep_segments if s.get("src_start", s.get("start")) == _top_start),
+                None,
+            )
+            if _log_seg:
+                import logging as _lg
+                _lg.getLogger("storyboard").info(
+                    "prosodic top candidate: t=%.2f score=%.3f text=%.60s",
+                    _top_start, _top_score,
+                    _log_seg.get("text", ""),
+                )
+
+    # Attach energy_level from energy_profile to keep_segments
+    if energy_profile:
+        _ep_index = {round(e.get("start", 0), 1): e for e in energy_profile if isinstance(e, dict)}
+        for seg in keep_segments:
+            _t = round(seg.get("src_start", seg.get("start", 0)), 1)
+            _ep_entry = _ep_index.get(_t)
+            if _ep_entry and "energy_level" not in seg:
+                seg["energy_level"] = _ep_entry.get("energy_level", "MEDIUM")
 
     # Generate graphic overlay cards via Claude
     graphic_cards = _generate_graphic_cards(
