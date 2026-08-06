@@ -574,7 +574,10 @@ def _generate_graphic_cards(
     elif trimmed_duration < 180:
         base_pace = 10
     elif trimmed_duration < 600:
-        base_pace = 16
+        # Linear interpolation 10→16 across 180–600s: eliminates the hard
+        # drop at 180s (179s→18 cards vs 181s→11 cards with flat pace=16).
+        # At 300s (5 min): pace≈11.7 → ~26 cards; at 599s: pace≈16 → ~37.
+        base_pace = 10 + 6 * (trimmed_duration - 180) / 420
     elif trimmed_duration < 1800:
         # Linear interpolation 16→28 across 600–1800s: eliminates the hard
         # drop at 600s (599s→37 cards vs 601s→21 cards with flat pace=28).
