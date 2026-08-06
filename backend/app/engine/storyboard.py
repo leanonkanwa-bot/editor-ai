@@ -2293,11 +2293,11 @@ def generate_storyboard(
                 None,
             )
             if _log_seg:
-                import logging as _lg
-                _lg.getLogger("storyboard").info(
-                    "prosodic top candidate: t=%.2f score=%.3f text=%.60s",
-                    _top_start, _top_score,
-                    _log_seg.get("text", ""),
+                print(
+                    f"[PROSODIC] top candidate:"
+                    f" t={_top_start:.2f} score={_top_score:.3f}"
+                    f" text={_log_seg.get('text', '')[:60]}",
+                    flush=True,
                 )
 
     # Attach energy_level from energy_profile to keep_segments
