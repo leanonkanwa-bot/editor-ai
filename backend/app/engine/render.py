@@ -2357,6 +2357,7 @@ def _render_hyperframes(
     # kept (~96%). Override to a single full-coverage segment so the storyboard places
     # cards across 100% of the rendered content, not just the LLM-approved portion.
     _keep_segs = plan.keep_segments or []
+    _prosodic_segs = _keep_segs  # preserve original planner segments for prosodic scoring
     if timing_map.compressed_intervals is None:
         _n_before = len(_keep_segs)
         _keep_segs = [{"start": 0.0, "end": timing_map.output_duration, "beat": "", "score": 0}]
@@ -2384,6 +2385,7 @@ def _render_hyperframes(
         style_pack=style_pack,
         subject_side=_subject_side,
         energy_profile=energy_profile,
+        prosodic_keep_segments=_prosodic_segs,
     )
     n_graphic = sum(1 for c in storyboard.get("cards", []) if c.get("type") != "caption")
     n_caption = sum(1 for c in storyboard.get("cards", []) if c.get("type") == "caption")

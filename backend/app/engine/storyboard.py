@@ -2266,6 +2266,7 @@ def generate_storyboard(
     style_pack: str = "lean_glass",
     subject_side: str | None = None,
     energy_profile: list | None = None,
+    prosodic_keep_segments: list | None = None,
 ) -> dict:
     """Generate a complete storyboard: graphic cards + caption cards.
 
@@ -2274,9 +2275,18 @@ def generate_storyboard(
     width, height = (1080, 1920) if format_hint == "short" else (1920, 1080)
     layout = "portrait" if format_hint == "short" else "landscape"
 
-    # Compute prosodic emphasis scores and enrich keep_segments in-place
+    # Compute prosodic emphasis scores and enrich keep_segments in-place.
+    # Use prosodic_keep_segments when provided (original planner segments, source-time)
+    # so passthrough-mode override (1 full-coverage segment) doesn't kill the signal.
+    _segs_for_prosodic = prosodic_keep_segments if prosodic_keep_segments else keep_segments
+    # Flatten transcript_segments → individual word dicts (source time) for prosodic scoring.
+    # transcript_segments is a list of Whisper segments with nested "words"; passing segments
+    # directly would make pause/slowdown operate on segment boundaries (≈0 pause for all).
+    _transcript_words_flat = [
+        w for seg in transcript_segments for w in seg.get("words", [])
+    ]
     if energy_profile:
-        _scores = _compute_prosodic_scores(keep_segments, transcript_segments, energy_profile)
+        _scores = _compute_prosodic_scores(_segs_for_prosodic, _transcript_words_flat, energy_profile)
         if _scores:
             _top_score = max(_scores.values())
             _top_start = next(k for k, v in _scores.items() if v == _top_score)
@@ -2302,7 +2312,7 @@ def generate_storyboard(
 
     # Attach energy_level from energy_profile to keep_segments
     if energy_profile:
-        _ep_index = {round(e.get("start", 0), 1): e for e in energy_profile if isinstance(e, dict)}
+        _ep_index = {round(e.get("at", 0), 1): e for e in energy_profile if isinstance(e, dict)}
         for seg in keep_segments:
             _t = round(seg.get("src_start", seg.get("start", 0)), 1)
             _ep_entry = _ep_index.get(_t)
