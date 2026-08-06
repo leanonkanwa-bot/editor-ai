@@ -1204,6 +1204,55 @@ def _inject_speech_breath_zooms(
     return result
 
 
+def _fill_zoom_gaps_with_holds(
+    zoom_entries: list[dict],
+    total_duration: float,
+) -> list[dict]:
+    """Inject zero-delta hold entries in every uncovered time window.
+
+    Without this, the FFmpeg if(between(...)) expression falls back to
+    default_zoom (1.3) in any gap between entries — causing violent ±25%
+    scale snaps every ~3s between breath tweens in drift-gap windows.
+    Hold entries (from == to) produce no visible movement; they just keep
+    the running scale level stable so the fallback is never reached.
+    """
+    if not zoom_entries:
+        return zoom_entries
+
+    sorted_e = sorted(zoom_entries, key=lambda e: float(e.get("start", 0)))
+    holds: list[dict] = []
+    # running tracks the scale in effect at max_end_so_far.
+    # Initialised from the first entry's "from" so the pre-entry hold is seamless.
+    running = float(sorted_e[0].get("from", 1.0))
+    max_end = 0.0
+
+    first_start = float(sorted_e[0].get("start", 0))
+    if first_start > 0.001:
+        holds.append({"start": 0.0, "end": first_start,
+                      "from": running, "to": running, "kind": "hold"})
+
+    for e in sorted_e:
+        e_start = float(e.get("start", 0))
+        e_end   = float(e.get("end", e_start))
+        if e_start > max_end + 0.001:
+            holds.append({"start": max_end, "end": e_start,
+                          "from": running, "to": running, "kind": "hold"})
+        if e_end > max_end:
+            running = float(e.get("to", running))
+            max_end = e_end
+
+    if max_end < total_duration - 0.001:
+        holds.append({"start": max_end, "end": total_duration,
+                      "from": running, "to": running, "kind": "hold"})
+
+    if holds:
+        print(
+            f"[ZOOM-HOLDS] {len(holds)} hold entries — prevents default_zoom snap in {len(holds)} gap(s)",
+            flush=True,
+        )
+    return sorted(zoom_entries + holds, key=lambda e: float(e.get("start", 0)))
+
+
 def _interp_zoom_scale(t: float, zoom_entries: list[dict]) -> float:
     """Linear-interpolate the running zoom scale at output time t.
 
@@ -2434,6 +2483,10 @@ def _render_hyperframes(
         remapped_zoom.extend(_zoom_bumps)
         remapped_zoom.sort(key=lambda z: float(z.get("start", 0)))
         print(f"[ZOOM-GAP-FILL] {len(_zoom_bumps)} bump entries injected total", flush=True)
+
+    # Seal all temporal gaps with zero-delta holds so the FFmpeg if(between())
+    # expression never falls back to default_zoom (1.3) between breath tweens.
+    remapped_zoom = _fill_zoom_gaps_with_holds(remapped_zoom, timing_map.output_duration)
 
     # Stage 3+4: Compose + Render
     _t_cli = time.perf_counter()
