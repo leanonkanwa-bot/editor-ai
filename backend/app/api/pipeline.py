@@ -539,7 +539,12 @@ Si rien à couper : {{"cuts": [], "kept": []}}"""
                 )
 
         t_start = float(words[i0].get("start", 0))
-        t_end   = float(words[i1].get("end", 0))
+        # Use next word's start to absorb the inter-repetition pause into the cut.
+        t_end = (
+            float(words[i1 + 1].get("start", 0))
+            if i1 + 1 < len(words)
+            else float(words[i1].get("end", 0))
+        )
         if t_end <= t_start:
             continue
         cut_text = " ".join(str(words[k].get("text", "")).strip() for k in range(i0, i1 + 1))
