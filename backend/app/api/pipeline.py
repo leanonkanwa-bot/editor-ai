@@ -476,6 +476,22 @@ Si rien à couper : {{"cuts": [], "kept": []}}"""
             print(f"[LLM-EDIT] skip invalid indices [{i0},{i1}] (words={len(words)})", flush=True)
             continue
 
+        # LLM sometimes cuts both occurrences of "A A" — shrink to first half so last is kept.
+        if reason.startswith("repetition"):
+            _span = i1 - i0 + 1
+            if _span >= 2 and _span % 2 == 0:
+                _half = _span // 2
+                _lh = [_wn(words[i0 + k]) for k in range(_half)]
+                _rh = [_wn(words[i0 + _half + k]) for k in range(_half)]
+                if _lh == _rh and all(_lh):
+                    _orig_i1 = i1
+                    i1 = i0 + _half - 1
+                    print(
+                        f"[LLM-EDIT] DEDUP-HALVE [{i0},{_orig_i1}]→[{i0},{i1}]"
+                        f" ({_half}-word symmetric repeat, keeping last occurrence)",
+                        flush=True,
+                    )
+
         # Repetition group completeness check.
         # (a) BACKWARD: extend i0 left if the LLM missed the start of the group.
         #     Condition: word just before cut == word just after cut (symmetric).
