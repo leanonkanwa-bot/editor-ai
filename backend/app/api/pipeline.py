@@ -401,6 +401,7 @@ CONSIGNES :
 4. Répétitions rhétoriques VOLONTAIRES (3+ occurrences identiques, effet stylistique) = NE PAS TOUCHER.
 5. NE JAMAIS toucher ces extraits clés (et UNIQUEMENT ceux-ci — ne crée pas de "segment protégé" de ta propre initiative) :
 {key_lines_str}
+   → Protection CIBLÉE : seuls les mots exacts de ces extraits sont intouchables. Si un faux départ ou une répétition PRÉCÈDE ces mots dans la même phrase, tu PEUX et DOIS le couper. Ex : "La vérité, la vraie vérité, c'est que tout se joue sur la constance" → coupe "La vérité," (faux départ), garde "la vraie vérité, c'est que tout se joue sur la constance." Ne protège JAMAIS l'ensemble d'un segment sous prétexte qu'il contient une key_line — seuls les mots de la key_line elle-même sont intouchables.
 6. En cas de doute → NE PAS COUPER.
 
 Réponds UNIQUEMENT en JSON strict (aucun texte avant ni après).
