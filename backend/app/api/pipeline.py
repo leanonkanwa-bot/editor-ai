@@ -1082,9 +1082,12 @@ def run_job(
                 continue  # gap too narrow to host real speech
 
             # Skip gap if the LLM explicitly marked this zone as filler/tangent/repeat.
-            # 50ms tolerance on each side handles float rounding between plan bounds.
+            # Use overlap fraction (>50% of the gap) rather than boundary proximity so
+            # that a drop_segment starting slightly after the gap start still fires
+            # (e.g. gap=[9.48,10.90], drop=[9.62,10.90] → 90% overlap → skipped).
+            _gap_dur = _ge_c - _gs_c
             if any(
-                _fz_s <= _gs_c + 0.050 and _fz_e >= _ge_c - 0.050
+                (min(_fz_e, _ge_c) - max(_fz_s, _gs_c)) / _gap_dur > 0.50
                 for _fz_s, _fz_e in _llm_filler_zones
             ):
                 print(

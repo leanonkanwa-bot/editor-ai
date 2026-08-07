@@ -632,88 +632,55 @@ def _output_verify(
             )
 
         # ── SMART-CUT: detect first-pass-missed stutters from extra words ──
-        # Guards (all must pass to fire a cut):
-        #   1. opcode = "insert" (pure extras, not replacements)
-        #   2. block = 2–3 words (prevents single-pronoun false positives and
-        #      large-alignment cuts from inter-pass disagreement)
-        #   3. exact same word sequence found within _OV_MAX_GAP seconds and
-        #      _OV_MAX_LOOK positions — forward OR backward from the extra block
-        #      (SequenceMatcher may align the 2nd duplicate as the insert and match
-        #       the 1st with ref, so we search both directions)
-        #   4. gap between the two occurrences: 20ms–2.5s (real silence, not same token)
-        _OV_MIN_EXTRA  = 2    # require ≥2-word match to fire
-        _OV_MAX_EXTRA  = 3    # cap at 3 to avoid large alignment cuts
-        _OV_MAX_GAP    = 2.5  # max seconds between occurrences
-        _OV_MAX_LOOK   = 8    # search window (positions) in each direction
+        # Strategy: SequenceMatcher identifies WHAT tokens are extra in act vs ref
+        # (tokens in the set `extra`).  We then do a direct n-gram scan over act_words
+        # to find WHERE those tokens appear twice within _OV_MAX_GAP seconds.  This
+        # is independent of SequenceMatcher alignment (which may produce "replace"
+        # instead of "insert" opcodes when another word is simultaneously missing).
+        #
+        # Guards:
+        #   1. n-gram length 2–3 words (avoids single-token false positives)
+        #   2. at least one token in the n-gram must be in the "extra" set
+        #      (so legitimate rhetorical repetitions like "jamais jamais" are
+        #       ignored unless they also appear as extra in the alignment)
+        #   3. gap between first occurrence end and second occurrence start: 20ms–2.5s
+        _OV_MIN_EXTRA  = 2    # min n-gram length to scan
+        _OV_MAX_EXTRA  = 3    # max n-gram length
+        _OV_MAX_GAP    = 2.5  # max seconds between the two occurrences
+
+        _extra_toks_set: set[str] = set(extra)  # tokens flagged as extra by SequenceMatcher
 
         smart_cuts: list[tuple[float, float]] = []
-        for _tag, _i1, _i2, _j1, _j2 in matcher.get_opcodes():
-            if _tag != "insert":
-                continue
-            _n_extra = _j2 - _j1
-            if not (_OV_MIN_EXTRA <= _n_extra <= _OV_MAX_EXTRA):
-                continue
-            _extra_blk  = act_words_bounded[_j1:_j2]
-            _extra_toks = [_norm(_wtext(w)) for w in _extra_blk]
-            _T_extra_s  = float(getattr(_extra_blk[0],  "start", -1))
-            _T_extra_e  = float(getattr(_extra_blk[-1], "end",   -1))
-            if _T_extra_s < 0 or _T_extra_e < 0:
-                continue
-
-            # Forward search: extra is the FIRST (hesitant) occurrence; the repeat
-            # AFTER it is the kept copy.  Cut = [extra_s, repeat_s].
-            _found, _T_cut_s, _T_cut_e = False, -1.0, -1.0
-            for _k in range(_j2, min(_j2 + _OV_MAX_LOOK, len(act_words_bounded))):
-                if _norm(_wtext(act_words_bounded[_k])) != _extra_toks[0]:
-                    continue
-                _tail = [
-                    _norm(_wtext(act_words_bounded[_k + _m]))
-                    for _m in range(_n_extra)
-                    if _k + _m < len(act_words_bounded)
-                ]
-                if _tail != _extra_toks:
-                    continue
-                _T_rep = float(getattr(act_words_bounded[_k], "start", -1))
-                if _T_rep < 0:
-                    continue
-                _gap = _T_rep - _T_extra_e
-                if 0.020 < _gap <= _OV_MAX_GAP:
-                    _found, _T_cut_s, _T_cut_e = True, _T_extra_s, _T_rep
-                    break
-
-            # Backward search: SequenceMatcher matched the first (hesitant) copy with
-            # ref and marked the second (kept) copy as the insert.  Look backward for
-            # the hesitant prior occurrence; cut = [prior_s, extra_s].
-            if not _found:
-                for _k in range(_j1 - 1, max(-1, _j1 - 1 - _OV_MAX_LOOK), -1):
-                    if _norm(_wtext(act_words_bounded[_k])) != _extra_toks[0]:
-                        continue
-                    _tail = [
+        if _extra_toks_set:
+            _seen_ngrams: dict[tuple, tuple] = {}  # n-gram → (T_start, T_end)
+            for _n in range(_OV_MIN_EXTRA, _OV_MAX_EXTRA + 1):
+                _seen_ngrams.clear()
+                for _k in range(len(act_words_bounded) - _n + 1):
+                    _ngram = tuple(
                         _norm(_wtext(act_words_bounded[_k + _m]))
-                        for _m in range(_n_extra)
-                        if _k + _m < len(act_words_bounded)
-                    ]
-                    if _tail != _extra_toks:
+                        for _m in range(_n)
+                    )
+                    # Only scan n-grams that contain at least one extra token.
+                    if not any(_tok in _extra_toks_set for _tok in _ngram):
                         continue
-                    _T_prior_s = float(getattr(act_words_bounded[_k],                "start", -1))
-                    _T_prior_e = float(getattr(act_words_bounded[_k + _n_extra - 1], "end",   -1))
-                    if _T_prior_s < 0 or _T_prior_e < 0:
+                    _T_s = float(getattr(act_words_bounded[_k],           "start", -1))
+                    _T_e = float(getattr(act_words_bounded[_k + _n - 1],  "end",   -1))
+                    if _T_s < 0 or _T_e < 0:
                         continue
-                    _gap = _T_extra_s - _T_prior_e
-                    if 0.020 < _gap <= _OV_MAX_GAP:
-                        _found, _T_cut_s, _T_cut_e = True, _T_prior_s, _T_extra_s
-                        break
-
-            if not _found:
-                continue
-
-            print(
-                f"[OUTPUT-VERIFY] SMART-CUT {_extra_toks!r}"
-                f" [{_T_cut_s:.3f},{_T_cut_e:.3f}]"
-                f" gap={abs(_T_cut_e - _T_cut_s):.3f}s — queued",
-                flush=True,
-            )
-            smart_cuts.append((_T_cut_s, _T_cut_e))
+                    if _ngram in _seen_ngrams:
+                        _prev_T_s, _prev_T_e = _seen_ngrams[_ngram]
+                        _gap = _T_s - _prev_T_e
+                        if 0.020 < _gap <= _OV_MAX_GAP:
+                            print(
+                                f"[OUTPUT-VERIFY] SMART-CUT {list(_ngram)!r}"
+                                f" [{_prev_T_s:.3f},{_T_s:.3f}]"
+                                f" gap={_gap:.3f}s — queued",
+                                flush=True,
+                            )
+                            smart_cuts.append((_prev_T_s, _T_s))
+                            del _seen_ngrams[_ngram]  # prevent double-fire on same n-gram
+                            continue
+                    _seen_ngrams[_ngram] = (_T_s, _T_e)
 
         return smart_cuts
 
