@@ -741,6 +741,7 @@ def plan_edit(
         resp = _client().messages.create(
             model=settings.anthropic_model,
             max_tokens=16000,
+            temperature=0,
             system=sys_prompt,
             messages=[{"role": "user", "content": [{"type": "text", "text": msg_text}]}],
         )

@@ -422,6 +422,7 @@ Si rien à couper : {{"cuts": [], "kept": []}}"""
         response = client.messages.create(
             model=_model,
             max_tokens=1500,
+            temperature=0,
             messages=[{"role": "user", "content": prompt}],
         )
     except Exception as e:
