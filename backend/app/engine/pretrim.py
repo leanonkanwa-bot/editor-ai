@@ -1817,6 +1817,18 @@ def pretrim(
     _compressed: list[tuple[float, float]] | None = None
 
     if remapped_words:
+        # ── DIAGNOSTIC: first-pass 'il'/'faut' occurrences in output timeline ──
+        _diag_toks = {"il", "faut"}
+        _diag_hits = [
+            (re.sub(r"[^\w]", "", w.text.lower()), round(w.start, 3), round(w.end, 3))
+            for w in remapped_words
+            if re.sub(r"[^\w]", "", w.text.lower()) in _diag_toks
+        ]
+        print(
+            f"[FIRST-PASS-DIAG] 'il'/'faut' in output timeline"
+            f" ({len(_diag_hits)} hits): {_diag_hits}",
+            flush=True,
+        )
         _smart_cuts   = _smart_pause_cuts(remapped_words)
         _stutter_cuts = _acoustic_stutter_cuts(
             concat_path, remapped_words, plan.key_lines or [], work_dir
