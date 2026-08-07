@@ -636,13 +636,15 @@ def _output_verify(
         #   1. opcode = "insert" (pure extras, not replacements)
         #   2. block = 2–3 words (prevents single-pronoun false positives and
         #      large-alignment cuts from inter-pass disagreement)
-        #   3. exact same word sequence found again within _OV_MAX_GAP seconds,
-        #      within _OV_MAX_LOOK positions (= short bridge only)
+        #   3. exact same word sequence found within _OV_MAX_GAP seconds and
+        #      _OV_MAX_LOOK positions — forward OR backward from the extra block
+        #      (SequenceMatcher may align the 2nd duplicate as the insert and match
+        #       the 1st with ref, so we search both directions)
         #   4. gap between the two occurrences: 20ms–2.5s (real silence, not same token)
         _OV_MIN_EXTRA  = 2    # require ≥2-word match to fire
         _OV_MAX_EXTRA  = 3    # cap at 3 to avoid large alignment cuts
-        _OV_MAX_GAP    = 2.5  # max seconds between extra end and repeat start
-        _OV_MAX_LOOK   = 8    # search window (positions) after the extra block
+        _OV_MAX_GAP    = 2.5  # max seconds between occurrences
+        _OV_MAX_LOOK   = 8    # search window (positions) in each direction
 
         smart_cuts: list[tuple[float, float]] = []
         for _tag, _i1, _i2, _j1, _j2 in matcher.get_opcodes():
@@ -658,8 +660,9 @@ def _output_verify(
             if _T_extra_s < 0 or _T_extra_e < 0:
                 continue
 
-            # Search for exact same sequence in the _OV_MAX_LOOK positions after j2.
-            _found, _T_repeat_s = False, -1.0
+            # Forward search: extra is the FIRST (hesitant) occurrence; the repeat
+            # AFTER it is the kept copy.  Cut = [extra_s, repeat_s].
+            _found, _T_cut_s, _T_cut_e = False, -1.0, -1.0
             for _k in range(_j2, min(_j2 + _OV_MAX_LOOK, len(act_words_bounded))):
                 if _norm(_wtext(act_words_bounded[_k])) != _extra_toks[0]:
                     continue
@@ -675,19 +678,42 @@ def _output_verify(
                     continue
                 _gap = _T_rep - _T_extra_e
                 if 0.020 < _gap <= _OV_MAX_GAP:
-                    _found, _T_repeat_s = True, _T_rep
+                    _found, _T_cut_s, _T_cut_e = True, _T_extra_s, _T_rep
                     break
+
+            # Backward search: SequenceMatcher matched the first (hesitant) copy with
+            # ref and marked the second (kept) copy as the insert.  Look backward for
+            # the hesitant prior occurrence; cut = [prior_s, extra_s].
+            if not _found:
+                for _k in range(_j1 - 1, max(-1, _j1 - 1 - _OV_MAX_LOOK), -1):
+                    if _norm(_wtext(act_words_bounded[_k])) != _extra_toks[0]:
+                        continue
+                    _tail = [
+                        _norm(_wtext(act_words_bounded[_k + _m]))
+                        for _m in range(_n_extra)
+                        if _k + _m < len(act_words_bounded)
+                    ]
+                    if _tail != _extra_toks:
+                        continue
+                    _T_prior_s = float(getattr(act_words_bounded[_k],                "start", -1))
+                    _T_prior_e = float(getattr(act_words_bounded[_k + _n_extra - 1], "end",   -1))
+                    if _T_prior_s < 0 or _T_prior_e < 0:
+                        continue
+                    _gap = _T_extra_s - _T_prior_e
+                    if 0.020 < _gap <= _OV_MAX_GAP:
+                        _found, _T_cut_s, _T_cut_e = True, _T_prior_s, _T_extra_s
+                        break
 
             if not _found:
                 continue
 
             print(
                 f"[OUTPUT-VERIFY] SMART-CUT {_extra_toks!r}"
-                f" [{_T_extra_s:.3f},{_T_extra_e:.3f}]→repeat@{_T_repeat_s:.3f}s"
-                f" gap={_T_repeat_s - _T_extra_e:.3f}s — queued",
+                f" [{_T_cut_s:.3f},{_T_cut_e:.3f}]"
+                f" gap={abs(_T_cut_e - _T_cut_s):.3f}s — queued",
                 flush=True,
             )
-            smart_cuts.append((_T_extra_s, _T_repeat_s))
+            smart_cuts.append((_T_cut_s, _T_cut_e))
 
         return smart_cuts
 
@@ -1075,8 +1101,43 @@ def pretrim(
         flush=True,
     )
 
+    # ── Filler-drop boundary guard ────────────────────────────────────────────
+    # After all snapping a boundary may still land inside a filler drop zone:
+    # (a) Pre-padding pushes s_padded into the post-pad region of a preceding
+    #     filler (e.g. "Euh," post-pad 80ms → s[0]=0.300 < drop.end=0.340).
+    # (b) Word-snap moves a boundary just past a filler word end but still inside
+    #     the drop's post-pad zone (e.g. "Bah," → s[6]=26.830 < drop.end=26.96).
+    # In both cases the filler's acoustic decay is audible at the clip start.
+    # Advance start boundaries to drop.end; retreat end boundaries to drop.start.
+    _fd_guard_changed = False
+    for _pi in range(len(_planned)):
+        _i, _s_src_i, _e_i, _s_i, _e_i_pad = _planned[_pi]
+        _changed = False
+        for _fd in (filler_drops or []):
+            if _fd.start - 0.005 <= _s_i < _fd.end:
+                _new_s = _fd.end
+                print(
+                    f"[PRETRIM] filler-guard s[{_i}]: {_s_i:.3f}→{_new_s:.3f}"
+                    f" (inside drop '{_fd.reason}' [{_fd.start:.3f},{_fd.end:.3f}])",
+                    flush=True,
+                )
+                _s_i = _new_s
+                _changed = True
+            if _fd.start < _e_i_pad <= _fd.end + 0.005:
+                _new_e = _fd.start
+                print(
+                    f"[PRETRIM] filler-guard e[{_i}]: {_e_i_pad:.3f}→{_new_e:.3f}"
+                    f" (inside drop '{_fd.reason}' [{_fd.start:.3f},{_fd.end:.3f}])",
+                    flush=True,
+                )
+                _e_i_pad = _new_e
+                _changed = True
+        if _changed:
+            _planned[_pi] = (_i, _s_src_i, _e_i, _s_i, _e_i_pad)
+            _fd_guard_changed = True
+
     # Re-verify pairwise 10ms after universal snap (snap rarely creates conflict).
-    if _univ_changed:
+    if _univ_changed or _fd_guard_changed:
         for _pi in range(len(_planned) - 1):
             _i, _s_src_i, _e_i, _s_i, _e_i_pad = _planned[_pi]
             _j, _s_src_j, _e_j, _s_j, _e_j_pad = _planned[_pi + 1]
