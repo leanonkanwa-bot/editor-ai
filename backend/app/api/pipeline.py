@@ -454,13 +454,16 @@ Si rien à couper : {{"cuts": [], "kept": []}}"""
         print(f"[LLM-EDIT] JSON parse error: {e} | raw: {raw[:200]}", flush=True)
         return []
 
-    # Log "kept" items for exhaustiveness audit
+    # Log "kept" items for exhaustiveness audit.
+    # Also build a set of explicitly kept ranges for the KEPT-WINS guard below.
+    _kept_indices: set[tuple[int, int]] = set()
     for kept in data.get("kept", []):
         k_idx = kept.get("indices", [])
         k_reason = kept.get("reason", "")
         if len(k_idx) == 2:
             k0, k1 = int(k_idx[0]), int(k_idx[1])
             if 0 <= k0 <= k1 < len(words):
+                _kept_indices.add((k0, k1))
                 k_text = " ".join(str(words[k].get("text", "")).strip() for k in range(k0, k1 + 1))
                 print(f"[LLM-EDIT] kept [{k0},{k1}] text={k_text!r} reason={k_reason!r}", flush=True)
 
@@ -475,6 +478,15 @@ Si rien à couper : {{"cuts": [], "kept": []}}"""
         i0, i1 = int(idx[0]), int(idx[1])
         if i0 < 0 or i1 >= len(words) or i0 > i1:
             print(f"[LLM-EDIT] skip invalid indices [{i0},{i1}] (words={len(words)})", flush=True)
+            continue
+        # KEPT-WINS: LLM emitted both kept[i0,i1] and cut[i0,i1] — kept takes priority.
+        # Prevents rhetorical/stylistic sequences from being cut despite a contradictory
+        # cut entry in the same response (Haiku sometimes emits both simultaneously).
+        if (i0, i1) in _kept_indices:
+            print(
+                f"[LLM-EDIT] KEPT-WINS [{i0},{i1}] — cut suppressed (conflict with kept entry)",
+                flush=True,
+            )
             continue
 
         # LLM sometimes cuts both occurrences of "A A" — shrink to first half so last is kept.

@@ -903,13 +903,24 @@ def pretrim(
                     # s is inside a word
                     _bd_pt = ws if (_s_j - ws < we - _s_j) else we
                     break
-            _gap_pt = _bd_pt if _bd_pt is not None else (_e_i_pad + _s_j) / 2.0
-            _planned[_pi]     = (_i, _s_src_i, _e_i, _s_i, _gap_pt)
-            _planned[_pi + 1] = (_j, _s_src_j, _e_j, _gap_pt, _e_j_pad)
+            _gap_pt_e = _bd_pt if _bd_pt is not None else (_e_i_pad + _s_j) / 2.0
+            # Advance s[j] to the next word START after _gap_pt_e (within 100ms).
+            # When the FALLBACK boundary lands in the inter-word silence just before
+            # a speech onset, starting the next segment AT that onset rather than in
+            # the pre-onset silence prevents AAC codec artifacts at the concat join.
+            _gap_pt_s = _gap_pt_e
+            for _nws, _nwe in _wt:
+                if _nws > _gap_pt_e + 0.005 and _nwe - _nws >= 0.030:
+                    if _nws - _gap_pt_e <= 0.100:
+                        _gap_pt_s = _nws
+                    break
+            _planned[_pi]     = (_i, _s_src_i, _e_i, _s_i, _gap_pt_e)
+            _planned[_pi + 1] = (_j, _s_src_j, _e_j, _gap_pt_s, _e_j_pad)
             _resolved.add(_pi)
+            _fb_suffix = f" onset-advance s→{_gap_pt_s:.3f}" if _gap_pt_s > _gap_pt_e else " contiguous"
             print(
                 f"[PRETRIM] stabilize FALLBACK seg[{_i}]/seg[{_j}]:"
-                f" e=s={_gap_pt:.3f} (contiguous — word wins)",
+                f" e={_gap_pt_e:.3f} s={_gap_pt_s:.3f} ({_fb_suffix.strip()})",
                 flush=True,
             )
 
