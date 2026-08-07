@@ -1064,12 +1064,35 @@ def run_job(
         )
         _repeated_vocab = {t for t, c in _src_word_counts.items() if c > 1}
 
+        # Build LLM-filler zone list: gaps the LLM explicitly marked as filler/
+        # tangent/repeat must NOT be rescued — the editorial intent was to cut them.
+        # These timestamps are in the same compressed space as keep_segments.
+        _llm_filler_zones: list[tuple[float, float]] = [
+            (float(_ds["start"]), float(_ds["end"]))
+            for _ds in plan.raw.get("drop_segments", [])
+            if str(_ds.get("reason", "")).lower() in {"filler", "tangent", "repeat"}
+        ]
+
         _n_rescued = 0
         for _gi in range(len(_keep_raw) - 1):
             _gs_c = float(_keep_raw[_gi].get("end", 0))
             _ge_c = float(_keep_raw[_gi + 1].get("start", 0))
             if _ge_c <= _gs_c + 0.050:
                 continue  # gap too narrow to host real speech
+
+            # Skip gap if the LLM explicitly marked this zone as filler/tangent/repeat.
+            # 50ms tolerance on each side handles float rounding between plan bounds.
+            if any(
+                _fz_s <= _gs_c + 0.050 and _fz_e >= _ge_c - 0.050
+                for _fz_s, _fz_e in _llm_filler_zones
+            ):
+                print(
+                    f"[GAP-RESCUE] gap-{_gi} [{_gs_c:.2f},{_ge_c:.2f}] skipped"
+                    f" — LLM-marked filler zone",
+                    flush=True,
+                )
+                continue
+
             _gs_src, _gs_off = _c2s_diag(_gs_c)
             _ge_src, _ge_off = _c2s_diag(_ge_c)
 
