@@ -1097,16 +1097,22 @@ def run_job(
             _wtxt = " ".join(str(w.get("text", "")).strip() for w in _gap_uncov[:8])
             _last_w_end_src = float(_gap_uncov[-1].get("end", 0)) + 0.150
             _new_end_c = _gs_c + (_last_w_end_src - _gs_src)
-            _new_end_c = min(_new_end_c, _ge_c - 0.010, _next_first_c - 0.010)
+            # Hard source-space cap: extension must never reach the next segment's
+            # source start (_ge_src).  In a gap, src delta == compressed delta, so
+            # this translates directly back to a compressed ceiling.
+            _src_cap_c = _gs_c + (_ge_src - 0.010 - _gs_src)
+            _new_end_c = min(_new_end_c, _ge_c - 0.010, _next_first_c - 0.010, _src_cap_c)
             if _new_end_c <= _gs_c + 0.050:
                 continue
 
+            _actual_src_end = _gs_src + (_new_end_c - _gs_c)  # clamped source end
             _keep_raw[_gi]["end"] = round(_new_end_c, 3)
             _n_rescued += 1
             print(
                 f"[GAP-RESCUE] gap-{_gi} extended seg[{_gi}].end"
                 f" {_gs_c:.2f}->{_new_end_c:.2f}"
-                f" (src {_gs_src:.2f}->{_last_w_end_src:.2f}): '{_wtxt}'",
+                f" (src {_gs_src:.2f}->{_actual_src_end:.2f}): '{_wtxt}'"
+                f" [next-seg src={_ge_src:.2f}]",
                 flush=True,
             )
             # Fix 6: flag repeated words being rescued so we can trace occurrences
