@@ -677,7 +677,7 @@ def _output_verify(
                                 f" gap={_gap:.3f}s — queued",
                                 flush=True,
                             )
-                            smart_cuts.append((_prev_T_s, _T_s))
+                            smart_cuts.append((max(0.0, _prev_T_s - 0.100), _T_s))
                             del _seen_ngrams[_ngram]  # prevent double-fire on same n-gram
                             continue
                     _seen_ngrams[_ngram] = (_T_s, _T_e)
@@ -817,7 +817,9 @@ def pretrim(
         # so that speech in the gap is included rather than silently abandoned.
         for _fd in (filler_drops or []):
             if _fd.end < s and _fd.end + 0.500 >= s_padded:
-                _sp_adj = min(s_padded, _fd.end + 0.020)
+                # +0.050 (was +0.020): leaves 50ms acoustic-tail clearance after
+                # filler drop end; prevents liar-gap from pulling start into tail zone.
+                _sp_adj = min(s_padded, _fd.end + 0.050)
                 if _sp_adj < s_padded:
                     print(
                         f"[PRETRIM] seg[{i}] s_padded {s_padded:.3f}→{_sp_adj:.3f}"
