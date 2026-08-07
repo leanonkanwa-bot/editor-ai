@@ -520,11 +520,15 @@ def _output_verify(
     video_path: Path,
     expected_words: list,  # list[WordTiming]
     work_dir: Path,
-) -> None:
-    """Re-transcribe video_path and compare to expected_words. Controlled by VERIFY_OUTPUT env var."""
+) -> list[tuple[float, float]]:
+    """Re-transcribe video_path and compare to expected_words. Controlled by VERIFY_OUTPUT env var.
+
+    Returns a list of (start, end) output-timeline cut ranges for confirmed stutter
+    repetitions detected in the second-pass transcript but missed by the first-pass ASR.
+    """
     import os, re, difflib
     if os.environ.get("VERIFY_OUTPUT", "true").strip().lower() in ("false", "0", "no"):
-        return
+        return []
 
     # Hallucination patterns Whisper generates on silence (FR + EN).
     # Token must match exactly after _norm() — add more as discovered.
@@ -626,8 +630,70 @@ def _output_verify(
                 f" | extra({len(extra)}): {extra[:10]}{_unc}",
                 flush=True,
             )
+
+        # ── SMART-CUT: detect first-pass-missed stutters from extra words ──
+        # Guards (all must pass to fire a cut):
+        #   1. opcode = "insert" (pure extras, not replacements)
+        #   2. block = 2–3 words (prevents single-pronoun false positives and
+        #      large-alignment cuts from inter-pass disagreement)
+        #   3. exact same word sequence found again within _OV_MAX_GAP seconds,
+        #      within _OV_MAX_LOOK positions (= short bridge only)
+        #   4. gap between the two occurrences: 20ms–2.5s (real silence, not same token)
+        _OV_MIN_EXTRA  = 2    # require ≥2-word match to fire
+        _OV_MAX_EXTRA  = 3    # cap at 3 to avoid large alignment cuts
+        _OV_MAX_GAP    = 2.5  # max seconds between extra end and repeat start
+        _OV_MAX_LOOK   = 8    # search window (positions) after the extra block
+
+        smart_cuts: list[tuple[float, float]] = []
+        for _tag, _i1, _i2, _j1, _j2 in matcher.get_opcodes():
+            if _tag != "insert":
+                continue
+            _n_extra = _j2 - _j1
+            if not (_OV_MIN_EXTRA <= _n_extra <= _OV_MAX_EXTRA):
+                continue
+            _extra_blk  = act_words_bounded[_j1:_j2]
+            _extra_toks = [_norm(_wtext(w)) for w in _extra_blk]
+            _T_extra_s  = float(getattr(_extra_blk[0],  "start", -1))
+            _T_extra_e  = float(getattr(_extra_blk[-1], "end",   -1))
+            if _T_extra_s < 0 or _T_extra_e < 0:
+                continue
+
+            # Search for exact same sequence in the _OV_MAX_LOOK positions after j2.
+            _found, _T_repeat_s = False, -1.0
+            for _k in range(_j2, min(_j2 + _OV_MAX_LOOK, len(act_words_bounded))):
+                if _norm(_wtext(act_words_bounded[_k])) != _extra_toks[0]:
+                    continue
+                _tail = [
+                    _norm(_wtext(act_words_bounded[_k + _m]))
+                    for _m in range(_n_extra)
+                    if _k + _m < len(act_words_bounded)
+                ]
+                if _tail != _extra_toks:
+                    continue
+                _T_rep = float(getattr(act_words_bounded[_k], "start", -1))
+                if _T_rep < 0:
+                    continue
+                _gap = _T_rep - _T_extra_e
+                if 0.020 < _gap <= _OV_MAX_GAP:
+                    _found, _T_repeat_s = True, _T_rep
+                    break
+
+            if not _found:
+                continue
+
+            print(
+                f"[OUTPUT-VERIFY] SMART-CUT {_extra_toks!r}"
+                f" [{_T_extra_s:.3f},{_T_extra_e:.3f}]→repeat@{_T_repeat_s:.3f}s"
+                f" gap={_T_repeat_s - _T_extra_e:.3f}s — queued",
+                flush=True,
+            )
+            smart_cuts.append((_T_extra_s, _T_repeat_s))
+
+        return smart_cuts
+
     except Exception as _e:
         print(f"[OUTPUT-VERIFY] ERROR — {_e}", flush=True)
+        return []
 
 
 def pretrim(
@@ -1680,7 +1746,7 @@ def pretrim(
             flush=True,
         )
 
-    _output_verify(concat_path, remapped_words, work_dir)
+    _verify_cuts = _output_verify(concat_path, remapped_words, work_dir)
 
     # Post-render word accounting — belt-and-suspenders after pre-render repair.
     # Only checks inter-segment gap words (pre/post-plan exclusions are OK).
@@ -1727,7 +1793,7 @@ def pretrim(
         )
         # Merge and sort all micro-cuts; de-overlap adjacent/overlapping intervals.
         _all_cuts: list[tuple[float, float]] = sorted(
-            _smart_cuts + _stutter_cuts, key=lambda c: c[0]
+            _smart_cuts + _stutter_cuts + _verify_cuts, key=lambda c: c[0]
         )
         _merged_cuts: list[tuple[float, float]] = []
         for _cs, _ce in _all_cuts:
