@@ -1590,10 +1590,25 @@ def pretrim(
             if si_end - si_start < 0.05:
                 continue
             sub_part = work_dir / f"trim_{i:04d}_{j:02d}.mp4"
-            # 4ms audio fade-in on every sub-part after the first to prevent
-            # the click that results from a hard cut into a new sub-interval.
+            # Fade-in after filler cut boundaries:
+            # • j>0  — always 40ms: kills acoustic tail from the excised filler word
+            # • j==0 near a drop end (≤100ms) — 40ms: segment starts flush after a
+            #   filler drop (e.g. "Euh," drop.end=0.340, s[0]=0.380 → 40ms gap)
+            # • j==0 elsewhere — 0ms: normal segment start, no click risk
+            _near_drop = j == 0 and any(
+                abs(si_start - _ffdr.end) < 0.100
+                for _ffdr in (filler_drops or [])
+            )
+            if _near_drop:
+                print(
+                    f"[PRETRIM] filler-fadein seg[{i}] j=0:"
+                    f" s={si_start:.3f} ≤100ms from drop end → 40ms fade-in",
+                    flush=True,
+                )
+            _fade_dur = 0.040 if (j > 0 or _near_drop) else 0.0
             audio_args = (
-                ["-af", "afade=t=in:st=0:d=0.004"] if j > 0 else []
+                ["-af", f"afade=t=in:st=0:d={_fade_dur:.3f}"]
+                if _fade_dur > 0 else []
             )
             _sub_venc = (
                 ["-c:v", "libx265", "-x265-params", "log-level=error",
