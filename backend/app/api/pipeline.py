@@ -490,6 +490,47 @@ Si rien à couper : {{"cuts": [], "kept": []}}"""
             )
             continue
 
+        # RHETORICAL-TRIPLE guard: if the span starts a phrase repeated ≥3 times
+        # consecutively in context (lookahead 12 words past i1), the repetition is
+        # a deliberate stylistic device — block the cut unconditionally.
+        # Single-occurrence French function words (stutters) are exempted.
+        # Example: "Répète après moi" × 3 must never be removed even though
+        # reason="repetition" — the LLM itself stated it as "× 3" but still cut it.
+        if reason.startswith("repetition"):
+            _FUNC_FR = {
+                "il", "elle", "ils", "elles", "je", "tu", "nous", "vous",
+                "le", "la", "les", "un", "une", "des", "de", "du", "en", "y", "on",
+                "et", "ou", "mais", "donc", "or", "ni", "car", "que", "qui", "quoi",
+            }
+            _ctx_end = min(len(words) - 1, i1 + 12)
+            _rhet_ngram: tuple | None = None
+            _rhet_cnt = 0
+            for _n in range(1, 5):
+                if i0 + _n - 1 > i1:
+                    break
+                _gram = tuple(_wn(words[i0 + _k]) for _k in range(_n))
+                if not all(_gram):
+                    continue
+                if _n == 1 and _gram[0] in _FUNC_FR:
+                    continue  # single function-word repeat → stutter, not rhetoric
+                _cnt, _pos = 0, i0
+                while _pos + _n - 1 <= _ctx_end:
+                    if tuple(_wn(words[_pos + _k]) for _k in range(_n)) == _gram:
+                        _cnt += 1
+                        _pos += _n
+                    else:
+                        break
+                if _cnt >= 3:
+                    _rhet_ngram, _rhet_cnt = _gram, _cnt
+                    break
+            if _rhet_ngram:
+                print(
+                    f"[LLM-EDIT] RHETORICAL-TRIPLE [{i0},{i1}]"
+                    f" — {_rhet_cnt}× {list(_rhet_ngram)!r} — cut suppressed",
+                    flush=True,
+                )
+                continue
+
         # LLM sometimes cuts both occurrences of "A A" — shrink to first half so last is kept.
         if reason.startswith("repetition"):
             _span = i1 - i0 + 1
