@@ -620,6 +620,9 @@ Si rien à couper : {{"cuts": [], "kept": []}}"""
         # lands at words[i1].end with no room for the acoustic tail. Extend 60ms
         # into the next word so the tail falls inside the drop rather than bleeding
         # into the next sub-part. Clamped to keep ≥60ms of the next word intact.
+        # _rep_tail_ext: partial interval of the next word that the pad eats into,
+        # added to target_intervals below so word_safe treats it as intentional.
+        _rep_tail_ext: "tuple[float, float] | None" = None
         if reason.startswith("repetition") and i1 + 1 < len(words):
             _word_i1_end = float(words[i1].get("end", 0))
             _gap = t_end - _word_i1_end
@@ -636,6 +639,7 @@ Si rien à couper : {{"cuts": [], "kept": []}}"""
                         flush=True,
                     )
                     t_end = _new_t_end
+                    _rep_tail_ext = (float(words[i1 + 1].get("start", 0)), _new_t_end)
         if t_end <= t_start:
             continue
         cut_text = " ".join(str(words[k].get("text", "")).strip() for k in range(i0, i1 + 1))
@@ -646,10 +650,14 @@ Si rien à couper : {{"cuts": [], "kept": []}}"""
         )
         # target_intervals: the exact word spans being cut so word_safe
         # treats them as intentional targets, not collateral bystanders.
+        # When REP-TAIL-PAD fired, include the partial next-word interval so
+        # word_safe doesn't see the tail-pad extension as a collateral cut.
         _target_ivs = tuple(
             (float(words[k].get("start", 0)), float(words[k].get("end", 0)))
             for k in range(i0, i1 + 1)
         )
+        if _rep_tail_ext is not None:
+            _target_ivs = _target_ivs + (_rep_tail_ext,)
         _pending_drops.append((
             i0, i1, reason,
             _DS(start=t_start, end=t_end, reason=f"llm_{reason}",
