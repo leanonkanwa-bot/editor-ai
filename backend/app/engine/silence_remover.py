@@ -59,7 +59,11 @@ def _is_filler(word: str) -> bool:
 _FILLER_PAUSE_GUARD_PRE  = 0.08   # seconds gap required before the filler (down from 0.20)
 _FILLER_PAUSE_GUARD_POST = 0.08   # seconds gap required after the filler (down from 0.15)
 _FILLER_GLUED_GUARD      = 0.030  # minimum post_gap — below this, next word is too close to cut safely
-_FILLER_CUT_PAD          = 0.080  # seconds padding around filler cut (up from 0.040, covers Whisper ±50ms)
+_FILLER_CUT_PAD          = 0.080  # seconds pre-filler padding (Whisper ±50ms error + margin)
+_FILLER_CUT_PAD_POST     = 0.160  # seconds post-filler padding — covers long vowel tails (Euh/Bah
+                                  # acoustic decay ≤150ms past Whisper word.end); deliberately larger
+                                  # than pre so the tail falls inside the dropped zone rather than
+                                  # bleeding into the next clip where fade-in only partially masks it.
 _FILLER_ZERO_GAP         = 0.005  # < 5ms = effectively 0 — filler is glued to adjacent word
 _MIN_WORD_DUR_S          = 0.030  # words shorter than this are Whisper artifacts, not speech
 
@@ -338,8 +342,8 @@ class RhythmAwareSilenceRemover:
                 cut_start = words[i - 1][2]   # prev_word.end — exact acoustic boundary
             else:
                 cut_start = max(start - _FILLER_CUT_PAD, words[i - 1][2] if i > 0 else 0.0)
-            cut_end   = min(end + _FILLER_CUT_PAD,
-                            words[i + 1][1] if i < len(words) - 1 else end + _FILLER_CUT_PAD)
+            cut_end   = min(end + _FILLER_CUT_PAD_POST,
+                            words[i + 1][1] if i < len(words) - 1 else end + _FILLER_CUT_PAD_POST)
             _pre_pad  = start - cut_start
             _post_pad = cut_end - end
 
