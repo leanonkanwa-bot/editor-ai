@@ -616,6 +616,26 @@ Si rien à couper : {{"cuts": [], "kept": []}}"""
             if i1 + 1 < len(words)
             else float(words[i1].get("end", 0))
         )
+        # REP-TAIL-PAD: when Whisper reports adjacent words (gap < 50ms), t_end
+        # lands at words[i1].end with no room for the acoustic tail. Extend 60ms
+        # into the next word so the tail falls inside the drop rather than bleeding
+        # into the next sub-part. Clamped to keep ≥60ms of the next word intact.
+        if reason.startswith("repetition") and i1 + 1 < len(words):
+            _word_i1_end = float(words[i1].get("end", 0))
+            _gap = t_end - _word_i1_end
+            if _gap < 0.050:
+                _next_word_end = float(words[i1 + 1].get("end", 0))
+                _tail_target = _word_i1_end + 0.060
+                _safe_limit = max(_next_word_end - 0.060, t_end)
+                _new_t_end = min(max(t_end, _tail_target), _safe_limit)
+                if _new_t_end > t_end:
+                    print(
+                        f"[LLM-EDIT] REP-TAIL-PAD [{i0},{i1}]"
+                        f" t_end {t_end:.3f}→{_new_t_end:.3f}"
+                        f" gap={_gap*1000:.0f}ms next_word={words[i1+1].get('text','?')!r}",
+                        flush=True,
+                    )
+                    t_end = _new_t_end
         if t_end <= t_start:
             continue
         cut_text = " ".join(str(words[k].get("text", "")).strip() for k in range(i0, i1 + 1))

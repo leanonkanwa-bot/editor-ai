@@ -1607,14 +1607,14 @@ def pretrim(
             )
             if _near_drop:
                 _kind = "anti-pop (word at boundary)" if _at_word_start else "tail-cover"
-                _fd_ms = 10 if _at_word_start else 80
+                _fd_ms = 25 if _at_word_start else 80
                 print(
                     f"[PRETRIM] filler-fadein seg[{i}] j=0:"
                     f" s={si_start:.3f} ≤100ms from drop end → {_fd_ms}ms {_kind}",
                     flush=True,
                 )
             _fade_dur = (
-                0.010 if (_near_drop and _at_word_start) else
+                0.025 if (_near_drop and _at_word_start) else
                 0.080 if (j > 0 or _near_drop) else
                 0.0
             )
