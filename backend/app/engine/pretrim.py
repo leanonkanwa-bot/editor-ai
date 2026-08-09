@@ -1591,23 +1591,33 @@ def pretrim(
                 continue
             sub_part = work_dir / f"trim_{i:04d}_{j:02d}.mp4"
             # Fade-in after filler cut boundaries:
-            # • j>0  — always 80ms: kills acoustic tail from the excised filler word
-            # • j==0 near a drop end (≤100ms) — 80ms: segment starts flush after a
-            #   filler drop (e.g. "Euh," drop.end=0.340, s[0]=0.380 → 80ms gap)
-            #   80ms (up from 40ms) covers tail lengths up to ~70ms reliably across
-            #   runs with non-deterministic plan edges.
-            # • j==0 elsewhere — 0ms: normal segment start, no click risk
+            # • j>0  — 80ms: kills acoustic tail from an intra-segment dropped filler
+            # • j==0 near a drop end (≤100ms), NOT at a word start — 80ms: gap of
+            #   silence exists between drop.end and next word; fade covers the tail
+            # • j==0 near a drop end, AT a word start (≤25ms) — 10ms anti-pop only:
+            #   post-pad was clamped by next_word.start → tail is fully in the drop;
+            #   80ms would fade-in the first word itself and sound muted
+            # • j==0 elsewhere — 0ms: normal segment start
             _near_drop = j == 0 and any(
                 abs(si_start - _ffdr.end) < 0.100
                 for _ffdr in (filler_drops or [])
             )
+            _at_word_start = _near_drop and any(
+                abs(si_start - w[0]) < 0.025 for w in _wt
+            )
             if _near_drop:
+                _kind = "anti-pop (word at boundary)" if _at_word_start else "tail-cover"
+                _fd_ms = 10 if _at_word_start else 80
                 print(
                     f"[PRETRIM] filler-fadein seg[{i}] j=0:"
-                    f" s={si_start:.3f} ≤100ms from drop end → 80ms fade-in",
+                    f" s={si_start:.3f} ≤100ms from drop end → {_fd_ms}ms {_kind}",
                     flush=True,
                 )
-            _fade_dur = 0.080 if (j > 0 or _near_drop) else 0.0
+            _fade_dur = (
+                0.010 if (_near_drop and _at_word_start) else
+                0.080 if (j > 0 or _near_drop) else
+                0.0
+            )
             audio_args = (
                 ["-af", f"afade=t=in:st=0:d={_fade_dur:.3f}"]
                 if _fade_dur > 0 else []
