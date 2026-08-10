@@ -1633,10 +1633,22 @@ def pretrim(
                 0.080 if (j > 0 or _near_drop) else
                 0.0
             )
-            audio_args = (
-                ["-af", f"afade=t=in:st=0:d={_fade_dur:.3f}"]
-                if _fade_dur > 0 else []
-            )
+            # Crossfade: fade-out the end of every non-final sub-part so the
+            # cut boundary before the drop zone also softens (fade-out → gap
+            # → fade-in = soft crossfade that masks the junction on both sides).
+            _is_last_sub = (j == len(sub_intervals) - 1)
+            _sub_dur = si_end - si_start
+            _fadeout_dur = 0.040 if (not _is_last_sub and _sub_dur > 0.120) else 0.0
+            _fadeout_start = _sub_dur - _fadeout_dur
+
+            _af_filters: list[str] = []
+            if _fade_dur > 0:
+                _af_filters.append(f"afade=t=in:st=0:d={_fade_dur:.3f}")
+            if _fadeout_dur > 0:
+                _af_filters.append(
+                    f"afade=t=out:st={_fadeout_start:.3f}:d={_fadeout_dur:.3f}"
+                )
+            audio_args = ["-af", ",".join(_af_filters)] if _af_filters else []
             _sub_venc = (
                 ["-c:v", "libx265", "-x265-params", "log-level=error",
                  "-preset", "ultrafast", "-crf", "18", "-pix_fmt", "yuv420p10le"]
