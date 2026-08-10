@@ -689,6 +689,49 @@ def _output_verify(
         return []
 
 
+# ── Junction fade helpers ────────────────────────────────────────────────────
+_TAIL_BUDGET_MS = 60.0
+_ONSET_CLASS_MAP: dict[str, str] = {
+    **{c: "fric" for c in "fvszcj"},
+    **{c: "stop" for c in "tpkbdg"},
+    **{c: "vowel" for c in "aeiouéèêàùûîôœæ"},
+}
+_ONSET_FADE_MS: dict[str, float] = {"fric": 5.0, "stop": 10.0, "vowel": 15.0}
+
+
+def _word_text_at(t: float, all_words: list) -> str:
+    """Word whose start is nearest to t within 80ms."""
+    best: Any = None
+    best_d = 0.080
+    for w in all_words:
+        d = abs(float(w.get("start", 0)) - t)
+        if d < best_d:
+            best_d, best = d, w
+    return str(best.get("text", "a")) if best else "a"
+
+
+def _effective_gap_ms(si_start: float, drop: DropSegment, all_words: list) -> float:
+    """Gap (ms) from last dropped word's acoustic tail to si_start."""
+    last_end = drop.start
+    for w in all_words:
+        ws, we = float(w.get("start", 0)), float(w.get("end", 0))
+        if drop.start - 0.050 <= ws and we <= drop.end + 0.020:
+            if we > last_end:
+                last_end = we
+    return max(0.0, (si_start - last_end) * 1000.0)
+
+
+def _junction_fade_ms(gap_ms: float, word_text: str) -> float:
+    """Fade-in (ms) at a cut junction: onset floor + tail-bleed cover, capped 40ms."""
+    tail_bleed = max(0.0, _TAIL_BUDGET_MS - gap_ms)
+    fc = (word_text.lstrip("'\"").lower() or "a")[0]
+    onset_ms = _ONSET_FADE_MS.get(_ONSET_CLASS_MAP.get(fc), 10.0)
+    return max(onset_ms, min(tail_bleed, 40.0))
+
+
+# ── End junction fade helpers ────────────────────────────────────────────────
+
+
 def pretrim(
     src: Path,
     transcript: dict[str, Any],
@@ -1605,34 +1648,27 @@ def pretrim(
             if si_end - si_start < 0.05:
                 continue
             sub_part = work_dir / f"trim_{i:04d}_{j:02d}.mp4"
-            # Fade-in after filler cut boundaries:
-            # • j>0  — 80ms: kills acoustic tail from an intra-segment dropped filler
-            # • j==0 near a drop end (≤100ms), NOT at a word start — 80ms: gap of
-            #   silence exists between drop.end and next word; fade covers the tail
-            # • j==0 near a drop end, AT a word start (≤25ms) — 10ms anti-pop only:
-            #   post-pad was clamped by next_word.start → tail is fully in the drop;
-            #   80ms would fade-in the first word itself and sound muted
-            # • j==0 elsewhere — 0ms: normal segment start
-            _near_drop = j == 0 and any(
-                abs(si_start - _ffdr.end) < 0.100
-                for _ffdr in (filler_drops or [])
-            )
-            _at_word_start = _near_drop and any(
-                abs(si_start - w[0]) < 0.025 for w in _wt
-            )
-            if _near_drop:
-                _kind = "anti-pop (word at boundary)" if _at_word_start else "tail-cover"
-                _fd_ms = 10 if _at_word_start else 80
+            _covering_drop: DropSegment | None = None
+            if filler_drops:
+                _near = [fd for fd in filler_drops if abs(si_start - fd.end) < 0.200]
+                if _near:
+                    _covering_drop = min(_near, key=lambda fd: abs(si_start - fd.end))
+            if _covering_drop is not None:
+                _gap_ms = _effective_gap_ms(si_start, _covering_drop, all_words)
+                _next_wtext = _word_text_at(si_start, all_words)
+                _fade_ms = _junction_fade_ms(_gap_ms, _next_wtext)
+                _fade_dur = _fade_ms / 1000.0
+                _onset_cls = _ONSET_CLASS_MAP.get(
+                    (_next_wtext.lstrip("'\"").lower() or "a")[0], "son"
+                )
                 print(
-                    f"[PRETRIM] filler-fadein seg[{i}] j=0:"
-                    f" s={si_start:.3f} ≤100ms from drop end → {_fd_ms}ms {_kind}",
+                    f"[PRETRIM] junction-fade seg[{i}] j={j}:"
+                    f" s={si_start:.3f} gap={_gap_ms:.0f}ms"
+                    f" word={_next_wtext!r}({_onset_cls}) → {_fade_ms:.0f}ms",
                     flush=True,
                 )
-            _fade_dur = (
-                0.010 if (_near_drop and _at_word_start) else
-                0.080 if (j > 0 or _near_drop) else
-                0.0
-            )
+            else:
+                _fade_dur = 0.0
             # Fade-out on non-final sub-parts disabled: sub-parts always end
             # at a word boundary, so a 40ms fade-out systematically clips the
             # final phoneme of the last word before the drop (e.g. "gens" → "gen").
