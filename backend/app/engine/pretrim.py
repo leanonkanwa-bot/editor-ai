@@ -1622,23 +1622,25 @@ def pretrim(
             )
             if _near_drop:
                 _kind = "anti-pop (word at boundary)" if _at_word_start else "tail-cover"
-                _fd_ms = 25 if _at_word_start else 80
+                _fd_ms = 10 if _at_word_start else 80
                 print(
                     f"[PRETRIM] filler-fadein seg[{i}] j=0:"
                     f" s={si_start:.3f} ≤100ms from drop end → {_fd_ms}ms {_kind}",
                     flush=True,
                 )
             _fade_dur = (
-                0.025 if (_near_drop and _at_word_start) else
+                0.010 if (_near_drop and _at_word_start) else
                 0.080 if (j > 0 or _near_drop) else
                 0.0
             )
             # Crossfade: fade-out the end of every non-final sub-part so the
             # cut boundary before the drop zone also softens (fade-out → gap
             # → fade-in = soft crossfade that masks the junction on both sides).
+            # Threshold 0.300s: short acoustic-tail sub-parts (<300ms) don't
+            # benefit from fade-out and it makes the resonance more prominent.
             _is_last_sub = (j == len(sub_intervals) - 1)
             _sub_dur = si_end - si_start
-            _fadeout_dur = 0.040 if (not _is_last_sub and _sub_dur > 0.120) else 0.0
+            _fadeout_dur = 0.040 if (not _is_last_sub and _sub_dur > 0.300) else 0.0
             _fadeout_start = _sub_dur - _fadeout_dur
 
             _af_filters: list[str] = []

@@ -628,10 +628,17 @@ Si rien à couper : {{"cuts": [], "kept": []}}"""
             _word_i1_end = float(words[i1].get("end", 0))
             _gap = t_end - _word_i1_end
             if _gap < 0.050:
+                _next_word_start = float(words[i1 + 1].get("start", 0))
                 _next_word_end = float(words[i1 + 1].get("end", 0))
                 _tail_target = _word_i1_end + 0.060
                 _safe_limit = max(_next_word_end - 0.060, t_end)
                 _new_t_end = min(max(t_end, _tail_target), _safe_limit)
+                # Guard: don't extend into the next word's consonant onset when
+                # the existing gap already covers the acoustic tail (gap ≥ 10ms).
+                # gap < 10ms = Whisper adjacent words, no room for tail → extend.
+                # gap ≥ 10ms + extension clips next word = cancel extension.
+                if _new_t_end > _next_word_start and _gap >= 0.010:
+                    _new_t_end = t_end
                 if _new_t_end > t_end:
                     print(
                         f"[LLM-EDIT] REP-TAIL-PAD [{i0},{i1}]"
