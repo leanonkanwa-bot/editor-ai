@@ -1575,13 +1575,28 @@ def pretrim(
                         # Clamp: can't retreat past the end of the previous sub-interval.
                         _new_s = max(_new_s, _sub_mut[_sk - 1][1] + 0.001)
                         _new_s = min(_new_s, _sub_mut[_sk][1] - 0.050)
-                        print(
-                            f"[PRETRIM] sub-part snap s[{i}][{_sk}]:"
-                            f" {_old_s:.3f}→{_new_s:.3f}"
-                            f" (word {_sw[0]:.3f}-{_sw[1]:.3f})",
-                            flush=True,
+                        # Drop-zone guard: if the snap landed inside a filler/repetition
+                        # drop (e.g. REP-TAIL-PAD extended the drop past word.end and snap
+                        # retreated into it), cancel — the original position is already the
+                        # correct drop.end set by the cut logic.
+                        _in_drop = any(
+                            fd.start < _new_s < fd.end
+                            for fd in (filler_drops or [])
                         )
-                        _sub_mut[_sk][0] = _new_s
+                        if _in_drop:
+                            print(
+                                f"[PRETRIM] sub-part snap s[{i}][{_sk}] cancelled"
+                                f" (snap {_old_s:.3f}→{_new_s:.3f} inside drop zone)",
+                                flush=True,
+                            )
+                        else:
+                            print(
+                                f"[PRETRIM] sub-part snap s[{i}][{_sk}]:"
+                                f" {_old_s:.3f}→{_new_s:.3f}"
+                                f" (word {_sw[0]:.3f}-{_sw[1]:.3f})",
+                                flush=True,
+                            )
+                            _sub_mut[_sk][0] = _new_s
             sub_intervals = [(si_s, si_e) for si_s, si_e in _sub_mut]
 
         # Cut each sub-interval with the same fast lossless encoding used for segments.
