@@ -189,22 +189,23 @@ def _dedup_drops(drops: list) -> list:
         span_d    = d.end - d.start
         threshold = 0.5 * min(span_prev, span_d)
         if overlap > threshold:
-            # >50% overlap relative to the smaller drop → dedup, keep narrower
-            if span_d < span_prev:
-                print(
-                    f"[DEDUP] {prev.reason} [{prev.start:.2f}-{prev.end:.2f}]"
-                    f" superseded by narrower {d.reason} [{d.start:.2f}-{d.end:.2f}]"
-                    f" (overlap={overlap:.3f}s)",
-                    flush=True,
-                )
-                result[-1] = d
-            else:
-                print(
-                    f"[DEDUP] {d.reason} [{d.start:.2f}-{d.end:.2f}]"
-                    f" merged into {prev.reason} [{prev.start:.2f}-{prev.end:.2f}]"
-                    f" (overlap={overlap:.3f}s)",
-                    flush=True,
-                )
+            # Merge to union: both drops cover this region; wider boundaries
+            # preserve pre/post padding from padded filler drops (crucial for
+            # catching voiced consonant onsets that precede the Whisper timestamp).
+            merged = DropSegment(
+                start=min(prev.start, d.start),
+                end=max(prev.end, d.end),
+                reason=prev.reason,
+                target_intervals=prev.target_intervals + d.target_intervals,
+            )
+            print(
+                f"[DEDUP] {d.reason} [{d.start:.2f}-{d.end:.2f}]"
+                f" merged into {prev.reason} [{prev.start:.2f}-{prev.end:.2f}]"
+                f" → union [{merged.start:.2f}-{merged.end:.2f}]"
+                f" (overlap={overlap:.3f}s)",
+                flush=True,
+            )
+            result[-1] = merged
         else:
             result.append(d)
     return result

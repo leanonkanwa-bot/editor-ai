@@ -690,7 +690,6 @@ def _output_verify(
 
 
 # ── Junction fade helpers ────────────────────────────────────────────────────
-_TAIL_BUDGET_MS = 60.0
 _ONSET_CLASS_MAP: dict[str, str] = {
     **{c: "fric" for c in "fvszcj"},
     **{c: "stop" for c in "tpkbdg"},
@@ -700,33 +699,23 @@ _ONSET_FADE_MS: dict[str, float] = {"fric": 5.0, "stop": 10.0, "vowel": 15.0}
 
 
 def _word_text_at(t: float, all_words: list) -> str:
-    """Word whose start is nearest to t within 80ms."""
+    """Word whose start is nearest to t within 80ms. Tries 'text' then 'word' key."""
     best: Any = None
     best_d = 0.080
     for w in all_words:
         d = abs(float(w.get("start", 0)) - t)
         if d < best_d:
             best_d, best = d, w
-    return str(best.get("text", "a")) if best else "a"
+    if best:
+        txt = str(best.get("text") or best.get("word") or "").strip()
+        return txt if txt else "a"
+    return "a"
 
 
-def _effective_gap_ms(si_start: float, drop: DropSegment, all_words: list) -> float:
-    """Gap (ms) from last dropped word's acoustic tail to si_start."""
-    last_end = drop.start
-    for w in all_words:
-        ws, we = float(w.get("start", 0)), float(w.get("end", 0))
-        if drop.start - 0.050 <= ws and we <= drop.end + 0.020:
-            if we > last_end:
-                last_end = we
-    return max(0.0, (si_start - last_end) * 1000.0)
-
-
-def _junction_fade_ms(gap_ms: float, word_text: str) -> float:
-    """Fade-in (ms) at a cut junction: onset floor + tail-bleed cover, capped 40ms."""
-    tail_bleed = max(0.0, _TAIL_BUDGET_MS - gap_ms)
+def _junction_fade_ms(word_text: str) -> float:
+    """Anti-pop fade-in (ms) at a cut junction — phoneme onset class only."""
     fc = (word_text.lstrip("'\"").lower() or "a")[0]
-    onset_ms = _ONSET_FADE_MS.get(_ONSET_CLASS_MAP.get(fc), 10.0)
-    return max(onset_ms, min(tail_bleed, 40.0))
+    return _ONSET_FADE_MS.get(_ONSET_CLASS_MAP.get(fc), 10.0)
 
 
 # ── End junction fade helpers ────────────────────────────────────────────────
@@ -1648,23 +1637,38 @@ def pretrim(
             if si_end - si_start < 0.05:
                 continue
             sub_part = work_dir / f"trim_{i:04d}_{j:02d}.mp4"
+            # Skip acoustic-tail pre-drop sub-parts: j=0 before an intra-segment
+            # drop, with no word onset in [si_start, si_end).  These sub-parts
+            # are pure resonance tail from the previous segment's last word — they
+            # play as an audible echo/double rather than real content.
+            if j == 0 and len(sub_intervals) > 1:
+                _has_onset = any(
+                    si_start <= float(w.get("start", 0)) < si_end
+                    for w in all_words
+                )
+                if not _has_onset:
+                    print(
+                        f"[PRETRIM] tail-skip seg[{i}] j=0 [{si_start:.3f},{si_end:.3f}]"
+                        f" ({(si_end - si_start) * 1000:.0f}ms) — no word onset",
+                        flush=True,
+                    )
+                    continue
+
             _covering_drop: DropSegment | None = None
             if filler_drops:
                 _near = [fd for fd in filler_drops if abs(si_start - fd.end) < 0.200]
                 if _near:
                     _covering_drop = min(_near, key=lambda fd: abs(si_start - fd.end))
             if _covering_drop is not None:
-                _gap_ms = _effective_gap_ms(si_start, _covering_drop, all_words)
                 _next_wtext = _word_text_at(si_start, all_words)
-                _fade_ms = _junction_fade_ms(_gap_ms, _next_wtext)
+                _fade_ms = _junction_fade_ms(_next_wtext)
                 _fade_dur = _fade_ms / 1000.0
                 _onset_cls = _ONSET_CLASS_MAP.get(
                     (_next_wtext.lstrip("'\"").lower() or "a")[0], "son"
                 )
                 print(
                     f"[PRETRIM] junction-fade seg[{i}] j={j}:"
-                    f" s={si_start:.3f} gap={_gap_ms:.0f}ms"
-                    f" word={_next_wtext!r}({_onset_cls}) → {_fade_ms:.0f}ms",
+                    f" s={si_start:.3f} word={_next_wtext!r}({_onset_cls}) → {_fade_ms:.0f}ms",
                     flush=True,
                 )
             else:
