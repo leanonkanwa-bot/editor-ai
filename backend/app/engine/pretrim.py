@@ -1633,15 +1633,14 @@ def pretrim(
                 0.080 if (j > 0 or _near_drop) else
                 0.0
             )
-            # Crossfade: fade-out the end of every non-final sub-part so the
-            # cut boundary before the drop zone also softens (fade-out → gap
-            # → fade-in = soft crossfade that masks the junction on both sides).
-            # Threshold 0.300s: short acoustic-tail sub-parts (<300ms) don't
-            # benefit from fade-out and it makes the resonance more prominent.
+            # Fade-out on non-final sub-parts disabled: sub-parts always end
+            # at a word boundary, so a 40ms fade-out systematically clips the
+            # final phoneme of the last word before the drop (e.g. "gens" → "gen").
+            # The fade-in on j>0 sub-parts is sufficient; no fade-out needed.
             _is_last_sub = (j == len(sub_intervals) - 1)
             _sub_dur = si_end - si_start
-            _fadeout_dur = 0.040 if (not _is_last_sub and _sub_dur > 0.300) else 0.0
-            _fadeout_start = _sub_dur - _fadeout_dur
+            _fadeout_dur = 0.0
+            _fadeout_start = _sub_dur
 
             _af_filters: list[str] = []
             if _fade_dur > 0:
