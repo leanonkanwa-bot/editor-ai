@@ -691,7 +691,7 @@ OUTPUT: a JSON array of card objects. Each card:
     "truth_text": "<prim_shatter_truth: the truth that replaces the shattered myth, max 60 chars>",
     "side": "<prim_split_stage: which side the speaker video slides to — 'left' or 'right'>",
     "mode": "<prim_split_stage: content type on the opposite side — 'steps' or 'diagram'>",
-    "nodes": [{"icon": "<prim_split_stage mode=diagram: emoji icon>", "label": "<prim_split_stage mode=diagram: node label>"}],
+    "nodes": [{{"icon": "<prim_split_stage mode=diagram: emoji icon>", "label": "<prim_split_stage mode=diagram: node label>"}}],
     "step_num": "<step_number: the step number or label, e.g. '01', '3', 'Étape 2'>",
     "step_label": "<step_number: short description of this step>",
     "quotes": ["<quote_carousel: quote 1>", "<quote_carousel: quote 2>", "<quote_carousel: quote 3>"],
