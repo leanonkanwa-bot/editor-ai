@@ -131,7 +131,7 @@ _LANDSCAPE_HERO_STYLES: frozenset[str] = frozenset({
     "key_phrase", "quote", "question", "definition",
     "chapter_marker", "callout",
     "prim_split_compare", "prim_journey_map", "prim_cinematic_reveal",
-    "prim_ascension_reveal",
+    "prim_ascension_reveal", "prim_shatter_truth", "prim_split_stage",
 })
 
 # Styles whose catalogue _family is "full_cover": consume the entire canvas.
@@ -139,7 +139,7 @@ _LANDSCAPE_HERO_STYLES: frozenset[str] = frozenset({
 # pass and backdrop-dim dispatch can operate without importing catalogue.py.
 _FULL_COVER_STYLES: frozenset[str] = frozenset({
     "prim_split_compare", "prim_journey_map", "prim_cinematic_reveal",
-    "prim_ascension_reveal", "prim_shatter_truth",
+    "prim_ascension_reveal", "prim_shatter_truth", "prim_split_stage",
 })
 
 
@@ -650,7 +650,7 @@ OUTPUT: a JSON array of card objects. Each card:
     "number": "<if a stat/number is featured — for prim_stat_counter use numeric string only, e.g. '46.2' not '46,2 M€'>",
     "prefix": "<prim_stat_counter only — currency/unit BEFORE the number, e.g. '$'. Convention FR: laisser vide, mettre la devise dans suffix>",
     "suffix": "<prim_stat_counter only — unit AFTER the number, e.g. 'M€', 'K', '%'. Convention FR: suffix='€' ou 'M€', prefix vide>",
-    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking"|"hand_written_note"|"speech_bubble_thought"|"calendar_date_highlight"|"percentage_split"|"red_flag_list"|"success_metric_badge"|"client_avatar_persona"|"book_recommendation"|"tool_stack"|"revenue_breakdown"|"age_milestone"|"contrarian_take"|"action_step_cta"|"story_chapter_transition"|"live_reaction_split"|"hidden_cost_reveal"|"social_proof_counter"|"timeline_prediction"|"red_thread_connector"|"silent_beat_pause"|"comment_reply_style"|"before_you_scroll"|"traffic_light_status"|"day_in_life_schedule"|"skill_tree_unlock"|"audience_poll_result"|"broken_promise_tracker"|"ingredient_list"|"resource_allocation"|"fill_in_the_blank"|"streak_counter"|"before_now_later"|"platform_stats"|"cost_comparison"|"decision_matrix"|"habit_tracker"|"income_vs_expense"|"milestone_recap"|"content_calendar"|"client_result_number"|"mistake_lesson"|"tool_comparison"|"weekly_review"|"audience_question"|"prim_stat_counter"|"prim_split_compare"|"prim_journey_map"|"number_hero"|"prim_cinematic_reveal"|"prim_ascension_reveal",
+    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking"|"hand_written_note"|"speech_bubble_thought"|"calendar_date_highlight"|"percentage_split"|"red_flag_list"|"success_metric_badge"|"client_avatar_persona"|"book_recommendation"|"tool_stack"|"revenue_breakdown"|"age_milestone"|"contrarian_take"|"action_step_cta"|"story_chapter_transition"|"live_reaction_split"|"hidden_cost_reveal"|"social_proof_counter"|"timeline_prediction"|"red_thread_connector"|"silent_beat_pause"|"comment_reply_style"|"before_you_scroll"|"traffic_light_status"|"day_in_life_schedule"|"skill_tree_unlock"|"audience_poll_result"|"broken_promise_tracker"|"ingredient_list"|"resource_allocation"|"fill_in_the_blank"|"streak_counter"|"before_now_later"|"platform_stats"|"cost_comparison"|"decision_matrix"|"habit_tracker"|"income_vs_expense"|"milestone_recap"|"content_calendar"|"client_result_number"|"mistake_lesson"|"tool_comparison"|"weekly_review"|"audience_question"|"prim_stat_counter"|"prim_split_compare"|"prim_journey_map"|"number_hero"|"prim_cinematic_reveal"|"prim_ascension_reveal"|"prim_shatter_truth"|"prim_split_stage",
     "left_label": "<comparison / prim_split_compare: left side label>",
     "left_value": "<comparison: left side value (prim_split_compare does not use this)>",
     "right_label": "<comparison / prim_split_compare: right side label>",
@@ -661,7 +661,7 @@ OUTPUT: a JSON array of card objects. Each card:
     "to_country": "<prim_journey_map optional — arrival country, e.g. 'Thaïlande'>",
     "distance_km": "<prim_journey_map optional — numeric distance string, e.g. '9560'>",
     "items": ["<list/checklist: item 1>", "<list/checklist: item 2>", ...],
-    "steps": ["<timeline: step 1>", "<timeline: step 2>", ...],
+    "steps": ["<timeline/prim_split_stage mode=steps: step 1>", "<step 2>", ...],
     "slides": ["<carousel: slide 1>", "<carousel: slide 2>", ...],
     "line_a": "<dialogue: first speaker's line>",
     "line_b": "<dialogue: second speaker's line>",
@@ -688,6 +688,10 @@ OUTPUT: a JSON array of card objects. Each card:
     "poll_options": ["<poll_question: option 1>", "<poll_question: option 2>"],
     "myth_text": "<myth_vs_fact: the incorrect belief to debunk>",
     "fact_text": "<myth_vs_fact: the corrected truth>",
+    "truth_text": "<prim_shatter_truth: the truth that replaces the shattered myth, max 60 chars>",
+    "side": "<prim_split_stage: which side the speaker video slides to — 'left' or 'right'>",
+    "mode": "<prim_split_stage: content type on the opposite side — 'steps' or 'diagram'>",
+    "nodes": [{"icon": "<prim_split_stage mode=diagram: emoji icon>", "label": "<prim_split_stage mode=diagram: node label>"}],
     "step_num": "<step_number: the step number or label, e.g. '01', '3', 'Étape 2'>",
     "step_label": "<step_number: short description of this step>",
     "quotes": ["<quote_carousel: quote 1>", "<quote_carousel: quote 2>", "<quote_carousel: quote 3>"],
@@ -1068,8 +1072,12 @@ RULES:
   "poll_question" — speaker poses a question WITH explicit
     multiple-choice options. Distinct from question (question has no
     options). Provide "poll_question" + "poll_options" array (2-4).
-  "myth_vs_fact" — speaker debunks a myth and states the real fact.
+  "myth_vs_fact" — speaker calmly debunks a myth and states the corrected fact.
     Distinct from callout (callout adds context, not a correction).
+    DISTINCTION FROM prim_shatter_truth: myth_vs_fact is the measured, informational
+      version — the speaker corrects a false belief without high confrontational energy.
+      For a DRAMATIC, emphatic destruction of a false belief (electric "Faux." energy,
+      the speaker attacks the belief head-on) → use prim_shatter_truth instead.
     Provide "myth_text" + "fact_text".
   "step_number" — speaker highlights a single focal step, phase, or
     pivotal narrative moment (e.g. "step 1", "première chose",
@@ -1309,6 +1317,66 @@ RULES:
     Provide "title" (REQUIRED — the result phrase, max 60 chars),
       "kicker" (optional — eyebrow label, e.g. "LE BILAN", "RÉSULTAT FINAL", max 30 chars).
     Zone: fullscreen. Duration: 2.0–3.5s.
+  "prim_shatter_truth" — the ONE full-screen confrontation card where the speaker actively
+    DESTROYS a false belief held by the audience. The myth text appears, micro-vibrates,
+    then shatters into fragments with a white flash — the truth imposes itself on a pure
+    black canvas. No filter:blur, depth via transforms only.
+    BUDGET: INDEPENDENT — exactly 1 per video. Does NOT consume the climax slot
+      (prim_cinematic_reveal / prim_ascension_reveal may still be used in the same video).
+    TRIGGER — ALL THREE must hold simultaneously:
+      (a) FALSE BELIEF TARGET: the speaker names or implies a specific false belief,
+          excuse, or myth that the AUDIENCE holds. The myth has a face — it is a belief
+          the viewer might currently hold, not a general misconception in the abstract.
+          "Tu penses que X → Faux." is the prototypical form.
+      (b) CONFRONTATIONAL ENERGY: the speaker actively demolishes it — not a calm
+          correction but a decisive, emphatic rejection. The tone is combative, electric.
+      (c) EXPLICIT MARKER (at least one must be present in the spoken segment):
+          FR: "Faux.", "C'est faux", "c'est un mensonge", "arrêtons de croire que",
+            "stop de penser que", "cette idée reçue", "démystifions", "tu te trompes",
+            "cette croyance est fausse", "c'est exactement le contraire",
+            "il faut déconstruire", "personne ne vous dit que c'est faux mais"
+          EN: "False.", "That's wrong", "Stop believing that", "Myth vs reality"
+    DISQUALIFIERS — do NOT use prim_shatter_truth for:
+      — Calm factual corrections without confrontational energy → myth_vs_fact
+      — Opinions or soft nuances → contrarian_take or callout
+      — Multiple myths listed at once → red_flag_list or checklist
+      — Moments where the speaker acknowledges both sides → versus_battle or comparison
+    DISTINCTION FROM myth_vs_fact: myth_vs_fact is the informational version
+      (speaker corrects, explains, provides the real fact — measured tone).
+      prim_shatter_truth is the DRAMATIC version — confrontational, electric.
+      Rule: if you could write the card as "En réalité, [fact]" without losing emotional
+      truth → myth_vs_fact. If the scene demands "FAUX. [Truth]" all-caps energy →
+      prim_shatter_truth.
+    Provide "myth_text" (REQUIRED — the false belief being shattered, max 50 chars,
+      framed from the audience's perspective: e.g. "travailler dur suffit pour réussir"),
+      "truth_text" (REQUIRED — the truth that replaces it, max 60 chars, declarative,
+      confident: e.g. "Ce qui compte c'est travailler intelligemment"),
+      "kicker" (optional — e.g. "IDÉE REÇUE", "MYTHE #1", max 25 chars).
+    Zone: fullscreen. Duration: 2.0–3.0s.
+  "prim_split_stage" — the speaker's face shrinks to 50% and slides to one side of the
+    screen while the opposite half reveals structured content: numbered steps
+    (mode='steps') or an icon+label vertical diagram (mode='diagram'). The speaker
+    remains visible throughout — no blackout. Used when the speaker walks through a
+    FRAMEWORK, PROCESS, or STRUCTURE the viewer should memorize.
+    BUDGET: 1–2 per video. Alternate "side" (left / right) between occurrences.
+    TRIGGER — at least one must hold:
+      (a) PROCESS / WORKFLOW: speaker explains 2–5 sequential or parallel steps
+          that form a reusable framework ("voilà les 3 étapes de ma méthode",
+          "le process est simple : A, puis B, puis C"). Use mode = 'steps'.
+      (b) DIAGRAM / RELATIONSHIP: speaker names 2–4 linked concepts, pillars,
+          or components that form a visual structure or chain ("les 3 piliers de X",
+          "la relation entre A, B et C"). Use mode = 'diagram'.
+    DISQUALIFIERS:
+      — Content with >5 steps → checklist or list instead
+      — Single isolated point → key_phrase or callout
+      — Pure storytelling without a reusable framework → key_phrase or anecdote
+    Provide "side" (REQUIRED — 'left' or 'right'; alternate between occurrences
+      for visual variety), "mode" (REQUIRED — 'steps' or 'diagram'),
+      "kicker" (optional — short eyebrow label, e.g. 'MA MÉTHODE', 'LE PROCESS',
+      max 25 chars), "steps" (mode='steps' REQUIRED — list of 2–5 short step strings,
+      max ~30 chars each), "nodes" (mode='diagram' REQUIRED — list of 2–4 objects,
+      each with "icon" (emoji) and "label" (short text, max 25 chars)).
+    Zone: fullscreen. Duration: 3.5–6.0s.
   "question_answer_pair" — speaker poses a question AND immediately answers
     it in the same breath (e.g. "Qu'est-ce que c'est ? C'est une méthode
     en 3 étapes"). BOTH question and answer are present in the same segment.
