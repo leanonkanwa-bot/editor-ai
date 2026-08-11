@@ -853,6 +853,12 @@ RULES:
     ENABLES the next ("j'avais investi dans X → c'est comme ça qu'on s'est
     rencontré → en l'observant j'ai réalisé → on en est venu à créer Y").
     Criterion: would reversing two steps break the story? If yes → timeline.
+    DISTINCTION FROM cause_effect: cause_effect describes a SINGLE BINARY
+      relationship — exactly ONE cause and ONE effect (A → B, two elements).
+      timeline is for 3+ ordered steps forming a full chain or progression.
+      DECISIVE TEST: count the distinct elements in the sequence.
+      If 2 elements (one cause, one effect) → cause_effect.
+      If 3+ elements forming a chain → timeline, even if each step causes the next.
     Provide "steps" array (2-6 items).
   "comparison" — speaker contrasts two distinct things (old/new, us/them,
     method A vs method B). Exactly 2 sides required. NOT for the same
@@ -883,6 +889,10 @@ RULES:
       d. DRAMATIC REPETITION: the number is echoed or spelled out ("je répète :
          cinq cent mille euros").
     If neither condition 2a/b/c/d is present → use stat instead.
+    EXCLUSIONS — do NOT use prim_stat_counter when:
+      — The number is income or revenue → income_reveal takes priority.
+      — All three number_hero conditions hold (singular dominance + personal result
+        + climactic placement) → number_hero takes priority.
     NUMBER FORMATTING RULES (strict — no exceptions):
     • Always split the magnitude into number + suffix. NEVER put the unit
       inside number. Always use decimal point "." not comma.
@@ -1104,9 +1114,24 @@ RULES:
     emoji_reaction is an exclamatory reaction moment).
   "price_tag" — speaker mentions a specific price point or cost. Provide
     "price" string + optional "price_context".
-  "warning_soft" — speaker flags a caution, common mistake, or risk (soft
-    register — not a crisis). Uses pack accent color only, NOT orange/red.
-    Distinct from callout (callout is neutral context). Provide "warning_text".
+  "warning_soft" — speaker signals a caution, trap, or common mistake using
+    EXPLICIT WARNING LANGUAGE (soft register — not a crisis, no alarm). The
+    speaker alerts the viewer to avoid or be careful of something.
+    TRIGGER: at least one explicit warning marker must be present:
+      FR: "attention", "méfie-toi", "évite", "piège", "danger", "risque",
+        "erreur classique", "ne fais pas ça", "à ne surtout pas faire",
+        "beaucoup font l'erreur de", "le piège c'est", "garde-toi de",
+        "sois prudent avec", "ce que les gens ratent", "le problème c'est que"
+      EN: "warning", "watch out", "avoid", "trap", "mistake", "be careful"
+    DISTINCTION FROM contrarian_take: contrarian_take challenges a widespread BELIEF
+      or conventional wisdom (provocative stance); warning_soft alerts about a
+      concrete RISK or MISTAKE to avoid (practical caution, not a belief battle).
+    DISTINCTION FROM mistake_lesson: mistake_lesson tells a PAST story of a mistake
+      the speaker MADE and learned from (narrative, retrospective). warning_soft is a
+      FORWARD-LOOKING alert to the viewer — avoid this, don't do that.
+    DISTINCTION FROM callout: callout is neutral context-setting. warning_soft has
+      explicit cautionary register and an action the viewer must avoid.
+    Provide "warning_text".
   "testimonial" — speaker quotes a customer, client, or user with their
     name and role context. Distinct from attributed_quote (attributed_quote
     is for public figures or named sources); testimonial is for end-user
@@ -1155,10 +1180,18 @@ RULES:
     only a quote and name are present). Distinct from rating (rating is
     the SPEAKER's own live assessment, not a cited review). Provide
     "stars" (int 0-5), "review_text", "reviewer_name".
-  "income_reveal" — speaker dramatically reveals an income, revenue, or
-    financial figure. Distinct from stat (stat is informational; income_reveal
-    has suspense/reveal energy). Provide "income_value" (the number string)
-    + "income_context" (brief qualifier).
+  "income_reveal" — speaker dramatically reveals a personal INCOME, REVENUE, or
+    FINANCIAL EARNINGS figure (their own money: salary, monthly revenue, passive
+    income, business CA). Has suspense/reveal energy — the number lands like a
+    punchline. Distinct from stat (stat is third-party data; income_reveal is
+    the speaker's OWN financial result with emotional weight).
+    DISTINCTION FROM prim_stat_counter: income_reveal is SPECIFIC TO MONEY EARNED
+      by the speaker (€/mois, CA, salaire, revenus passifs, résultat financier).
+      prim_stat_counter covers ALL OTHER personal metrics (subscriber count, client
+      count, conversion rate, non-financial achievements). Rule: if the number
+      represents income or revenue → income_reveal, not prim_stat_counter, even
+      when a structural reveal signal is present.
+    Provide "income_value" (the number string) + "income_context" (brief qualifier).
   "number_hero" — the SINGLE most important number in the entire video, given
     full visual staging: centered spotlight, mirror accent lines above and below
     the number, cinematic 3-act reveal animation.
@@ -1173,9 +1206,19 @@ RULES:
     DISTINCTION FROM income_reveal: income_reveal is a blur-reveal text card (no spotlight,
       no mirror lines). number_hero is a full visual spectacle — use income_reveal when
       the reveal energy is present but the number is not the dominant climax of the video.
-    DISTINCTION FROM prim_stat_counter: prim_stat_counter is a count-up animation for any
-      speaker metric with a structural reveal signal; number_hero is for the ONE number that
-      anchors the entire video's credibility argument — not every strong stat qualifies.
+    OVERRIDE RULE: when ALL THREE trigger conditions hold simultaneously, number_hero
+      takes priority over prim_stat_counter, income_reveal, and stat — even when the
+      number would also qualify for those styles. Decisive test: if you removed this
+      single number from the video, does the video lose its central credibility proof?
+      If YES → number_hero. If no → prim_stat_counter or income_reveal.
+    DISTINCTION FROM prim_stat_counter: prim_stat_counter renders as a count-up badge
+      in the UPPER-RIGHT CORNER (zone: upper-right). number_hero gives the number the
+      ENTIRE SCREEN with spotlight + mirror accent lines + 3-act cinematic reveal
+      (zone: fullscreen). When all three trigger conditions are met → number_hero wins;
+      prim_stat_counter is for every other personal metric that doesn't qualify.
+    DISTINCTION FROM income_reveal: income_reveal is a blur-reveal text card for any
+      personal income/revenue figure. number_hero is for the ONE dominant climax number
+      of the entire video regardless of whether it is income or any other metric.
     DISTINCTION FROM stat: stat is informational data without personal climactic energy.
     Provide "nh_number" (display string, e.g. "12 000 €/mois") +
     "nh_kicker" (e.g. "RÉSULTAT DU MOIS") + "nh_detail" (e.g. "en affiliation organique").
@@ -1422,11 +1465,16 @@ RULES:
     data_bar_chart is for GENERIC comparative data (costs, rates, volumes,
     durations, counts) whose labels are NOT platform or revenue-source names.
     Provide "bar_labels" list + "bar_values" list of float (same length, 2-4 items).
-  "cause_effect" — speaker explicitly states a cause-and-effect relationship
-    ("parce que X, donc Y", "X entraîne Y", "si X alors Y"). REQUIRES both
-    cause and effect to be named. Distinct from callout (callout is one point).
-    Distinct from comparison (comparison contrasts two things; cause_effect
-    shows a directional causal link). Provide "cause_text" + "effect_text".
+  "cause_effect" — speaker explicitly states a SINGLE cause-and-effect
+    relationship ("parce que X, donc Y", "X entraîne Y", "si X alors Y").
+    REQUIRES exactly two elements: one named cause and one named effect.
+    Distinct from callout (callout is one point). Distinct from comparison
+    (comparison contrasts two things; cause_effect shows a directional link).
+    DISTINCTION FROM timeline: timeline has 3+ sequential steps; cause_effect
+      has exactly 2 elements (one cause, one effect). If the speaker names 3 or
+      more events in sequence — even with causal language between each step —
+      use timeline, not cause_effect.
+    Provide "cause_text" + "effect_text".
   "number_ranking" — speaker names a ranked ordered list (top 3, podium,
     leaderboard). REQUIRES explicit ordering/ranking. Distinct from list
     (list is unordered or loosely ordered; number_ranking has explicit
@@ -1570,10 +1618,19 @@ RULES:
   "timeline_prediction" — speaker presents a timeline that mixes confirmed past
     steps with projected future steps, explicitly distinguishing between what has
     happened and what is planned ("jusqu'ici on a fait X et Y… et voici ce qu'on
-    prévoit pour Z"). REQUIRES at least one confirmed step and one predicted step.
-    Distinct from timeline (timeline is all-confirmed events; timeline_prediction
-    explicitly separates confirmed from predicted). Provide "confirmed_steps"
-    list + "predicted_steps" list (1-4 each).
+    prévoit pour Z"). REQUIRES at least one confirmed step AND at least one
+    predicted/future step — both lists must be non-empty.
+    HARD TRIGGER: at least one step must be in the FUTURE or expressed as a plan —
+      detectable by future tense ("on va", "on prévoit", "notre prochain objectif",
+      "d'ici X mois", "l'étape suivante"), conditional, or explicit planning language
+      ("l'objectif est de", "on compte", "ce qu'on prépare").
+    HARD RULE: if ALL steps are in the PAST with no forward projection →
+      milestone_recap or timeline, NOT timeline_prediction.
+    DISTINCTION FROM milestone_recap: milestone_recap lists PAST-ONLY confirmed
+      achievements the speaker looks back on. timeline_prediction REQUIRES a
+      FORWARD-LOOKING component. No future step → not timeline_prediction.
+    Distinct from timeline (timeline is a fully confirmed sequence with no future
+      projection). Provide "confirmed_steps" list + "predicted_steps" list (1-4 each).
   "red_thread_connector" — speaker explicitly ties together 2-3 concepts
     mentioned at different points in the video ("tu te souviens de X ? Et de Y ?
     Eh bien les deux sont liés…"). The connector energy — calling back to
