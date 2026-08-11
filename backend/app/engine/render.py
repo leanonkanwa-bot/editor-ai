@@ -1007,7 +1007,7 @@ def _compute_speech_punch_in_times(
             continue
         cs = float(card.get("startSec", 0))
         ce = float(card.get("endSec", cs))
-        hero_intervals.append((cs, ce))
+        hero_intervals.append((max(0.0, cs - 2.0), ce))
 
     candidates: list[tuple[float, str]] = []
     for seg in script_structure:
@@ -2655,7 +2655,7 @@ def _render_hyperframes(
     # The formula scales automatically with _n_workers, so if HyperFrames is ever
     # allocated more than 6 workers the limit tightens proportionally.
     # Revisit _SEG_FRAMES_PER_WORKER if Railway container RAM allocation changes significantly.
-    _SEG_FRAMES_PER_WORKER = 250
+    _SEG_FRAMES_PER_WORKER = 340
     _SEG_MAX_FRAMES_DEFAULT = _SEG_FRAMES_PER_WORKER * _n_workers  # e.g. 1500 at 6 workers
     # HF_SEG_MAX_FRAMES env var overrides the computed value — use for fast test cycles
     # (set to 500 in Railway Variables to trigger segmentation on short test videos).
@@ -2742,31 +2742,40 @@ def _render_hyperframes(
             else:
                 _kf_venc = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
                             "-pix_fmt", "yuv420p"]
-            _kf_result = subprocess.run(
-                [
-                    FFMPEG_PATH, "-y",
-                    "-i", str(trimmed),
-                    *_kf_venc,
-                    "-g", "30", "-keyint_min", "1",
-                    "-force_key_frames", _kf_str,
-                    "-c:a", "copy",
-                    str(_trimmed_kf),
-                ],
-                capture_output=True, timeout=1200,
-            )
-            if _kf_result.returncode == 0:
-                trimmed = _trimmed_kf
-                print(
-                    f"[HF-SEG] Keyframe pass done in {time.perf_counter()-_t_kf:.1f}s"
-                    f" → {_trimmed_kf.name}",
-                    flush=True,
+            _kf_done = False
+            for _kf_attempt in range(2):
+                _kf_result = subprocess.run(
+                    [
+                        FFMPEG_PATH, "-y",
+                        "-i", str(trimmed),
+                        *_kf_venc,
+                        "-g", "30", "-keyint_min", "1",
+                        "-force_key_frames", _kf_str,
+                        "-c:a", "copy",
+                        str(_trimmed_kf),
+                    ],
+                    capture_output=True, timeout=1200,
                 )
-            else:
-                print(
-                    f"[HF-SEG] WARN: keyframe pass failed ({_kf_result.returncode}) "
-                    f"— boundary overlap may occur: "
-                    f"{_kf_result.stderr.decode(errors='replace')[-200:].strip()}",
-                    flush=True,
+                if _kf_result.returncode == 0:
+                    trimmed = _trimmed_kf
+                    print(
+                        f"[HF-SEG] Keyframe pass done in {time.perf_counter()-_t_kf:.1f}s"
+                        f" → {_trimmed_kf.name}",
+                        flush=True,
+                    )
+                    _kf_done = True
+                    break
+                _kf_err = _kf_result.stderr.decode(errors="replace")[-300:].strip()
+                if _kf_attempt == 0:
+                    print(
+                        f"[HF-SEG] Keyframe pass failed (attempt 1/2, rc={_kf_result.returncode})"
+                        f" — retrying: {_kf_err}",
+                        flush=True,
+                    )
+            if not _kf_done:
+                raise RuntimeError(
+                    f"[HF-SEG] Keyframe pass failed after 2 attempts "
+                    f"(rc={_kf_result.returncode}): {_kf_err}"
                 )
 
         _all_graphic = [c for c in storyboard.get("cards", []) if c.get("type") != "caption"]
