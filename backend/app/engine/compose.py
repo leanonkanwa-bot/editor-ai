@@ -2651,10 +2651,16 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('  background-size:256px 256px; mix-blend-mode:overlay;')
         parts.append('}')
     if content_style == "prim_split_compare":
+        # Root: zero padding for full-bleed canvas (same fix as prim_journey_map)
+        parts.append(f'.card[data-card-id="{card_id}"] .root {{ padding:0; gap:0; justify-content:flex-start; align-items:stretch; }}')
+        # Card-panel: base CSS sets flex-direction:column — must override to row for left/right split
         parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
         parts.append('  width:100%; height:100%; max-width:none; padding:0;')
-        parts.append('  display:flex; position:relative; overflow:hidden; background:#000;')
+        parts.append('  display:flex; flex-direction:row; align-items:stretch;')
+        parts.append('  position:relative; overflow:hidden; background:#000;')
         parts.append('}')
+        # Generic kicker is inside card-panel as first flex item — wrong position with flex-direction:row
+        parts.append(f'.card[data-card-id="{card_id}"] .kicker {{ display:none; }}')
         parts.append(f'.card[data-card-id="{card_id}"] .spc-half {{')
         parts.append('  flex:1; display:flex; align-items:center; justify-content:center;')
         parts.append('  overflow:hidden;')
@@ -2673,6 +2679,13 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         if p.get("accent_line_glow"):
             parts.append(f'  box-shadow:{p["accent_line_glow"]};')
         parts.append('}')
+        if kicker:
+            parts.append(f'.card[data-card-id="{card_id}"] .spc-kicker {{')
+            parts.append(f'  position:absolute; top:32px; left:50%; transform:translateX(-50%);')
+            parts.append(f'  font-family:{p["font"]}; font-size:{kicker_size_eff};')
+            parts.append(f'  font-weight:700; letter-spacing:0.15em; text-transform:uppercase;')
+            parts.append(f'  color:{p["accent"]}; white-space:nowrap; opacity:0; z-index:10;')
+            parts.append('}')
     elif content_style == "prim_journey_map":
         # ── prim_journey_map — flight-tracker overlay (prototype) ──────────
         # Root must be full-bleed: root_padding=48px would shrink the available height,
@@ -4146,6 +4159,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
     elif content_style == "prim_split_compare":
         _spc_l = _esc(hints.get("left_label", "A"))
         _spc_r = _esc(hints.get("right_label", "B"))
+        if kicker:
+            parts.append(f'    <div class="spc-kicker" id="{card_id}-spc-kicker">{_esc(kicker)}</div>')
         parts.append(f'    <div class="spc-half spc-left" id="{card_id}-spc-left">')
         parts.append(f'      <div class="spc-label" id="{card_id}-spc-label-l">{_spc_l}</div>')
         parts.append(f'    </div>')
@@ -4446,6 +4461,14 @@ def _build_timeline_js(
                 )
         lines.append("")
 
+    # Pre-compute graphic windows so captions that start during a graphic card
+    # don't run their fade-in animation (the post-loop to(opacity:0) suppression
+    # reads current opacity=0 and is a no-op, letting fromTo(0→1) win).
+    _graphic_windows_pre = [
+        (round(float(c.get("startSec", 0)), 3), round(float(c.get("endSec", 0)), 3))
+        for c in cards if c.get("type") != "caption"
+    ]
+
     for card in cards:
         card_id = _esc_js(str(card.get("id", "")))
         if not card_id:
@@ -4480,12 +4503,18 @@ def _build_timeline_js(
             )
 
         if is_caption:
-            lines.append(
-                f'  tl.fromTo(\'{sel}\', '
-                f'{{ opacity: 0 }}, '
-                f'{{ opacity: 1, duration: {fade_in_dur:.3f}, ease: _eIn }}, '
-                f'{start:.4f});'
-            )
+            # Skip fade-in if caption starts during an active graphic card window.
+            # The post-loop suppression tl.to(opacity:0) is a no-op in that case
+            # because it reads current opacity=0 and animates 0→0, letting the
+            # fromTo(0→1) win. Skipping the fromTo keeps opacity at 0 instead.
+            _cap_in_gfx = any(gs <= start < ge for gs, ge in _graphic_windows_pre)
+            if not _cap_in_gfx:
+                lines.append(
+                    f'  tl.fromTo(\'{sel}\', '
+                    f'{{ opacity: 0 }}, '
+                    f'{{ opacity: 1, duration: {fade_in_dur:.3f}, ease: _eIn }}, '
+                    f'{start:.4f});'
+                )
             word_sel = f'.card[data-card-id="{card_id}"] .cap-word'
             if len(card.get("words", [])) > 0:
                 lines.append(
@@ -7334,6 +7363,10 @@ def _build_timeline_js(
                 # Labels fade in after divider
                 lines.append(f'  tl.fromTo(\'{_spc_ll_sel}\', {{ opacity: 0, scale: 0.88 }}, {{ opacity: 1, scale: 1, duration: 0.260, ease: _eIn }}, {start + 0.530:.4f});')
                 lines.append(f'  tl.fromTo(\'{_spc_rl_sel}\', {{ opacity: 0, scale: 0.88 }}, {{ opacity: 1, scale: 1, duration: 0.260, ease: _eIn }}, {start + 0.580:.4f});')
+                _spc_kicker_txt = card.get("contentHints", {}).get("kicker", "")
+                if _spc_kicker_txt:
+                    _spc_k_sel = f'.card[data-card-id="{card_id}"] #{card_id}-spc-kicker'
+                    lines.append(f'  tl.fromTo(\'{_spc_k_sel}\', {{ opacity: 0, y: -8 }}, {{ opacity: 1, y: 0, duration: 0.200, ease: _eIn }}, {start + 0.600:.4f});')
             elif content_style == "prim_journey_map":
                 # ── prim_journey_map GSAP — bezier flight, pure JS onUpdate ──────
                 _jmt_hd_sel  = f'.card[data-card-id="{card_id}"] #{card_id}-jmt-header'
