@@ -3037,14 +3037,22 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         _sst_side = hints.get("side", "right")    # "left"=video left / "right"=video right
         _sst_mode = hints.get("mode", "steps")    # "steps" or "diagram"
         _sst_is_light = p["id"] in ("lean_paper", "lean_craft")
+        # Glass illusion without any filter:blur/backdrop-filter — SwiftShader constraint.
+        # Dark packs: dense gradient (same technique as prim_cinematic_reveal bg_full)
+        # + inset highlight simulating a lit glass edge.
         _sst_panel_bg = (
-            "rgba(250,250,248,0.92)" if p["id"] == "lean_paper" else
-            "rgba(232,217,197,0.92)" if p["id"] == "lean_craft" else
-            "rgba(6,6,16,0.86)"
+            "rgba(250,250,248,0.94)" if p["id"] == "lean_paper" else
+            "rgba(232,217,197,0.94)" if p["id"] == "lean_craft" else
+            f"linear-gradient(160deg, rgba(18,18,28,0.96), rgba(6,6,14,0.98))"
+        )
+        # inset highlight for dark packs (mimics glass edge light catch)
+        _sst_inset = (
+            "" if _sst_is_light else
+            "inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(255,255,255,0.03)"
         )
         # panel sits on the side OPPOSITE the video
         _sst_panel_edge = "right:0" if _sst_side == "left" else "left:0"
-        # divider line faces the video
+        # divider line faces the video (accent-tinted, same opacity as prim_cinematic_reveal border)
         _sst_border_side = "border-left" if _sst_side == "left" else "border-right"
 
         # Card-panel: transparent — video shows through on the video side
@@ -3064,8 +3072,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('  padding:0 52px; box-sizing:border-box;')
         parts.append(f'  background:{_sst_panel_bg};')
         parts.append(f'  {_sst_border_side}:1px solid {p["accent"]}28;')
-        if not _sst_is_light:
-            parts.append('  backdrop-filter:blur(16px);')
+        if _sst_inset:
+            parts.append(f'  box-shadow:{_sst_inset};')
         parts.append('}')
 
         # Kicker / eyebrow label
