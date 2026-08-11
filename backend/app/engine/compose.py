@@ -3038,17 +3038,12 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         _sst_mode = hints.get("mode", "steps")    # "steps" or "diagram"
         _sst_is_light = p["id"] in ("lean_paper", "lean_craft")
         # Glass illusion without any filter:blur/backdrop-filter — SwiftShader constraint.
-        # Dark packs: dense gradient (same technique as prim_cinematic_reveal bg_full)
-        # + inset highlight simulating a lit glass edge.
+        # Dark packs: dense gradient (same technique as prim_cinematic_reveal bg_full).
+        # box-shadow:inset removed — SwiftShader compositing cost per frame; border alone suffices.
         _sst_panel_bg = (
             "rgba(250,250,248,0.94)" if p["id"] == "lean_paper" else
             "rgba(232,217,197,0.94)" if p["id"] == "lean_craft" else
             f"linear-gradient(160deg, rgba(18,18,28,0.96), rgba(6,6,14,0.98))"
-        )
-        # inset highlight for dark packs (mimics glass edge light catch)
-        _sst_inset = (
-            "" if _sst_is_light else
-            "inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(255,255,255,0.03)"
         )
         # panel sits on the side OPPOSITE the video
         _sst_panel_edge = "right:0" if _sst_side == "left" else "left:0"
@@ -3072,8 +3067,6 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('  padding:0 52px; box-sizing:border-box;')
         parts.append(f'  background:{_sst_panel_bg};')
         parts.append(f'  {_sst_border_side}:1px solid {p["accent"]}28;')
-        if _sst_inset:
-            parts.append(f'  box-shadow:{_sst_inset};')
         parts.append('}')
 
         # Kicker / eyebrow label
@@ -7701,7 +7694,6 @@ def _build_timeline_js(
                 # #video-stage fills 1080px wide; scaled center stays at 540px.
                 # Shift ±270px moves it to center of left (270px) or right (810px) half.
                 _sst_vx  = -270 if _sst_side_g == "left" else 270
-                _sst_ry  = -6   if _sst_side_g == "left" else 6
                 # Content panel slides in from outside the content side
                 _sst_px_from = 70 if _sst_side_g == "left" else -70
 
@@ -7712,8 +7704,8 @@ def _build_timeline_js(
                 # Phase 1: video stage repositions (0 → 0.55s)
                 lines.append(
                     f'  tl.to("#video-stage", '
-                    f'{{ x: {_sst_vx}, scale: 0.50, rotateY: {_sst_ry}, '
-                    f'transformPerspective: 900, duration: 0.55, ease: "power3.inOut", '
+                    f'{{ x: {_sst_vx}, scale: 0.50, '
+                    f'duration: 0.55, ease: "power3.inOut", '
                     f'overwrite: "auto" }}, {start:.4f});'
                 )
                 # Phase 2: content panel slides in (start+0.20)
@@ -7776,14 +7768,14 @@ def _build_timeline_js(
                     # Variant A — direct slide-back: clean power3.inOut return
                     lines.append(
                         f'  tl.to("#video-stage", '
-                        f'{{ x: 0, scale: 1, rotateY: 0, duration: 0.50, '
+                        f'{{ x: 0, scale: 1, duration: 0.50, '
                         f'ease: "power3.inOut", overwrite: "auto" }}, {_sst_exit_t:.4f});'
                     )
                 elif _sst_variant == 1:
                     # Variant B — fade-bridge: opacity dims briefly as video returns
                     lines.append(
                         f'  tl.to("#video-stage", '
-                        f'{{ x: 0, scale: 1, rotateY: 0, duration: 0.50, '
+                        f'{{ x: 0, scale: 1, duration: 0.50, '
                         f'ease: "power3.inOut", overwrite: "auto" }}, {_sst_exit_t:.4f});'
                     )
                     lines.append(
@@ -7795,7 +7787,7 @@ def _build_timeline_js(
                     # Variant C — zoom-forward burst: scale overshoots briefly then settles
                     lines.append(
                         f'  tl.to("#video-stage", '
-                        f'{{ x: 0, scale: 1.06, rotateY: 0, duration: 0.28, '
+                        f'{{ x: 0, scale: 1.06, duration: 0.28, '
                         f'ease: "power4.out", overwrite: "auto" }}, {_sst_exit_t:.4f});'
                     )
                     lines.append(

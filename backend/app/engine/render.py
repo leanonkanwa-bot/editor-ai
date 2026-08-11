@@ -2541,10 +2541,10 @@ def _render_hyperframes(
     # 14 workers × 700 MB steady (21 GB JIT peak) → OOM → SwiftShader crash.
     _node_heap_mb = max(4096, min(8192, int(_mem_avail_gb * 512)))  # 50% of avail, 4–8 GB
     _chrome_budget_gb = max(2.0, _mem_avail_gb - (_node_heap_mb / 1024) - 2.0)
-    _mem_workers = min(24, max(4, int(_chrome_budget_gb / 1.5)))  # 1.5 GB/worker (JIT peak)
+    _mem_workers = min(24, max(3, int(_chrome_budget_gb / 2.0)))  # 2.0 GB/worker — recalibrated for complex primitives
     _cpu_count = _os.cpu_count() or 8
-    _cpu_workers = max(4, _cpu_count - 2)
-    _n_workers = max(4, min(_mem_workers, _cpu_workers))
+    _cpu_workers = max(3, _cpu_count - 2)
+    _n_workers = max(3, min(_mem_workers, _cpu_workers))
     print(
         f"[HF] workers: {_n_workers}"
         f" (limit={_mem_limit_gb:.1f}GB used={_mem_used_gb:.1f}GB"
