@@ -75,7 +75,14 @@ class Settings(BaseSettings):
     # Toggle via SUBJECT_TRACKING=true in Railway env vars (default: false).
     subject_tracking: bool = False
 
-    @field_validator("subject_tracking", "disable_cuts", "cut_fillers", mode="before")
+    # Detection-only / PDF report mode.
+    # When true: all detection (silence_remover + LLM-EDIT) runs as normal, but
+    # NO physical or virtual cuts are applied to the video — full passthrough.
+    # A downloadable PDF listing all detected cut points is generated instead.
+    # CUT_FILLERS and other cut flags are ignored (detection always runs).
+    report_only: bool = False
+
+    @field_validator("subject_tracking", "disable_cuts", "cut_fillers", "report_only", mode="before")
     @classmethod
     def _coerce_bool_env(cls, v: object) -> bool:
         if isinstance(v, str):

@@ -799,20 +799,33 @@ def run_job(
         from app.core.config import settings as _cfg
         drops: list = []
         filler_drops: list = []
-        if _cfg.disable_cuts or not _cfg.cut_fillers:
-            # No-cut mode: skip all speech-cut detection. Transcript timestamps
-            # are used 1:1 in pretrim passthrough (no drift possible).
+        _stutter_near_misses: list = []
+        if _cfg.disable_cuts:
+            # Full bypass: no detection, no cuts.
             transcript_clean = transcript
-            _reason = "DISABLE_CUTS=true" if _cfg.disable_cuts else "CUT_FILLERS=false"
-            print(f"[PIPELINE] {_reason} — skipping ALL speech cuts", flush=True)
+            print("[PIPELINE] DISABLE_CUTS=true — passthrough, detection skipped", flush=True)
+        elif not _cfg.cut_fillers and not _cfg.report_only:
+            # Legacy no-cut mode (CUT_FILLERS=false without REPORT_ONLY):
+            # skip all detection to preserve existing behaviour.
+            transcript_clean = transcript
+            print("[PIPELINE] CUT_FILLERS=false — skipping ALL speech cuts", flush=True)
         else:
+            # Detection runs: either cut mode (cut_fillers=true) or
+            # report-only mode (report_only=true, cuts applied per cut_fillers).
             remover = RhythmAwareSilenceRemover()
             word_timestamps = [
                 w for seg in transcript.get("segments", [])
                 for w in seg.get("words", [])
             ]
             drops, filler_drops = remover.process(word_timestamps, transcript.get("segments", []))
-            transcript_clean = apply_drops_to_transcript(transcript, drops)
+            _stutter_near_misses = remover.near_misses
+            if _cfg.cut_fillers:
+                transcript_clean = apply_drops_to_transcript(transcript, drops)
+            else:
+                # report_only=true but cut_fillers=false: detection ran, no cuts applied.
+                transcript_clean = transcript
+                drops = []
+                print("[PIPELINE] REPORT_ONLY — detection active, cuts suppressed (CUT_FILLERS=false)", flush=True)
         print(f"[TIMING] silence_removal: {time.perf_counter()-_t:.1f}s", flush=True)
 
         # ── Step 3: Energy detection (Feature 4) ──────────────────────────
@@ -956,7 +969,13 @@ def run_job(
         _cfg_reps = _os_cfg.getenv("CUT_REPETITIONS", "false").strip().lower() == "true"
         _cfg_fs   = _os_cfg.getenv("CUT_FALSE_STARTS", "false").strip().lower() == "true"
         _cfg_paus = _os_cfg.getenv("CUT_PAUSES",       "false").strip().lower() == "true"
-        if not _cfg_fillers:
+        if _cfg.report_only:
+            print(
+                f"[CONFIG] REPORT_ONLY — detection: fillers=ON repetitions=ON false_starts=ON"
+                f" | cuts: {'fillers+reps+fs' if _cfg_fillers else 'NONE'}",
+                flush=True,
+            )
+        elif not _cfg_fillers:
             print("[CONFIG] cuts: ALL OFF (fillers paused — CUT_FILLERS=false)", flush=True)
         else:
             print(
@@ -968,18 +987,20 @@ def run_job(
             )
         _t = time.perf_counter()
         try:
-            if not _cfg_fillers:
+            if not _cfg_fillers and not _cfg.report_only:
                 _llm_drops = []   # all cuts off — skip LLM editorial entirely
             else:
                 _llm_drops = _llm_editorial_cuts(transcript, plan.key_lines or [])
                 # Step 6.6: stable-ts targeted refinement (STABLE_TS_REPAIR=true only)
                 _llm_drops = _stable_ts_refine_cuts(src, _llm_drops, transcript)
-            # Filter LLM drops by active cut categories.
+            # In report_only mode: keep all detected categories for the PDF.
+            # In normal cut mode: filter by active cut category flags.
             _n_llm_before = len(_llm_drops)
-            if not _cfg_reps:
-                _llm_drops = [d for d in _llm_drops if not d.reason.startswith("llm_repetition")]
-            if not _cfg_fs:
-                _llm_drops = [d for d in _llm_drops if not d.reason.startswith("llm_false_start")]
+            if not _cfg.report_only:
+                if not _cfg_reps:
+                    _llm_drops = [d for d in _llm_drops if not d.reason.startswith("llm_repetition")]
+                if not _cfg_fs:
+                    _llm_drops = [d for d in _llm_drops if not d.reason.startswith("llm_false_start")]
             if _n_llm_before != len(_llm_drops):
                 print(
                     f"[CONFIG] LLM drops filtered: {_n_llm_before}→{len(_llm_drops)}"
@@ -1340,6 +1361,37 @@ def run_job(
             hook_overlay, broll_specs_dicts, speaker_dicts,
         )
 
+        # ── REPORT_ONLY: generate PDF from detections, then zero filler_drops ──
+        # PDF is generated here (Phase 1) while all detection data is in memory.
+        # Phase 2 (render) will add the download link to the final job result.
+        # filler_drops are cleared so plan_data carries no physical cuts when
+        # CUT_FILLERS=false, preserving the existing no-cut video behaviour.
+        _has_edit_report: bool = False
+        if _cfg.report_only:
+            _report_drops = list(filler_drops)
+            if not _cfg.cut_fillers:
+                # Suppress all physical cuts — detection ran for reporting only.
+                filler_drops = []
+            try:
+                from app.engine.edit_report import build_edit_report as _build_report
+                _nm_for_pdf = [nm for nm in _stutter_near_misses if nm.get("gap", 1.0) < 1.0]
+                _src_dur = float(transcript.get("duration") or 0.0)
+                _build_report(
+                    job_id=job_id,
+                    source_filename=src.name,
+                    plan_segments=plan.keep_segments,
+                    key_lines=plan.key_lines or [],
+                    detected_drops=_report_drops,
+                    stutter_near_misses=_nm_for_pdf,
+                    source_words=_source_words,
+                    src_duration=_src_dur,
+                    output_path=settings.outputs_dir / f"{job_id}_report.pdf",
+                )
+                _has_edit_report = True
+                print(f"[REPORT] PDF ready → {job_id}_report.pdf", flush=True)
+            except Exception as _rpt_exc:
+                print(f"[REPORT] PDF generation failed: {_rpt_exc}", flush=True)
+
         # ── Persist everything; set status → ready_for_review ─────────────
         print(f"[TIMING] phase1_total: {time.perf_counter()-_t0:.1f}s", flush=True)
         store.update(
@@ -1368,6 +1420,7 @@ def run_job(
                     for d in _effective_virtual_drops
                 ],
                 "source_words": _source_words,
+                "has_edit_report": _has_edit_report,
             },
             transcript=transcript_clean,
             subject_pos=subject_pos,
@@ -1642,6 +1695,12 @@ def run_render_phase(job_id: str, src: Path) -> None:
         print(f"[TIMING] brand_bumpers: {time.perf_counter()-_t:.1f}s", flush=True)
         print(f"[TIMING] phase2_total: {time.perf_counter()-_t_phase2:.1f}s", flush=True)
 
+        _edit_report_url: str | None = None
+        if plan_data.get("has_edit_report"):
+            _rp = settings.outputs_dir / f"{job_id}_report.pdf"
+            if _rp.exists():
+                _edit_report_url = f"/api/jobs/{job_id}/edit-report"
+
         store.update(
             job_id,
             status="done",
@@ -1660,6 +1719,7 @@ def run_render_phase(job_id: str, src: Path) -> None:
                 "content_type": content_type,
                 "hook_overlay": hook_overlay,
                 "brand_applied": bool(brand_kit.get("name")),
+                "edit_report_url": _edit_report_url,
             },
         )
         # Video-ready email — fire-and-forget, never blocks render delivery

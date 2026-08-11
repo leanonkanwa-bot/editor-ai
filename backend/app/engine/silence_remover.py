@@ -101,6 +101,11 @@ class DropSegment:
 class RhythmAwareSilenceRemover:
     """Analyses word timestamps and returns segments to drop."""
 
+    def __init__(self) -> None:
+        # Populated after each process() call — near-miss repetitions not
+        # caught as stutters.  Used by the PDF report in REPORT_ONLY mode.
+        self.near_misses: list[dict] = []
+
     def process(
         self,
         word_timestamps: list[dict[str, Any]],
@@ -263,8 +268,9 @@ class RhythmAwareSilenceRemover:
         drops.extend(filler_drops + stutter_drops + false_start_drops)
         drops.sort(key=lambda d: d.start)
 
-        if _cut_reps:
-            _log_stutter_near_misses(words)
+        # Always collect near-misses; print only when CUT_REPETITIONS=true.
+        # Result stored on self.near_misses for REPORT_ONLY consumption.
+        self.near_misses = _collect_stutter_near_misses(words, do_print=_cut_reps)
 
         print(
             f"[SILENCE] detected: {len(pause_drops)} pause-excess"
@@ -444,14 +450,16 @@ def _find_stutter_drops(
 _STUTTER_NEAR_MISS_WINDOW = 8
 
 
-def _log_stutter_near_misses(words: list[tuple[str, float, float]]) -> None:
-    """Log word repetitions that were NOT caught as stutters, with rejection reason.
+def _collect_stutter_near_misses(
+    words: list[tuple[str, float, float]],
+    do_print: bool = False,
+) -> list[dict]:
+    """Collect word repetitions NOT caught as stutters (bridge tokens between them).
 
-    Scans all words for same-normalized-form pairs within _STUTTER_NEAR_MISS_WINDOW
-    positions. A pair that was already cut by _find_stutter_drops (adjacent with
-    only transparent separators between them) is skipped. All others get a
-    [STUTTER] near-miss line explaining why they were not cut.
+    Returns structured dicts for the PDF report.  Prints when do_print=True.
+    One near-miss per i-position (first match wins).
     """
+    results: list[dict] = []
     norms = [_normalize_word(w[0]) for w in words]
 
     for i in range(len(words)):
@@ -461,26 +469,35 @@ def _log_stutter_near_misses(words: list[tuple[str, float, float]]) -> None:
             if norms[j] != norms[i]:
                 continue
 
-            # Same normalized word at i and j.
-            bridge_norms = norms[i + 1: j]
             non_transparent = [norms[k] for k in range(i + 1, j) if norms[k]]
 
             if not non_transparent:
-                # Adjacent (possibly with transparent separators) — should have
-                # been caught by _find_stutter_drops; skip.
+                # Adjacent — should have been caught by _find_stutter_drops; skip.
                 pass
             else:
                 gap = words[j][1] - words[i][2]
                 bridge_tokens = [words[k][0] for k in range(i + 1, j)]
-                print(
-                    f"[STUTTER] near-miss: '{words[i][0]}' x2"
-                    f" at {words[i][1]:.2f}s / {words[j][1]:.2f}s"
-                    f" gap={gap:.2f}s"
-                    f" bridge={bridge_tokens!r}"
-                    f" reason=not_adjacent",
-                    flush=True,
-                )
+                results.append({
+                    "word":   words[i][0],
+                    "t1":     words[i][1],
+                    "t1_end": words[i][2],
+                    "t2":     words[j][1],
+                    "t2_end": words[j][2],
+                    "gap":    gap,
+                    "bridge": bridge_tokens,
+                })
+                if do_print:
+                    print(
+                        f"[STUTTER] near-miss: '{words[i][0]}' x2"
+                        f" at {words[i][1]:.2f}s / {words[j][1]:.2f}s"
+                        f" gap={gap:.2f}s"
+                        f" bridge={bridge_tokens!r}"
+                        f" reason=not_adjacent",
+                        flush=True,
+                    )
             break  # one report per i position
+
+    return results
 
 
 # French and English function words: determiners, prepositions, pronouns,

@@ -1702,6 +1702,22 @@ def download(
     return FileResponse(out, media_type="video/mp4", filename=f"edited-{job_id}.mp4")
 
 
+@app.get("/api/jobs/{job_id}/edit-report")
+def get_edit_report(job_id: str, request: Request):
+    """Download the editorial PDF report for a job (generated in REPORT_ONLY mode)."""
+    job = store.get(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    report_path = settings.outputs_dir / f"{job_id}_report.pdf"
+    if not report_path.exists():
+        raise HTTPException(404, "No edit report for this job — enable REPORT_ONLY=true")
+    return FileResponse(
+        report_path,
+        media_type="application/pdf",
+        filename=f"leanon-rapport-{job_id[:12]}.pdf",
+    )
+
+
 @app.get("/api/upload/preview/{upload_id}")
 def upload_preview(upload_id: str):
     """Extract a representative frame from an uploaded source video."""
