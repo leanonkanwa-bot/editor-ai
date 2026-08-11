@@ -1379,17 +1379,25 @@ RULES:
             "cette croyance est fausse", "c'est exactement le contraire",
             "il faut déconstruire", "personne ne vous dit que c'est faux mais"
           EN: "False.", "That's wrong", "Stop believing that", "Myth vs reality"
+    HARD GATE: if none of the exact expressions from (c) appear verbatim in the
+      spoken segment → do NOT use prim_shatter_truth. Weaker expressions such as
+      "c'est totalement inexact", "c'est une illusion", "Absolument pas", "Non," alone
+      are NOT sufficient — they do not carry the explicit shattering energy required.
+      When the marker is absent: use myth_vs_fact (measured correction) or
+      contrarian_take (counterintuitive opinion), never prim_shatter_truth.
     DISQUALIFIERS — do NOT use prim_shatter_truth for:
-      — Calm factual corrections without confrontational energy → myth_vs_fact
+      — Factual corrections without a marker from (c) → myth_vs_fact
       — Opinions or soft nuances → contrarian_take or callout
       — Multiple myths listed at once → red_flag_list or checklist
       — Moments where the speaker acknowledges both sides → versus_battle or comparison
     DISTINCTION FROM myth_vs_fact: myth_vs_fact is the informational version
-      (speaker corrects, explains, provides the real fact — measured tone).
-      prim_shatter_truth is the DRAMATIC version — confrontational, electric.
-      Rule: if you could write the card as "En réalité, [fact]" without losing emotional
-      truth → myth_vs_fact. If the scene demands "FAUX. [Truth]" all-caps energy →
-      prim_shatter_truth.
+      (speaker corrects, explains, provides the real fact — measured tone). It applies
+      whenever the correction lacks an explicit marker from (c).
+      prim_shatter_truth is the DRAMATIC version — confrontational, electric — and
+      requires one of the exact markers from (c) to be spoken.
+      Rule: if the exact spoken words could be paraphrased as "En réalité, [fact]"
+      without losing emotional truth → myth_vs_fact. Only "FAUX. [Truth]" all-caps
+      energy with a verbatim marker → prim_shatter_truth.
     Provide "myth_text" (REQUIRED — the false belief being shattered, max 50 chars,
       framed from the audience's perspective: e.g. "travailler dur suffit pour réussir"),
       "truth_text" (REQUIRED — the truth that replaces it, max 60 chars, declarative,
@@ -2746,7 +2754,7 @@ def generate_storyboard(
     # runs the full quality chain identical to main cards.
     from math import ceil as _math_ceil
 
-    _gf_max = min(_math_ceil(trimmed_duration / 90), 8)
+    _gf_max = _math_ceil(trimmed_duration / 90)  # proportional — no hard cap after 12 min
     _gf_gaps = _find_fill_gaps(
         _sorted_gc, remapped_words, trimmed_duration,
         threshold_s=20.0, min_words=25, max_gaps=_gf_max,
