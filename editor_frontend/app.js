@@ -1491,6 +1491,16 @@ async function showResult(jobId, result) {
   if (player) player.src = downloadUrl;
   if (downloadLink) downloadLink.href = downloadUrl;
 
+  const editReportEl = $("editReportLink");
+  if (editReportEl) {
+    if (result?.edit_report_url) {
+      editReportEl.href = result.edit_report_url;
+      editReportEl.style.display = "flex";
+    } else {
+      editReportEl.style.display = "none";
+    }
+  }
+
   // Store API thumbnail URL for library (generated on-demand by backend)
   try {
     const videos = JSON.parse(localStorage.getItem("edited_videos") || "[]");
