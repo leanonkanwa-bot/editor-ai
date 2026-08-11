@@ -135,4 +135,30 @@ PRIMITIVES: dict[str, dict] = {
             "and prim_ascension_reveal (those are climax-of-pride / result moments)."
         ),
     },
+    "prim_split_stage": {
+        "_family": "full_cover",
+        "_pack": "lean_glass",
+        "zone": "fullscreen",
+        "duration_range_s": (3.5, 6.0),
+        "cover_type": "none",
+        "contentHints": {
+            "side":   "REQUIRED — which side the speaker video moves to: 'left' or 'right'",
+            "mode":   "REQUIRED — content type on the opposite side: 'steps' or 'diagram'",
+            "kicker": "optional — small eyebrow label above the content (max 25 chars)",
+            "steps":  "mode='steps' REQUIRED — list of 2-5 step strings, e.g. ['Prompt', 'HyperFrames', 'Vidéo']",
+            "nodes":  "mode='diagram' REQUIRED — list of 2-4 dicts with keys 'icon' (emoji) and 'label' (str)",
+        },
+        "description": (
+            "Layout-shift primitive: the speaker video shrinks to 50% and slides to one side "
+            "(left or right) with subtle rotateY depth, while the opposite half reveals "
+            "structured content — numbered steps (mode='steps') or an icon+label "
+            "vertical diagram (mode='diagram'). "
+            "Speaker returns to fullscreen at exit via one of 3 rotating variants "
+            "(A: direct slide-back, B: fade-bridge, C: zoom-forward burst). "
+            "No blackout — the speaker remains visible throughout; do not pair with backdrop-dim. "
+            "Budget: 1-2 per video maximum. "
+            "Ideal moments: explaining a multi-step process, a workflow, or a framework the viewer should remember. "
+            "Alternate 'side' between occurrences for visual variety."
+        ),
+    },
 }

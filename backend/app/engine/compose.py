@@ -170,7 +170,7 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
     if layout == "portrait" and not is_caption:
         _is_portrait_full_cover = card.get("contentHints", {}).get("style", "") in (
             "prim_split_compare", "prim_journey_map", "prim_cinematic_reveal",
-            "prim_ascension_reveal", "prim_shatter_truth",
+            "prim_ascension_reveal", "prim_shatter_truth", "prim_split_stage",
         )
         if not _is_portrait_full_cover and zone not in (
             "portrait-center-full", "portrait-center-left", "portrait-center-right"
@@ -3032,6 +3032,85 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         if p.get("title_glow_intense"):
             parts.append(f'  text-shadow:{p["title_glow_intense"]};')
         parts.append('}')
+    # ── prim_split_stage CSS ─────────────────────────────────────────────────
+    if content_style == "prim_split_stage":
+        _sst_side = hints.get("side", "right")    # "left"=video left / "right"=video right
+        _sst_mode = hints.get("mode", "steps")    # "steps" or "diagram"
+        _sst_is_light = p["id"] in ("lean_paper", "lean_craft")
+        _sst_panel_bg = (
+            "rgba(250,250,248,0.92)" if p["id"] == "lean_paper" else
+            "rgba(232,217,197,0.92)" if p["id"] == "lean_craft" else
+            "rgba(6,6,16,0.86)"
+        )
+        # panel sits on the side OPPOSITE the video
+        _sst_panel_edge = "right:0" if _sst_side == "left" else "left:0"
+        # divider line faces the video
+        _sst_border_side = "border-left" if _sst_side == "left" else "border-right"
+
+        # Card-panel: transparent — video shows through on the video side
+        parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
+        parts.append('  width:100%; height:100%; max-width:none; padding:0;')
+        parts.append('  position:relative; background:none; overflow:hidden;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .kicker {{ display:none; }}')
+        parts.append(f'.card[data-card-id="{card_id}"] .accent-line {{ display:none; }}')
+        parts.append(f'.card[data-card-id="{card_id}"] .shimmer-mask {{ display:none; }}')
+
+        # Content panel: occupies the opposite 46% of the frame
+        parts.append(f'.card[data-card-id="{card_id}"] .sst-panel {{')
+        parts.append(f'  position:absolute; top:0; {_sst_panel_edge}; width:46%;')
+        parts.append('  height:100%; display:flex; flex-direction:column;')
+        parts.append('  align-items:flex-start; justify-content:center;')
+        parts.append('  padding:0 52px; box-sizing:border-box;')
+        parts.append(f'  background:{_sst_panel_bg};')
+        parts.append(f'  {_sst_border_side}:1px solid {p["accent"]}28;')
+        if not _sst_is_light:
+            parts.append('  backdrop-filter:blur(16px);')
+        parts.append('}')
+
+        # Kicker / eyebrow label
+        parts.append(f'.card[data-card-id="{card_id}"] .sst-kicker {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:13px;')
+        parts.append(f'  font-weight:700; letter-spacing:0.18em; text-transform:uppercase;')
+        parts.append(f'  color:{p["accent"]}; margin-bottom:28px; opacity:0;')
+        parts.append('}')
+
+        if _sst_mode == "steps":
+            # Numbered step rows
+            parts.append(f'.card[data-card-id="{card_id}"] .sst-step {{')
+            parts.append('  display:flex; align-items:flex-start; gap:18px;')
+            parts.append('  margin-bottom:22px; opacity:0;')
+            parts.append('}')
+            parts.append(f'.card[data-card-id="{card_id}"] .sst-num {{')
+            parts.append(f'  font-family:{p["font"]}; font-size:26px;')
+            parts.append(f'  font-weight:{p["font_weight"]}; color:{p["accent"]};')
+            parts.append('  line-height:1.1; min-width:34px; flex-shrink:0;')
+            parts.append('}')
+            parts.append(f'.card[data-card-id="{card_id}"] .sst-label {{')
+            parts.append(f'  font-family:{p["font"]}; font-size:22px;')
+            parts.append(f'  font-weight:{"600" if p["font_weight"] == "800" else p["font_weight"]};')
+            parts.append(f'  color:{p["text"]}; line-height:1.35;')
+            parts.append('}')
+        else:
+            # Vertical diagram: icon + label nodes with arrow connectors
+            parts.append(f'.card[data-card-id="{card_id}"] .sst-diagram {{')
+            parts.append('  display:flex; flex-direction:column; align-items:flex-start; gap:0;')
+            parts.append('}')
+            parts.append(f'.card[data-card-id="{card_id}"] .sst-node {{')
+            parts.append('  display:flex; align-items:center; gap:16px; opacity:0;')
+            parts.append('}')
+            parts.append(f'.card[data-card-id="{card_id}"] .sst-icon {{')
+            parts.append('  font-size:36px; line-height:1; flex-shrink:0; width:44px; text-align:center;')
+            parts.append('}')
+            parts.append(f'.card[data-card-id="{card_id}"] .sst-dlabel {{')
+            parts.append(f'  font-family:{p["font"]}; font-size:21px;')
+            parts.append(f'  font-weight:{"600" if p["font_weight"] == "800" else p["font_weight"]};')
+            parts.append(f'  color:{p["text"]}; line-height:1.3;')
+            parts.append('}')
+            parts.append(f'.card[data-card-id="{card_id}"] .sst-arrow {{')
+            parts.append(f'  font-size:18px; color:{p["accent"]}; opacity:0;')
+            parts.append('  padding-left:20px; margin:6px 0;')
+            parts.append('}')
     parts.append('</style>')
     # Timeline: full-screen overlay, no card-panel wrapper
     if content_style == "timeline":
@@ -4280,6 +4359,35 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'        <div class="pst-truth" id="{card_id}-pst-truth">{_pst_truth_t}</div>')
         parts.append(f'      </div>')
         parts.append(f'    </div>')
+    elif content_style == "prim_split_stage":
+        # ── prim_split_stage HTML — content panel (video side has no HTML)
+        _sst_mode_h     = hints.get("mode", "steps")
+        _sst_kicker_t   = _esc(hints.get("kicker", "") or kicker or "")
+        _sst_steps_data = hints.get("steps", [])
+        _sst_nodes_data = hints.get("nodes", [])
+        parts.append(f'    <div class="sst-panel" id="{card_id}-sst-panel">')
+        if _sst_kicker_t:
+            parts.append(f'      <div class="sst-kicker" id="{card_id}-sst-kicker">{_sst_kicker_t}</div>')
+        if _sst_mode_h == "steps":
+            for _si, _step in enumerate(_sst_steps_data[:5]):
+                parts.append(f'      <div class="sst-step" id="{card_id}-sst-step-{_si}">')
+                parts.append(f'        <div class="sst-num">{_si + 1}.</div>')
+                parts.append(f'        <div class="sst-label">{_esc(str(_step))}</div>')
+                parts.append(f'      </div>')
+        else:
+            _sst_nn = min(len(_sst_nodes_data), 4)
+            parts.append(f'      <div class="sst-diagram" id="{card_id}-sst-diagram">')
+            for _ni, _node in enumerate(_sst_nodes_data[:4]):
+                _sst_icon  = _esc(str(_node.get("icon", "•"))) if isinstance(_node, dict) else "•"
+                _sst_lbl   = _esc(str(_node.get("label", _node))) if isinstance(_node, dict) else _esc(str(_node))
+                parts.append(f'        <div class="sst-node" id="{card_id}-sst-node-{_ni}">')
+                parts.append(f'          <div class="sst-icon">{_sst_icon}</div>')
+                parts.append(f'          <div class="sst-dlabel">{_sst_lbl}</div>')
+                parts.append(f'        </div>')
+                if _ni < _sst_nn - 1:
+                    parts.append(f'        <div class="sst-arrow" id="{card_id}-sst-arrow-{_ni}">↓</div>')
+            parts.append(f'      </div>')
+        parts.append(f'    </div>')
     elif content_style == "number_hero":
         _nh_number_t  = _esc(hints.get("nh_number", ""))
         _nh_kicker_t  = _esc(hints.get("nh_kicker", "") or kicker or "")
@@ -4468,6 +4576,7 @@ def _build_timeline_js(
         (round(float(c.get("startSec", 0)), 3), round(float(c.get("endSec", 0)), 3))
         for c in cards if c.get("type") != "caption"
     ]
+    _sst_exit_count = 0   # rotation counter for prim_split_stage exit variants
 
     for card in cards:
         card_id = _esc_js(str(card.get("id", "")))
@@ -7572,6 +7681,120 @@ def _build_timeline_js(
                              f'{{ opacity: 0, scale: 0.92 }}, '
                              f'{{ opacity: 1, scale: 1, duration: 0.500, ease: "back.out(1.3)" }}, '
                              f'{start + 0.850:.4f});')
+            # ── prim_split_stage GSAP — video slides + content reveals ──────
+            elif content_style == "prim_split_stage":
+                _sst_side_g  = hints.get("side", "right")   # "left"=video left, "right"=video right
+                _sst_mode_g  = hints.get("mode", "steps")
+                _sst_steps_g = hints.get("steps", [])
+                _sst_nodes_g = hints.get("nodes", [])
+                _sst_kicker_g = hints.get("kicker", "") or card.get("contentHints", {}).get("kicker", "")
+
+                # Geometry: scale 0.5 + translate to the target side
+                # #video-stage fills 1080px wide; scaled center stays at 540px.
+                # Shift ±270px moves it to center of left (270px) or right (810px) half.
+                _sst_vx  = -270 if _sst_side_g == "left" else 270
+                _sst_ry  = -6   if _sst_side_g == "left" else 6
+                # Content panel slides in from outside the content side
+                _sst_px_from = 70 if _sst_side_g == "left" else -70
+
+                _sst_panel_s  = f'.card[data-card-id="{card_id}"] #{card_id}-sst-panel'
+                _sst_kicker_s = f'.card[data-card-id="{card_id}"] #{card_id}-sst-kicker'
+
+                # ── ENTRY ──
+                # Phase 1: video stage repositions (0 → 0.55s)
+                lines.append(
+                    f'  tl.to("#video-stage", '
+                    f'{{ x: {_sst_vx}, scale: 0.50, rotateY: {_sst_ry}, '
+                    f'transformPerspective: 900, duration: 0.55, ease: "power3.inOut", '
+                    f'overwrite: "auto" }}, {start:.4f});'
+                )
+                # Phase 2: content panel slides in (start+0.20)
+                lines.append(
+                    f'  tl.fromTo(\'{_sst_panel_s}\', '
+                    f'{{ opacity: 0, x: {_sst_px_from} }}, '
+                    f'{{ opacity: 1, x: 0, duration: 0.38, ease: "power3.out" }}, '
+                    f'{start + 0.20:.4f});'
+                )
+                # Phase 3: kicker fades in ahead of steps
+                if _sst_kicker_g:
+                    lines.append(
+                        f'  tl.fromTo(\'{_sst_kicker_s}\', '
+                        f'{{ opacity: 0 }}, {{ opacity: 1, duration: 0.22, ease: "power2.out" }}, '
+                        f'{start + 0.22:.4f});'
+                    )
+                # Phase 4: steps or nodes stagger in
+                if _sst_mode_g == "steps":
+                    for _si in range(min(len(_sst_steps_g), 5)):
+                        _sst_step_s = f'.card[data-card-id="{card_id}"] #{card_id}-sst-step-{_si}'
+                        _sst_from_x = _sst_px_from // 2
+                        lines.append(
+                            f'  tl.fromTo(\'{_sst_step_s}\', '
+                            f'{{ opacity: 0, x: {_sst_from_x} }}, '
+                            f'{{ opacity: 1, x: 0, duration: 0.240, ease: "power2.out" }}, '
+                            f'{start + 0.38 + _si * 0.11:.4f});'
+                        )
+                else:
+                    _sst_nn_g = min(len(_sst_nodes_g), 4)
+                    for _ni in range(_sst_nn_g):
+                        _sst_node_s = f'.card[data-card-id="{card_id}"] #{card_id}-sst-node-{_ni}'
+                        lines.append(
+                            f'  tl.fromTo(\'{_sst_node_s}\', '
+                            f'{{ opacity: 0, y: 14 }}, '
+                            f'{{ opacity: 1, y: 0, duration: 0.240, ease: "power2.out" }}, '
+                            f'{start + 0.38 + _ni * 0.14:.4f});'
+                        )
+                        if _ni < _sst_nn_g - 1:
+                            _sst_arr_s = f'.card[data-card-id="{card_id}"] #{card_id}-sst-arrow-{_ni}'
+                            lines.append(
+                                f'  tl.fromTo(\'{_sst_arr_s}\', '
+                                f'{{ opacity: 0 }}, '
+                                f'{{ opacity: 1, duration: 0.16, ease: "power2.out" }}, '
+                                f'{start + 0.44 + _ni * 0.14:.4f});'
+                            )
+
+                # ── EXIT — 3 rotating variants ──
+                _sst_variant = _sst_exit_count % 3
+                _sst_exit_count += 1
+                _sst_exit_t = round(end - 0.52, 4)
+
+                # Content panel always fades out first
+                lines.append(
+                    f'  tl.to(\'{_sst_panel_s}\', '
+                    f'{{ opacity: 0, duration: 0.28, ease: "power2.in" }}, '
+                    f'{_sst_exit_t:.4f});'
+                )
+
+                if _sst_variant == 0:
+                    # Variant A — direct slide-back: clean power3.inOut return
+                    lines.append(
+                        f'  tl.to("#video-stage", '
+                        f'{{ x: 0, scale: 1, rotateY: 0, duration: 0.50, '
+                        f'ease: "power3.inOut", overwrite: "auto" }}, {_sst_exit_t:.4f});'
+                    )
+                elif _sst_variant == 1:
+                    # Variant B — fade-bridge: opacity dims briefly as video returns
+                    lines.append(
+                        f'  tl.to("#video-stage", '
+                        f'{{ x: 0, scale: 1, rotateY: 0, duration: 0.50, '
+                        f'ease: "power3.inOut", overwrite: "auto" }}, {_sst_exit_t:.4f});'
+                    )
+                    lines.append(
+                        f'  tl.fromTo("#video-stage", '
+                        f'{{ opacity: 0.65 }}, {{ opacity: 1, duration: 0.28, '
+                        f'ease: "power2.out" }}, {_sst_exit_t:.4f});'
+                    )
+                else:
+                    # Variant C — zoom-forward burst: scale overshoots briefly then settles
+                    lines.append(
+                        f'  tl.to("#video-stage", '
+                        f'{{ x: 0, scale: 1.06, rotateY: 0, duration: 0.28, '
+                        f'ease: "power4.out", overwrite: "auto" }}, {_sst_exit_t:.4f});'
+                    )
+                    lines.append(
+                        f'  tl.to("#video-stage", '
+                        f'{{ scale: 1, duration: 0.26, ease: "power2.inOut" }}, '
+                        f'{round(_sst_exit_t + 0.28, 4):.4f});'
+                    )
             # ── number_hero GSAP — 3-act cinematic reveal ────────────────────
             elif content_style == "number_hero":
                 _nh_spot_s = f'.card[data-card-id="{card_id}"] #{card_id}-nh-spotlight'
@@ -8335,6 +8558,7 @@ def compose(
     font-family: "Inter", "Montserrat", ui-sans-serif, system-ui, sans-serif;
   }}
   #stage {{ position: relative; width: 100%; height: 100%; overflow: hidden; }}
+  #video-stage {{ position: absolute; inset: 0; }}
   .video-wrapper {{
     position: absolute; left: 0; top: 0;
     width: {width}px; height: {height}px;
@@ -8363,10 +8587,12 @@ def compose(
        data-width="{width}"
        data-height="{height}">
 
-    <div class="video-wrapper" id="video-wrap">
-      <video id="bg-video" src="input-video.mp4" muted playsinline
-             data-start="0" data-duration="{duration:.3f}"
-             data-track-index="1"></video>
+    <div id="video-stage">
+      <div class="video-wrapper" id="video-wrap">
+        <video id="bg-video" src="input-video.mp4" muted playsinline
+               data-start="0" data-duration="{duration:.3f}"
+               data-track-index="1"></video>
+      </div>
     </div>
     <div id="backdrop-dim" style="position:absolute;inset:0;background:rgba(0,0,0,0.45);z-index:5;opacity:0;pointer-events:none;"></div>
     <div id="broll-transition-overlay" style="position:absolute;inset:0;z-index:18;pointer-events:none;opacity:0;"></div>
