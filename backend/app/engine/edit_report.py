@@ -305,18 +305,37 @@ def _render_html(
     fname = escape(source_filename)
     jid_short = escape(job_id[:16])
 
-    # Beat rows
-    beat_parts: list[str] = []
+    # Beat rows — merge consecutive same-beat segments before display.
+    # Adjacent segments sharing the same beat label are one narrative block;
+    # showing them separately creates visual noise and makes the structure
+    # look more granular than it really is.
+    _merged_segs: list[dict] = []
     for seg in plan_segments:
-        beat = str(seg.get("beat", "story")).lower()
+        _beat = str(seg.get("beat", "story")).lower()
+        if _merged_segs and _merged_segs[-1]["beat"] == _beat:
+            _merged_segs[-1]["end"] = float(seg.get("end", _merged_segs[-1]["end"]))
+        else:
+            _merged_segs.append({
+                "beat": _beat,
+                "start": float(seg.get("start", 0)),
+                "end": float(seg.get("end", 0)),
+                "summary": str(seg.get("summary", "")).strip(),
+            })
+
+    beat_parts: list[str] = []
+    for seg in _merged_segs:
+        beat = seg["beat"]
         label = _BEAT_LABELS.get(beat, beat.title())
         bc, pc = _BEAT_CSS.get(beat, ("b-story", "p-story"))
-        t_s = float(seg.get("start", 0))
-        t_e = float(seg.get("end", t_s))
-        raw = str(seg.get("summary", "")).strip()
+        t_s = seg["start"]
+        t_e = seg["end"]
+        raw = seg["summary"]
         excerpt = escape((raw[:72] + "…") if len(raw) > 75 else raw)
+        # Dim very short segments (< 3 s) — real but not actionable as a
+        # standalone narrative beat at this granularity.
+        dim = " style=\"opacity:0.55\"" if (t_e - t_s) < 3.0 else ""
         beat_parts.append(
-            f'<div class="beat-row {bc}">'
+            f'<div class="beat-row {bc}"{dim}>'
             f'<span class="beat-pill {pc}">{escape(label)}</span>'
             f'<span class="beat-ts">{_ts(t_s)} &rarr; {_ts(t_e)}</span>'
             f'<span class="beat-excerpt">{excerpt}</span>'
@@ -345,8 +364,16 @@ def _render_html(
     # Drop cards
     drop_parts: list[str] = []
     for drop in sorted(detected_drops, key=lambda d: d.start):
+        # Filter zero-duration artifacts (start ≈ end, e.g. Whisper tokenisation
+        # splitting "c'est" into a bare "c" token at the same timestamp).
+        if drop.end - drop.start < 0.05:
+            continue
         label, cls = _drop_info(drop.reason)
-        word = escape(_word_text(drop, source_words))
+        word_raw = _word_text(drop, source_words)
+        # Filter single-character detections (same Whisper artefact family).
+        if len(word_raw.strip("« »").strip()) <= 1:
+            continue
+        word = escape(word_raw)
         ts_range = f"{_ts(drop.start)} &rarr; {_ts(drop.end)}"
         ts_precise = f"{_ts_p(drop.start)} &rarr; {_ts_p(drop.end)}"
         drop_parts.append(
