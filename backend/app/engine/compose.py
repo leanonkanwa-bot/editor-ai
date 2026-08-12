@@ -719,6 +719,19 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
     shadow_val = f'{p["shadow"]}, {p["shadow_inset"]}' if p["shadow_inset"] else p["shadow"]
     parts = [f'<div class="card" data-card-id="{card_id}">']
     parts.append('<style>')
+    # Apply border-radius to the .card element itself so the global overflow:hidden clips
+    # content AND box-shadow at a rounded boundary (not a rectangle).
+    # This fixes shadow-clipping inconsistency: compact cards with wide panels (e.g.
+    # warning_soft, action_step_cta) have only ~21px clearance to the card-host edge,
+    # so a 60px box-shadow would be cut sharply at a right angle without this.
+    # Excluded: full-cover styles where .card fills the entire 1920×1080 canvas.
+    _full_cover_styles = frozenset({
+        "prim_split_stage", "prim_anecdote_frame", "prim_journey_map",
+        "prim_cinematic_reveal", "prim_ascension_reveal", "prim_shatter_truth",
+        "prim_split_compare", "prim_numbered_rule",
+    })
+    if p.get("radius") and p["radius"] not in ("0px", "0") and content_style not in _full_cover_styles:
+        parts.append(f'.card[data-card-id="{card_id}"] {{ border-radius: {p["radius"]}; overflow: hidden; }}')
     parts.append(f'.card[data-card-id="{card_id}"] .root {{')
     parts.append('  width: 100%; height: 100%; display: flex; flex-direction: column;')
     _root_justify = "flex-start" if (compact and content_style in _TALL_DATA_PANEL_TYPES) else "center"
@@ -744,6 +757,13 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('    rgba(13,13,13,0.32) 75%,')
         parts.append('    transparent 100%);')
         parts.append('  box-shadow: none;')
+        parts.append('}')
+    if compact and p.get("id") == "lean_glass":
+        # Compact zone (landscape-tl, 660px wide): panel right edge at ~639px leaves only 21px
+        # before the card boundary. The default 60px blur spills 39px past → clips in a straight
+        # line even with rounded card corners. Reduce to 16px so the glow fades within bounds.
+        parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
+        parts.append('  box-shadow: 0 0 16px rgba(76,201,240,0.22), 0 4px 12px rgba(0,0,0,0.45);')
         parts.append('}')
     if p["has_grain"]:
         gt = p.get("grain_type", "")
@@ -1320,7 +1340,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('}')
     if content_style == "warning_soft":
         parts.append(f'.card[data-card-id="{card_id}"] .ws-wrap {{')
-        parts.append('  display:flex; flex-direction:column; align-items:center; gap:16px;')
+        _ws_gap = "10px" if compact else "16px"
+        parts.append(f'  display:flex; flex-direction:column; align-items:center; gap:{_ws_gap};')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .ws-text {{')
         parts.append(f'  font-family:{p["font"]}; font-size:{title_size_eff};')
@@ -1942,8 +1963,9 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'.card[data-card-id="{card_id}"] .asc-wrap {{')
         parts.append('  display:flex; flex-direction:column; align-items:center; gap:10px; width:100%;')
         parts.append('}')
+        _asc_sz = title_size_eff if compact else number_size_eff
         parts.append(f'.card[data-card-id="{card_id}"] .asc-text {{')
-        parts.append(f'  font-family:{p["font"]}; font-size:{number_size_eff};')
+        parts.append(f'  font-family:{p["font"]}; font-size:{_asc_sz};')
         parts.append(f'  font-weight:900; color:{p["text"]}; text-align:center; opacity:0;')
         if p["title_glow_intense"]:
             parts.append(f'  text-shadow:{p["title_glow_intense"]};')
@@ -3470,9 +3492,10 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
     elif content_style == "warning_soft":
         _ws_text = _esc(hints.get("warning_text", ""))
         _ws_acc = p["accent"]
+        _ws_sz = 28 if compact else 44
         if p["id"] == "lean_craft":
             _ws_svg = (
-                f'<svg viewBox="0 0 48 48" width="44" height="44">'
+                f'<svg viewBox="0 0 48 48" width="{_ws_sz}" height="{_ws_sz}">'
                 f'<path d="M24 5 L43 41 H5 Z" fill="none" stroke="{_ws_acc}" stroke-width="2.5"'
                 f' stroke-linejoin="round" stroke-linecap="round"/>'
                 f'<path d="M24 19 L24 30" stroke="{_ws_acc}" stroke-width="2.5" stroke-linecap="round"/>'
@@ -3481,7 +3504,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             )
         else:
             _ws_svg = (
-                f'<svg viewBox="0 0 48 48" width="44" height="44">'
+                f'<svg viewBox="0 0 48 48" width="{_ws_sz}" height="{_ws_sz}">'
                 f'<path d="M24 6L44 42H4L24 6Z" fill="none" stroke="{_ws_acc}" stroke-width="3"'
                 f' stroke-linejoin="round"/>'
                 f'<line x1="24" y1="19" x2="24" y2="31" stroke="{_ws_acc}" stroke-width="3"'
