@@ -2291,6 +2291,39 @@ def _render_hyperframes(
     else:
         print("[HF] SDR source — skipping HDR conversion", flush=True)
 
+    # ── HF video proxy: downscale 4K/high-res source for SwiftShader budget ──
+    # Chrome decodes the source video frame-by-frame via SwiftShader. A 4K
+    # source uses ~33 MB/frame in GPU decode buffers (vs 8 MB for 1080p),
+    # exhausting the shared SwiftShader pool at ~600/1010 frames → ERR_ABORTED
+    # on the media resource. Proxy to HF canvas resolution before compose().
+    _hf_pw, _hf_ph = (1080, 1920) if plan.format == "short" else (1920, 1080)
+    _trimmed_info = _probe_video_info(trimmed)
+    if _needs_proxy(_trimmed_info, _hf_pw, _hf_ph):
+        _hf_proxy = work_dir / "hf_proxy.mp4"
+        print(
+            f"[HF] Source {_trimmed_info['width']}x{_trimmed_info['height']} "
+            f"({_trimmed_info.get('codec','?')}) exceeds HF canvas "
+            f"{_hf_pw}x{_hf_ph} — creating proxy (SwiftShader budget)...",
+            flush=True,
+        )
+        _run([
+            FFMPEG_PATH, "-y", "-loglevel", "error",
+            "-i", str(trimmed),
+            "-vf", (
+                f"scale={_hf_pw}:{_hf_ph}:force_original_aspect_ratio=increase"
+                f":flags=fast_bilinear,crop={_hf_pw}:{_hf_ph},fps=30"
+            ),
+            "-c:v", "libx264", "-preset", "fast", "-crf", "18",
+            "-c:a", "copy",
+            str(_hf_proxy),
+        ])
+        trimmed = _hf_proxy
+        print(
+            f"[HF] HF proxy ready: {_hf_proxy.stat().st_size // (1024 * 1024):.1f} MB "
+            f"(was {_trimmed_info['width']}x{_trimmed_info['height']})",
+            flush=True,
+        )
+
     # Dump diagnostic data for coverage audit
     import json as _json
     _diag = {
@@ -2991,7 +3024,7 @@ def render(
                 if _d.exists():
                     _shutil.rmtree(_d, ignore_errors=True)
                     print(f"[HF] Cleaned up {_dir_name}", flush=True)
-            for _f in ["trimmed.mp4", "trimmed_sdr.mp4", "trimmed_pretrim.mp4"]:
+            for _f in ["trimmed.mp4", "trimmed_sdr.mp4", "trimmed_pretrim.mp4", "hf_proxy.mp4"]:
                 _fp = work_dir / _f
                 if _fp.exists():
                     _fp.unlink()
