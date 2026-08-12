@@ -2757,7 +2757,7 @@ def generate_storyboard(
     _gf_max = _math_ceil(trimmed_duration / 90)  # proportional — no hard cap after 12 min
     _gf_gaps = _find_fill_gaps(
         _sorted_gc, remapped_words, trimmed_duration,
-        threshold_s=20.0, min_words=25, max_gaps=_gf_max,
+        threshold_s=12.0, min_words=15, max_gaps=_gf_max,
     )
     print(
         f"[GAP-FILL] {len(_gf_gaps)} qualifying gap(s) (max={_gf_max} calls)",
