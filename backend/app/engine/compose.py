@@ -3063,57 +3063,59 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'.card[data-card-id="{card_id}"] .shimmer-mask {{ display:none; }}')
 
         # Content panel: occupies the opposite 46% of the frame
+        _sst_dot_color = "rgba(0,0,0,0.05)" if _sst_is_light else "rgba(255,255,255,0.05)"
+        # Round only the speaker-facing edge — screen-touching edges stay flush
+        _sst_radius = "0 14px 14px 0" if _sst_side == "right" else "14px 0 0 14px"
         parts.append(f'.card[data-card-id="{card_id}"] .sst-panel {{')
         parts.append(f'  position:absolute; top:0; {_sst_panel_edge}; width:46%;')
         parts.append('  height:100%; display:flex; flex-direction:column;')
         parts.append('  align-items:flex-start; justify-content:center;')
         parts.append('  padding:0 52px; box-sizing:border-box;')
-        parts.append(f'  background:{_sst_panel_bg};')
+        parts.append(f'  background:radial-gradient(circle, {_sst_dot_color} 1px, transparent 1px), {_sst_panel_bg};')
+        parts.append('  background-size:28px 28px, auto;')
+        parts.append(f'  border-radius:{_sst_radius};')
         parts.append(f'  {_sst_border_side}:1px solid {p["accent"]}28;')
         parts.append('}')
 
         # Kicker / eyebrow label
         parts.append(f'.card[data-card-id="{card_id}"] .sst-kicker {{')
-        parts.append(f'  font-family:{p["font"]}; font-size:13px;')
+        parts.append(f'  font-family:{p["font"]}; font-size:18px;')
         parts.append(f'  font-weight:700; letter-spacing:0.18em; text-transform:uppercase;')
-        parts.append(f'  color:{p["accent"]}; margin-bottom:28px; opacity:0;')
+        parts.append(f'  color:{p["accent"]}; margin-bottom:36px; opacity:0;')
         parts.append('}')
 
         if _sst_mode == "steps":
             # Numbered step rows
             parts.append(f'.card[data-card-id="{card_id}"] .sst-step {{')
-            parts.append('  display:flex; align-items:flex-start; gap:18px;')
-            parts.append('  margin-bottom:22px; opacity:0;')
+            parts.append('  display:flex; align-items:flex-start; gap:22px;')
+            parts.append('  margin-bottom:30px; opacity:0;')
             parts.append('}')
             parts.append(f'.card[data-card-id="{card_id}"] .sst-num {{')
-            parts.append(f'  font-family:{p["font"]}; font-size:26px;')
+            parts.append(f'  font-family:{p["font"]}; font-size:36px;')
             parts.append(f'  font-weight:{p["font_weight"]}; color:{p["accent"]};')
-            parts.append('  line-height:1.1; min-width:34px; flex-shrink:0;')
+            parts.append('  line-height:1.1; min-width:46px; flex-shrink:0;')
             parts.append('}')
             parts.append(f'.card[data-card-id="{card_id}"] .sst-label {{')
-            parts.append(f'  font-family:{p["font"]}; font-size:22px;')
+            parts.append(f'  font-family:{p["font"]}; font-size:30px;')
             parts.append(f'  font-weight:{"600" if p["font_weight"] == "800" else p["font_weight"]};')
             parts.append(f'  color:{p["text"]}; line-height:1.35;')
             parts.append('}')
         else:
-            # Vertical diagram: icon + label nodes with arrow connectors
+            # Vertical diagram: text-only nodes with accent dash via ::before (no icons, no arrows)
             parts.append(f'.card[data-card-id="{card_id}"] .sst-diagram {{')
-            parts.append('  display:flex; flex-direction:column; align-items:flex-start; gap:0;')
+            parts.append('  display:flex; flex-direction:column; align-items:flex-start; gap:32px;')
             parts.append('}')
             parts.append(f'.card[data-card-id="{card_id}"] .sst-node {{')
             parts.append('  display:flex; align-items:center; gap:16px; opacity:0;')
             parts.append('}')
-            parts.append(f'.card[data-card-id="{card_id}"] .sst-icon {{')
-            parts.append('  font-size:36px; line-height:1; flex-shrink:0; width:44px; text-align:center;')
+            parts.append(f'.card[data-card-id="{card_id}"] .sst-node::before {{')
+            parts.append(f'  content:""; display:block; width:26px; height:2px; flex-shrink:0;')
+            parts.append(f'  background:{p["accent"]}; border-radius:1px;')
             parts.append('}')
             parts.append(f'.card[data-card-id="{card_id}"] .sst-dlabel {{')
-            parts.append(f'  font-family:{p["font"]}; font-size:21px;')
+            parts.append(f'  font-family:{p["font"]}; font-size:30px;')
             parts.append(f'  font-weight:{"600" if p["font_weight"] == "800" else p["font_weight"]};')
-            parts.append(f'  color:{p["text"]}; line-height:1.3;')
-            parts.append('}')
-            parts.append(f'.card[data-card-id="{card_id}"] .sst-arrow {{')
-            parts.append(f'  font-size:18px; color:{p["accent"]}; opacity:0;')
-            parts.append('  padding-left:20px; margin:6px 0;')
+            parts.append(f'  color:{p["text"]}; line-height:1.35;')
             parts.append('}')
     parts.append('</style>')
     # Timeline: full-screen overlay, no card-panel wrapper
@@ -4379,17 +4381,12 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
                 parts.append(f'        <div class="sst-label">{_esc(str(_step))}</div>')
                 parts.append(f'      </div>')
         else:
-            _sst_nn = min(len(_sst_nodes_data), 4)
             parts.append(f'      <div class="sst-diagram" id="{card_id}-sst-diagram">')
             for _ni, _node in enumerate(_sst_nodes_data[:4]):
-                _sst_icon  = _esc(str(_node.get("icon", "•"))) if isinstance(_node, dict) else "•"
-                _sst_lbl   = _esc(str(_node.get("label", _node))) if isinstance(_node, dict) else _esc(str(_node))
+                _sst_lbl = _esc(str(_node.get("label", _node))) if isinstance(_node, dict) else _esc(str(_node))
                 parts.append(f'        <div class="sst-node" id="{card_id}-sst-node-{_ni}">')
-                parts.append(f'          <div class="sst-icon">{_sst_icon}</div>')
                 parts.append(f'          <div class="sst-dlabel">{_sst_lbl}</div>')
                 parts.append(f'        </div>')
-                if _ni < _sst_nn - 1:
-                    parts.append(f'        <div class="sst-arrow" id="{card_id}-sst-arrow-{_ni}">↓</div>')
             parts.append(f'      </div>')
         parts.append(f'    </div>')
     elif content_style == "number_hero":
@@ -7737,14 +7734,6 @@ def _build_timeline_js(
                             f'{{ opacity: 1, y: 0, duration: 0.240, ease: "power2.out" }}, '
                             f'{start + 0.38 + _ni * 0.14:.4f});'
                         )
-                        if _ni < _sst_nn_g - 1:
-                            _sst_arr_s = f'.card[data-card-id="{card_id}"] #{card_id}-sst-arrow-{_ni}'
-                            lines.append(
-                                f'  tl.fromTo(\'{_sst_arr_s}\', '
-                                f'{{ opacity: 0 }}, '
-                                f'{{ opacity: 1, duration: 0.16, ease: "power2.out" }}, '
-                                f'{start + 0.44 + _ni * 0.14:.4f});'
-                            )
 
                 # ── EXIT — panel fades out; video-stage untouched (stays at scale:1/x:0) ──
                 _sst_exit_t = round(end - 0.52, 4)
