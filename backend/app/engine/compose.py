@@ -7685,11 +7685,12 @@ def _build_timeline_js(
                              f'{start + 0.850:.4f});')
             # ── prim_split_stage GSAP — video slides + content reveals ──────
             elif content_style == "prim_split_stage":
-                _sst_side_g  = hints.get("side", "right")   # "left"=video left, "right"=video right
-                _sst_mode_g  = hints.get("mode", "steps")
-                _sst_steps_g = hints.get("steps", [])
-                _sst_nodes_g = hints.get("nodes", [])
-                _sst_kicker_g = hints.get("kicker", "") or card.get("contentHints", {}).get("kicker", "")
+                _sst_ch_g    = card.get("contentHints", {})
+                _sst_side_g  = _sst_ch_g.get("side", "right")
+                _sst_mode_g  = _sst_ch_g.get("mode", "steps")
+                _sst_steps_g = _sst_ch_g.get("steps", [])
+                _sst_nodes_g = _sst_ch_g.get("nodes", [])
+                _sst_kicker_g = _sst_ch_g.get("kicker", "")
 
                 # #video-stage stays at scale:1/x:0 — panel covers its half opaquely.
                 # Content panel slides in from outside the content side
