@@ -3037,13 +3037,12 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         _sst_side = hints.get("side", "right")    # "left"=video left / "right"=video right
         _sst_mode = hints.get("mode", "steps")    # "steps" or "diagram"
         _sst_is_light = p["id"] in ("lean_paper", "lean_craft")
-        # Glass illusion without any filter:blur/backdrop-filter — SwiftShader constraint.
-        # Dark packs: dense gradient (same technique as prim_cinematic_reveal bg_full).
-        # box-shadow:inset removed — SwiftShader compositing cost per frame; border alone suffices.
+        # Fully opaque panel — #video-stage stays at scale:1/x:0 (no SwiftShader
+        # re-rasterization of the video texture). Panel covers its half completely.
         _sst_panel_bg = (
-            "rgba(250,250,248,0.94)" if p["id"] == "lean_paper" else
-            "rgba(232,217,197,0.94)" if p["id"] == "lean_craft" else
-            f"linear-gradient(160deg, rgba(18,18,28,0.96), rgba(6,6,14,0.98))"
+            "#FAFAF8" if p["id"] == "lean_paper" else
+            "#E8D9C5" if p["id"] == "lean_craft" else
+            "linear-gradient(160deg, #12121C, #06060E)"
         )
         # panel sits on the side OPPOSITE the video
         _sst_panel_edge = "right:0" if _sst_side == "left" else "left:0"
@@ -4577,8 +4576,6 @@ def _build_timeline_js(
         (round(float(c.get("startSec", 0)), 3), round(float(c.get("endSec", 0)), 3))
         for c in cards if c.get("type") != "caption"
     ]
-    _sst_exit_count = 0   # rotation counter for prim_split_stage exit variants
-
     for card in cards:
         card_id = _esc_js(str(card.get("id", "")))
         if not card_id:
@@ -7690,10 +7687,7 @@ def _build_timeline_js(
                 _sst_nodes_g = hints.get("nodes", [])
                 _sst_kicker_g = hints.get("kicker", "") or card.get("contentHints", {}).get("kicker", "")
 
-                # Geometry: scale 0.5 + translate to the target side
-                # #video-stage fills 1080px wide; scaled center stays at 540px.
-                # Shift ±270px moves it to center of left (270px) or right (810px) half.
-                _sst_vx  = -270 if _sst_side_g == "left" else 270
+                # #video-stage stays at scale:1/x:0 — panel covers its half opaquely.
                 # Content panel slides in from outside the content side
                 _sst_px_from = 70 if _sst_side_g == "left" else -70
 
@@ -7701,14 +7695,7 @@ def _build_timeline_js(
                 _sst_kicker_s = f'.card[data-card-id="{card_id}"] #{card_id}-sst-kicker'
 
                 # ── ENTRY ──
-                # Phase 1: video stage repositions (0 → 0.55s)
-                lines.append(
-                    f'  tl.to("#video-stage", '
-                    f'{{ x: {_sst_vx}, scale: 0.50, '
-                    f'duration: 0.55, ease: "power3.inOut", '
-                    f'overwrite: "auto" }}, {start:.4f});'
-                )
-                # Phase 2: content panel slides in (start+0.20)
+                # Phase 1: content panel slides in (start+0.20)
                 lines.append(
                     f'  tl.fromTo(\'{_sst_panel_s}\', '
                     f'{{ opacity: 0, x: {_sst_px_from} }}, '
@@ -7752,49 +7739,13 @@ def _build_timeline_js(
                                 f'{start + 0.44 + _ni * 0.14:.4f});'
                             )
 
-                # ── EXIT — 3 rotating variants ──
-                _sst_variant = _sst_exit_count % 3
-                _sst_exit_count += 1
+                # ── EXIT — panel fades out; video-stage untouched (stays at scale:1/x:0) ──
                 _sst_exit_t = round(end - 0.52, 4)
-
-                # Content panel always fades out first
                 lines.append(
                     f'  tl.to(\'{_sst_panel_s}\', '
                     f'{{ opacity: 0, duration: 0.28, ease: "power2.in" }}, '
                     f'{_sst_exit_t:.4f});'
                 )
-
-                if _sst_variant == 0:
-                    # Variant A — direct slide-back: clean power3.inOut return
-                    lines.append(
-                        f'  tl.to("#video-stage", '
-                        f'{{ x: 0, scale: 1, duration: 0.50, '
-                        f'ease: "power3.inOut", overwrite: "auto" }}, {_sst_exit_t:.4f});'
-                    )
-                elif _sst_variant == 1:
-                    # Variant B — fade-bridge: opacity dims briefly as video returns
-                    lines.append(
-                        f'  tl.to("#video-stage", '
-                        f'{{ x: 0, scale: 1, duration: 0.50, '
-                        f'ease: "power3.inOut", overwrite: "auto" }}, {_sst_exit_t:.4f});'
-                    )
-                    lines.append(
-                        f'  tl.fromTo("#video-stage", '
-                        f'{{ opacity: 0.65 }}, {{ opacity: 1, duration: 0.28, '
-                        f'ease: "power2.out" }}, {_sst_exit_t:.4f});'
-                    )
-                else:
-                    # Variant C — zoom-forward burst: scale overshoots briefly then settles
-                    lines.append(
-                        f'  tl.to("#video-stage", '
-                        f'{{ x: 0, scale: 1.06, duration: 0.28, '
-                        f'ease: "power4.out", overwrite: "auto" }}, {_sst_exit_t:.4f});'
-                    )
-                    lines.append(
-                        f'  tl.to("#video-stage", '
-                        f'{{ scale: 1, duration: 0.26, ease: "power2.inOut" }}, '
-                        f'{round(_sst_exit_t + 0.28, 4):.4f});'
-                    )
             # ── number_hero GSAP — 3-act cinematic reveal ────────────────────
             elif content_style == "number_hero":
                 _nh_spot_s = f'.card[data-card-id="{card_id}"] #{card_id}-nh-spotlight'
