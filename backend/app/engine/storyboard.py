@@ -859,6 +859,16 @@ RULES:
       DECISIVE TEST: count the distinct elements in the sequence.
       If 2 elements (one cause, one effect) → cause_effect.
       If 3+ elements forming a chain → timeline, even if each step causes the next.
+    DISTINCTION FROM prim_split_stage: When the speaker presents 2–5 steps
+      as an explicitly named METHOD, FRAMEWORK, or PROCESS the viewer should
+      memorize and reuse, prim_split_stage TAKES PRIORITY over timeline.
+      Decisive markers for prim_split_stage: "ma méthode", "le process", "les
+      étapes de X", "les piliers", "la structure", "la formule", "voilà comment
+      je fais / comment ça marche" + a short labelable list of 2-5 items.
+      timeline = what happened in chronological / narrative order (story).
+      prim_split_stage = framework the viewer should learn and apply.
+      Rule: if you can reframe the sequence as "MA MÉTHODE : étape 1, 2, 3"
+      without changing its meaning → use prim_split_stage, NOT timeline.
     Provide "steps" array (2-6 items).
   "comparison" — speaker contrasts two distinct things (old/new, us/them,
     method A vs method B). Exactly 2 sides required. NOT for the same
@@ -1410,6 +1420,14 @@ RULES:
     remains visible throughout — no blackout. Used when the speaker walks through a
     FRAMEWORK, PROCESS, or STRUCTURE the viewer should memorize.
     BUDGET: 1–2 per video. Alternate "side" (left / right) between occurrences.
+    PRIORITY OVER timeline: when trigger (a) holds AND the speaker explicitly
+      frames the sequence as a method/framework (markers: "ma méthode", "le
+      process", "les étapes de", "les piliers", "la formule", "voilà comment
+      je fais"), use prim_split_stage INSTEAD OF timeline — even if timeline
+      could also match the sequential pattern. timeline is for chronological
+      narrative flow (what happened); prim_split_stage is for teachable
+      frameworks (what to do / how it works). When in doubt: can the viewer
+      apply these steps themselves after watching? If yes → prim_split_stage.
     TRIGGER — at least one must hold:
       (a) PROCESS / WORKFLOW: speaker explains 2–5 sequential or parallel steps
           that form a reusable framework ("voilà les 3 étapes de ma méthode",
