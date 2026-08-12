@@ -4637,7 +4637,7 @@ def _build_timeline_js(
             # full_cover cinematic beat: backdrop fires first, card enters after _fc_offset.
             _fc_excl_style = card.get("contentHints", {}).get("style", "")
             _is_fc = (card.get("_family") == "full_cover"
-                      and _fc_excl_style not in ("prim_anecdote_frame", "prim_journey_map"))
+                      and _fc_excl_style not in ("prim_anecdote_frame", "prim_journey_map", "prim_split_stage"))
             if _is_fc and is_paper:              # Piste A — cut sec + fade power2.out
                 _fc_offset, _fc_bd_dur = 0.20, 0.22
                 _fc_host_from = '{ opacity: 0 }'
@@ -4752,7 +4752,9 @@ def _build_timeline_js(
                 lines.append(
                     f'  tl.set("#backdrop-dim", {{ opacity: 0, backgroundColor: "rgba(0,0,0,0.45)" }}, {end:.4f});'
                 )
-            elif center_zone:
+            elif center_zone and content_style != "prim_split_stage":
+                # prim_split_stage: video speaker must stay fully visible on the
+                # non-panel half — no dimming of any kind.
                 lines.append(
                     f'  tl.to("#backdrop-dim", '
                     f'{{ opacity: 1, duration: 0.30, ease: _eIn }}, {start:.4f});'
