@@ -3034,6 +3034,10 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('}')
     # ── prim_split_stage CSS ─────────────────────────────────────────────────
     if content_style == "prim_split_stage":
+        # Root must be full-bleed — same fix as prim_split_compare / prim_journey_map.
+        # root_padding:48px confines .card-panel to an inset area and prevents
+        # height:100% on .sst-panel from reaching the card edges.
+        parts.append(f'.card[data-card-id="{card_id}"] .root {{ padding:0; gap:0; justify-content:flex-start; align-items:stretch; }}')
         _sst_side = hints.get("side", "right")    # "left"=video left / "right"=video right
         _sst_mode = hints.get("mode", "steps")    # "steps" or "diagram"
         _sst_is_light = p["id"] in ("lean_paper", "lean_craft")

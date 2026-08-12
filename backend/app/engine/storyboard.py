@@ -2069,6 +2069,20 @@ Design graphic overlay cards for this video — up to {target_cards} maximum. Pl
                             f" (landscape non-hero guard)",
                             flush=True,
                         )
+            # Reverse guard: full-cover primitives MUST be fullscreen — if the LLM
+            # assigned a compact zone, force it back. The forward guard above only handles
+            # the inverse direction (fullscreen → compact for non-hero cards).
+            for card in cards:
+                _cs = card.get("contentHints", {}).get("style", "")
+                if _cs in _FULL_COVER_STYLES and card.get("zone", "") not in ("fullscreen", "video-overlay"):
+                    _old_zone = card.get("zone", "?")
+                    card["zone"] = "fullscreen"
+                    print(
+                        f"[STORYBOARD] ZONE-REMAP {card.get('id', '?')}"
+                        f" style={_cs!r} {_old_zone!r} -> 'fullscreen'"
+                        f" (full-cover landscape guard)",
+                        flush=True,
+                    )
         print(f"[STORYBOARD] Generated {len(cards)} graphic cards", flush=True)
         return cards
     except Exception as e:
