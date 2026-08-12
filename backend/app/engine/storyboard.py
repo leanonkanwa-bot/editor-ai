@@ -2421,7 +2421,7 @@ def _inject_rhythm_split_stage(
     subject_side: str | None,
     layout: str,
     threshold_s: float = 18.0,
-    min_words: int = 6,
+    min_words: int = 4,
     card_dur: float = 4.5,
 ) -> list[dict]:
     """Inject prim_split_stage(mode=caption) in windows > 18s without any graphic card.
@@ -2475,8 +2475,9 @@ def _inject_rhythm_split_stage(
         if len(span_words) < min_words:
             continue  # no usable speech in this window — skip
 
-        # Cap at ~12 words for panel readability (≈ 2 lines at 32px)
-        caption_text = " ".join(w.text for w in span_words[:12])
+        # Max 4 words — large font needs short text to fill the panel with presence
+        raw_text = " ".join(w.text for w in span_words[:4])
+        caption_text = raw_text[0].upper() + raw_text[1:] if raw_text else ""
 
         card_id = f"card-rhythm-sst-{_idx + 1:02d}"
         new_cards.append({
@@ -2495,8 +2496,8 @@ def _inject_rhythm_split_stage(
         })
         print(
             f"[RHYTHM-SPLIT] {card_id} [{card_start:.1f}–{card_end:.1f}s]"
-            f" side={_side!r} words={len(span_words[:12])}"
-            f" text={caption_text[:45]!r}",
+            f" side={_side!r} words={len(span_words[:4])}"
+            f" text={caption_text!r}",
             flush=True,
         )
 

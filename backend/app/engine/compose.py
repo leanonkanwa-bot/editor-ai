@@ -3101,11 +3101,11 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'  color:{p["text"]}; line-height:1.35;')
             parts.append('}')
         elif _sst_mode == "caption":
-            # Rhythm-injected card: transcript text verbatim, no structure
+            # Rhythm-injected card: 4-word transcript fragment, large font for panel presence
             parts.append(f'.card[data-card-id="{card_id}"] .sst-caption {{')
-            parts.append(f'  font-family:{p["font"]}; font-size:32px;')
-            parts.append(f'  font-weight:{"600" if p["font_weight"] == "800" else p["font_weight"]};')
-            parts.append(f'  color:{p["text"]}; line-height:1.45;')
+            parts.append(f'  font-family:{p["font"]}; font-size:64px;')
+            parts.append(f'  font-weight:{p["font_weight"]};')
+            parts.append(f'  color:{p["text"]}; line-height:1.25;')
             parts.append('  opacity:0; max-width:100%;')
             parts.append('}')
         else:
