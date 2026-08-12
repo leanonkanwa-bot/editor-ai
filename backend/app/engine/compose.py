@@ -442,7 +442,6 @@ _LEAN_CINEMA = {
     "accent_line_glow_bright": "0 0 10px rgba(201,168,106,0.25)",
     "backdrop_dim": "brightness(0.15)",
     "backdrop_restore": "brightness(1)",
-    "has_letterbox": True,
 }
 
 _PACKS = {"lean_glass": _LEAN_GLASS, "lean_paper": _LEAN_PAPER, "lean_vibe": _LEAN_VIBE, "lean_ledger": _LEAN_LEDGER, "lean_craft": _LEAN_CRAFT, "lean_cinema": _LEAN_CINEMA}
@@ -735,6 +734,17 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
     parts.append(f'  gap: 14px; max-width: {max_width_eff}; position: relative;')
     parts.append(f'  box-shadow: {shadow_val};')
     parts.append('}')
+    if p.get("id") == "lean_cinema":
+        # Radial-gradient dissolve: panel fades into the video — text emerges from the scene.
+        # box-shadow suppressed; a hard shadow rectangle would outline the transparent edges.
+        parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
+        parts.append('  background: radial-gradient(ellipse 85% 80% at 50% 50%,')
+        parts.append('    rgba(13,13,13,0.95) 22%,')
+        parts.append('    rgba(13,13,13,0.78) 50%,')
+        parts.append('    rgba(13,13,13,0.32) 75%,')
+        parts.append('    transparent 100%);')
+        parts.append('  box-shadow: none;')
+        parts.append('}')
     if p["has_grain"]:
         gt = p.get("grain_type", "")
         tex_svg = {"confetti": _CONFETTI_SVG, "grid": _GRID_SVG, "paper": _PAPER_GRAIN_SVG, "film": _FILM_GRAIN_SVG}.get(gt, _GRAIN_SVG)
@@ -3169,9 +3179,6 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         return "\n".join(parts)
 
     parts.append('<div class="root">')
-    if p.get("has_letterbox"):
-        parts.append('  <div style="position:absolute;top:0;left:0;right:0;height:60px;background:#000;z-index:3"></div>')
-        parts.append('  <div style="position:absolute;bottom:0;left:0;right:0;height:60px;background:#000;z-index:3"></div>')
     parts.append('  <div class="card-panel">')
     if kicker:
         parts.append(f'    <div class="kicker" id="{card_id}-kicker">{_esc(kicker)}</div>')
