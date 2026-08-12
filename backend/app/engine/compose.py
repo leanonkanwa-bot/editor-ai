@@ -3100,6 +3100,14 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'  font-weight:{"600" if p["font_weight"] == "800" else p["font_weight"]};')
             parts.append(f'  color:{p["text"]}; line-height:1.35;')
             parts.append('}')
+        elif _sst_mode == "caption":
+            # Rhythm-injected card: transcript text verbatim, no structure
+            parts.append(f'.card[data-card-id="{card_id}"] .sst-caption {{')
+            parts.append(f'  font-family:{p["font"]}; font-size:32px;')
+            parts.append(f'  font-weight:{"600" if p["font_weight"] == "800" else p["font_weight"]};')
+            parts.append(f'  color:{p["text"]}; line-height:1.45;')
+            parts.append('  opacity:0; max-width:100%;')
+            parts.append('}')
         else:
             # Vertical diagram: text-only nodes with accent dash via ::before (no icons, no arrows)
             parts.append(f'.card[data-card-id="{card_id}"] .sst-diagram {{')
@@ -4380,6 +4388,10 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
                 parts.append(f'        <div class="sst-num">{_si + 1}.</div>')
                 parts.append(f'        <div class="sst-label">{_esc(str(_step))}</div>')
                 parts.append(f'      </div>')
+        elif _sst_mode_h == "caption":
+            _sst_caption_t = _esc(hints.get("caption_text", ""))
+            if _sst_caption_t:
+                parts.append(f'      <div class="sst-caption" id="{card_id}-sst-caption">{_sst_caption_t}</div>')
         else:
             parts.append(f'      <div class="sst-diagram" id="{card_id}-sst-diagram">')
             for _ni, _node in enumerate(_sst_nodes_data[:4]):
@@ -7713,7 +7725,7 @@ def _build_timeline_js(
                         f'{{ opacity: 0 }}, {{ opacity: 1, duration: 0.22, ease: "power2.out" }}, '
                         f'{start + 0.22:.4f});'
                     )
-                # Phase 4: steps or nodes stagger in
+                # Phase 4: steps, nodes, or caption fade in
                 if _sst_mode_g == "steps":
                     for _si in range(min(len(_sst_steps_g), 5)):
                         _sst_step_s = f'.card[data-card-id="{card_id}"] #{card_id}-sst-step-{_si}'
@@ -7724,6 +7736,14 @@ def _build_timeline_js(
                             f'{{ opacity: 1, x: 0, duration: 0.240, ease: "power2.out" }}, '
                             f'{start + 0.38 + _si * 0.11:.4f});'
                         )
+                elif _sst_mode_g == "caption":
+                    _sst_cap_s = f'.card[data-card-id="{card_id}"] #{card_id}-sst-caption'
+                    lines.append(
+                        f'  tl.fromTo(\'{_sst_cap_s}\', '
+                        f'{{ opacity: 0 }}, '
+                        f'{{ opacity: 1, duration: 0.35, ease: "power2.out" }}, '
+                        f'{start + 0.28:.4f});'
+                    )
                 else:
                     _sst_nn_g = min(len(_sst_nodes_g), 4)
                     for _ni in range(_sst_nn_g):

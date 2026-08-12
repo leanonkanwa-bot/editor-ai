@@ -2413,6 +2413,96 @@ Return ONE JSON object — a card or {{}}, nothing else:
         return None
 
 
+def _inject_rhythm_split_stage(
+    graphic_cards: list[dict],
+    remapped_words: list[WordTiming],
+    trimmed_duration: float,
+    style_pack: str,
+    subject_side: str | None,
+    layout: str,
+    threshold_s: float = 18.0,
+    min_words: int = 6,
+    card_dur: float = 4.5,
+) -> list[dict]:
+    """Inject prim_split_stage(mode=caption) in windows > 18s without any graphic card.
+
+    The 18s counter resets ONLY on graphic cards — punch-ins/zoom never reset it.
+    Caption text is sourced verbatim from remapped_words; nothing is fabricated.
+    Landscape only: portrait has inline captions, rhythm split adds nothing there.
+    """
+    if layout != "landscape":
+        return []
+
+    # Panel goes on the side OPPOSITE the speaker's face.
+    # subject_side="left" → panel covers right → side="left" (panel right in compose terms).
+    # subject_side="right" → panel covers left → side="right" (panel left in compose terms).
+    if subject_side == "left":
+        _side = "left"
+    elif subject_side == "right":
+        _side = "right"
+    else:
+        _side = "right"  # default: panel on left
+
+    # Build occupied windows (graphic card presence only — punch-ins ignored)
+    occupied = sorted(
+        [(float(c.get("startSec", 0)), float(c.get("endSec", 0))) for c in graphic_cards],
+        key=lambda x: x[0],
+    )
+
+    # Walk the timeline to find free windows ≥ threshold_s
+    free_windows: list[tuple[float, float]] = []
+    cursor = 0.0
+    for ws, we in occupied:
+        if ws - cursor >= threshold_s:
+            free_windows.append((cursor, ws))
+        cursor = max(cursor, we)
+    if trimmed_duration - cursor >= threshold_s:
+        free_windows.append((cursor, trimmed_duration))
+
+    new_cards: list[dict] = []
+    for _idx, (fw_start, fw_end) in enumerate(free_windows):
+        # Brief breath before panel slides in (0.5s)
+        card_start = round(fw_start + 0.5, 3)
+        card_end   = round(min(card_start + card_dur, fw_end - 0.3), 3)
+        if card_end - card_start < 2.5:
+            continue  # window too short for a readable card
+
+        # Gather words spoken during the card window; fall back to wider window
+        span_words = [w for w in remapped_words if card_start <= w.start < card_end]
+        if len(span_words) < min_words:
+            span_words = [w for w in remapped_words
+                          if fw_start <= w.start < fw_start + card_dur + 1.5]
+        if len(span_words) < min_words:
+            continue  # no usable speech in this window — skip
+
+        # Cap at ~12 words for panel readability (≈ 2 lines at 32px)
+        caption_text = " ".join(w.text for w in span_words[:12])
+
+        card_id = f"card-rhythm-sst-{_idx + 1:02d}"
+        new_cards.append({
+            "id": card_id,
+            "type": "graphic",
+            "zone": "fullscreen",
+            "startSec": card_start,
+            "endSec": card_end,
+            "_family": "full_cover",
+            "contentHints": {
+                "style": "prim_split_stage",
+                "mode": "caption",
+                "side": _side,
+                "caption_text": caption_text,
+            },
+        })
+        print(
+            f"[RHYTHM-SPLIT] {card_id} [{card_start:.1f}–{card_end:.1f}s]"
+            f" side={_side!r} words={len(span_words[:12])}"
+            f" text={caption_text[:45]!r}",
+            flush=True,
+        )
+
+    return new_cards
+
+
 def generate_storyboard(
     trimmed_duration: float,
     remapped_words: list[WordTiming],
@@ -2927,6 +3017,31 @@ def generate_storyboard(
         )
     else:
         print("[GAP-FILL] No new cards inserted", flush=True)
+
+    # ── Rhythm split-stage injection ─────────────────────────────────────────
+    # Injects prim_split_stage(mode=caption) in any remaining window > 18s
+    # that has no graphic card. Counter is based on graphic card presence only —
+    # punch-ins/zoom NEVER reset the 18s silence clock.
+    # Runs AFTER gap-fill so rhythm cards only fire where gap-fill couldn't help.
+    _rhythm_splits = _inject_rhythm_split_stage(
+        graphic_cards=graphic_cards,
+        remapped_words=remapped_words,
+        trimmed_duration=trimmed_duration,
+        style_pack=style_pack,
+        subject_side=subject_side,
+        layout=layout,
+    )
+    if _rhythm_splits:
+        graphic_cards = sorted(
+            graphic_cards + _rhythm_splits,
+            key=lambda c: float(c.get("startSec", 0)),
+        )
+        print(
+            f"[RHYTHM-SPLIT] Merged {len(_rhythm_splits)} card(s) — total: {len(graphic_cards)}",
+            flush=True,
+        )
+    else:
+        print("[RHYTHM-SPLIT] No windows > 18s without graphic card", flush=True)
 
     # ── Full-cover exclusion pass ─────────────────────────────────────────────
     # Drop card_overlay cards that overlap a full_cover window. full_cover cards
