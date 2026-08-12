@@ -305,10 +305,13 @@ def _render_html(
     fname = escape(source_filename)
     jid_short = escape(job_id[:16])
 
-    # Beat rows — merge consecutive same-beat segments before display.
-    # Adjacent segments sharing the same beat label are one narrative block;
-    # showing them separately creates visual noise and makes the structure
-    # look more granular than it really is.
+    # Beat rows — consolidate before display in two passes:
+    # 1. Merge consecutive same-beat segments into one block.
+    # 2. Absorb short blocks (< 3 s) into the preceding segment so the
+    #    timeline stays continuous with no fragment rows.  A 2-second
+    #    "RÉALISATION" between two longer beats is not a standalone narrative
+    #    phase — extending the preceding block's end is more accurate than
+    #    showing a semi-visible row the user can't act on.
     _merged_segs: list[dict] = []
     for seg in plan_segments:
         _beat = str(seg.get("beat", "story")).lower()
@@ -322,8 +325,16 @@ def _render_html(
                 "summary": str(seg.get("summary", "")).strip(),
             })
 
-    beat_parts: list[str] = []
+    _MIN_BEAT_DUR = 3.0
+    _consolidated: list[dict] = []
     for seg in _merged_segs:
+        if _consolidated and (seg["end"] - seg["start"]) < _MIN_BEAT_DUR:
+            _consolidated[-1]["end"] = seg["end"]  # absorb into preceding
+        else:
+            _consolidated.append(seg)
+
+    beat_parts: list[str] = []
+    for seg in _consolidated:
         beat = seg["beat"]
         label = _BEAT_LABELS.get(beat, beat.title())
         bc, pc = _BEAT_CSS.get(beat, ("b-story", "p-story"))
@@ -331,11 +342,8 @@ def _render_html(
         t_e = seg["end"]
         raw = seg["summary"]
         excerpt = escape((raw[:72] + "…") if len(raw) > 75 else raw)
-        # Dim very short segments (< 3 s) — real but not actionable as a
-        # standalone narrative beat at this granularity.
-        dim = " style=\"opacity:0.55\"" if (t_e - t_s) < 3.0 else ""
         beat_parts.append(
-            f'<div class="beat-row {bc}"{dim}>'
+            f'<div class="beat-row {bc}">'
             f'<span class="beat-pill {pc}">{escape(label)}</span>'
             f'<span class="beat-ts">{_ts(t_s)} &rarr; {_ts(t_e)}</span>'
             f'<span class="beat-excerpt">{excerpt}</span>'
