@@ -437,10 +437,11 @@ IMPORTANT — la règle 3b prime sur la règle 6 (doute) dès que la structure A
 {key_lines_str}
    → Protection CIBLÉE : seuls les mots exacts de ces extraits sont intouchables. Si un faux départ ou une répétition PRÉCÈDE ces mots dans la même phrase, tu PEUX et DOIS le couper. Ex : "La vérité, la vraie vérité, c'est que tout se joue sur la constance" → coupe "La vérité," (faux départ), garde "la vraie vérité, c'est que tout se joue sur la constance." Ne protège JAMAIS l'ensemble d'un segment sous prétexte qu'il contient une key_line — seuls les mots de la key_line elle-même sont intouchables.
 6. En cas de doute → NE PAS COUPER.
+7. SIGNAL ACOUSTIQUE VAD : si le bloc VAD ci-dessus est présent, examine chaque gap signalé. Un gap indique une parole acoustique NON-TRANSCRITE entre deux mots. Agis UNIQUEMENT si le contexte textuel autour du gap suggère un faux départ ou une répétition — par exemple si le mot APRÈS le gap répète ou reprend un groupe déjà présent juste avant. Dans ce cas, coupe les mots avant le gap qui forment l'ébauche avortée. Si le texte autour du gap est cohérent et non-répété, IGNORE le gap (c'est probablement une pause naturelle ou un son parasite). Rule 6 prime : en cas de doute, ne pas couper.
 
 Réponds UNIQUEMENT en JSON strict (aucun texte avant ni après).
 "cuts" = ce qui doit être coupé. "kept" = candidats que tu as examinés mais décidé de GARDER (liste tous pour audit) :
-{{"cuts": [{{"indices": [debut, fin_inclus], "reason": "filler|repetition|false_start|premature_conclusive"}}], "kept": [{{"indices": [i, j], "reason": "kept — explication"}}]}}
+{{"cuts": [{{"indices": [debut, fin_inclus], "reason": "filler|repetition|false_start|premature_conclusive|vad_false_start"}}], "kept": [{{"indices": [i, j], "reason": "kept — explication"}}]}}
 
 Exemple — [2]="Euh", [5]-[6]="il il", [12]-[15]="parce qu'ils parce qu'ils", [20]-[22] répétition rhétorique gardée :
 {{"cuts": [{{"indices": [2, 2], "reason": "filler"}}, {{"indices": [5, 5], "reason": "repetition"}}, {{"indices": [12, 13], "reason": "repetition"}}], "kept": [{{"indices": [20, 22], "reason": "kept — répétition rhétorique volontaire 3× stylistique"}}]}}
