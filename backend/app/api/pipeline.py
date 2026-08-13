@@ -192,7 +192,7 @@ def _dedup_drops(drops: list) -> list:
             # Merge to union: both drops cover this region; wider boundaries
             # preserve pre/post padding from padded filler drops (crucial for
             # catching voiced consonant onsets that precede the Whisper timestamp).
-            merged = DropSegment(
+            merged = _DS(
                 start=min(prev.start, d.start),
                 end=max(prev.end, d.end),
                 reason=prev.reason,
