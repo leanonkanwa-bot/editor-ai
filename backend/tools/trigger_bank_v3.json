@@ -10596,5 +10596,24 @@
       "Non, le succès n'est pas une question de chance. C'est un mensonge confortable pour ceux qui ne veulent pas agir.",
       "Cette croyance va te tuer : 'je ne suis pas légitime'. Faux. La légitimité se prouve en agissant, pas en attendant."
     ]
+  },
+  "prim_confession_frame": {
+    "tier1": [
+      "J'ai douté de tout pendant des mois — de moi, de ma méthode, de pourquoi je continuais.",
+      "J'avais honte d'admettre que je ne savais plus pourquoi je faisais tout ça.",
+      "Je faisais semblant que ça allait, mais intérieurement j'étais complètement perdu.",
+      "J'ai caché mes doutes parce que j'avais l'impression que tout le monde y arrivait sauf moi.",
+      "J'aurais voulu qu'on me dise d'arrêter — j'étais trop épuisé pour décider moi-même.",
+      "Ce succès que vous voyez, il m'a coûté des nuits à pleurer sans vraiment comprendre pourquoi.",
+      "J'ai failli tout abandonner à deux reprises — j'avais perdu confiance en ce que je construisais.",
+      "Je ne savais plus si ce que je faisais avait un sens — j'étais dans le noir complet.",
+      "Pendant des mois, je n'osais pas parler de mes chiffres parce que j'avais honte qu'ils soient si bas.",
+      "Ce que j'ai caché pendant longtemps, c'est que j'avais peur d'être un imposteur — que quelqu'un finisse par s'en rendre compte."
+    ],
+    "tier2": [
+      "Mon associé m'a demandé comment j'allais — j'ai dit bien, mais c'était faux, j'étais au fond depuis trois semaines.",
+      "Ce que ma communauté ne voyait pas derrière chaque vidéo, c'est que je me demandais si ça valait encore la peine de continuer.",
+      "Honnêtement, y'a eu une période où je voulais juste tout couper — les réseaux, la boîte, les clients, tout."
+    ]
   }
 }

@@ -4842,7 +4842,7 @@ def _build_timeline_js(
             # portrait-center-full slot) also trigger backdrop-dim as a safety net.
             if layout == "portrait" and card.get("type") != "caption":
                 _pfc_style = card.get("contentHints", {}).get("style", "")
-                _is_pfc = _pfc_style in ("prim_split_compare", "prim_journey_map", "prim_cinematic_reveal", "prim_ascension_reveal", "prim_shatter_truth")
+                _is_pfc = _pfc_style in ("prim_split_compare", "prim_journey_map", "prim_cinematic_reveal", "prim_ascension_reveal", "prim_shatter_truth", "prim_split_stage", "prim_confession_frame")
                 if not _is_pfc and card_zone not in (
                     "portrait-center-full", "portrait-center-left", "portrait-center-right"
                 ):
@@ -7982,7 +7982,7 @@ def _build_timeline_js(
             _NO_ACCENT_SPAN_TYPES = frozenset({
                 "prim_cinematic_reveal", "prim_ascension_reveal", "number_hero", "prim_stat_counter",
                 "prim_split_compare", "prim_journey_map", "prim_anecdote_frame",
-                "prim_numbered_rule", "prim_shatter_truth",
+                "prim_numbered_rule", "prim_shatter_truth", "prim_split_stage", "prim_confession_frame",
             })
             _aw = card.get("contentHints", {}).get("accent_word", "")
             _ch_ref = card.get("contentHints", {})

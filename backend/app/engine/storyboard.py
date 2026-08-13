@@ -652,7 +652,7 @@ OUTPUT: a JSON array of card objects. Each card:
     "number": "<if a stat/number is featured — for prim_stat_counter use numeric string only, e.g. '46.2' not '46,2 M€'>",
     "prefix": "<prim_stat_counter only — currency/unit BEFORE the number, e.g. '$'. Convention FR: laisser vide, mettre la devise dans suffix>",
     "suffix": "<prim_stat_counter only — unit AFTER the number, e.g. 'M€', 'K', '%'. Convention FR: suffix='€' ou 'M€', prefix vide>",
-    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking"|"hand_written_note"|"speech_bubble_thought"|"calendar_date_highlight"|"percentage_split"|"red_flag_list"|"success_metric_badge"|"client_avatar_persona"|"book_recommendation"|"tool_stack"|"revenue_breakdown"|"age_milestone"|"contrarian_take"|"action_step_cta"|"story_chapter_transition"|"live_reaction_split"|"hidden_cost_reveal"|"social_proof_counter"|"timeline_prediction"|"red_thread_connector"|"silent_beat_pause"|"comment_reply_style"|"before_you_scroll"|"traffic_light_status"|"day_in_life_schedule"|"skill_tree_unlock"|"audience_poll_result"|"broken_promise_tracker"|"ingredient_list"|"resource_allocation"|"fill_in_the_blank"|"streak_counter"|"before_now_later"|"platform_stats"|"cost_comparison"|"decision_matrix"|"habit_tracker"|"income_vs_expense"|"milestone_recap"|"content_calendar"|"client_result_number"|"mistake_lesson"|"tool_comparison"|"weekly_review"|"audience_question"|"prim_stat_counter"|"prim_split_compare"|"prim_journey_map"|"number_hero"|"prim_cinematic_reveal"|"prim_ascension_reveal"|"prim_shatter_truth"|"prim_split_stage",
+    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking"|"hand_written_note"|"speech_bubble_thought"|"calendar_date_highlight"|"percentage_split"|"red_flag_list"|"success_metric_badge"|"client_avatar_persona"|"book_recommendation"|"tool_stack"|"revenue_breakdown"|"age_milestone"|"contrarian_take"|"action_step_cta"|"story_chapter_transition"|"live_reaction_split"|"hidden_cost_reveal"|"social_proof_counter"|"timeline_prediction"|"red_thread_connector"|"silent_beat_pause"|"comment_reply_style"|"before_you_scroll"|"traffic_light_status"|"day_in_life_schedule"|"skill_tree_unlock"|"audience_poll_result"|"broken_promise_tracker"|"ingredient_list"|"resource_allocation"|"fill_in_the_blank"|"streak_counter"|"before_now_later"|"platform_stats"|"cost_comparison"|"decision_matrix"|"habit_tracker"|"income_vs_expense"|"milestone_recap"|"content_calendar"|"client_result_number"|"mistake_lesson"|"tool_comparison"|"weekly_review"|"audience_question"|"prim_stat_counter"|"prim_split_compare"|"prim_journey_map"|"number_hero"|"prim_cinematic_reveal"|"prim_ascension_reveal"|"prim_shatter_truth"|"prim_split_stage"|"prim_confession_frame",
     "left_label": "<comparison / prim_split_compare: left side label>",
     "left_value": "<comparison: left side value (prim_split_compare does not use this)>",
     "right_label": "<comparison / prim_split_compare: right side label>",
@@ -1448,6 +1448,77 @@ RULES:
       max ~30 chars each), "nodes" (mode='diagram' REQUIRED — list of 2–4 objects,
       each with "icon" (emoji) and "label" (short text, max 25 chars)).
     Zone: fullscreen. Duration: 3.5–6.0s.
+  "prim_confession_frame" — a full-screen fragility reveal for the single personal
+    confession moment: the speaker admits a weakness, a doubt, a moment of shame,
+    or a personal low point they actually lived through. Staged as a desaturation
+    overlay (mix-blend-mode:saturation drains colour) + subtle radial vignette +
+    discrete bottom-left text entry + thin accent line that draws slowly left→right.
+    Register: intimate and understated — no fanfare, no punchline.
+    BUDGET: HARD LIMIT — exactly ONE per video, in its own independent slot.
+      The climax slot (prim_cinematic_reveal / prim_ascension_reveal) and the
+      confession slot (prim_confession_frame) are DISTINCT — a video CAN contain
+      both a prim_cinematic_reveal AND a prim_confession_frame simultaneously,
+      because they occupy different emotional registers. Never two prim_confession_frame
+      in the same video.
+    PLACEMENT — most often mid-video or at the opening of a transformation arc:
+      the confession introduces the "before" state, the personal struggle that
+      gives the speaker's advice credibility. May also appear near the end as a
+      raw honest moment after the main content has been delivered.
+    TRIGGER — all FOUR must hold simultaneously:
+      (a) PERSONAL FIRST-PERSON: the speaker speaks about themselves specifically —
+          "j'ai", "je me suis", "j'avais", "je faisais", "je n'osais pas".
+          NOT a general lesson about failure or a hypothetical: "beaucoup de gens
+          doutent" or "on traverse tous des périodes difficiles" → key_phrase instead.
+      (b) PAST SUFFERING / FRAGILITY: the content names a lived weakness, shame,
+          doubt, or difficult personal state — not a challenge overcome with ease,
+          not a lesson framed as a tip. The speaker is admitting something difficult,
+          not celebrating their resilience after the fact.
+      (c) OPENLY ADMITTED: the speaker consciously surfaces something they could have
+          hidden — the very act of naming it is the gesture: "j'ai caché", "je
+          faisais semblant", "j'avais honte", "j'ai douté", "j'aurais voulu qu'on
+          me dise d'arrêter". A vague mention of "a hard period" without naming the
+          inner state does not qualify.
+      (d) SELF-CONTAINED: the confession names the fragile state clearly enough that
+          it works as a standalone card — a viewer reading it alone understands what
+          the speaker felt. An incomplete thought or a confession buried mid-sentence
+          does not qualify.
+    LINGUISTIC MARKERS (at least one MUST be present in the segment):
+      "j'ai douté", "j'avais honte", "j'avais peur", "j'étais perdu(e)",
+      "je ne savais plus", "je faisais semblant", "j'ai caché", "je n'osais pas",
+      "j'aurais voulu qu'on me dise", "j'ai pleuré", "je voulais tout arrêter",
+      "j'étais épuisé(e)", "j'avais l'impression de tout rater",
+      "j'avais perdu confiance", "je me suis senti(e) seul(e)",
+      "j'ai failli tout abandonner", "ce que j'ai caché", "ma pire période",
+      "je ne comprenais plus pourquoi"
+      WITHOUT at least one of these (or an equivalent direct first-person admission
+      of fragility in the speaker's own words) → use key_phrase or anecdote instead.
+    DISQUALIFIERS — do NOT use prim_confession_frame for:
+      — Lessons framed as takeaways: "ce que j'ai appris de mes échecs, c'est…"
+        (focus on the lesson, not the emotional state) → key_phrase
+      — Overcome-with-strength framing: "j'ai traversé ça et voilà ce que j'ai fait"
+        (focus is on the overcoming, not the suffering itself) → key_phrase
+      — General statements about struggle without personal admission: "beaucoup
+        d'entrepreneurs vivent ça" → callout or key_phrase
+      — Pivot to solution: "j'ai douté, mais j'ai compris que…" — if the sentence
+        immediately resolves the doubt into a lesson, the payoff dominates;
+        the confession clause alone is too short → key_phrase
+      — Future-facing anxiety without a past lived experience: "j'ai peur de…"
+        (present fear without the retrospective "I lived through it" dimension)
+    CRITICAL DISTINCTION FROM prim_cinematic_reveal:
+      prim_cinematic_reveal = strength, manifesto, conviction —
+        "voilà ce qui a tout changé", "ma conviction profonde", "le vrai levier c'est X"
+      prim_confession_frame = fragility, aveu, personal low point —
+        "j'avais honte", "je faisais semblant", "j'ai failli tout arrêter"
+      DECISIVE TEST: is the speaker standing tall (certainty, direction, arrival)
+        or speaking from a place of inner fragility (doubt, shame, exhaustion)?
+        Standing tall → prim_cinematic_reveal. Fragility → prim_confession_frame.
+        A phrase CAN contain both a past confession and a current conviction —
+        assign to whichever emotion DOMINATES in the segment.
+    Provide "confession_text" (REQUIRED — the raw first-person past-tense confession,
+      max 80 chars, must contain the speaker's admitted fragile state),
+      "kicker" (optional — quiet eyebrow label, max 30 chars, e.g.
+      "CE QUE JE N'AI JAMAIS DIT", "MON POINT BAS", "CE QUE J'AI CACHÉ").
+    Zone: fullscreen. Duration: 2.5–4.0s.
   "question_answer_pair" — speaker poses a question AND immediately answers
     it in the same breath (e.g. "Qu'est-ce que c'est ? C'est une méthode
     en 3 étapes"). BOTH question and answer are present in the same segment.

@@ -161,4 +161,24 @@ PRIMITIVES: dict[str, dict] = {
             "Alternate 'side' between occurrences for visual variety."
         ),
     },
+    "prim_confession_frame": {
+        "_family": "full_cover",
+        "_pack": "lean_glass",
+        "zone": "fullscreen",
+        "duration_range_s": (2.5, 4.0),
+        "cover_type": "none",
+        "contentHints": {
+            "confession_text": "REQUIRED — first-person past-tense confession, max 80 chars",
+            "kicker": "optional — quiet eyebrow label (max 30 chars), e.g. 'MON POINT BAS', 'CE QUE J\\'AI CACHÉ'",
+        },
+        "description": (
+            "Fragility primitive: a desaturation overlay (mix-blend-mode:saturation #808080, opacity 0→0.4, "
+            "1.2s sine.inOut) drains colour from the pack background — no filter:blur. "
+            "A radial vignette pulls the edges dark. The confession text rises discreetly from "
+            "bottom-left (y:8→0 + opacity, power2.out, no overshoot). A thin 2px stadium-shape "
+            "accent line draws left→right (scaleX 0→1, power1.inOut, 0.9s). "
+            "Register: intimate, understated — emotional inverse of prim_cinematic_reveal. "
+            "Independent budget: 1 per video. Can coexist with prim_cinematic_reveal."
+        ),
+    },
 }
