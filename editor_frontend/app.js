@@ -1371,13 +1371,53 @@ $("retryBtn")?.addEventListener("click", async () => {
 });
 
 // ── Job-resume on page reload ─────────────────────────────────────────────────
-// If the user reloads while a render is in progress (or the render completed
-// while the tab was inactive), active_job_id survives in localStorage.  On
-// load we probe the server and show a non-intrusive banner so the user can
-// return to their result without re-uploading.
+// Two recovery paths:
+// 1. active_job_id — set at poll() start, cleared by showResult()/fail().
+//    Covers refresh during an active render or while the tab was inactive.
+// 2. last_completed_job_id — set by showResult(), never auto-cleared.
+//    Covers the post-result refresh case: user saw the result, refreshed,
+//    active_job_id was already gone but the video is still downloadable.
 (async function _resumeActiveJob() {
   const savedJobId = localStorage.getItem("active_job_id");
-  if (!savedJobId) return;
+  if (!savedJobId) {
+    // No active render — check if the user refreshed after seeing a completed result.
+    const lastJobId = localStorage.getItem("last_completed_job_id");
+    if (!lastJobId) return;
+    let ld;
+    try {
+      const lr = await apiFetch(`/api/jobs/${lastJobId}`);
+      if (!lr.ok) { localStorage.removeItem("last_completed_job_id"); return; }
+      ld = await lr.json();
+    } catch { localStorage.removeItem("last_completed_job_id"); return; }
+    if (ld.status !== "done") { localStorage.removeItem("last_completed_job_id"); return; }
+    const _btnStyle = [
+      "background:rgba(34,197,94,.15);border:1px solid rgba(34,197,94,.35)",
+      "color:rgba(34,197,94,.9);border-radius:6px;padding:.2rem .65rem",
+      "font-size:.72rem;font-weight:600;cursor:pointer;font-family:var(--font)",
+    ].join(";");
+    const _b = document.createElement("div");
+    _b.id = "resumeBanner";
+    _b.style.cssText = [
+      "position:fixed;top:0;left:0;right:0;z-index:9999",
+      "display:flex;align-items:center;justify-content:space-between;gap:.75rem",
+      "padding:.45rem 1rem;font-size:.8rem;font-family:var(--font)",
+      "background:#0a2318;border-bottom:1px solid rgba(34,197,94,.22)",
+      "color:rgba(34,197,94,.9)",
+    ].join(";");
+    _b.innerHTML = `<span>Votre dernière vidéo est toujours disponible</span><div style="display:flex;gap:.5rem"><button id="resumeBannerBtn" style="${_btnStyle}">Voir le résultat</button><button id="resumeBannerClose" style="${_btnStyle}">✕</button></div>`;
+    document.body.prepend(_b);
+    document.getElementById("resumeBannerBtn")?.addEventListener("click", () => {
+      _b.remove();
+      localStorage.removeItem("last_completed_job_id");
+      switchSection("editorArea");
+      showResult(lastJobId, ld.result);
+    });
+    document.getElementById("resumeBannerClose")?.addEventListener("click", () => {
+      _b.remove();
+      localStorage.removeItem("last_completed_job_id");
+    });
+    return;
+  }
   let jdata;
   try {
     const jr = await apiFetch(`/api/jobs/${savedJobId}`);
@@ -1461,6 +1501,7 @@ function spawnConfetti() {
 
 async function showResult(jobId, result) {
   localStorage.removeItem("active_job_id");
+  localStorage.setItem("last_completed_job_id", jobId);
   document.getElementById("resumeBanner")?.remove();
   if (submitBtn) { submitBtn.disabled = false; submitBtn.querySelector(".btn-label").textContent = "Éditer ma vidéo"; submitBtn.classList.remove("loading"); }
   previewCard?.classList.add("hidden");
