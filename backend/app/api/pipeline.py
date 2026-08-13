@@ -351,6 +351,8 @@ def _stable_ts_refine_cuts(src: "Path", drops: list, transcript: dict) -> list:
 def _llm_editorial_cuts(
     transcript: dict,
     key_lines: list[str],
+    *,
+    vad_gaps: list[dict] | None = None,
 ) -> list:
     """Call Claude Haiku with the verbatim numbered transcript → list of DropSegments to cut.
 
@@ -389,10 +391,40 @@ def _llm_editorial_cuts(
 
     key_lines_str = "\n".join(f"- {l}" for l in key_lines[:10]) if key_lines else "(aucun)"
 
+    # VAD acoustic signal block — only visible gaps within the numbered transcript range
+    _vad_block = ""
+    if vad_gaps:
+        _visible = [
+            g for g in vad_gaps
+            if (g.get("word_before_idx") is None or g["word_before_idx"] < _MAX_WORDS)
+            and (g.get("word_after_idx") is None or g["word_after_idx"] < _MAX_WORDS)
+        ]
+        if _visible:
+            _vad_lines = []
+            for g in _visible:
+                wb = g.get("word_before_idx")
+                wa = g.get("word_after_idx")
+                ctx_b = g.get("context_before", "")
+                ctx_a = g.get("context_after", "")
+                dur = g["duration_ms"]
+                if wb is not None and wa is not None:
+                    ref = f"[{wb}]->[{wa}] \"{ctx_b}\" -> \"{ctx_a}\""
+                elif wb is not None:
+                    ref = f"apres [{wb}] \"{ctx_b}\""
+                else:
+                    ref = f"avant [{wa}] \"{ctx_a}\""
+                label = "parole entiere manquee" if g["type"] == "full_segment" else "hesitation probable"
+                _vad_lines.append(f"  {ref} : {dur}ms ({label})")
+            _vad_block = (
+                "\nSIGNAL ACOUSTIQUE VAD — paroles detectees par Silero mais non-transcrites par Whisper :\n"
+                + "\n".join(_vad_lines)
+                + "\n"
+            )
+
     prompt = f"""Tu es un éditeur vidéo expert. Transcription VERBATIM numérotée (un indice = un mot) :
 
 {numbered}{"...(tronqué après [{_max_idx}])" if _truncated else ""}
-
+{_vad_block}
 CONSIGNES :
 0. SCAN SYSTÉMATIQUE : examine CHAQUE indice de [0] à [{_max_idx}] sans en sauter aucun.
 1. Coupe uniquement : fillers isolés (Euh, Bah, Ben, Hein, Hm, ouais isolé), répétitions accidentelles (même mot/groupe répété consécutivement), faux départs (phrase relancée immédiatement).
@@ -792,6 +824,16 @@ def run_job(
             _tx_pool.shutdown(wait=False)
         print(f"[TIMING] transcription+vision: {time.perf_counter()-_t0:.1f}s", flush=True)
 
+        # ── Step 1b: VAD gap detection ────────────────────────────────────
+        _t = time.perf_counter()
+        _vad_gaps: list = []
+        try:
+            from app.engine.vad_gaps import compute_vad_gaps as _compute_vad_gaps
+            _vad_gaps = _compute_vad_gaps(src, transcript)
+        except Exception as _vad_exc:
+            print(f"[VAD-GAPS] skipped: {_vad_exc}", flush=True)
+        print(f"[TIMING] vad_gaps: {time.perf_counter()-_t:.1f}s", flush=True)
+
         # ── Step 2: Silence removal (Feature 2) ───────────────────────────
         _t = time.perf_counter()
         store.update(job_id, status="transcribing", progress=20,
@@ -990,7 +1032,7 @@ def run_job(
             if not _cfg_fillers and not _cfg.report_only:
                 _llm_drops = []   # all cuts off — skip LLM editorial entirely
             else:
-                _llm_drops = _llm_editorial_cuts(transcript, plan.key_lines or [])
+                _llm_drops = _llm_editorial_cuts(transcript, plan.key_lines or [], vad_gaps=_vad_gaps)
                 # Step 6.6: stable-ts targeted refinement (STABLE_TS_REPAIR=true only)
                 _llm_drops = _stable_ts_refine_cuts(src, _llm_drops, transcript)
             # In report_only mode: keep all detected categories for the PDF.
