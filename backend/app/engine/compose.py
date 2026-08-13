@@ -301,6 +301,8 @@ _LEAN_GLASS = {
     "accent_line_glow_bright": "0 0 20px #4cc9f0",
     "backdrop_dim": "brightness(0.25)",
     "backdrop_restore": "brightness(1)",
+    # Climax primitives: dark canvas with accent radial bloom at upper-centre (Direction B — cold)
+    "bg_full": "radial-gradient(ellipse 65% 52% at 50% 44%, rgba(76,201,240,0.16) 0%, rgba(76,201,240,0.05) 44%, #04040E 72%)",
 }
 
 _LEAN_PAPER = {
@@ -328,6 +330,8 @@ _LEAN_PAPER = {
     "accent_line_glow_bright": "0 0 14px rgba(79,107,255,0.45)",
     "backdrop_dim": "brightness(1.6) saturate(0.3)",
     "backdrop_restore": "brightness(1) saturate(1)",
+    # Climax primitives: dark canvas with blue radial bloom at upper-centre (Direction B — cold)
+    "bg_full": "radial-gradient(ellipse 65% 52% at 50% 44%, rgba(79,107,255,0.16) 0%, rgba(79,107,255,0.05) 44%, #04041A 72%)",
 }
 
 _LEAN_VIBE = {
@@ -356,6 +360,8 @@ _LEAN_VIBE = {
     "accent_line_glow_bright": "0 0 18px rgba(255,230,109,0.6)",
     "backdrop_dim": "brightness(0.35) saturate(1.3)",
     "backdrop_restore": "brightness(1) saturate(1)",
+    # Climax primitives: deep warm dark with orange-to-yellow sol vif from bottom (Direction C — warm)
+    "bg_full": "radial-gradient(ellipse 80% 58% at 50% 90%, rgba(255,140,60,0.28) 0%, rgba(255,80,30,0.12) 42%, #080402 70%)",
 }
 
 _LEAN_LEDGER = {
@@ -384,6 +390,8 @@ _LEAN_LEDGER = {
     "accent_line_glow_bright": "0 0 12px rgba(0,200,150,0.3)",
     "backdrop_dim": "brightness(0.2)",
     "backdrop_restore": "brightness(1)",
+    # Climax primitives: dark forest with green radial bloom at upper-centre (Direction B — cold)
+    "bg_full": "radial-gradient(ellipse 65% 52% at 50% 44%, rgba(0,200,150,0.14) 0%, rgba(0,200,150,0.04) 44%, #030A08 72%)",
 }
 
 _LEAN_CRAFT = {
@@ -413,6 +421,8 @@ _LEAN_CRAFT = {
     "accent_line_glow_bright": "0 0 10px rgba(217,119,87,0.35)",
     "backdrop_dim": "brightness(0.3) sepia(0.2)",
     "backdrop_restore": "brightness(1) sepia(0)",
+    # Climax primitives: deep warm dark with terracotta sol vif from bottom (Direction C — warm)
+    "bg_full": "radial-gradient(ellipse 80% 58% at 50% 90%, rgba(217,119,87,0.24) 0%, rgba(170,60,20,0.09) 42%, #060302 70%)",
 }
 
 _LEAN_CINEMA = {
@@ -442,6 +452,8 @@ _LEAN_CINEMA = {
     "accent_line_glow_bright": "0 0 10px rgba(201,168,106,0.25)",
     "backdrop_dim": "brightness(0.15)",
     "backdrop_restore": "brightness(1)",
+    # Climax primitives: deep cinematic dark with gold sol vif from bottom (Direction C — warm)
+    "bg_full": "radial-gradient(ellipse 80% 58% at 50% 90%, rgba(201,168,106,0.22) 0%, rgba(140,90,20,0.08) 42%, #050402 70%)",
 }
 
 _PACKS = {"lean_glass": _LEAN_GLASS, "lean_paper": _LEAN_PAPER, "lean_vibe": _LEAN_VIBE, "lean_ledger": _LEAN_LEDGER, "lean_craft": _LEAN_CRAFT, "lean_cinema": _LEAN_CINEMA}
@@ -2632,7 +2644,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('  width:100%; height:100%; max-width:none; padding:0;')
         parts.append('  display:flex; flex-direction:column; align-items:center;')
         parts.append('  justify-content:center; gap:20px; box-sizing:border-box;')
-        parts.append(f'  background:{p.get("bg_full", "#000")};')
+        parts.append('  background:#000;')  # intentionally dark — not a climax primitive
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .pnr-number {{')
         parts.append(f'  font-family:{p["font"]}; font-size:180px;')
@@ -2831,7 +2843,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('}')
     # ── prim_cinematic_reveal CSS ────────────────────────────────────────────
     if content_style == "prim_cinematic_reveal":
-        # Light-pack text override: bg_full is always #000; pack text may be dark.
+        # Light-pack text override: bg_full is a dark gradient; craft/paper pack text is dark.
         _pcr_text = (
             "rgba(255,255,255,0.92)"
             if p["id"] in ("lean_craft", "lean_paper")
@@ -2898,7 +2910,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('}')
     # ── prim_ascension_reveal CSS ─────────────────────────────────────────────
     if content_style == "prim_ascension_reveal":
-        # Light-pack text override: bg_full is always #000; pack text may be dark.
+        # Light-pack text override: bg_full is a dark gradient; craft/paper pack text is dark.
         _par_text = (
             "rgba(255,255,255,0.92)"
             if p["id"] in ("lean_craft", "lean_paper")
@@ -2976,7 +2988,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('}')
     # ── prim_shatter_truth CSS ───────────────────────────────────────────────
     if content_style == "prim_shatter_truth":
-        # Light-pack override: bg_full is always #000; craft/paper text is dark.
+        # Light-pack override: bg_full is a dark gradient; craft/paper text is dark.
         _pst_text = (
             "rgba(255,255,255,0.95)"
             if p["id"] in ("lean_craft", "lean_paper")
@@ -3078,7 +3090,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         _sst_panel_bg = (
             "#FAFAF8" if p["id"] == "lean_paper" else
             "#E8D9C5" if p["id"] == "lean_craft" else
-            "linear-gradient(160deg, #12121C, #06060E)"
+            p.get("bg_full", "linear-gradient(160deg, #12121C, #06060E)")
         )
         # panel sits on the side OPPOSITE the video
         _sst_panel_edge = "right:0" if _sst_side == "left" else "left:0"
