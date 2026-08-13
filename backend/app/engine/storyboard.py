@@ -132,6 +132,7 @@ _LANDSCAPE_HERO_STYLES: frozenset[str] = frozenset({
     "chapter_marker", "callout",
     "prim_split_compare", "prim_journey_map", "prim_cinematic_reveal",
     "prim_ascension_reveal", "prim_shatter_truth", "prim_split_stage",
+    "prim_confession_frame",
 })
 
 # Styles whose catalogue _family is "full_cover": consume the entire canvas.
@@ -140,6 +141,7 @@ _LANDSCAPE_HERO_STYLES: frozenset[str] = frozenset({
 _FULL_COVER_STYLES: frozenset[str] = frozenset({
     "prim_split_compare", "prim_journey_map", "prim_cinematic_reveal",
     "prim_ascension_reveal", "prim_shatter_truth", "prim_split_stage",
+    "prim_confession_frame",
 })
 
 
@@ -2068,6 +2070,21 @@ Design graphic overlay cards for this video — up to {target_cards} maximum. Pl
                     f" style={_rc.get('contentHints',{}).get('style','?')!r}"
                     f" t={_rc.get('startSec','?')}s"
                     f" (budget=1 PCR+PAR shared, kept {_keep_climax.get('id','?')})",
+                    flush=True,
+                )
+        # Budget=1 guard: prim_confession_frame — independent of climax slot, at most one per video.
+        # Tiebreak: keep the card with the latest startSec (same policy as climax budget).
+        _confess_cards = [c for c in cards if c.get("contentHints", {}).get("style", "") == "prim_confession_frame"]
+        if len(_confess_cards) > 1:
+            _confess_cards.sort(key=lambda c: float(c.get("startSec", 0)), reverse=True)
+            _keep_confess = _confess_cards[0]
+            for _rc in _confess_cards[1:]:
+                cards.remove(_rc)
+                print(
+                    f"[STORYBOARD] CONFESS-BUDGET evicted {_rc.get('id','?')}"
+                    f" style='prim_confession_frame'"
+                    f" t={_rc.get('startSec','?')}s"
+                    f" (budget=1 PCF, kept {_keep_confess.get('id','?')})",
                     flush=True,
                 )
         # Landscape zone guard: video-overlay and fullscreen in landscape leave compact=False

@@ -171,6 +171,7 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
         _is_portrait_full_cover = card.get("contentHints", {}).get("style", "") in (
             "prim_split_compare", "prim_journey_map", "prim_cinematic_reveal",
             "prim_ascension_reveal", "prim_shatter_truth", "prim_split_stage",
+            "prim_confession_frame",
         )
         if not _is_portrait_full_cover and zone not in (
             "portrait-center-full", "portrait-center-left", "portrait-center-right"
@@ -740,7 +741,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
     _full_cover_styles = frozenset({
         "prim_split_stage", "prim_anecdote_frame", "prim_journey_map",
         "prim_cinematic_reveal", "prim_ascension_reveal", "prim_shatter_truth",
-        "prim_split_compare", "prim_numbered_rule",
+        "prim_split_compare", "prim_numbered_rule", "prim_confession_frame",
     })
     if p.get("radius") and p["radius"] not in ("0px", "0") and content_style not in _full_cover_styles:
         parts.append(f'.card[data-card-id="{card_id}"] {{ border-radius: {p["radius"]}; overflow: hidden; }}')
@@ -3169,6 +3170,57 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'  font-weight:{"600" if p["font_weight"] == "800" else p["font_weight"]};')
             parts.append(f'  color:{p["text"]}; line-height:1.35;')
             parts.append('}')
+    # ── prim_confession_frame CSS ─────────────────────────────────────────────
+    if content_style == "prim_confession_frame":
+        # Light-pack text override: bg_full is always dark; craft/paper native text is dark.
+        _pcf_text_color = (
+            "rgba(255,255,255,0.92)"
+            if p["id"] in ("lean_craft", "lean_paper")
+            else p["text"]
+        )
+        # Card-panel: full-bleed dark canvas. position:relative anchors absolute children.
+        parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
+        parts.append('  width:100%; height:100%; max-width:none; padding:0;')
+        parts.append('  position:relative;')
+        parts.append(f'  background:{p.get("bg_full", "#000")};')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .kicker {{ display:none; }}')
+        parts.append(f'.card[data-card-id="{card_id}"] .accent-line {{ display:none; }}')
+        parts.append(f'.card[data-card-id="{card_id}"] .shimmer-mask {{ display:none; }}')
+        # L0 — Desaturation overlay: mix-blend-mode:saturation drains colour from bg_full.
+        # #808080 neutral grey → saturation collapses, no hue shift.
+        # filter:saturate() banned (unconfirmed SwiftShader); blend-mode is safe.
+        parts.append(f'.card[data-card-id="{card_id}"] .pcf-desat {{')
+        parts.append('  position:absolute; inset:0; background:#808080;')
+        parts.append('  mix-blend-mode:saturation; opacity:0; pointer-events:none; z-index:1;')
+        parts.append('}')
+        # L1 — Vignette: radial-gradient dims edges; gradient is static, opacity-only animates.
+        parts.append(f'.card[data-card-id="{card_id}"] .pcf-vignette {{')
+        parts.append('  position:absolute; inset:0; pointer-events:none; z-index:2;')
+        parts.append('  background:radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.25) 100%);')
+        parts.append('  opacity:0;')
+        parts.append('}')
+        # L2/L3 — Scene: stacks line then text bottom-left.
+        parts.append(f'.card[data-card-id="{card_id}"] .pcf-scene {{')
+        parts.append('  position:absolute; inset:0; z-index:3;')
+        parts.append('  display:flex; flex-direction:column;')
+        parts.append('  justify-content:flex-end; align-items:flex-start;')
+        parts.append('  padding:56px 64px;')
+        parts.append('}')
+        # L3 — Accent line: HF rule 7 — display:block + explicit width → scaleX non-trivial.
+        # border-radius:999px = stadium-shape (mandatory). transform-origin:left → left→right reveal.
+        parts.append(f'.card[data-card-id="{card_id}"] .pcf-line {{')
+        parts.append('  display:block; height:2px; border-radius:999px;')
+        parts.append(f'  background:{p["accent"]}; width:100px;')
+        parts.append('  transform:scaleX(0); transform-origin:left center;')
+        parts.append('  opacity:0; margin-bottom:18px;')
+        parts.append('}')
+        # L2 — Text: intimate weight (600), moderate size, bottom-left.
+        parts.append(f'.card[data-card-id="{card_id}"] .pcf-text {{')
+        parts.append(f'  font-family:{p["font"]}; font-size:34px; font-weight:600;')
+        parts.append(f'  color:{_pcf_text_color}; line-height:1.35; opacity:0;')
+        parts.append('  max-width:72%; overflow-wrap:break-word; word-break:break-word;')
+        parts.append('}')
     parts.append('</style>')
     # Timeline: full-screen overlay, no card-panel wrapper
     if content_style == "timeline":
@@ -4442,6 +4494,17 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
                 parts.append(f'          <div class="sst-dlabel">{_sst_lbl}</div>')
                 parts.append(f'        </div>')
             parts.append(f'      </div>')
+        parts.append(f'    </div>')
+    elif content_style == "prim_confession_frame":
+        # ── prim_confession_frame HTML — 4-layer fragility reveal ─────────────
+        # L0 pcf-desat + L1 pcf-vignette: full-canvas overlays (absolute, no text).
+        # L2 pcf-text + L3 pcf-line: stacked bottom-left inside pcf-scene.
+        _pcf_confession_t = _esc(hints.get("confession_text", ""))
+        parts.append(f'    <div class="pcf-desat" id="{card_id}-pcf-desat"></div>')
+        parts.append(f'    <div class="pcf-vignette" id="{card_id}-pcf-vignette"></div>')
+        parts.append(f'    <div class="pcf-scene">')
+        parts.append(f'      <div class="pcf-line" id="{card_id}-pcf-line"></div>')
+        parts.append(f'      <div class="pcf-text" id="{card_id}-pcf-text">{_pcf_confession_t}</div>')
         parts.append(f'    </div>')
     elif content_style == "number_hero":
         _nh_number_t  = _esc(hints.get("nh_number", ""))
@@ -7675,6 +7738,36 @@ def _build_timeline_js(
                                  f'{{ opacity: 0, y: 10 }}, '
                                  f'{{ opacity: 1, y: 0, duration: 0.400, ease: "power2.out" }}, '
                                  f'{start + 1.100:.4f});')
+            # ── prim_confession_frame GSAP — 4-layer fragility reveal ────────
+            elif content_style == "prim_confession_frame":
+                _pcf_desat_s = f'.card[data-card-id="{card_id}"] #{card_id}-pcf-desat'
+                _pcf_vig_s   = f'.card[data-card-id="{card_id}"] #{card_id}-pcf-vignette'
+                _pcf_line_s  = f'.card[data-card-id="{card_id}"] #{card_id}-pcf-line'
+                _pcf_text_s  = f'.card[data-card-id="{card_id}"] #{card_id}-pcf-text'
+                # L0 — Desaturation: sine.inOut 1.2s, drains bg_full colour continuously.
+                lines.append(f'  tl.fromTo(\'{_pcf_desat_s}\', '
+                             f'{{ opacity: 0 }}, '
+                             f'{{ opacity: 0.4, duration: 1.200, ease: "sine.inOut" }}, '
+                             f'{start:.4f});')
+                # L1 — Vignette: opacity-only (gradient is static in CSS), power1.out, +0.1s.
+                lines.append(f'  tl.fromTo(\'{_pcf_vig_s}\', '
+                             f'{{ opacity: 0 }}, '
+                             f'{{ opacity: 1, duration: 1.000, ease: "power1.out" }}, '
+                             f'{start + 0.100:.4f});')
+                # L2 — Text: y(8→0) + letterSpacing open→settled, power2.out, +0.4s.
+                # No overshoot — deliberate contrast with back.out(1.4) of climax primitives.
+                # letterSpacing open tracking ("0.06em") settles to natural — fragility→clarity arc.
+                lines.append(f'  tl.fromTo(\'{_pcf_text_s}\', '
+                             f'{{ opacity: 0, y: 8, letterSpacing: "0.06em" }}, '
+                             f'{{ opacity: 1, y: 0, letterSpacing: "0em", duration: 1.300, ease: "power2.out" }}, '
+                             f'{start + 0.400:.4f});')
+                # L3 — Accent line: scaleX(0→1), transform-origin:left, power1.inOut, +0.9s, 0.9s dur.
+                # Deliberately slow — arrives after text anchors the confession.
+                # HF rule 7: display:block + explicit width (100px in CSS) → scaleX non-trivial.
+                lines.append(f'  tl.fromTo(\'{_pcf_line_s}\', '
+                             f'{{ scaleX: 0, opacity: 0 }}, '
+                             f'{{ scaleX: 1, opacity: 1, duration: 0.900, ease: "power1.inOut" }}, '
+                             f'{start + 0.900:.4f});')
             # ── prim_shatter_truth GSAP — myth trembles → shatters → truth ──
             elif content_style == "prim_shatter_truth":
                 _pst_myth_s  = f'.card[data-card-id="{card_id}"] #{card_id}-pst-myth'
