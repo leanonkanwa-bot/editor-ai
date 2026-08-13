@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>prim_confession_frame — 6 packs</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Inter:wght@400;600;800&family=Montserrat:wght@600;700&family=Playfair+Display:wght@700&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #060609;
+      color: #c8c8d8;
+      font-family: 'Inter', system-ui, sans-serif;
+      padding: 48px 40px 64px;
+      min-height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────────── */
+    .page-header {
+      margin-bottom: 44px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .page-title {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+
+    .page-sub {
+      font-size: 11px;
+      color: rgba(255,255,255,0.28);
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+    }
+
+    .page-layers {
+      margin-top: 16px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .layer-chip {
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border-radius: 3px;
+      border: 1px solid rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.35);
+    }
+
+    /* ── Grid ────────────────────────────────────────────────────────────────── */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 36px 24px;
+      max-width: 1440px;
+    }
+
+    .pack-item {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .pack-label {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 10.5px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.38);
+    }
+
+    .accent-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* ── Card ────────────────────────────────────────────────────────────────── */
+    .pcf-card {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      position: relative;
+      overflow: hidden;
+      outline: 1px solid rgba(255,255,255,0.05);
+    }
+
+    /* L0 background canvas */
+    .pcf-bg {
+      position: absolute;
+      inset: 0;
+      background: var(--bg-full);
+    }
+
+    /* L0 Desaturation overlay — mix-blend-mode:saturation + #808080 (neutral grey)
+       drains colour from bg_full without hue shift. opacity:0.4 = partial desaturation.
+       filter:saturate() banned (unconfirmed SwiftShader compat); blend-mode is safe.    */
+    .pcf-desat {
+      position: absolute;
+      inset: 0;
+      background: #808080;
+      mix-blend-mode: saturation;
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
+    /* L1 Vignette — radial-gradient static, only opacity animates in production */
+    .pcf-vignette {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.25) 100%);
+      pointer-events: none;
+    }
+
+    /* L2/L3 Scene — bottom-left layout */
+    .pcf-scene {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      align-items: flex-start;
+      padding: 14px 16px;
+    }
+
+    /* L3 Accent line — stadium-shape, scaleX(0→1) from left in prod */
+    .pcf-line {
+      display: block;
+      height: 1.5px;
+      border-radius: 999px;
+      background: var(--accent);
+      width: 25px;
+      margin-bottom: 5px;
+    }
+
+    /* L2 Text — intimate weight 600, no overshoot, letterSpacing settles to 0 */
+    .pcf-text {
+      font-family: var(--font);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-color);
+      line-height: 1.35;
+      max-width: 75%;
+    }
+
+    /* ── Card metadata below each card ──────────────────────────────────────── */
+    .pack-meta {
+      font-size: 9.5px;
+      color: rgba(255,255,255,0.18);
+      letter-spacing: 0.04em;
+      line-height: 1.5;
+    }
+
+    .override-note {
+      color: rgba(255,200,100,0.35);
+    }
+
+    /* ── Direction badge ─────────────────────────────────────────────────────── */
+    .dir-badge {
+      position: absolute;
+      top: 7px;
+      right: 8px;
+      font-size: 8px;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.18);
+      background: rgba(0,0,0,0.35);
+      padding: 2px 5px;
+      border-radius: 2px;
+    }
+
+    /* ── Footer ─────────────────────────────────────────────────────────────── */
+    footer {
+      margin-top: 52px;
+      font-size: 10px;
+      color: rgba(255,255,255,0.16);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      border-top: 1px solid rgba(255,255,255,0.05);
+      padding-top: 20px;
+      line-height: 1.8;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="page-header">
+    <div class="page-title">prim_confession_frame</div>
+    <div class="page-sub">preview statique · 6 packs · état final de l'animation</div>
+    <div class="page-layers">
+      <span class="layer-chip">L0 — désat mix-blend-mode:saturation #808080 ×0.4</span>
+      <span class="layer-chip">L1 — vignette radial-gradient opacité finale</span>
+      <span class="layer-chip">L2 — texte bas-gauche power2.out sans overshoot</span>
+      <span class="layer-chip">L3 — trait 2px stadium-shape scaleX left→right power1.inOut 0.9s</span>
+    </div>
+  </div>
+
+  <div class="grid">
+
+    <!-- ── lean_glass ───────────────────────────────────────────────────────── -->
+    <div class="pack-item">
+      <div class="pack-label">
+        <div class="accent-dot" style="background:#4cc9f0"></div>
+        lean_glass
+      </div>
+      <div class="pcf-card" style="
+        --bg-full: radial-gradient(ellipse 65% 52% at 50% 44%, rgba(76,201,240,0.16) 0%, rgba(76,201,240,0.05) 44%, #04040E 72%);
+        --accent: #4cc9f0;
+        --text-color: #F1F1F1;
+        --font: 'Inter', sans-serif;
+      ">
+        <div class="pcf-bg"></div>
+        <div class="pcf-desat"></div>
+        <div class="pcf-vignette"></div>
+        <div class="pcf-scene">
+          <div class="pcf-line"></div>
+          <div class="pcf-text">J'ai douté de tout pendant des mois.</div>
+        </div>
+        <div class="dir-badge">Direction B · cold</div>
+      </div>
+      <div class="pack-meta">Inter 600 · #4cc9f0 · bloom upper-centre</div>
+    </div>
+
+    <!-- ── lean_paper ───────────────────────────────────────────────────────── -->
+    <div class="pack-item">
+      <div class="pack-label">
+        <div class="accent-dot" style="background:#4F6BFF"></div>
+        lean_paper
+      </div>
+      <div class="pcf-card" style="
+        --bg-full: radial-gradient(ellipse 65% 52% at 50% 44%, rgba(79,107,255,0.16) 0%, rgba(79,107,255,0.05) 44%, #04041A 72%);
+        --accent: #4F6BFF;
+        --text-color: rgba(255,255,255,0.92);
+        --font: 'Inter', sans-serif;
+      ">
+        <div class="pcf-bg"></div>
+        <div class="pcf-desat"></div>
+        <div class="pcf-vignette"></div>
+        <div class="pcf-scene">
+          <div class="pcf-line"></div>
+          <div class="pcf-text">Je ne savais plus pourquoi je continuais.</div>
+        </div>
+        <div class="dir-badge">Direction B · cold</div>
+      </div>
+      <div class="pack-meta">
+        Inter 600 · #4F6BFF · bloom upper-centre<br>
+        <span class="override-note">text override rgba(255,255,255,.92) — pack natif light</span>
+      </div>
+    </div>
+
+    <!-- ── lean_vibe ────────────────────────────────────────────────────────── -->
+    <div class="pack-item">
+      <div class="pack-label">
+        <div class="accent-dot" style="background:#FFE66D"></div>
+        lean_vibe
+      </div>
+      <div class="pcf-card" style="
+        --bg-full: radial-gradient(ellipse 80% 58% at 50% 90%, rgba(255,140,60,0.28) 0%, rgba(255,80,30,0.12) 42%, #080402 70%);
+        --accent: #FFE66D;
+        --text-color: #FFFFFF;
+        --font: 'Poppins', sans-serif;
+      ">
+        <div class="pcf-bg"></div>
+        <div class="pcf-desat"></div>
+        <div class="pcf-vignette"></div>
+        <div class="pcf-scene">
+          <div class="pcf-line"></div>
+          <div class="pcf-text">Je faisais semblant que ça allait.</div>
+        </div>
+        <div class="dir-badge">Direction C · warm</div>
+      </div>
+      <div class="pack-meta">Poppins 600 · #FFE66D · bloom sol vif bottom — texte flotte sur le bloom</div>
+    </div>
+
+    <!-- ── lean_ledger ──────────────────────────────────────────────────────── -->
+    <div class="pack-item">
+      <div class="pack-label">
+        <div class="accent-dot" style="background:#00C896"></div>
+        lean_ledger
+      </div>
+      <div class="pcf-card" style="
+        --bg-full: radial-gradient(ellipse 65% 52% at 50% 44%, rgba(0,200,150,0.14) 0%, rgba(0,200,150,0.04) 44%, #030A08 72%);
+        --accent: #00C896;
+        --text-color: #E8EBF0;
+        --font: 'IBM Plex Mono', monospace;
+      ">
+        <div class="pcf-bg"></div>
+        <div class="pcf-desat"></div>
+        <div class="pcf-vignette"></div>
+        <div class="pcf-scene">
+          <div class="pcf-line"></div>
+          <div class="pcf-text">J'aurais voulu qu'on me dise d'arrêter.</div>
+        </div>
+        <div class="dir-badge">Direction B · cold</div>
+      </div>
+      <div class="pack-meta">IBM Plex Mono 600 · #00C896 · bloom upper-centre — mono renforce le côté aveu brut</div>
+    </div>
+
+    <!-- ── lean_craft ───────────────────────────────────────────────────────── -->
+    <div class="pack-item">
+      <div class="pack-label">
+        <div class="accent-dot" style="background:#D97757"></div>
+        lean_craft
+      </div>
+      <div class="pcf-card" style="
+        --bg-full: radial-gradient(ellipse 80% 58% at 50% 90%, rgba(217,119,87,0.24) 0%, rgba(170,60,20,0.09) 42%, #060302 70%);
+        --accent: #D97757;
+        --text-color: rgba(255,255,255,0.92);
+        --font: 'Montserrat', sans-serif;
+      ">
+        <div class="pcf-bg"></div>
+        <div class="pcf-desat"></div>
+        <div class="pcf-vignette"></div>
+        <div class="pcf-scene">
+          <div class="pcf-line"></div>
+          <div class="pcf-text">Je l'ai caché parce que j'avais honte.</div>
+        </div>
+        <div class="dir-badge">Direction C · warm</div>
+      </div>
+      <div class="pack-meta">
+        Montserrat 600 · #D97757 · bloom sol vif bottom<br>
+        <span class="override-note">text override rgba(255,255,255,.92) — pack natif light</span>
+      </div>
+    </div>
+
+    <!-- ── lean_cinema ──────────────────────────────────────────────────────── -->
+    <div class="pack-item">
+      <div class="pack-label">
+        <div class="accent-dot" style="background:#C9A86A"></div>
+        lean_cinema
+      </div>
+      <div class="pcf-card" style="
+        --bg-full: radial-gradient(ellipse 80% 58% at 50% 90%, rgba(201,168,106,0.22) 0%, rgba(140,90,20,0.08) 42%, #050402 70%);
+        --accent: #C9A86A;
+        --text-color: #F5F0E8;
+        --font: 'Playfair Display', serif;
+      ">
+        <div class="pcf-bg"></div>
+        <div class="pcf-desat"></div>
+        <div class="pcf-vignette"></div>
+        <div class="pcf-scene">
+          <div class="pcf-line"></div>
+          <div class="pcf-text">Ce succès m'a coûté plus qu'il ne paraît.</div>
+        </div>
+        <div class="dir-badge">Direction C · warm</div>
+      </div>
+      <div class="pack-meta">Playfair Display 700 · #C9A86A · bloom gold bottom — serif renforce la gravité</div>
+    </div>
+
+  </div>
+
+  <footer>
+    L0 mix-blend-mode:saturation (zéro filter:blur/backdrop-filter) ·
+    L1 vignette radial-gradient opacité seulement ·
+    L2 power2.out sans overshoot — contraste avec back.out(1.4) des primitives climax ·
+    L3 border-radius:999px stadium-shape · transform-origin:left center · 0.9s délibérément lent ·
+    commit 0cf540f · coverage guard 101 styles exit 0
+  </footer>
+
+</body>
+</html>

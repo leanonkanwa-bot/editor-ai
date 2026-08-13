@@ -7754,12 +7754,12 @@ def _build_timeline_js(
                              f'{{ opacity: 0 }}, '
                              f'{{ opacity: 1, duration: 1.000, ease: "power1.out" }}, '
                              f'{start + 0.100:.4f});')
-                # L2 — Text: y(8→0) + letterSpacing open→settled, power2.out, +0.4s.
+                # L2 — Text: y(8→0) + opacity, power2.out, +0.4s.
                 # No overshoot — deliberate contrast with back.out(1.4) of climax primitives.
-                # letterSpacing open tracking ("0.06em") settles to natural — fragility→clarity arc.
+                # letterSpacing intentionally static (animating it reflows text and stutters at frame capture).
                 lines.append(f'  tl.fromTo(\'{_pcf_text_s}\', '
-                             f'{{ opacity: 0, y: 8, letterSpacing: "0.06em" }}, '
-                             f'{{ opacity: 1, y: 0, letterSpacing: "0em", duration: 1.300, ease: "power2.out" }}, '
+                             f'{{ opacity: 0, y: 8 }}, '
+                             f'{{ opacity: 1, y: 0, duration: 1.300, ease: "power2.out" }}, '
                              f'{start + 0.400:.4f});')
                 # L3 — Accent line: scaleX(0→1), transform-origin:left, power1.inOut, +0.9s, 0.9s dur.
                 # Deliberately slow — arrives after text anchors the confession.
