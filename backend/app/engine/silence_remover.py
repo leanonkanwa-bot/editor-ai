@@ -43,6 +43,15 @@ _FILLER_WORDS_EN = frozenset({
 
 _FILLER_WORDS = _FILLER_WORDS_FR_V1 | _FILLER_WORDS_EN
 
+# Multi-word fillers that can't match a single Whisper token — detected separately.
+_FILLER_WORDS_MULTI: frozenset[str] = frozenset(f for f in _FILLER_WORDS if " " in f)
+# Pre-tokenised, sorted longest-first so "you know what i mean" beats "you know".
+_FILLER_PHRASES: list[list[str]] = sorted(
+    [f.split() for f in _FILLER_WORDS_MULTI],
+    key=len,
+    reverse=True,
+)
+
 _FILLERS_RE = re.compile(
     r"^(" + "|".join(re.escape(f) for f in sorted(_FILLER_WORDS, key=len, reverse=True)) + r")$",
     re.IGNORECASE,
@@ -126,7 +135,7 @@ class RhythmAwareSilenceRemover:
         import os as _os_sr
         _cut_reps = _os_sr.getenv("CUT_REPETITIONS", "false").strip().lower() == "true"
         _cut_fs   = _os_sr.getenv("CUT_FALSE_STARTS", "false").strip().lower() == "true"
-        _cut_paus = _os_sr.getenv("CUT_PAUSES",       "false").strip().lower() == "true"
+        _cut_paus = _os_sr.getenv("CUT_PAUSES",       "true").strip().lower()  == "true"
 
         drops: list[DropSegment] = []
 
@@ -289,15 +298,89 @@ class RhythmAwareSilenceRemover:
         words: list[tuple[str, float, float]],
         segment_ends: set[float],
     ) -> list[DropSegment]:
-        """Drop isolated filler words that serve no semantic purpose.
+        """Drop isolated filler words/phrases that serve no semantic purpose.
 
-        A filler is cut when it has at least one side gap >= _FILLER_PAUSE_GUARD
-        and is not dangerously glued to the next word (post_gap >= _FILLER_GLUED_GUARD).
-        Cut boundaries are padded by _FILLER_CUT_PAD and hard-clamped to adjacent
-        word edges so no neighbouring word is ever clipped.
+        Single-word fillers: matched token-by-token via _FILLERS_RE.
+        Multi-word fillers (e.g. "du coup", "tu vois"): matched as consecutive
+        token sequences via _FILLER_PHRASES, in a pre-pass that builds _used_in_multi
+        so the single-word loop never double-processes the same tokens.
+        Both paths apply the same pause-guard and boundary-padding logic.
         """
         drops: list[DropSegment] = []
+        _used_in_multi: set[int] = set()
+
+        # ── Multi-word filler pre-pass ────────────────────────────────────
+        for _parts in _FILLER_PHRASES:
+            _n = len(_parts)
+            for _j in range(len(words) - _n + 1):
+                if any(_j + _k in _used_in_multi for _k in range(_n)):
+                    continue
+                if not all(
+                    words[_j + _k][0].strip(".,!?;:'\"()").lower() == _parts[_k]
+                    for _k in range(_n)
+                ):
+                    continue
+                _p_start = words[_j][1]
+                _p_end   = words[_j + _n - 1][2]
+                pre_gap  = _p_start - words[_j - 1][2] if _j > 0 else float("inf")
+                post_gap = words[_j + _n][1] - _p_end  if _j + _n < len(words) else float("inf")
+                _phrase  = " ".join(_parts)
+
+                _at_seg_end   = any(abs(_p_end - se) < 0.1 for se in segment_ends)
+                _zero_gap_pre = (_j > 0) and (pre_gap < _FILLER_ZERO_GAP)
+                _passes_pause = (
+                    pre_gap > _FILLER_PAUSE_GUARD_PRE
+                    or post_gap > _FILLER_PAUSE_GUARD_POST
+                    or _zero_gap_pre
+                )
+                _glued = post_gap < _FILLER_GLUED_GUARD and _j + _n < len(words)
+
+                _verdict = "CUT"
+                if _at_seg_end:
+                    _verdict = "KEPT:seg_boundary"
+                elif not _passes_pause:
+                    _verdict = (
+                        f"KEPT:pause_guard(pre={pre_gap*1000:.0f}ms<{_FILLER_PAUSE_GUARD_PRE*1000:.0f}"
+                        f" post={post_gap*1000:.0f}ms<{_FILLER_PAUSE_GUARD_POST*1000:.0f})"
+                    )
+                elif _glued:
+                    _verdict = f"KEPT:glued(post={post_gap*1000:.0f}ms<{_FILLER_GLUED_GUARD*1000:.0f})"
+
+                print(
+                    f"[FILLER-AUDIT] {_phrase!r} {_p_start:.3f}-{_p_end:.3f}s"
+                    f" | pre={pre_gap*1000:.0f}ms post={post_gap*1000:.0f}ms"
+                    + (" [GLUED-PRE]" if _zero_gap_pre else "")
+                    + f" → {_verdict}",
+                    flush=True,
+                )
+
+                if _verdict == "CUT":
+                    _adj_pre_end    = words[_j - 1][2] if _j > 0 else _p_start
+                    _adj_post_start = words[_j + _n][1] if _j + _n < len(words) else _p_end
+                    if _zero_gap_pre:
+                        _cut_s = _adj_pre_end
+                    else:
+                        _cut_s = max(_adj_pre_end, _p_start - _FILLER_CUT_PAD)
+                    _cut_e = min(_adj_post_start, _p_end + _FILLER_CUT_PAD_POST)
+                    print(
+                        f"[FILLER] cut {_phrase!r} {_p_start:.3f}-{_p_end:.3f}s"
+                        f" → [{_cut_s:.3f},{_cut_e:.3f}]",
+                        flush=True,
+                    )
+                    drops.append(DropSegment(
+                        _cut_s, _cut_e,
+                        f"filler_phrase:{_phrase}",
+                        target_intervals=tuple(
+                            (words[_j + _k][1], words[_j + _k][2]) for _k in range(_n)
+                        ),
+                    ))
+                    for _k in range(_n):
+                        _used_in_multi.add(_j + _k)
+
+        # ── Single-word filler pass ───────────────────────────────────────
         for i, (text, start, end) in enumerate(words):
+            if i in _used_in_multi:
+                continue
             if not _is_filler(text):
                 continue
 
