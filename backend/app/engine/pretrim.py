@@ -1259,6 +1259,20 @@ def pretrim(
                 return True   # force-resolved 0-gap — valid by prior decision
             return False
 
+        # LLM-marked filler zones: words that START inside these were
+        # intentionally excluded by the planning LLM as filler/tangent/repeat.
+        # WORD-LOST must not rescue them — doing so pulls the filler token
+        # (and any acoustically-glued neighbour) back into the output even
+        # when the rule-based detector correctly kept or missed the filler.
+        # Boundary check uses word.start only (< fz_e, no tolerance on right):
+        # a word whose start is inside the zone belongs to the filler even if
+        # it acoustically straddles the zone boundary.
+        _wl_llm_filler_zones: list[tuple[float, float]] = [
+            (float(_ds.get("start", 0)), float(_ds.get("end", 0)))
+            for _ds in (plan.raw.get("drop_segments") or [])
+            if str(_ds.get("reason", "")).lower() in {"filler", "tangent", "repeat"}
+        ]
+
         _wl_total_repaired = 0
         _wl_fallback_count = 0
         _wl_pass_n = 0
@@ -1280,6 +1294,16 @@ def pretrim(
                     for d in (filler_drops or [])
                 ):
                     continue  # explicitly dropped
+                if any(
+                    _fz_s - 0.010 <= _wl_ws < _fz_e
+                    for _fz_s, _fz_e in _wl_llm_filler_zones
+                ):
+                    print(
+                        f"[WORD-LOST] skipped '{_wl_txt}' {_wl_ws:.2f}-{_wl_we:.2f}s"
+                        f" — starts inside LLM filler zone",
+                        flush=True,
+                    )
+                    continue  # LLM filler zone — do not rescue
 
                 # ── Bidirectional repair ─────────────────────────────────────────────
                 # (a) extend e[pi_a] rightward to cover word.end
