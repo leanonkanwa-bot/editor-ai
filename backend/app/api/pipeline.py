@@ -145,6 +145,16 @@ def _guard_drops_against_key_content(
         offenders = [
             wtext for ws, we, wtext in protected_intervals
             if drop.start < we and drop.end > ws
+            # llm_false_start cuts target a false-start phrase whose restart begins
+            # at drop.end; any protected word entirely within the cut is the false-start
+            # occurrence (not the key-line content which starts at drop.end) — exempt it.
+            # Other reasons (llm_repetition, etc.) do NOT get this exemption: a wrong
+            # repetition cut that happens to target a key-line word must remain blocked.
+            and not (
+                drop.reason == "llm_false_start"
+                and drop.start <= ws + 0.005
+                and we <= drop.end + 0.005
+            )
         ]
         if offenders:
             print(
@@ -189,19 +199,26 @@ def _dedup_drops(drops: list) -> list:
         span_d    = d.end - d.start
         threshold = 0.5 * min(span_prev, span_d)
         if overlap > threshold:
-            # Merge to union: both drops cover this region; wider boundaries
-            # preserve pre/post padding from padded filler drops (crucial for
-            # catching voiced consonant onsets that precede the Whisper timestamp).
+            # For filler drops: use min-end (conservative) — the rule-based post-pad
+            # is always ≤ the LLM's boundary (next word start), so min preserves the
+            # acoustic tail without letting an over-wide LLM cut eat into content words.
+            # For all other drop types: keep union (wider boundaries preserve padding).
+            _both_filler = (
+                prev.reason.startswith("filler") or prev.reason.startswith("llm_filler")
+            ) and (
+                d.reason.startswith("filler") or d.reason.startswith("llm_filler")
+            )
             merged = _DS(
                 start=min(prev.start, d.start),
-                end=max(prev.end, d.end),
+                end=min(prev.end, d.end) if _both_filler else max(prev.end, d.end),
                 reason=prev.reason,
                 target_intervals=prev.target_intervals + d.target_intervals,
             )
             print(
                 f"[DEDUP] {d.reason} [{d.start:.2f}-{d.end:.2f}]"
                 f" merged into {prev.reason} [{prev.start:.2f}-{prev.end:.2f}]"
-                f" → union [{merged.start:.2f}-{merged.end:.2f}]"
+                f" -> {'min-end' if _both_filler else 'union'}"
+                f" [{merged.start:.2f}-{merged.end:.2f}]"
                 f" (overlap={overlap:.3f}s)",
                 flush=True,
             )
@@ -645,6 +662,55 @@ Si rien à couper : {{"cuts": [], "kept": []}}"""
                     f" +{_fwd} word(s) {_fwd_text!r}",
                     flush=True,
                 )
+
+        # FILLER-SCOPE-TRIM: enforce canonical filler boundaries — the LLM cannot
+        # extend a filler cut to include content words. Forward-scan [i0..i1] with
+        # _FILLER_PHRASES (multi-word, longest-first) then single _is_filler; truncate
+        # i1 to the last canonical filler token found. SKIP if span has no canonical
+        # filler at all (protects against hallucinated filler reasons).
+        if reason == "filler":
+            from app.engine.silence_remover import (
+                _is_filler as _sr_is_filler,
+                _FILLER_PHRASES as _sr_phrases,
+            )
+            _filler_end = i0 - 1  # sentinel: no canonical filler found yet
+            _k = i0
+            while _k <= i1:
+                _matched_phrase = False
+                for _ph in _sr_phrases:   # sorted longest-first already
+                    _pn = len(_ph)
+                    if _k + _pn - 1 > i1:
+                        continue
+                    if all(
+                        str(words[_k + _pi].get("text", "")).strip(".,!?;:'\"()").lower() == _ph[_pi]
+                        for _pi in range(_pn)
+                    ):
+                        _filler_end = _k + _pn - 1
+                        _k += _pn
+                        _matched_phrase = True
+                        break
+                if not _matched_phrase:
+                    if _sr_is_filler(str(words[_k].get("text", "")).strip()):
+                        _filler_end = _k
+                        _k += 1
+                    else:
+                        break  # first non-canonical word — stop
+            if _filler_end < i0:
+                _skip_text = " ".join(str(words[k].get("text", "")).strip() for k in range(i0, i1 + 1))
+                print(
+                    f"[LLM-EDIT] FILLER-SCOPE-SKIP [{i0},{i1}] text={_skip_text!r}"
+                    f" — no canonical filler in span",
+                    flush=True,
+                )
+                continue
+            if _filler_end < i1:
+                _trim_orig = " ".join(str(words[k].get("text", "")).strip() for k in range(i0, i1 + 1))
+                print(
+                    f"[LLM-EDIT] FILLER-SCOPE-TRIM [{i0},{i1}]→[{i0},{_filler_end}]"
+                    f" text={_trim_orig!r}",
+                    flush=True,
+                )
+                i1 = _filler_end
 
         t_start = float(words[i0].get("start", 0))
         # Use next word's start to absorb the inter-repetition pause into the cut.

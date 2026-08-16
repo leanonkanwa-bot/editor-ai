@@ -1267,8 +1267,16 @@ def pretrim(
         # Boundary check uses word.start only (< fz_e, no tolerance on right):
         # a word whose start is inside the zone belongs to the filler even if
         # it acoustically straddles the zone boundary.
+        # drop_segments timestamps are COMPRESSED (plan_edit receives transcript_clean).
+        # When source-coordinate mode is active, convert each zone boundary to SOURCE
+        # space via _c2s so the comparison with _wl_ws (SOURCE) is in the same space.
         _wl_llm_filler_zones: list[tuple[float, float]] = [
-            (float(_ds.get("start", 0)), float(_ds.get("end", 0)))
+            (
+                _c2s(float(_ds.get("start", 0)), _vd_sorted) if use_source_coords
+                else float(_ds.get("start", 0)),
+                _c2s(float(_ds.get("end", 0)), _vd_sorted) if use_source_coords
+                else float(_ds.get("end", 0)),
+            )
             for _ds in (plan.raw.get("drop_segments") or [])
             if str(_ds.get("reason", "")).lower() in {"filler", "tangent", "repeat"}
         ]
