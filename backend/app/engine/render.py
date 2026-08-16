@@ -3748,7 +3748,7 @@ def render(
 
     # Cover stream chat / subscriber UI in top-right corner -- short-form only.
     # In long-form (16:9) the crop is different and the UI position varies.
-    _stream_ui_cover = "drawbox=x=W-300:y=0:w=300:h=200:color=black:t=fill" if short_form else None
+    _stream_ui_cover = "drawbox=x=iw-300:y=0:w=300:h=200:color=black:t=fill" if short_form else None
     _vf_p1 = [p for p in [color_grade, scale_filter, _stream_ui_cover, _zoom_str] if p]
     _cmd_p1: list[str] = [
         FFMPEG_PATH, "-y", "-loglevel", "error",
