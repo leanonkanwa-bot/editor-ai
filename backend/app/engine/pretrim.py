@@ -1545,6 +1545,19 @@ def pretrim(
             _wl_has_after  = any(_planned[_p2][3] >= _wl_we - 0.010 for _p2 in range(len(_planned)))
             if not (_wl_has_before and _wl_has_after):
                 continue  # pre-plan or post-plan word — intentional exclusion, skip
+            # Guard: word starts inside an LLM-marked filler/tangent/repeat zone.
+            # The repair loop already skips these via the same check (l.1305-1314).
+            # Without this guard the final assertion re-absorbs them via FALLBACK.
+            if any(
+                _fz_s - 0.010 <= _wl_ws < _fz_e
+                for _fz_s, _fz_e in _wl_llm_filler_zones
+            ):
+                print(
+                    f"[WORD-LOST] assert-skip '{_wl_txt}' {_wl_ws:.3f}s"
+                    f" — starts inside LLM filler zone (final assertion)",
+                    flush=True,
+                )
+                continue
             # GRACEFUL FALLBACK: force-absorb into nearest segment boundary — never crash to user.
             _wl_fallback_count += 1
             print(
