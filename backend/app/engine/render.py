@@ -2636,6 +2636,7 @@ def _render_hyperframes(
                 "--crf", "18",
                 "--workers", str(_n_workers),
                 "--protocol-timeout", str(_seg_proto_ms),
+                "--debug",
                 "--video-frame-format", "jpg",
                 "--tmp-dir", str(_hf_tmp),
             ],
