@@ -1932,6 +1932,12 @@ def pretrim(
             continue
         if any(d.start - 0.010 <= _ws and _we <= d.end + 0.010 for d in (filler_drops or [])):
             continue
+        # Check 3: word starts inside an LLM-marked filler/tangent/repeat zone — intentional drop
+        if any(
+            _fz_s - 0.010 <= _ws < _fz_e
+            for _fz_s, _fz_e in _wl_llm_filler_zones
+        ):
+            continue
         # Only flag inter-segment gaps (not pre/post-plan exclusions)
         _pr_before = any(si[1] <= _ws + 0.010 for si in source_intervals)
         _pr_after  = any(si[0] >= _we - 0.010 for si in source_intervals)
