@@ -2511,6 +2511,7 @@ def _inject_rhythm_split_stage(
     threshold_s: float = 18.0,
     min_words: int = 4,
     card_dur: float = 4.5,
+    min_gap_s: float = 25.0,
 ) -> list[dict]:
     """Inject prim_split_stage(mode=caption) in windows > 18s without any graphic card.
 
@@ -2548,7 +2549,12 @@ def _inject_rhythm_split_stage(
         free_windows.append((cursor, trimmed_duration))
 
     new_cards: list[dict] = []
+    _last_card_end = -min_gap_s  # negative sentinel so first window is never gated
     for _idx, (fw_start, fw_end) in enumerate(free_windows):
+        # Enforce minimum spacing between successive rhythm cards to avoid clustering
+        if fw_start < _last_card_end + min_gap_s:
+            continue
+
         # Brief breath before panel slides in (0.5s)
         card_start = round(fw_start + 0.5, 3)
         card_end   = round(min(card_start + card_dur, fw_end - 0.3), 3)
@@ -2563,9 +2569,34 @@ def _inject_rhythm_split_stage(
         if len(span_words) < min_words:
             continue  # no usable speech in this window — skip
 
-        # Max 4 words — large font needs short text to fill the panel with presence
-        raw_text = " ".join(w.text for w in span_words[:4])
+        # Find best syntactic start: sentence boundary (. ? !) beats clause boundary (, ; :).
+        # Starting at a natural break prevents mid-phrase fragments like "tu dois donc faire".
+        _start_idx = 0
+        _clause_idx = 0
+        _found_clause = False
+        for _wi in range(1, len(span_words)):
+            _prev_txt = span_words[_wi - 1].text.rstrip()
+            if _prev_txt and _prev_txt[-1] in ".?!":
+                _start_idx = _wi
+                break  # strong boundary found — stop
+            if not _found_clause and _prev_txt and _prev_txt[-1] in ",;:":
+                _clause_idx = _wi
+                _found_clause = True
+        else:
+            if _found_clause:
+                _start_idx = _clause_idx
+
+        # Guard: boundary must leave at least min_words words; otherwise fall back to 0
+        if len(span_words) - _start_idx < min_words:
+            _start_idx = 0
+
+        # Max 4 words from the syntactic start — large font needs short text for panel presence
+        raw_text = " ".join(w.text for w in span_words[_start_idx:_start_idx + 4])
         caption_text = raw_text[0].upper() + raw_text[1:] if raw_text else ""
+
+        # Alternate panel side across successive PLACED cards (not free-window index)
+        # so skipped windows don't break the L-R pattern.
+        _card_side = _side if len(new_cards) % 2 == 0 else ("right" if _side == "left" else "left")
 
         card_id = f"card-rhythm-sst-{_idx + 1:02d}"
         new_cards.append({
@@ -2578,13 +2609,14 @@ def _inject_rhythm_split_stage(
             "contentHints": {
                 "style": "prim_split_stage",
                 "mode": "caption",
-                "side": _side,
+                "side": _card_side,
                 "caption_text": caption_text,
             },
         })
+        _last_card_end = card_end
         print(
             f"[RHYTHM-SPLIT] {card_id} [{card_start:.1f}–{card_end:.1f}s]"
-            f" side={_side!r} words={len(span_words[:4])}"
+            f" side={_card_side!r} words={len(span_words[_start_idx:_start_idx + 4])}"
             f" text={caption_text!r}",
             flush=True,
         )

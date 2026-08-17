@@ -4586,6 +4586,7 @@ def _build_timeline_js(
     subject_position: dict | None = None,
     pack: dict | None = None,
     layout: str = "portrait",
+    video_pos_x: float = 50.0,
 ) -> str:
     """Build the master GSAP timeline script including zoom/pan on the video wrapper."""
     p = pack or _LEAN_GLASS
@@ -7890,6 +7891,26 @@ def _build_timeline_js(
                             f'{start + 0.38 + _ni * 0.14:.4f});'
                         )
 
+                # ── VIDEO REFRAME — snap object-position to keep face in uncovered half ──
+                # Derives face_cx from video_pos_x using the inverse of the 16:9→9:16 formula.
+                # For a portrait source (no horizontal slack), object-position has no effect.
+                _sst_r = 256.0 / 81.0  # (16/9)^2 — correct for any 16:9 landscape source
+                _sst_face_cx = (video_pos_x * (_sst_r - 1.0) + 50.0) / _sst_r
+                # "panel on LEFT" (side="right"): face should sit at 73% (center of right 54%)
+                # "panel on RIGHT" (side="left"): face should sit at 27% (center of left 54%)
+                _sst_target_x = 73.0 if _sst_side_g == "right" else 27.0
+                _sst_vpos = (_sst_face_cx * _sst_r - _sst_target_x) / (_sst_r - 1.0)
+                _sst_vpos = max(0.0, min(100.0, _sst_vpos))
+                # Snap at card entry (panel fully opaque → snap invisible); restore just before exit
+                lines.append(
+                    f'  tl.set(\'.video-wrapper video\', '
+                    f'{{ objectPosition: \'{_sst_vpos:.1f}% 50%\' }}, {start:.4f});'
+                )
+                lines.append(
+                    f'  tl.set(\'.video-wrapper video\', '
+                    f'{{ objectPosition: \'{video_pos_x:.1f}% 50%\' }}, {round(end - 0.54, 4):.4f});'
+                )
+
                 # ── EXIT — panel fades out; video-stage untouched (stays at scale:1/x:0) ──
                 _sst_exit_t = round(end - 0.52, 4)
                 lines.append(
@@ -8624,7 +8645,7 @@ def compose(
     all_cards = _rendered_cards
 
     # Build master timeline
-    timeline_js = _build_timeline_js(all_cards, zoom_entries=zoom_entries, subject_position=subject_position, pack=pack, layout=layout)
+    timeline_js = _build_timeline_js(all_cards, zoom_entries=zoom_entries, subject_position=subject_position, pack=pack, layout=layout, video_pos_x=_video_pos_x)
 
     # CSS custom properties from theme
     accent_vars = "\n".join(
