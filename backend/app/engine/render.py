@@ -2688,7 +2688,7 @@ def _render_hyperframes(
     # The formula scales automatically with _n_workers, so if HyperFrames is ever
     # allocated more than 6 workers the limit tightens proportionally.
     # Revisit _SEG_FRAMES_PER_WORKER if Railway container RAM allocation changes significantly.
-    _SEG_FRAMES_PER_WORKER = 340
+    _SEG_FRAMES_PER_WORKER = 500
     _SEG_MAX_FRAMES_DEFAULT = _SEG_FRAMES_PER_WORKER * _n_workers  # e.g. 1500 at 6 workers
     # HF_SEG_MAX_FRAMES env var overrides the computed value — use for fast test cycles
     # (set to 500 in Railway Variables to trigger segmentation on short test videos).
