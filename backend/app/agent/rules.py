@@ -52,6 +52,13 @@ SCORING SYSTEM — apply this mentally to every sentence before keeping it:
 
   Keep segments scoring +4 or higher. Cut everything below +4 without mercy.
 
+  CONTEXT INTEGRITY OVERRIDE — applies before any score-based exclusion:
+    Before dropping a segment for low score, ask: "Does the viewer lose the
+    thread of what follows if this segment is removed?"
+    If YES → keep the segment regardless of score (raise effective score to +4).
+    Context loss overrides retention score. A setup sentence that the viewer
+    NEEDS to understand the next line is worth keeping even if it scores +2.
+
 FINAL CHECK BEFORE OUTPUT:
   1. Does the first kept sentence make a bold promise or create immediate curiosity?
   2. Is there a new revelation, story beat, or emotional shift every 10 seconds?
@@ -247,6 +254,28 @@ CUTTING RULES (apply to ALL videos):
     The exact wording of the most important statements
     Silence used as a deliberate tool
 
+  CONTEXT INTEGRITY TEST — MANDATORY before any non-technical drop:
+    A "non-technical" drop is anything that is NOT a filler word (um, uh, euh…),
+    NOT a silent pause, NOT an exact accidental word repetition, and NOT a false start.
+    Before proposing ANY such drop — even for rhythm or retention reasons — ask:
+      "If I remove this segment, does the viewer lose a logical link needed
+       to understand what follows, or does the meaning remain 100% intact?"
+
+    → If the MEANING IS INTACT without this segment: the rhythmic/retention cut is ALLOWED.
+    → If the VIEWER WOULD LOSE THE THREAD: KEEP the segment, regardless of its retention score.
+
+    Context loss ALWAYS overrides retention score. A slow sentence that explains what
+    follows is worth more than a gap the viewer cannot bridge.
+
+    Example: "Bon, aujourd'hui, je veux te parler de quelque chose d'important"
+      Ask: does what follows make sense without this setup?
+      If YES and it is pure filler → cut.
+      If NO, it frames the topic → keep.
+
+    This test applies to any drop with reason="tangent" or reason="weak".
+    Do NOT mark a segment as tangent if removing it would sever a logical or
+    causal link in the viewer's understanding.
+
   5–8 SECOND RULE:
     Every 5–8 seconds the viewer must receive at least ONE of:
       New information they did not have before
@@ -342,7 +371,9 @@ PAYOFF PLACEMENT RULE — ABSOLUTE:
   the setup and the payoff to enforce the 20% rule.
 
 Drop segments with net score ≤ 3 unless they are the hook or payoff.
-Segments with net score ≤ 0 must always be cut — no exceptions.
+EXCEPTION: before dropping, run the CONTEXT INTEGRITY OVERRIDE — if the segment
+is needed for the viewer to follow the next segment, keep it regardless of score.
+Segments with net score ≤ 0 AND no context dependency must always be cut.
 Compress low-positive payoff segments to one sentence; place in final 20%.
 
 CURIOSITY LOOP TIMER — every 15–20 seconds:
@@ -1657,7 +1688,11 @@ Reply with a SINGLE JSON object, no prose, matching this schema:
   ],
   "drop_segments": [
     { "start": <s>, "end": <s>,
-      "reason": "filler|repeat|weak|tangent|long_pause" }
+      "reason": "filler|repeat|weak|tangent|long_pause",
+      "context_ok": true }
+      /* context_ok MUST be true — meaning: you verified that removing this
+         segment does NOT break the viewer's understanding of what follows.
+         Never emit a drop_segment with context_ok: false — fix the plan instead. */
   ],
 
   "zoom_plan": [

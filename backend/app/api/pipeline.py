@@ -1307,10 +1307,19 @@ def run_job(
         # Build LLM-filler zone list: gaps the LLM explicitly marked as filler/
         # tangent/repeat must NOT be rescued — the editorial intent was to cut them.
         # These timestamps are in the same compressed space as keep_segments.
+        # Technical drops (filler, repeat) always block GAP-RESCUE.
+        # Editorial drops (tangent, weak) block GAP-RESCUE ONLY if the LLM
+        # confirmed context_ok=true — i.e. it ran the CONTEXT INTEGRITY TEST.
         _llm_filler_zones: list[tuple[float, float]] = [
             (float(_ds["start"]), float(_ds["end"]))
             for _ds in plan.raw.get("drop_segments", [])
-            if str(_ds.get("reason", "")).lower() in {"filler", "tangent", "repeat"}
+            if (
+                str(_ds.get("reason", "")).lower() in {"filler", "repeat"}
+                or (
+                    str(_ds.get("reason", "")).lower() in {"tangent", "weak"}
+                    and bool(_ds.get("context_ok", False))
+                )
+            )
         ]
 
         _n_rescued = 0
@@ -1413,6 +1422,78 @@ def run_job(
                 f"[GAP-RESCUE] {_n_rescued} segment(s) extended to recover lost speech",
                 flush=True,
             )
+
+        # ── GAP-RESCUE lead-in: words before the first keep_segment ──────────
+        # The main loop only covers inter-segment gaps (range(len-1)).
+        # Content at the very start of the video (e.g. "Bon, aujourd'hui…")
+        # was silently lost. Here we extend the first segment's start backward.
+        if _keep_raw:
+            _li_ge_c = float(_keep_raw[0].get("start", 0))
+            if _li_ge_c > 0.050:
+                _li_dur = _li_ge_c  # gap = [0, _li_ge_c]
+                _li_blocked = any(
+                    (min(_fz_e, _li_ge_c) - max(_fz_s, 0.0)) / _li_dur > 0.50
+                    for _fz_s, _fz_e in _llm_filler_zones
+                )
+                if not _li_blocked:
+                    _li_gs_src, _ = _c2s_diag(0.0)
+                    _li_ge_src, _ = _c2s_diag(_li_ge_c)
+                    _li_uncov = [
+                        w for w in _source_words
+                        if float(w.get("start", 0)) >= _li_gs_src - 0.005
+                        and float(w.get("start", 0)) < _li_ge_src - 0.005
+                        and float(w.get("end", 0)) > _li_gs_src + 0.005
+                        and float(w.get("end", 0)) <= _li_ge_src + 0.005
+                        and (float(w.get("end", 0)) - float(w.get("start", 0))) >= 0.030
+                        and not any(
+                            d.start < float(w.get("end", 0)) and d.end > float(w.get("start", 0))
+                            for d in filler_drops
+                        )
+                    ]
+                    if _li_uncov:
+                        _first_w_src = float(_li_uncov[0].get("start", 0))
+                        _new_start_src = max(0.0, _first_w_src - 0.150)
+                        _new_start_c = max(0.0, _new_start_src)  # offset=0 before first drop
+                        _old_start_c = _li_ge_c
+                        _keep_raw[0]["start"] = round(_new_start_c, 3)
+                        _wtxt_li = " ".join(str(w.get("text", "")).strip() for w in _li_uncov[:8])
+                        print(
+                            f"[GAP-RESCUE] lead-in extended seg[0].start"
+                            f" {_old_start_c:.2f}->{_new_start_c:.2f}"
+                            f" (src {_li_gs_src:.2f}->{_new_start_src:.2f}): '{_wtxt_li}'",
+                            flush=True,
+                        )
+                else:
+                    print(
+                        f"[GAP-RESCUE] lead-in [{0:.2f},{_li_ge_c:.2f}] skipped"
+                        f" — LLM-marked filler zone",
+                        flush=True,
+                    )
+
+        # ── GAP-RESCUE tail: words after the last keep_segment ───────────────
+        if _keep_raw:
+            _tl_gs_c = float(_keep_raw[-1].get("end", 0))
+            _tl_ge_src, _ = _c2s_diag(_tl_gs_c)
+            _tl_uncov = [
+                w for w in _source_words
+                if float(w.get("start", 0)) >= _tl_ge_src - 0.005
+                and (float(w.get("end", 0)) - float(w.get("start", 0))) >= 0.030
+                and not any(
+                    d.start < float(w.get("end", 0)) and d.end > float(w.get("start", 0))
+                    for d in filler_drops
+                )
+            ]
+            if _tl_uncov:
+                _last_w_end_src = float(_tl_uncov[-1].get("end", 0)) + 0.150
+                _new_end_c = _tl_gs_c + (_last_w_end_src - _tl_ge_src)
+                _wtxt_tl = " ".join(str(w.get("text", "")).strip() for w in _tl_uncov[:8])
+                _keep_raw[-1]["end"] = round(_new_end_c, 3)
+                print(
+                    f"[GAP-RESCUE] tail extended seg[{len(_keep_raw)-1}].end"
+                    f" {_tl_gs_c:.2f}->{_new_end_c:.2f}"
+                    f" (src {_tl_ge_src:.2f}->{_last_w_end_src:.2f}): '{_wtxt_tl}'",
+                    flush=True,
+                )
 
         # ── Step 7: Hook rewrite (Feature 3) ──────────────────────────────
         _t = time.perf_counter()

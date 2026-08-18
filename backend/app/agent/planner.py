@@ -426,7 +426,10 @@ def plan_edit(
                     "    this segment's first word (always cut at breath boundaries)\n"
                     "  retention_note: one sentence on why this earns watch time\n"
                     "Drop segments with net score ≤ 3 unless hook or payoff.\n"
-                    "Segments with net score ≤ 0 must ALWAYS be cut.\n"
+                    "EXCEPTION: before dropping any segment for low score, ask: 'Does the\n"
+                    "viewer lose the thread of what follows if this is removed?' If YES,\n"
+                    "keep the segment regardless of score — context loss overrides score.\n"
+                    "Segments with net score ≤ 0 AND no context dependency must always be cut.\n"
                     "Hook must be the highest-scoring segment in keep_segments.\n\n"
                     "LOOP TIMER: Every 15–20s of output, a new curiosity loop must open.\n"
                     "Track the output timeline — no 20s window without a new tension.\n\n"
@@ -929,11 +932,34 @@ def _log_plan_shape(plan: dict) -> None:
                 s.get("reason") or s.get("retention_note", "")
                 for s in drop if isinstance(s, dict)
             ]
+            _editorial = [
+                r for r in reasons
+                if str(r).lower() in {"tangent", "weak"}
+            ]
+            _no_ctx_ok = [
+                s for s in drop
+                if isinstance(s, dict)
+                and str(s.get("reason", "")).lower() in {"tangent", "weak"}
+                and not s.get("context_ok", False)
+            ]
             print(
                 f"[PLAN-JSON] WARNING: Claude emitted drop_segments "
                 f"({len(drop)} items, scores={scores}, reasons={reasons})",
                 flush=True,
             )
+            if _editorial:
+                print(
+                    f"[PLAN-JSON] EDITORIAL-DROP: {len(_editorial)} non-technical drop(s)"
+                    f" reason={_editorial} — verify CONTEXT INTEGRITY TEST was applied",
+                    flush=True,
+                )
+            if _no_ctx_ok:
+                spans = [(s.get("start"), s.get("end")) for s in _no_ctx_ok]
+                print(
+                    f"[PLAN-JSON] CONTEXT-OK-MISSING: {len(_no_ctx_ok)} editorial drop(s)"
+                    f" missing context_ok=true: {spans}",
+                    flush=True,
+                )
 
 
 def _extract_json(text: str) -> dict[str, Any]:
