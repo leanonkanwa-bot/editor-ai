@@ -1692,7 +1692,11 @@ Reply with a SINGLE JSON object, no prose, matching this schema:
       "context_ok": true }
       /* context_ok MUST be true — meaning: you verified that removing this
          segment does NOT break the viewer's understanding of what follows.
-         Never emit a drop_segment with context_ok: false — fix the plan instead. */
+         Never emit a drop_segment with context_ok: false — fix the plan instead.
+         reason="repeat" MUST NOT be used when the second occurrence extends the
+         first (adds content after the repeated phrase). A complete phrase (≥5 words)
+         repeated then extended ("Tu dois X. Tu dois X et faire Y.") is deliberate
+         rhetorical emphasis — both occurrences must remain in keep_segments. */
   ],
 
   "zoom_plan": [

@@ -450,8 +450,9 @@ CONSIGNES :
 2. Répétitions simples : garde LA DERNIÈRE occurrence, coupe les précédentes. Ex : "[5] il [6] il" → coupe [5,5], garde [6].
 3. Répétitions multi-mots : identifie le groupe entier depuis son PREMIER MOT. Ex : "[12] parce [13] qu'ils [14] parce [15] qu'ils" → coupe [12,13] (TOUT le premier groupe), garde [14,15]. ERREUR À ÉVITER : couper seulement [13,13] "qu'ils" en oubliant [12] "parce" → "parce" orphelin audible.
 3b. Répétitions SUPERPOSÉES — un doublon peut appartenir à un groupe plus long qui se répète aussi. Ex : "[60] il [61] faut [62] il [63] faut" — '[62] il' ressemble à un doublon de '[60] il', MAIS le groupe 'il faut' se répète entièrement × 2. Coupe le PREMIER groupe complet [60,61], garde [62,63]. ERREUR CRITIQUE : couper seulement [62,62]='il' → laisse '[61] faut [63] faut' audible. Règle : après ta coupe, le texte restant ne doit contenir AUCUNE répétition résiduelle du même mot ou groupe.
-IMPORTANT — la règle 3b prime sur la règle 6 (doute) dès que la structure AB-AB est explicitement visible, même si AB a du poids sémantique ('tu dois', 'on va', 'je pense', 'c'est', etc.). Ex : "[62] du [63] coup [64] tu [65] dois, [66] tu [67] dois [68] arrêter" → coupe [64,65], garde [62,63,66,67,68,...]. La présence d'un préfixe ('du coup', 'donc', 'alors') AVANT le premier AB ne protège pas la répétition.
+IMPORTANT — la règle 3b prime sur la règle 6 (doute) dès que la structure AB-AB est explicitement visible, même si AB a du poids sémantique ('on va', 'je pense', 'c'est', etc.). Ex : "[62] du [63] coup [64] tu [65] dois, [66] tu [67] dois [68] arrêter" → coupe [64,65], garde [62,63,66,67,68,...]. La présence d'un préfixe ('du coup', 'donc', 'alors') AVANT le premier AB ne protège pas la répétition.
 4. Répétitions rhétoriques VOLONTAIRES (3+ occurrences identiques, effet stylistique) = NE PAS TOUCHER.
+4b. EXCEPTION PHRASE COMPLÈTE AVEC EXTENSION — si un groupe de ≥ 5 mots formant une clause complète (avec verbe conjugué) est répété, ET que la 2ème occurrence ÉTEND la première en ajoutant du contenu supplémentaire après le groupe répété → GARDER LES DEUX occurrences. Ce n'est pas une répétition accidentelle mais une insistance rhétorique délibérée. La règle 3b NE S'APPLIQUE PAS. Signal : group répété ≥ 5 mots ET 2ème occurrence continue au-delà. Ex : "Tu dois te lever chaque matin. Tu dois te lever chaque matin et faire le travail." → kept both (reason="kept — répétition rhétorique phrase complète avec extension").
 5. NE JAMAIS toucher ces extraits clés (et UNIQUEMENT ceux-ci — ne crée pas de "segment protégé" de ta propre initiative) :
 {key_lines_str}
    → Protection CIBLÉE : seuls les mots exacts de ces extraits sont intouchables. Si un faux départ ou une répétition PRÉCÈDE ces mots dans la même phrase, tu PEUX et DOIS le couper. Ex : "La vérité, la vraie vérité, c'est que tout se joue sur la constance" → coupe "La vérité," (faux départ), garde "la vraie vérité, c'est que tout se joue sur la constance." Ne protège JAMAIS l'ensemble d'un segment sous prétexte qu'il contient une key_line — seuls les mots de la key_line elle-même sont intouchables.
@@ -585,6 +586,32 @@ Si rien à couper : {{"cuts": [], "kept": []}}"""
                     flush=True,
                 )
                 continue
+
+        # PHRASE-EXTENDED-REPEAT guard: a complete phrase (≥5 words) that immediately
+        # restarts verbatim then continues with additional content is a deliberate
+        # rhetorical emphasis repeat ("Tu dois X. Tu dois X et faire Y.") — not
+        # accidental. Block regardless of what the LLM decided. Complements rule 4b
+        # in the prompt; this code guard handles LLM non-determinism.
+        if reason.startswith("repetition") and (i1 - i0 + 1) >= 5:
+            _cut_norms = tuple(
+                _wn(words[k]) for k in range(i0, i1 + 1)
+                if _wn(words[k])
+            )
+            if len(_cut_norms) >= 5:
+                _rs, _collected = i1 + 1, []
+                while _rs < len(words) and len(_collected) < len(_cut_norms):
+                    _n = _wn(words[_rs])
+                    if _n:
+                        _collected.append(_n)
+                    _rs += 1
+                if tuple(_collected) == _cut_norms and _rs < len(words):
+                    print(
+                        f"[LLM-EDIT] PHRASE-EXTENDED-REPEAT [{i0},{i1}]"
+                        f" — {len(_cut_norms)}-word phrase restarts with extension"
+                        f" — cut suppressed",
+                        flush=True,
+                    )
+                    continue
 
         # LLM sometimes cuts both occurrences of "A A" — shrink to first half so last is kept.
         _dedup_halve_fired = False
