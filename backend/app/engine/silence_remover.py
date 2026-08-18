@@ -687,19 +687,35 @@ def _find_false_start_drops(
 
             first_phrase = " ".join(w[0] for w in words[i: i + MIN_NGRAM])
 
-            # Guard (a): no sentence/clause-ending punctuation in the FULL first phrase
-            # [i, j): covers period, !, ?, and comma (Whisper often uses comma for
-            # sentence-final positions instead of period, e.g. "matin," not "matin.").
-            # Complete-sentence repeats (rhetorical emphasis) and reformulations of
-            # finished thoughts end with punctuation → rejected.
-            # True false starts (abandoned mid-thought) have no punctuation → pass.
-            if any(re.search(r"[.?!,]", words[k][0]) for k in range(i, j)):
+            # Guard (a) — two conditions; either one rejects the candidate:
+            #
+            # Condition 1: hard sentence boundary (. ? !) anywhere in range [i, j).
+            # A period/question/exclamation inside the first phrase means the speaker
+            # finished a sentence before restarting → rhetorical repeat, not a false start.
+            if any(re.search(r"[.?!]", words[k][0]) for k in range(i, j)):
                 print(
                     f"[FALSE-START] rejected '{first_phrase}' at {words[i][1]:.2f}s"
-                    f" — sentence/clause boundary in first phrase",
+                    f" — hard sentence boundary in first phrase",
                     flush=True,
                 )
                 break
+
+            # Condition 2: long bridge (≥ MIN_NGRAM+1 words) whose last word carries
+            # any terminal punctuation (. ? ! ,).  Whisper uses commas in sentence-
+            # final position ("matin," instead of "matin."), so a long bridge that ends
+            # with a comma also signals a completed clause — not an abandoned fragment.
+            # Short bridges (true false starts like "c'est… c'est pas") have bridge_len
+            # < MIN_NGRAM+1 and are never rejected here.
+            _bridge_len = j - (i + MIN_NGRAM)
+            if _bridge_len >= MIN_NGRAM + 1 and j > 0:
+                _last_w = words[j - 1][0]
+                if re.search(r"[.?!,]", _last_w):
+                    print(
+                        f"[FALSE-START] rejected '{first_phrase}' at {words[i][1]:.2f}s"
+                        f" — long bridge ({_bridge_len}w) ends with '{_last_w}'",
+                        flush=True,
+                    )
+                    break
 
             # Guard (b): bridge < 2.0s
             if bridge_gap >= MAX_BRIDGE:
