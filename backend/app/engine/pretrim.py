@@ -1725,14 +1725,42 @@ def pretrim(
                 )
             else:
                 _fade_dur = 0.0
-            # Fade-out on non-final sub-parts disabled: sub-parts always end
-            # at a word boundary, so a 40ms fade-out systematically clips the
-            # final phoneme of the last word before the drop (e.g. "gens" → "gen").
-            # The fade-in on j>0 sub-parts is sufficient; no fade-out needed.
+            # Tail-fade (Option C): on the last sub-part of non-final segments,
+            # apply a short fade-out anchored to word.end (not e_padded) to taper
+            # the post-phoneme resonance before the inter-segment cut.
+            # Anchoring to word.end preserves the phoneme body; the fade covers
+            # only the ~20ms acoustic tail that would otherwise be truncated hard.
+            # A 40ms fade-out on e_padded is still disabled for intra-segment
+            # sub-parts — those end at a filler drop boundary, not a word boundary.
             _is_last_sub = (j == len(sub_intervals) - 1)
             _sub_dur = si_end - si_start
             _fadeout_dur = 0.0
             _fadeout_start = _sub_dur
+            if _is_last_sub and _pi < len(_planned) - 1:
+                _sw_in = [
+                    w for w in all_words
+                    if float(w.get("start", 0)) >= si_start - 0.050
+                    and float(w.get("start", 0)) < si_end - 0.005
+                ]
+                if _sw_in:
+                    _last_w = max(_sw_in, key=lambda w: float(w.get("start", 0)))
+                    _last_we = float(_last_w.get("end", 0))
+                    _tail_room = si_end - _last_we
+                    if _tail_room >= 0.015:
+                        _fadeout_dur = min(0.020, _tail_room)
+                        _fadeout_start = max(0.001, _last_we - si_start)
+                        print(
+                            f"[PRETRIM] tail-fade seg[{i}]:"
+                            f" word.end={_last_we:.3f} room={_tail_room*1000:.0f}ms"
+                            f" → {_fadeout_dur*1000:.0f}ms",
+                            flush=True,
+                        )
+                    else:
+                        print(
+                            f"[PRETRIM] tail-fade seg[{i}] skipped:"
+                            f" word.end={_last_we:.3f} room={_tail_room*1000:.0f}ms < 15ms",
+                            flush=True,
+                        )
 
             _af_filters: list[str] = []
             if _fade_dur > 0:
