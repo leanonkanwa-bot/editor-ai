@@ -370,6 +370,7 @@ def _llm_editorial_cuts(
     key_lines: list[str],
     *,
     vad_gaps: list[dict] | None = None,
+    keep_segs: list[dict] | None = None,
 ) -> list:
     """Call Claude Haiku with the verbatim numbered transcript → list of DropSegments to cut.
 
@@ -586,6 +587,7 @@ Si rien à couper : {{"cuts": [], "kept": []}}"""
                 continue
 
         # LLM sometimes cuts both occurrences of "A A" — shrink to first half so last is kept.
+        _dedup_halve_fired = False
         if reason.startswith("repetition"):
             _span = i1 - i0 + 1
             if _span >= 2 and _span % 2 == 0:
@@ -600,6 +602,29 @@ Si rien à couper : {{"cuts": [], "kept": []}}"""
                         f" ({_half}-word symmetric repeat, keeping last occurrence)",
                         flush=True,
                     )
+                    # Verify kept last occurrence falls inside a keep_segment.
+                    # If it's in a planner gap it will be absent from the output
+                    # regardless — in that case cut the full original span instead.
+                    if keep_segs is not None:
+                        _kept_t0 = float(words[i0 + _half].get("start", 0))
+                        _kept_t1 = float(words[i0 + _span - 1].get("end", 0))
+                        _in_ks = any(
+                            float(ks.get("start", 0)) <= _kept_t0 + 0.050
+                            and float(ks.get("end", 0)) >= _kept_t1 - 0.050
+                            for ks in keep_segs
+                        )
+                        if not _in_ks:
+                            i1 = _orig_i1
+                            print(
+                                f"[LLM-EDIT] DEDUP-HALVE-REVERTED [{i0},{i1}]"
+                                f" — kept [{i0+_half},{i0+_span-1}]"
+                                f" t={_kept_t0:.3f}-{_kept_t1:.3f}s not in any keep_segment",
+                                flush=True,
+                            )
+                        else:
+                            _dedup_halve_fired = True
+                    else:
+                        _dedup_halve_fired = True
 
         # Repetition group completeness check.
         # (a) BACKWARD: extend i0 left if the LLM missed the start of the group.
@@ -726,7 +751,7 @@ Si rien à couper : {{"cuts": [], "kept": []}}"""
         # _rep_tail_ext: partial interval of the next word that the pad eats into,
         # added to target_intervals below so word_safe treats it as intentional.
         _rep_tail_ext: "tuple[float, float] | None" = None
-        if reason.startswith("repetition") and i1 + 1 < len(words):
+        if reason.startswith("repetition") and i1 + 1 < len(words) and not _dedup_halve_fired:
             _word_i1_end = float(words[i1].get("end", 0))
             _gap = t_end - _word_i1_end
             if _gap < 0.050:
@@ -1101,7 +1126,11 @@ def run_job(
             if not _cfg_fillers and not _cfg.report_only:
                 _llm_drops = []   # all cuts off — skip LLM editorial entirely
             else:
-                _llm_drops = _llm_editorial_cuts(transcript, plan.key_lines or [], vad_gaps=_vad_gaps)
+                _llm_drops = _llm_editorial_cuts(
+                    transcript, plan.key_lines or [],
+                    vad_gaps=_vad_gaps,
+                    keep_segs=plan.keep_segments,
+                )
                 # Step 6.6: stable-ts targeted refinement (STABLE_TS_REPAIR=true only)
                 _llm_drops = _stable_ts_refine_cuts(src, _llm_drops, transcript)
             # In report_only mode: keep all detected categories for the PDF.
