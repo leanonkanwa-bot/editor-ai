@@ -1713,16 +1713,46 @@ def pretrim(
             if _covering_drop is not None or _is_inter_seg:
                 _next_wtext = _word_text_at(si_start, all_words)
                 _fade_ms = _junction_fade_ms(_next_wtext)
-                _fade_dur = _fade_ms / 1000.0
                 _onset_cls = _ONSET_CLASS_MAP.get(
                     (_next_wtext.lstrip("'\"").lower() or "a")[0], "son"
                 )
                 _fade_kind = "inter-seg" if _is_inter_seg and _covering_drop is None else "filler-drop"
-                print(
-                    f"[PRETRIM] junction-fade seg[{i}] j={j} ({_fade_kind}):"
-                    f" s={si_start:.3f} word={_next_wtext!r}({_onset_cls}) → {_fade_ms:.0f}ms",
-                    flush=True,
-                )
+                # At inter-seg starts, extend the fade-in to cover the acoustic tail
+                # of the excluded gap word that may bleed into the segment start.
+                # Use the silence window before the first word onset (≤30ms, leave
+                # ≥5ms of clean onset). Filler-drop junctions keep phoneme-based
+                # duration (the next word starts right at the boundary).
+                if _is_inter_seg:
+                    _first_onset = si_start + 0.120  # sentinel: no word found within 120ms
+                    for _w in all_words:
+                        _ws = float(_w.get("start", 0))
+                        if _ws >= si_start and _ws < si_start + 0.120:
+                            if _ws < _first_onset:
+                                _first_onset = _ws
+                    _silence_ms = (_first_onset - si_start) * 1000.0
+                    _dyn_ms = min(30.0, max(_fade_ms, _silence_ms - 5.0))
+                    if _dyn_ms > _fade_ms:
+                        print(
+                            f"[PRETRIM] junction-fade seg[{i}] j={j} ({_fade_kind}):"
+                            f" s={si_start:.3f} word={_next_wtext!r}({_onset_cls})"
+                            f" silence={_silence_ms:.0f}ms → {_dyn_ms:.0f}ms (dyn)",
+                            flush=True,
+                        )
+                    else:
+                        print(
+                            f"[PRETRIM] junction-fade seg[{i}] j={j} ({_fade_kind}):"
+                            f" s={si_start:.3f} word={_next_wtext!r}({_onset_cls})"
+                            f" → {_dyn_ms:.0f}ms",
+                            flush=True,
+                        )
+                    _fade_ms = _dyn_ms
+                else:
+                    print(
+                        f"[PRETRIM] junction-fade seg[{i}] j={j} ({_fade_kind}):"
+                        f" s={si_start:.3f} word={_next_wtext!r}({_onset_cls}) → {_fade_ms:.0f}ms",
+                        flush=True,
+                    )
+                _fade_dur = _fade_ms / 1000.0
             else:
                 _fade_dur = 0.0
             # Tail-fade (Option C): on the last sub-part of non-final segments,
