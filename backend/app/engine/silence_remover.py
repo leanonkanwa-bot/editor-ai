@@ -660,11 +660,8 @@ def _find_false_start_drops(
 
     drops: list[DropSegment] = []
     last_cut_end = -1.0  # guard (d): end timestamp of most recent false-start cut
-    _guard_a_block_until = 0  # word index: skip outer-loop i values inside a rejected zone
 
     for i in range(len(words) - MIN_NGRAM):
-        if i < _guard_a_block_until:  # inner bigram of an already-rejected phrase — skip
-            continue
         if not norms[i]:
             continue
 
@@ -690,40 +687,18 @@ def _find_false_start_drops(
 
             first_phrase = " ".join(w[0] for w in words[i: i + MIN_NGRAM])
 
-            # Guard (a) — two conditions; either one rejects the candidate.
-            # Both also set _guard_a_block_until=j so that inner bigrams starting
-            # at i+1 … j-1 (same repeated phrase, just shifted by one word) are
-            # skipped by the outer loop without re-logging the same rejection.
-            #
-            # Condition 1: hard sentence boundary (. ? !) anywhere in range [i, j).
-            # A period/question/exclamation inside the first phrase means the speaker
-            # finished a sentence before restarting → rhetorical repeat, not a false start.
-            if any(re.search(r"[.?!]", words[k][0]) for k in range(i, j)):
-                _guard_a_block_until = j
+            # Guard (a): no sentence-ending punctuation in the first bigram.
+            # Checks only the bigram itself [i, i+MIN_NGRAM) — not the full bridge —
+            # so unrelated true false starts elsewhere in the transcript are not blocked.
+            # Known limitation: deliberate complete-sentence repetitions whose bigram has
+            # no punctuation (e.g. "Tu dois te lever chaque matin,") are not caught here.
+            if any(re.search(r"[.?!]", words[k][0]) for k in range(i, i + MIN_NGRAM)):
                 print(
                     f"[FALSE-START] rejected '{first_phrase}' at {words[i][1]:.2f}s"
-                    f" — hard sentence boundary in first phrase",
+                    f" — sentence boundary in bigram",
                     flush=True,
                 )
                 break
-
-            # Condition 2: long bridge (≥ MIN_NGRAM+1 words) whose last word carries
-            # any terminal punctuation (. ? ! ,).  Whisper uses commas in sentence-
-            # final position ("matin," instead of "matin."), so a long bridge that ends
-            # with a comma also signals a completed clause — not an abandoned fragment.
-            # Short bridges (true false starts like "c'est… c'est pas") have bridge_len
-            # < MIN_NGRAM+1 and are never rejected here.
-            _bridge_len = j - (i + MIN_NGRAM)
-            if _bridge_len >= MIN_NGRAM + 1 and j > 0:
-                _last_w = words[j - 1][0]
-                if re.search(r"[.?!,]", _last_w):
-                    _guard_a_block_until = j
-                    print(
-                        f"[FALSE-START] rejected '{first_phrase}' at {words[i][1]:.2f}s"
-                        f" — long bridge ({_bridge_len}w) ends with '{_last_w}'",
-                        flush=True,
-                    )
-                    break
 
             # Guard (b): bridge < 2.0s
             if bridge_gap >= MAX_BRIDGE:
