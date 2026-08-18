@@ -376,6 +376,13 @@ is needed for the viewer to follow the next segment, keep it regardless of score
 Segments with net score ≤ 0 AND no context dependency must always be cut.
 Compress low-positive payoff segments to one sentence; place in final 20%.
 
+DROP_SEGMENTS EXHAUSTIVE RULE — MANDATORY:
+  Every time interval that is NOT included in keep_segments and contains
+  audible speech MUST appear in drop_segments with an explicit reason.
+  Never leave speech outside keep_segments without a corresponding drop_segment.
+  Silent exclusion (omitting content from keep_segments with no drop_segment)
+  breaks traceability — the safety net cannot protect what is not declared.
+
 CURIOSITY LOOP TIMER — every 15–20 seconds:
   Every 15–20 seconds of the output edit, a NEW curiosity loop must open.
   Track your output timeline as you build keep_segments:

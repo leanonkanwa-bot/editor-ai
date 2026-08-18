@@ -647,6 +647,14 @@ def _find_false_start_drops(
       (c) Restart must extend beyond the bigram (word at j+MIN_NGRAM exists)
       (d) No two adjacent false-start cuts
       (e) First occurrence must contain at least one lexical word
+
+    Known structural limitation: when Whisper fuses consecutive identical spans
+    ("il faut... il faut faire ça") into a single segment with continuous
+    timestamps and no VAD gap ≥ GAP_TRIGGER (0.35s), this detector sees zero
+    gap and emits nothing.  SMART-CUT handles ~2/3 of these via the pause path.
+    The remaining ~1/3 (Whisper-fused, sub-threshold gap) are undetectable at
+    this level — acceptable loss, no code fix possible without reprocessing the
+    Whisper alignment.
     """
     if len(words) < 4:
         return []

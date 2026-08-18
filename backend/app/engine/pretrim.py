@@ -1278,7 +1278,13 @@ def pretrim(
                 else float(_ds.get("end", 0)),
             )
             for _ds in (plan.raw.get("drop_segments") or [])
-            if str(_ds.get("reason", "")).lower() in {"filler", "tangent", "repeat"}
+            if (
+                str(_ds.get("reason", "")).lower() in {"filler", "repeat"}
+                or (
+                    str(_ds.get("reason", "")).lower() == "tangent"
+                    and _ds.get("context_ok") is True
+                )
+            )
         ]
 
         _wl_total_repaired = 0
