@@ -1704,15 +1704,22 @@ def pretrim(
                 _near = [fd for fd in filler_drops if abs(si_start - fd.end) < 0.200]
                 if _near:
                     _covering_drop = min(_near, key=lambda fd: abs(si_start - fd.end))
-            if _covering_drop is not None:
+            # Apply anti-pop fade-in at every cut junction:
+            #   • after an intra-segment filler drop (_covering_drop is set), OR
+            #   • at the first sub-part of any segment that follows a cut (i > 0, j == 0)
+            # The second case covers all inter-segment boundaries produced by the
+            # ffmpeg concat — these previously received no audio treatment at all.
+            _is_inter_seg = (j == 0 and i > 0)
+            if _covering_drop is not None or _is_inter_seg:
                 _next_wtext = _word_text_at(si_start, all_words)
                 _fade_ms = _junction_fade_ms(_next_wtext)
                 _fade_dur = _fade_ms / 1000.0
                 _onset_cls = _ONSET_CLASS_MAP.get(
                     (_next_wtext.lstrip("'\"").lower() or "a")[0], "son"
                 )
+                _fade_kind = "inter-seg" if _is_inter_seg and _covering_drop is None else "filler-drop"
                 print(
-                    f"[PRETRIM] junction-fade seg[{i}] j={j}:"
+                    f"[PRETRIM] junction-fade seg[{i}] j={j} ({_fade_kind}):"
                     f" s={si_start:.3f} word={_next_wtext!r}({_onset_cls}) → {_fade_ms:.0f}ms",
                     flush=True,
                 )
