@@ -687,11 +687,14 @@ def _find_false_start_drops(
 
             first_phrase = " ".join(w[0] for w in words[i: i + MIN_NGRAM])
 
-            # Guard (a): no sentence-ending punctuation in first occurrence
-            if any(re.search(r"[.?!]", words[k][0]) for k in range(i, i + MIN_NGRAM)):
+            # Guard (a): no sentence-ending punctuation in the FULL first phrase
+            # (from bigram start to the restart boundary j, not just the bigram).
+            # A phrase that ends with . ? ! is a complete sentence — a repeated
+            # complete sentence is rhetorical repetition, not a false start.
+            if any(re.search(r"[.?!]", words[k][0]) for k in range(i, j)):
                 print(
                     f"[FALSE-START] rejected '{first_phrase}' at {words[i][1]:.2f}s"
-                    f" — sentence boundary in first occurrence",
+                    f" — sentence boundary in first phrase (complete sentence repeat)",
                     flush=True,
                 )
                 break
