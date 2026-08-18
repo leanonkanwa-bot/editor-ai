@@ -660,8 +660,11 @@ def _find_false_start_drops(
 
     drops: list[DropSegment] = []
     last_cut_end = -1.0  # guard (d): end timestamp of most recent false-start cut
+    _guard_a_block_until = 0  # word index: skip outer-loop i values inside a rejected zone
 
     for i in range(len(words) - MIN_NGRAM):
+        if i < _guard_a_block_until:  # inner bigram of an already-rejected phrase — skip
+            continue
         if not norms[i]:
             continue
 
@@ -687,12 +690,16 @@ def _find_false_start_drops(
 
             first_phrase = " ".join(w[0] for w in words[i: i + MIN_NGRAM])
 
-            # Guard (a) — two conditions; either one rejects the candidate:
+            # Guard (a) — two conditions; either one rejects the candidate.
+            # Both also set _guard_a_block_until=j so that inner bigrams starting
+            # at i+1 … j-1 (same repeated phrase, just shifted by one word) are
+            # skipped by the outer loop without re-logging the same rejection.
             #
             # Condition 1: hard sentence boundary (. ? !) anywhere in range [i, j).
             # A period/question/exclamation inside the first phrase means the speaker
             # finished a sentence before restarting → rhetorical repeat, not a false start.
             if any(re.search(r"[.?!]", words[k][0]) for k in range(i, j)):
+                _guard_a_block_until = j
                 print(
                     f"[FALSE-START] rejected '{first_phrase}' at {words[i][1]:.2f}s"
                     f" — hard sentence boundary in first phrase",
@@ -710,6 +717,7 @@ def _find_false_start_drops(
             if _bridge_len >= MIN_NGRAM + 1 and j > 0:
                 _last_w = words[j - 1][0]
                 if re.search(r"[.?!,]", _last_w):
+                    _guard_a_block_until = j
                     print(
                         f"[FALSE-START] rejected '{first_phrase}' at {words[i][1]:.2f}s"
                         f" — long bridge ({_bridge_len}w) ends with '{_last_w}'",
