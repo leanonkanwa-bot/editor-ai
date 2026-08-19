@@ -1772,7 +1772,14 @@ def pretrim(
             _sub_dur = si_end - si_start
             _fadeout_dur = 0.0
             _fadeout_start = _sub_dur
-            if _is_last_sub and _pi < len(_planned) - 1:
+            # Apply tail-fade when:
+            #   • last sub-interval of a non-final segment (inter-segment boundary), OR
+            #   • any non-last sub-interval (intra-segment cut point before a drop).
+            # The second case was previously missing: j=0 content ending before a
+            # false-start or filler drop received no fadeout, producing a hard word
+            # truncation (e.g. "discipline" cut at drop.start with no acoustic tail).
+            if not _is_last_sub or _pi < len(_planned) - 1:
+                _tf_kind = "cut-pt" if not _is_last_sub else "seg-end"
                 _sw_in = [
                     w for w in all_words
                     if float(w.get("start", 0)) >= si_start - 0.050
@@ -1786,14 +1793,14 @@ def pretrim(
                         _fadeout_dur = min(0.020, _tail_room)
                         _fadeout_start = max(0.001, _last_we - si_start)
                         print(
-                            f"[PRETRIM] tail-fade seg[{i}]:"
+                            f"[PRETRIM] tail-fade seg[{i}] j={j} ({_tf_kind}):"
                             f" word.end={_last_we:.3f} room={_tail_room*1000:.0f}ms"
                             f" → {_fadeout_dur*1000:.0f}ms",
                             flush=True,
                         )
                     else:
                         print(
-                            f"[PRETRIM] tail-fade seg[{i}] skipped:"
+                            f"[PRETRIM] tail-fade seg[{i}] j={j} skipped:"
                             f" word.end={_last_we:.3f} room={_tail_room*1000:.0f}ms < 15ms",
                             flush=True,
                         )
