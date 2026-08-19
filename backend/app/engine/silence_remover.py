@@ -647,6 +647,10 @@ def _find_false_start_drops(
       (c) Restart must extend beyond the bigram (word at j+MIN_NGRAM exists)
       (d) No two adjacent false-start cuts
       (e) First occurrence must contain at least one lexical word
+      (f) Complete-phrase repetition with extension — if the abandoned phrase
+          [i..j-1] has ≥5 normalized tokens and the restart at j begins with
+          the same tokens then continues beyond, this is deliberate rhetorical
+          emphasis (e.g. "Tu dois X. Tu dois X et Y."), not a false start.
 
     Known structural limitation: when Whisper fuses consecutive identical spans
     ("il faut... il faut faire ça") into a single segment with continuous
@@ -698,8 +702,6 @@ def _find_false_start_drops(
             # Guard (a): no sentence-ending punctuation in the first bigram.
             # Checks only the bigram itself [i, i+MIN_NGRAM) — not the full bridge —
             # so unrelated true false starts elsewhere in the transcript are not blocked.
-            # Known limitation: deliberate complete-sentence repetitions whose bigram has
-            # no punctuation (e.g. "Tu dois te lever chaque matin,") are not caught here.
             if any(re.search(r"[.?!]", words[k][0]) for k in range(i, i + MIN_NGRAM)):
                 print(
                     f"[FALSE-START] rejected '{first_phrase}' at {words[i][1]:.2f}s"
@@ -738,6 +740,26 @@ def _find_false_start_drops(
                     flush=True,
                 )
                 break
+
+            # Guard (f): complete-phrase repetition with extension.
+            # The abandoned phrase [i..j-1] is ≥5 normalized tokens AND the
+            # restart at j begins with the identical tokens then continues —
+            # this is deliberate rhetorical emphasis, not a false start.
+            _gf_norms = [norms[k] for k in range(i, j) if norms[k]]
+            if len(_gf_norms) >= 5:
+                _gf_rs, _gf_collected = j, []
+                while _gf_rs < len(words) and len(_gf_collected) < len(_gf_norms):
+                    if norms[_gf_rs]:
+                        _gf_collected.append(norms[_gf_rs])
+                    _gf_rs += 1
+                if tuple(_gf_collected) == tuple(_gf_norms) and _gf_rs < len(words):
+                    print(
+                        f"[FALSE-START] rejected '{first_phrase}' at {words[i][1]:.2f}s"
+                        f" — complete-phrase repeat with extension"
+                        f" ({len(_gf_norms)}-word phrase)",
+                        flush=True,
+                    )
+                    break
 
             # All guards passed — cut first occurrence + bridge up to restart.
             cut_start = words[i][1]
