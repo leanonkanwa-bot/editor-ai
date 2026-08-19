@@ -1861,7 +1861,7 @@ def pretrim(
                 ["-c:v", "libx265", "-x265-params", "log-level=error",
                  "-preset", "ultrafast", "-crf", "18", "-pix_fmt", "yuv420p10le"]
                 if _is_10bit_src else
-                ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "0"]
+                ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "18"]
             )
             _run([
                 FFMPEG_PATH, "-y", "-loglevel", "error",
@@ -2138,9 +2138,9 @@ def pretrim(
     fps = 30
     if _is_10bit_src:
         _venc_final = ["-c:v", "libx265", "-x265-params", "log-level=error",
-                       "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p10le"]
+                       "-preset", "ultrafast", "-crf", "18", "-pix_fmt", "yuv420p10le"]
     else:
-        _venc_final = ["-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p"]
+        _venc_final = ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "18", "-pix_fmt", "yuv420p"]
     _run([
         FFMPEG_PATH, "-y", "-loglevel", "error",
         "-i", str(output_path),
