@@ -525,9 +525,25 @@ def _output_verify(
 
     Returns a list of (start, end) output-timeline cut ranges for confirmed stutter
     repetitions detected in the second-pass transcript but missed by the first-pass ASR.
+
+    Disabled by default (VERIFY_OUTPUT=false): on long videos (>120s), two-pass Whisper
+    variance produces false-positive "extra" tokens from timing drift between the
+    first pass (on source) and second pass (on post-cut concat), causing _compress_pauses
+    to silently remove 100s+ of legitimate content as spurious stutter repetitions.
     """
     import os, re, difflib
-    if os.environ.get("VERIFY_OUTPUT", "true").strip().lower() in ("false", "0", "no"):
+    if os.environ.get("VERIFY_OUTPUT", "false").strip().lower() in ("false", "0", "no"):
+        return []
+
+    # Safety guard: even when VERIFY_OUTPUT=true, skip long videos where two-pass
+    # Whisper variance is too high to reliably distinguish extra tokens from drift.
+    _vid_dur = _probe_duration(video_path)
+    if _vid_dur > 120.0:
+        print(
+            f"[OUTPUT-VERIFY] SKIPPED — video {_vid_dur:.0f}s > 120s"
+            f" (two-pass Whisper variance risk on long content)",
+            flush=True,
+        )
         return []
 
     # Hallucination patterns Whisper generates on silence (FR + EN).
