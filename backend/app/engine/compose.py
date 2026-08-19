@@ -8554,6 +8554,27 @@ def compose(
         if style == "number_hero":
             return card
 
+        # prim_split_stage: the LLM alternates sides for visual variety but ignores face
+        # position. For portrait sources object-position cannot reframe the video, so if
+        # the opaque .sst-panel ends up on the speaker's side the face is hidden entirely.
+        # Correct the side hint at render time: "right" puts the panel on the LEFT 0-46%;
+        # "left" puts it on the RIGHT 54-100%. Flip if face_cx falls inside the panel band.
+        if style == "prim_split_stage" and _has_face:
+            _sst_side = card.get("contentHints", {}).get("side", "right")
+            _face_in_panel = (
+                (_sst_side == "right" and _face_cx < 46.0) or
+                (_sst_side == "left"  and _face_cx > 54.0)
+            )
+            if _face_in_panel:
+                _corrected = "left" if _sst_side == "right" else "right"
+                print(
+                    f"[COMPOSE] PSS-side-flip {card.get('id', '?')}: "
+                    f"face_cx={_face_cx:.1f}% in panel band for side={_sst_side!r}"
+                    f" → corrected to {_corrected!r}",
+                    flush=True,
+                )
+                return {**card, "contentHints": {**card.get("contentHints", {}), "side": _corrected}}
+
         # Catch-all for all remaining types (timeline, versus_battle, dialogue,
         # testimonial, roadmap_milestone, secret_reveal, mindmap, etc.): apply
         # face-aware portrait-centre displacement. These types previously bypassed
