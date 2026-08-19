@@ -3194,10 +3194,11 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('  position:absolute; inset:0; background:#808080;')
         parts.append('  mix-blend-mode:saturation; opacity:0; pointer-events:none; z-index:1;')
         parts.append('}')
-        # L1 — Vignette: radial-gradient dims edges; gradient is static, opacity-only animates.
+        # L1 — Vignette: gradient starts at 50% (centre stays clear), edges dim to 0.40 black.
+        # Wider transparent zone prevents the halo-over-face effect seen at 30%.
         parts.append(f'.card[data-card-id="{card_id}"] .pcf-vignette {{')
         parts.append('  position:absolute; inset:0; pointer-events:none; z-index:2;')
-        parts.append('  background:radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.25) 100%);')
+        parts.append('  background:radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.40) 100%);')
         parts.append('  opacity:0;')
         parts.append('}')
         # L2/L3 — Scene: stacks line then text bottom-left.
@@ -7745,15 +7746,19 @@ def _build_timeline_js(
                 _pcf_vig_s   = f'.card[data-card-id="{card_id}"] #{card_id}-pcf-vignette'
                 _pcf_line_s  = f'.card[data-card-id="{card_id}"] #{card_id}-pcf-line'
                 _pcf_text_s  = f'.card[data-card-id="{card_id}"] #{card_id}-pcf-text'
-                # L0 — Desaturation: sine.inOut 1.2s, drains bg_full colour continuously.
+                # L0 — Desaturation: sine.inOut 1.2s. Opacity kept at 0.10 so the effect
+                # remains subtle even if mix-blend-mode:saturation falls back to a plain
+                # grey overlay in the render environment (SwiftShader / headless Chrome).
                 lines.append(f'  tl.fromTo(\'{_pcf_desat_s}\', '
                              f'{{ opacity: 0 }}, '
-                             f'{{ opacity: 0.4, duration: 1.200, ease: "sine.inOut" }}, '
+                             f'{{ opacity: 0.10, duration: 1.200, ease: "sine.inOut" }}, '
                              f'{start:.4f});')
                 # L1 — Vignette: opacity-only (gradient is static in CSS), power1.out, +0.1s.
+                # Cap at 0.45 — gradient now spans from centre-clear (50%) to edges,
+                # so the speaker's face stays readable at any vignette opacity.
                 lines.append(f'  tl.fromTo(\'{_pcf_vig_s}\', '
                              f'{{ opacity: 0 }}, '
-                             f'{{ opacity: 1, duration: 1.000, ease: "power1.out" }}, '
+                             f'{{ opacity: 0.45, duration: 1.000, ease: "power1.out" }}, '
                              f'{start + 0.100:.4f});')
                 # L2 — Text: y(8→0) + opacity, power2.out, +0.4s.
                 # No overshoot — deliberate contrast with back.out(1.4) of climax primitives.
