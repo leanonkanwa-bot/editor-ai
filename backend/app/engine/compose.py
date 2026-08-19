@@ -3181,18 +3181,20 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             if p["id"] in ("lean_craft", "lean_paper")
             else p["text"]
         )
-        # Card-panel: full-bleed dark canvas. position:relative anchors absolute children.
-        # overflow:hidden is required so absolute children (pcf-desat, pcf-vignette)
-        # are clipped to the panel's border-radius and don't bleed into card corners.
+        # Card-panel: transparent — the video source (speaker) shows through underneath.
+        # pcf-desat and pcf-vignette apply their moody treatment ON the live video.
+        # overflow:hidden clips absolute children to the panel's border-radius.
+        # bg_full is intentionally NOT used here: it is an opaque dark gradient that
+        # would fully cover the speaker (same bug as other full-cover primitives).
         parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
         parts.append('  width:100%; height:100%; max-width:none; padding:0;')
-        parts.append('  position:relative; overflow:hidden;')
-        parts.append(f'  background:{p.get("bg_full", "#000")};')
+        parts.append('  position:relative; overflow:hidden; background:transparent;')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .kicker {{ display:none; }}')
         parts.append(f'.card[data-card-id="{card_id}"] .accent-line {{ display:none; }}')
         parts.append(f'.card[data-card-id="{card_id}"] .shimmer-mask {{ display:none; }}')
-        # L0 — Desaturation overlay: mix-blend-mode:saturation drains colour from bg_full.
+        # L0 — Desaturation overlay: mix-blend-mode:saturation drains colour from the
+        # video source showing through the transparent card-panel.
         # #808080 neutral grey → saturation collapses, no hue shift.
         # filter:saturate() banned (unconfirmed SwiftShader); blend-mode is safe.
         parts.append(f'.card[data-card-id="{card_id}"] .pcf-desat {{')
