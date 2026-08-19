@@ -759,6 +759,9 @@ def _find_false_start_drops(
                         f" ({len(_gf_norms)}-word phrase)",
                         flush=True,
                     )
+                    # Block the entire repetition zone so shifted bigrams ('dois te',
+                    # 'te lever', …) inside [i, j) are rejected by guard(d).
+                    last_cut_end = words[j][1]
                     break
 
             # All guards passed — cut first occurrence + bridge up to restart.
