@@ -1680,6 +1680,34 @@ def pretrim(
                                 flush=True,
                             )
                             _sub_mut[_sk][0] = _new_s
+            # Word-overhang guard: the snap above is clamped by the next
+            # sub-interval's start (= drop.end) but won't extend past drop.start
+            # when the snap function returns "exact boundary, no snap needed"
+            # (e.g. Whisper records we==drop.start in _wt but we>drop.start in
+            # all_words).  This guard is the safety net: if the last word whose
+            # onset falls inside sub-interval k has its acoustic end past si_end,
+            # extend si_end to word.end so FFmpeg extracts the full word.
+            for _sk in range(len(_sub_mut) - 1):
+                _si_s_k = _sub_mut[_sk][0]
+                _si_e_k = _sub_mut[_sk][1]
+                _last_we_k = max(
+                    (
+                        float(w.get("end", 0))
+                        for w in all_words
+                        if _si_s_k <= float(w.get("start", 0)) < _si_e_k - 0.005
+                    ),
+                    default=0.0,
+                )
+                if _last_we_k > _si_e_k + 0.005:
+                    _ext_e_k = min(_last_we_k, _sub_mut[_sk + 1][0] - 0.001)
+                    if _ext_e_k > _si_e_k + 0.005:
+                        print(
+                            f"[PRETRIM] overhang-extend seg[{i}] sub[{_sk}]:"
+                            f" {_si_e_k:.3f}→{_ext_e_k:.3f}"
+                            f" (word.end={_last_we_k:.3f})",
+                            flush=True,
+                        )
+                        _sub_mut[_sk][1] = _ext_e_k
             sub_intervals = [(si_s, si_e) for si_s, si_e in _sub_mut]
 
         # Cut each sub-interval with the same fast lossless encoding used for segments.
