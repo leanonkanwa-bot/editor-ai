@@ -741,7 +741,10 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
     _full_cover_styles = frozenset({
         "prim_split_stage", "prim_anecdote_frame", "prim_journey_map",
         "prim_cinematic_reveal", "prim_ascension_reveal", "prim_shatter_truth",
-        "prim_split_compare", "prim_numbered_rule", "prim_confession_frame",
+        "prim_numbered_rule",
+        # prim_split_compare and prim_confession_frame removed: their .card-panel
+        # fills the card area but the .card itself must still receive border-radius
+        # so the card boundary is rounded like all other catalogue cards.
     })
     if p.get("radius") and p["radius"] not in ("0px", "0") and content_style not in _full_cover_styles:
         parts.append(f'.card[data-card-id="{card_id}"] {{ border-radius: {p["radius"]}; overflow: hidden; }}')
@@ -3179,9 +3182,11 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             else p["text"]
         )
         # Card-panel: full-bleed dark canvas. position:relative anchors absolute children.
+        # overflow:hidden is required so absolute children (pcf-desat, pcf-vignette)
+        # are clipped to the panel's border-radius and don't bleed into card corners.
         parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
         parts.append('  width:100%; height:100%; max-width:none; padding:0;')
-        parts.append('  position:relative;')
+        parts.append('  position:relative; overflow:hidden;')
         parts.append(f'  background:{p.get("bg_full", "#000")};')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .kicker {{ display:none; }}')
