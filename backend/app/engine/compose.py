@@ -7959,10 +7959,16 @@ def _build_timeline_js(
                     _sst_cp_show  = "inset(0 0 0 62% round 14px 0 0 14px)"
                     _sst_cp_hide  = "inset(0 0 0 100% round 14px 0 0 14px)"
 
-                # Clip-path entry: reveal speaker window simultaneously with panel slide
+                # Clip-path entry: set+to instead of fromTo so the hide-state is NEVER
+                # applied before t=start+0.20. fromTo can apply its from-state at t=0
+                # when GSAP seeks/rewinds the timeline during rendering (e.g. frame-0 init),
+                # causing a black screen from the very first frame until the card entry.
+                # tl.set at position P only fires when the playhead reaches P — safe.
                 lines.append(
-                    f'  tl.fromTo(\'.video-wrapper\', '
-                    f'{{ clipPath: \'{_sst_cp_hide}\' }}, '
+                    f'  tl.set(\'.video-wrapper\', {{ clipPath: \'{_sst_cp_hide}\' }}, {start + 0.20:.4f});'
+                )
+                lines.append(
+                    f'  tl.to(\'.video-wrapper\', '
                     f'{{ clipPath: \'{_sst_cp_show}\', duration: 0.38, ease: "power3.out" }}, '
                     f'{start + 0.20:.4f});'
                 )
