@@ -2508,20 +2508,20 @@ def _inject_rhythm_split_stage(
     style_pack: str,
     subject_side: str | None,
     layout: str,
-    rhythm_s: float = 6.0,
+    rhythm_s: float = 3.0,
     min_words: int = 4,
     card_dur: float = 4.5,
     exclusion_pad: float = 0.5,
     **_deprecated,  # absorbs old threshold_s / min_gap_s kwargs
 ) -> list[dict]:
-    """Inject prim_split_stage(mode=caption) on a 6s grid, skipping slots covered by a rich card.
+    """Inject prim_split_stage(mode=caption) on a 3s grid, skipping slots covered by a rich card.
 
     Walk the timeline every rhythm_s seconds. At each slot check whether it overlaps
     any existing graphic card (with exclusion_pad buffer). If not → inject a caption
-    card with word-by-word sync. Landscape only.
+    card with word-by-word sync. Works for both portrait and landscape layouts.
+    (Was landscape-only before — that restriction was the root cause of zero triggers on
+    portrait videos, since the reference test file is 9:16 portrait.)
     """
-    if layout != "landscape":
-        return []
 
     _side = "left" if subject_side == "left" else "right"
 
