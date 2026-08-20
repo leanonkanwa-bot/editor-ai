@@ -3149,11 +3149,16 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'  color:{p["text"]}; line-height:1.35;')
             parts.append('}')
         elif _sst_mode == "caption":
+            # Word-by-word container — flex-wrap so words flow naturally
             parts.append(f'.card[data-card-id="{card_id}"] .sst-caption {{')
+            parts.append('  display:flex; flex-wrap:wrap; align-content:flex-start;')
+            parts.append('  gap:0.22em 0.28em; max-width:100%;')
+            parts.append('}')
+            parts.append(f'.card[data-card-id="{card_id}"] .sst-cap-word {{')
             parts.append(f'  font-family:{p["font"]}; font-size:44px;')
             parts.append(f'  font-weight:{p["font_weight"]};')
-            parts.append(f'  color:{p["text"]}; line-height:1.25;')
-            parts.append('  opacity:0; max-width:100%;')
+            parts.append(f'  color:{p["text"]}; line-height:1.3;')
+            parts.append('  opacity:0;')
             parts.append('}')
         else:
             # Vertical diagram: text-only nodes with accent dash via ::before (no icons, no arrows)
@@ -4490,9 +4495,13 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
                 parts.append(f'        <div class="sst-label">{_esc(str(_step))}</div>')
                 parts.append(f'      </div>')
         elif _sst_mode_h == "caption":
-            _sst_caption_t = _esc(hints.get("caption_text", ""))
-            if _sst_caption_t:
-                parts.append(f'      <div class="sst-caption" id="{card_id}-sst-caption">{_sst_caption_t}</div>')
+            _sst_cap_words = hints.get("caption_words", [])
+            if _sst_cap_words:
+                parts.append(f'      <div class="sst-caption" id="{card_id}-sst-caption">')
+                for _cwi, _cw in enumerate(_sst_cap_words):
+                    _cw_text = _esc(str(_cw.get("text", "") if isinstance(_cw, dict) else _cw))
+                    parts.append(f'        <span class="sst-cap-word" id="{card_id}-sst-cw-{_cwi}">{_cw_text}</span>')
+                parts.append('      </div>')
         else:
             parts.append(f'      <div class="sst-diagram" id="{card_id}-sst-diagram">')
             for _ni, _node in enumerate(_sst_nodes_data[:4]):
@@ -7885,13 +7894,16 @@ def _build_timeline_js(
                             f'{start + 0.38 + _si * 0.11:.4f});'
                         )
                 elif _sst_mode_g == "caption":
-                    _sst_cap_s = f'.card[data-card-id="{card_id}"] #{card_id}-sst-caption'
-                    lines.append(
-                        f'  tl.fromTo(\'{_sst_cap_s}\', '
-                        f'{{ opacity: 0 }}, '
-                        f'{{ opacity: 1, duration: 0.35, ease: "power2.out" }}, '
-                        f'{start + 0.28:.4f});'
-                    )
+                    # Word-by-word sync: each word flips to opacity:1 at its transcript timestamp.
+                    # Panel entry (0.20s) completes before the first word is due — words appear
+                    # on the panel as the speaker says them, like normal captions.
+                    _sst_cap_words_g = _sst_ch_g.get("caption_words", [])
+                    _sst_panel_ready = start + 0.60  # panel entry takes 0.38s from start+0.20
+                    for _cwi, _cw in enumerate(_sst_cap_words_g):
+                        _cw_t = float(_cw.get("start", 0)) if isinstance(_cw, dict) else start + 0.60
+                        _cw_t = max(_sst_panel_ready, _cw_t)  # never before panel is visible
+                        _sst_cw_s = f'.card[data-card-id="{card_id}"] #{card_id}-sst-cw-{_cwi}'
+                        lines.append(f'  tl.set(\'{_sst_cw_s}\', {{ opacity: 1 }}, {_cw_t:.4f});')
                 else:
                     _sst_nn_g = min(len(_sst_nodes_g), 4)
                     for _ni in range(_sst_nn_g):

@@ -2590,9 +2590,12 @@ def _inject_rhythm_split_stage(
         if len(span_words) - _start_idx < min_words:
             _start_idx = 0
 
-        # Up to 8 words from the syntactic start (44px font fits 8 words comfortably in 62% panel)
-        raw_text = " ".join(w.text for w in span_words[_start_idx:_start_idx + 8])
-        caption_text = raw_text[0].upper() + raw_text[1:] if raw_text else ""
+        # All words from the syntactic start (word-by-word sync, cap at 16 for overflow safety)
+        _cap_words_raw = span_words[_start_idx:_start_idx + 16]
+        caption_words = [
+            {"text": w.text, "start": float(w.start), "end": float(w.end)}
+            for w in _cap_words_raw
+        ]
 
         # Alternate panel side across successive PLACED cards (not free-window index)
         # so skipped windows don't break the L-R pattern.
@@ -2610,14 +2613,14 @@ def _inject_rhythm_split_stage(
                 "style": "prim_split_stage",
                 "mode": "caption",
                 "side": _card_side,
-                "caption_text": caption_text,
+                "caption_words": caption_words,
             },
         })
         _last_card_end = card_end
         print(
             f"[RHYTHM-SPLIT] {card_id} [{card_start:.1f}–{card_end:.1f}s]"
-            f" side={_card_side!r} words={len(span_words[_start_idx:_start_idx + 4])}"
-            f" text={caption_text!r}",
+            f" side={_card_side!r} words={len(caption_words)}"
+            f" text={' '.join(w['text'] for w in caption_words)!r}",
             flush=True,
         )
 
@@ -3139,10 +3142,30 @@ def generate_storyboard(
     else:
         print("[GAP-FILL] No new cards inserted", flush=True)
 
-    # Rhythm split-stage injection disabled — prim_split_stage is placed only by the
-    # planner at intentional narrative moments (framework, process, structure).
-    # The 18s-gap timer produced mechanical, non-intentional triggers.
-    print("[RHYTHM-SPLIT] disabled — planner-only placement", flush=True)
+    # ── Rhythm split-stage injection ─────────────────────────────────────────
+    # Injects prim_split_stage(mode=caption) with word-by-word sync in long dead zones.
+    # threshold_s=30s (up from 18s) — fires less frequently, only in genuine gaps.
+    _rhythm_splits = _inject_rhythm_split_stage(
+        graphic_cards=graphic_cards,
+        remapped_words=remapped_words,
+        trimmed_duration=trimmed_duration,
+        style_pack=style_pack,
+        subject_side=subject_side,
+        layout=layout,
+        threshold_s=30.0,
+        min_gap_s=40.0,
+    )
+    if _rhythm_splits:
+        graphic_cards = sorted(
+            graphic_cards + _rhythm_splits,
+            key=lambda c: float(c.get("startSec", 0)),
+        )
+        print(
+            f"[RHYTHM-SPLIT] Merged {len(_rhythm_splits)} card(s) — total: {len(graphic_cards)}",
+            flush=True,
+        )
+    else:
+        print("[RHYTHM-SPLIT] No windows > 30s without graphic card", flush=True)
 
     # ── Full-cover exclusion pass ─────────────────────────────────────────────
     # Drop card_overlay cards that overlap a full_cover window. full_cover cards
