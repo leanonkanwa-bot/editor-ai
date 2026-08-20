@@ -7984,23 +7984,35 @@ def _build_timeline_js(
                     f'{{ x: \'{_sst_tx:.1f}%\' }}, {start + 0.20:.4f});'
                 )
 
-                # ── EXIT — panel fades out; clip-path reset (no animated hide) ──
-                # Double safety prevents black screen when card.endSec is close to or beyond
-                # segment_duration — in that case Safety B at end-0.23 would never fire.
+                # ── EXIT — panel fades; clip-path expands to full (synced, no snap) ──
+                # Animate clip-path from show→full instead of snapping to "none".
+                # Snap was jarring: video instantly went 38%→fullscreen while panel
+                # faded — the set+to combo now syncs the expansion with the fade.
+                # Safety B at end-0.23 clears the inset() after the animation completes.
                 _sst_exit_t = round(end - 0.52, 4)
+                # Fully-open inset keeps same round value so the transition is smooth
+                _sst_cp_exit = (
+                    f"inset(0 0% 0 0 round 0 14px 14px 0)"
+                    if _sst_side_g == "left"
+                    else f"inset(0 0 0 0% round 14px 0 0 14px)"
+                )
                 lines.append(
                     f'  tl.to(\'{_sst_panel_s}\', '
                     f'{{ opacity: 0, duration: 0.28, ease: "power2.in" }}, '
                     f'{_sst_exit_t:.4f});'
                 )
-                # Safety A: immediate clip-path + translateX reset at panel fade start
+                # Expand video window in sync with panel fade (no snap)
                 lines.append(
-                    f'  tl.set(\'.video-wrapper\', {{ clipPath: "none" }}, {_sst_exit_t:.4f});'
+                    f'  tl.to(\'.video-wrapper\', '
+                    f'{{ clipPath: "{_sst_cp_exit}", duration: 0.28, ease: "power2.in" }}, '
+                    f'{_sst_exit_t:.4f});'
                 )
                 lines.append(
-                    f'  tl.set(\'.video-wrapper video\', {{ x: "0%" }}, {_sst_exit_t:.4f});'
+                    f'  tl.to(\'.video-wrapper video\', '
+                    f'{{ x: "0%", duration: 0.28, ease: "power2.in" }}, '
+                    f'{_sst_exit_t:.4f});'
                 )
-                # Safety B: second reset as fallback
+                # Safety B: clear residual inset() after animation completes
                 lines.append(
                     f'  tl.set(\'.video-wrapper\', {{ clipPath: "none" }}, {round(end - 0.23, 4):.4f});'
                 )
