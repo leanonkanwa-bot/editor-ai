@@ -2577,9 +2577,25 @@ def _render_hyperframes(
     _mem_workers = min(24, max(3, int(_chrome_budget_gb / 2.0)))  # 2.0 GB/worker — recalibrated for complex primitives
     _cpu_count = _os.cpu_count() or 8
     _cpu_workers = max(3, _cpu_count - 2)
-    _n_workers = max(3, min(_mem_workers, _cpu_workers))
+    _n_workers_auto = max(3, min(_mem_workers, _cpu_workers))
+
+    # HF_N_WORKERS env var overrides the auto-computed value for manual tuning.
+    # Increment by 1 from Railway Variables to find the safe ceiling.
+    # WARNING: setting this too high risks SIGKILL (OOM) — validate each step.
+    _hf_n_workers_env = _os.environ.get("HF_N_WORKERS", "")
+    if _hf_n_workers_env.strip().isdigit():
+        _n_workers = max(3, int(_hf_n_workers_env.strip()))
+        # Shrink Node heap to give Chrome more room when workers are pinned above auto.
+        if _n_workers > _n_workers_auto:
+            _extra = _n_workers - _n_workers_auto
+            _node_heap_mb = max(2048, _node_heap_mb - _extra * 512)
+        _workers_src = f"env HF_N_WORKERS={_n_workers}"
+    else:
+        _n_workers = _n_workers_auto
+        _workers_src = "auto"
+
     print(
-        f"[HF] workers: {_n_workers}"
+        f"[HF] workers: {_n_workers} ({_workers_src})"
         f" (limit={_mem_limit_gb:.1f}GB used={_mem_used_gb:.1f}GB"
         f" avail={_mem_avail_gb:.1f}GB node={_node_heap_mb // 1024}GB"
         f" chrome_budget={_chrome_budget_gb:.1f}GB→{_mem_workers},"
