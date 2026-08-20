@@ -692,16 +692,23 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         panel_align     = "center"
         max_width_eff   = "85%"
         # Adaptive title size — prevent vertical overflow for long texts.
-        # At 64px/~10 chars per line in a portrait zone (text area ≈ 356px),
-        # texts > 35 chars wrap to 4+ lines and risk exceeding the card height.
+        # key_phrase/quote are hero cards: their text must stay large (≥48px) so they
+        # dominate the frame. Other card types use a tighter reduction curve.
         if title and not number:
             _tc = len(title)
-            if _tc > 55:
-                title_size_eff = "32px"
-            elif _tc > 35:
-                title_size_eff = "38px"
-            elif _tc > 20:
-                title_size_eff = "56px"
+            if content_style in ("key_phrase", "quote"):
+                if _tc > 60:
+                    title_size_eff = "48px"
+                elif _tc > 40:
+                    title_size_eff = "56px"
+                # ≤40 chars: keep 64px default
+            else:
+                if _tc > 55:
+                    title_size_eff = "32px"
+                elif _tc > 35:
+                    title_size_eff = "38px"
+                elif _tc > 20:
+                    title_size_eff = "56px"
         # Dual-text-block types: myth_vs_fact and objection_response render two
         # separate text blocks both using title_size_eff. Their combined length
         # drives vertical height, not the title field — apply separate reduction.
