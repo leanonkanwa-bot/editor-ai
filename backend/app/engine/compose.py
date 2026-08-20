@@ -744,16 +744,14 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
     # This fixes shadow-clipping inconsistency: compact cards with wide panels (e.g.
     # warning_soft, action_step_cta) have only ~21px clearance to the card-host edge,
     # so a 60px box-shadow would be cut sharply at a right angle without this.
-    # Excluded: full-cover styles where .card fills the entire 1920×1080 canvas.
-    _full_cover_styles = frozenset({
-        "prim_split_stage", "prim_anecdote_frame", "prim_journey_map",
-        "prim_cinematic_reveal", "prim_ascension_reveal", "prim_shatter_truth",
-        "prim_numbered_rule",
-        # prim_split_compare and prim_confession_frame removed: their .card-panel
-        # fills the card area but the .card itself must still receive border-radius
-        # so the card boundary is rounded like all other catalogue cards.
-    })
-    if p.get("radius") and p["radius"] not in ("0px", "0") and content_style not in _full_cover_styles:
+    # All styles receive border-radius on .card so the card boundary is consistently
+    # rounded. Primitive climax cards (prim_cinematic_reveal, prim_split_stage, etc.)
+    # were previously excluded via _full_cover_styles under the assumption that they
+    # fill the full canvas — but .card always needs overflow:hidden + border-radius so
+    # absolutely-positioned children are clipped to the rounded boundary (same fix that
+    # landed for prim_confession_frame and prim_split_compare). lean_cinema pack keeps
+    # radius=0px intentionally — the condition below naturally skips it.
+    if p.get("radius") and p["radius"] not in ("0px", "0"):
         parts.append(f'.card[data-card-id="{card_id}"] {{ border-radius: {p["radius"]}; overflow: hidden; }}')
     parts.append(f'.card[data-card-id="{card_id}"] .root {{')
     parts.append('  width: 100%; height: 100%; display: flex; flex-direction: column;')
