@@ -1334,20 +1334,36 @@ def run_job(
         # Build LLM-filler zone list: gaps the LLM explicitly marked as filler/
         # tangent/repeat must NOT be rescued — the editorial intent was to cut them.
         # These timestamps are in the same compressed space as keep_segments.
-        # Technical drops (filler, repeat) always block GAP-RESCUE.
-        # Editorial drops (tangent, weak) block GAP-RESCUE ONLY if the LLM
-        # confirmed context_ok=true — i.e. it ran the CONTEXT INTEGRITY TEST.
-        _llm_filler_zones: list[tuple[float, float]] = [
-            (float(_ds["start"]), float(_ds["end"]))
-            for _ds in plan.raw.get("drop_segments", [])
-            if (
-                str(_ds.get("reason", "")).lower() in {"filler", "repeat"}
-                or (
-                    str(_ds.get("reason", "")).lower() in {"tangent", "weak"}
-                    and bool(_ds.get("context_ok", False))
-                )
-            )
-        ]
+        # Technical drops (filler, repeat): only block GAP-RESCUE when an actual
+        # filler_drop overlaps the zone (source-coord comparison via _c2s_diag).
+        # A planner "filler"/"repeat" label with no acoustic/LLM-EDIT confirmation
+        # is a planning false-positive — GAP-RESCUE must be allowed to recover it.
+        # Editorial drops (tangent, weak+context_ok): trust the planner directly,
+        # no acoustic confirmation required.
+        _llm_filler_zones: list[tuple[float, float]] = []
+        for _ds in plan.raw.get("drop_segments", []):
+            _ds_r = str(_ds.get("reason", "")).lower()
+            _fz_s_c = float(_ds.get("start", 0))
+            _fz_e_c = float(_ds.get("end", 0))
+            if _ds_r in {"filler", "repeat"}:
+                _fz_s_src, _ = _c2s_diag(_fz_s_c)
+                _fz_e_src, _ = _c2s_diag(_fz_e_c)
+                if not any(
+                    d.end > _fz_s_src + 0.050 and d.start < _fz_e_src - 0.050
+                    for d in filler_drops
+                ):
+                    print(
+                        f"[GAP-RESCUE] plan drop [{_fz_s_c:.2f},{_fz_e_c:.2f}]"
+                        f" reason={_ds_r!r} unbacked by any filler_drop"
+                        f" → GAP-RESCUE allowed to recover",
+                        flush=True,
+                    )
+                    continue
+            elif _ds_r in {"tangent", "weak"} and bool(_ds.get("context_ok", False)):
+                pass  # editorial drop — trust planner without acoustic confirmation
+            else:
+                continue
+            _llm_filler_zones.append((_fz_s_c, _fz_e_c))
 
         _n_rescued = 0
         for _gi in range(len(_keep_raw) - 1):

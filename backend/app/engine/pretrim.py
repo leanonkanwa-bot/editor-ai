@@ -1286,22 +1286,34 @@ def pretrim(
         # drop_segments timestamps are COMPRESSED (plan_edit receives transcript_clean).
         # When source-coordinate mode is active, convert each zone boundary to SOURCE
         # space via _c2s so the comparison with _wl_ws (SOURCE) is in the same space.
-        _wl_llm_filler_zones: list[tuple[float, float]] = [
-            (
+        #
+        # Guard: "filler"/"repeat" drops require an overlapping applied filler_drop
+        # (acoustic or LLM-EDIT approved) to block WORD-LOST rescue. A planner label
+        # with no acoustic/LLM confirmation is a planning error — WORD-LOST must be
+        # allowed to rescue those words. Editorial drops ("tangent"+context_ok) are
+        # trusted without acoustic confirmation.
+        _wl_llm_filler_zones: list[tuple[float, float]] = []
+        for _ds in (plan.raw.get("drop_segments") or []):
+            _ds_r = str(_ds.get("reason", "")).lower()
+            fz_s = (
                 _c2s(float(_ds.get("start", 0)), _vd_sorted) if use_source_coords
-                else float(_ds.get("start", 0)),
+                else float(_ds.get("start", 0))
+            )
+            fz_e = (
                 _c2s(float(_ds.get("end", 0)), _vd_sorted) if use_source_coords
-                else float(_ds.get("end", 0)),
+                else float(_ds.get("end", 0))
             )
-            for _ds in (plan.raw.get("drop_segments") or [])
-            if (
-                str(_ds.get("reason", "")).lower() in {"filler", "repeat"}
-                or (
-                    str(_ds.get("reason", "")).lower() == "tangent"
-                    and _ds.get("context_ok") is True
-                )
-            )
-        ]
+            if _ds_r in {"filler", "repeat"}:
+                if not any(
+                    d.end > fz_s + 0.050 and d.start < fz_e - 0.050
+                    for d in (filler_drops or [])
+                ):
+                    continue  # unbacked planner label — allow WORD-LOST to rescue
+            elif _ds_r == "tangent" and _ds.get("context_ok") is True:
+                pass  # editorial drop — trust planner without acoustic confirmation
+            else:
+                continue
+            _wl_llm_filler_zones.append((fz_s, fz_e))
 
         _wl_total_repaired = 0
         _wl_fallback_count = 0
