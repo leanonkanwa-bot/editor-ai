@@ -2510,7 +2510,7 @@ def _inject_rhythm_split_stage(
     layout: str,
     rhythm_s: float = 3.0,
     min_words: int = 4,
-    card_dur: float = 4.5,
+    card_dur: float = 3.0,
     exclusion_pad: float = 0.5,
     **_deprecated,  # absorbs old threshold_s / min_gap_s kwargs
 ) -> list[dict]:
@@ -2605,8 +2605,10 @@ def _inject_rhythm_split_stage(
                         "caption_words": caption_words,
                     },
                 })
-                # Mark this slot as occupied so it doesn't self-conflict
-                exclusion.append((card_start - exclusion_pad, card_end + exclusion_pad))
+                # Mark this slot as occupied so it doesn't self-conflict.
+                # No right padding — SST cards are grid-aligned, right pad would push
+                # boundary past cursor + rhythm_s and block every other slot.
+                exclusion.append((card_start - exclusion_pad, card_end))
                 print(
                     f"[RHYTHM-SPLIT] {card_id} [{card_start:.1f}–{card_end:.1f}s]"
                     f" side={_card_side!r} words={len(caption_words)}"
