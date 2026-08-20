@@ -2575,6 +2575,17 @@ def _inject_rhythm_split_stage(
                     for w in span_words[_start_idx:_start_idx + 16]
                 ]
 
+                # Adaptive end: trim card to last word + 0.8s so the panel never sits
+                # frozen after the speech ends. Keeps minimum 2.5s for entry/exit anims.
+                if caption_words:
+                    _last_word_end = caption_words[-1]["end"]
+                    _adaptive_end = min(
+                        _last_word_end + 0.80,
+                        card_start + card_dur,
+                        trimmed_duration - 0.3,
+                    )
+                    card_end = round(max(_adaptive_end, card_start + 2.5), 3)
+
                 _card_side = _side if len(new_cards) % 2 == 0 else (
                     "right" if _side == "left" else "left"
                 )

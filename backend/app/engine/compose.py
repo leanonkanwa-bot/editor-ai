@@ -7931,9 +7931,14 @@ def _build_timeline_js(
                     # on the panel as the speaker says them, like normal captions.
                     _sst_cap_words_g = _sst_ch_g.get("caption_words", [])
                     _sst_panel_ready = start + 0.60  # panel entry takes 0.38s from start+0.20
+                    _sst_clamp_offset = 0.0  # stagger for words clamped to panel_ready
                     for _cwi, _cw in enumerate(_sst_cap_words_g):
-                        _cw_t = float(_cw.get("start", 0)) if isinstance(_cw, dict) else start + 0.60
-                        _cw_t = max(_sst_panel_ready, _cw_t)  # never before panel is visible
+                        _cw_t = float(_cw.get("start", 0)) if isinstance(_cw, dict) else _sst_panel_ready
+                        if _cw_t < _sst_panel_ready:
+                            # Word spoke before panel was visible — stagger 0.10s each
+                            # so they trickle in rather than all appearing simultaneously.
+                            _cw_t = _sst_panel_ready + _sst_clamp_offset
+                            _sst_clamp_offset += 0.10
                         _sst_cw_s = f'.card[data-card-id="{card_id}"] #{card_id}-sst-cw-{_cwi}'
                         lines.append(f'  tl.set(\'{_sst_cw_s}\', {{ opacity: 1 }}, {_cw_t:.4f});')
                 else:
