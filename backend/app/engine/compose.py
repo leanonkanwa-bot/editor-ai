@@ -1449,9 +1449,9 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'  box-shadow:{p["accent_line_glow"]};')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .lj-label {{')
-        parts.append(f'  font-family:{p["font"]}; font-size:{kicker_size_eff};')
+        parts.append(f'  display:block; font-family:{p["font"]}; font-size:{kicker_size_eff};')
         parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]};')
-        parts.append('  text-align:center; max-width:90px;')
+        parts.append('  text-align:center; max-width:90px; overflow-wrap:break-word;')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .lj-conn {{')
         parts.append(f'  flex:1; height:2px; background:{p["accent"]};')
@@ -3633,6 +3633,9 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'    </div>')
     elif content_style == "location_journey":
         _lj_pts = hints.get("journey_points", [])
+        # Normalise: LLM sometimes sends a string instead of a list
+        if isinstance(_lj_pts, str):
+            _lj_pts = [x.strip() for x in _lj_pts.replace(" / ", "\n").replace(" • ", "\n").split("\n") if x.strip()] or [_lj_pts]
         _n_lj = min(len(_lj_pts), 5)
         parts.append(f'    <div class="lj-wrap">')
         for _lj_i, _lj_pt in enumerate(_lj_pts[:_n_lj]):
