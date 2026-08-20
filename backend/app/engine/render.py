@@ -963,7 +963,9 @@ def _zoom_filter_for_level(zoom_level: int, target_w: int, target_h: int) -> str
 # ── Speech-moment punch-in constants ──────────────────────────────────────────
 _PUNCH_IN_STRONG_BEATS    = frozenset({"realization", "payoff", "amplify", "principle"})
 _PUNCH_IN_SPEECH_SCALE    = 1.060   # 6% scale bump
-_PUNCH_IN_SPEECH_DUR      = 0.40    # seconds each for IN and OUT phases (≥12 frames for perceived fluidity)
+_PUNCH_IN_SPEECH_DUR      = 0.40    # seconds each for IN (≥12 frames for perceived fluidity)
+_PUNCH_IN_SCALE_CAP       = 1.25    # skip punch if baseline already at/above this — prevents
+                                    # ratchet accumulation when pull_out is disabled
 _PUNCH_IN_BUDGET_S        = 13.0   # minimum seconds between two punch-ins
 _PUNCH_IN_SEGMENT_MIN_DUR = 2.0    # source segment must be this long to qualify
 _PUNCH_IN_ENTRY_OFFSET    = 0.15   # fire this many seconds after segment start
@@ -1062,6 +1064,12 @@ def _inject_speech_punch_in_zooms(
 
     for t_punch in sorted(punch_times):
         baseline  = _interp_zoom_scale(t_punch, result)
+        if baseline >= _PUNCH_IN_SCALE_CAP:
+            print(
+                f"[PUNCH] t={t_punch:.2f}s skipped — baseline {baseline:.4f} ≥ cap {_PUNCH_IN_SCALE_CAP}",
+                flush=True,
+            )
+            continue
         scale_in  = round(baseline * _PUNCH_IN_SPEECH_SCALE, 4)
         t_peak    = round(t_punch + _PUNCH_IN_SPEECH_DUR, 4)
 
