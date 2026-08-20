@@ -753,6 +753,17 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
     # radius=0px intentionally — the condition below naturally skips it.
     if p.get("radius") and p["radius"] not in ("0px", "0"):
         parts.append(f'.card[data-card-id="{card_id}"] {{ border-radius: {p["radius"]}; overflow: hidden; }}')
+        # Round the card-host clip boundary so box-shadows from .card-panel are clipped
+        # at rounded corners rather than at a sharp rectangular edge. Excluded for
+        # full-cover primitives that fill the entire canvas (rounding the full frame
+        # would clip face/content at the edges).
+        _FULL_COVER_TYPES = frozenset({
+            "prim_cinematic_reveal", "prim_ascension_reveal", "prim_shatter_truth",
+            "prim_confession_frame", "prim_split_compare", "prim_journey_map",
+            "prim_numbered_rule", "prim_split_stage", "prim_anecdote_frame",
+        })
+        if content_style not in _FULL_COVER_TYPES:
+            parts.append(f'.card-host[data-card-id="{card_id}"] {{ border-radius: {p["radius"]}; }}')
     parts.append(f'.card[data-card-id="{card_id}"] .root {{')
     parts.append('  width: 100%; height: 100%; display: flex; flex-direction: column;')
     _root_justify = "flex-start" if (compact and content_style in _TALL_DATA_PANEL_TYPES) else "center"
@@ -4791,8 +4802,12 @@ def _build_timeline_js(
                 _fc_host_to   = '{ opacity: 1, scale: 1, duration: 0.500, ease: "power2.out" }'
             elif _is_fc:                         # Piste C — iris vertical (glass + ledger)
                 _fc_offset, _fc_bd_dur = 0.15, 0.20
-                _fc_host_from = '{ opacity: 0, clipPath: "inset(45% 0 45% 0)" }'
-                _fc_host_to   = '{ opacity: 1, clipPath: "inset(0% 0 0% 0)", duration: 0.550, ease: "power2.out" }'
+                _fc_r = p.get("radius", "0px")
+                # Use `round R` so the iris opens to a rounded clip — matches the
+                # card-host border-radius added above. Without `round`, inset(0%) leaves a
+                # permanent rectangular clip-path that overrides border-radius visually.
+                _fc_host_from = f'{{ opacity: 0, clipPath: "inset(45% 0 45% 0 round {_fc_r})" }}'
+                _fc_host_to   = f'{{ opacity: 1, clipPath: "inset(0% 0 0% 0 round {_fc_r})", duration: 0.550, ease: "power2.out" }}'
             else:
                 _fc_offset = 0
             ent_dur = 0.550 if is_cinema else 0.320
@@ -4821,11 +4836,15 @@ def _build_timeline_js(
                     pass  # cinema: slow opacity only, no panel movement
                 elif is_ledger:
                     if not _is_fc:  # iris host covers the reveal — skip conflicting panel clip
-                        # Scan down: clip from top (matches ledger's terminal aesthetic)
+                        # Scan down: clip from top (matches ledger's terminal aesthetic).
+                        # `round R` so the final clip-path respects the panel's border-radius
+                        # — without it, inset(0%) leaves a permanent rectangular clip that
+                        # overrides border-radius, giving the panel square corners.
+                        _ledger_r = p.get("radius", "4px")
                         lines.append(
                             f'  tl.fromTo(\'{panel_sel}\', '
-                            f'{{ clipPath: "inset(100% 0 0% 0)" }}, '
-                            f'{{ clipPath: "inset(0% 0 0% 0)", duration: 0.350, ease: _eIn }}, '
+                            f'{{ clipPath: "inset(100% 0 0% 0 round {_ledger_r})" }}, '
+                            f'{{ clipPath: "inset(0% 0 0% 0 round {_ledger_r})", duration: 0.350, ease: _eIn }}, '
                             f'{_p_t:.4f});'
                         )
                 elif is_vibe:
