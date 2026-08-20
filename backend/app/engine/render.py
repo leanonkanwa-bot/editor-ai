@@ -1043,17 +1043,20 @@ def _inject_speech_punch_in_zooms(
     zoom_entries: list[dict],
     punch_times: list[float],
 ) -> list[dict]:
-    """Inject 1.0->1.06->1.0 bumps at speech punch-in times, composited with drift.
+    """Inject one-way 6% punch-in zooms at speech punch-in times; freeze at reached scale.
 
-    Each event: IN 0.40s ease-OUT (kind="punch_in"), OUT 0.40s ease-IN (kind="pull_out").
-    _build_zoom_t_expr() dispatches on kind — the "ease" field is never read.
+    Each event is a single IN ramp (kind="punch_in") over _PUNCH_IN_SPEECH_DUR seconds.
+    There is NO automatic pull_out: after the peak, _fill_zoom_gaps_with_holds freezes
+    the scale until the next planned entry takes over. This prevents the yoyo effect
+    (brutal 0.4 s snap-back to baseline that was visible as a mechanical bounce).
 
-    Three cases for existing entries spanning or touching [t_punch, t_end]:
+    Three cases for existing entries spanning or touching [t_punch, t_peak]:
       1. Entry straddles t_punch (start < t_punch < end): split at t_punch. The
-         post-punch portion (if it extends past t_end) resumes from baseline.
-      2. Entry starts during [t_punch, t_end) but ends after t_end: trim start to
-         t_end and set from=baseline to avoid a jump when pull-out returns to baseline.
-      3. Entry ends during [t_punch, t_end]: silently dropped — punch-in covers that window.
+         post-punch portion (if it extends past t_peak) resumes from scale_in; its
+         target is max(scale_in, zto) so holds freeze and upward drifts continue.
+      2. Entry starts during [t_punch, t_peak) but ends after t_peak: trim start to
+         t_peak and set from=scale_in so the entry continues from the punch peak.
+      3. Entry ends during [t_punch, t_peak]: silently dropped — punch-in covers that window.
     """
     result = list(zoom_entries)
 
@@ -1061,7 +1064,6 @@ def _inject_speech_punch_in_zooms(
         baseline  = _interp_zoom_scale(t_punch, result)
         scale_in  = round(baseline * _PUNCH_IN_SPEECH_SCALE, 4)
         t_peak    = round(t_punch + _PUNCH_IN_SPEECH_DUR, 4)
-        t_end     = round(t_peak  + _PUNCH_IN_SPEECH_DUR, 4)
 
         processed: list[dict] = []
         for ze in result:
@@ -1071,7 +1073,7 @@ def _inject_speech_punch_in_zooms(
             zto    = float(ze.get("to",    zfrom))
             kind   = ze.get("kind", "drift")
 
-            if kind in ("jump_cut", "punch_in", "pull_out"):
+            if kind in ("jump_cut", "punch_in"):
                 processed.append(ze)
                 continue
 
@@ -1081,28 +1083,26 @@ def _inject_speech_punch_in_zooms(
                 frac = (t_punch - zs) / dur
                 scale_at = round(zfrom + (zto - zfrom) * frac, 4)
                 processed.append({**ze, "end": round(t_punch, 4), "to": scale_at})
-                if ze_end > t_end:
-                    # Post-punch portion: resume from baseline (= zoom at t_punch = zoom
-                    # at t_end since the pull-out returns exactly to baseline).
-                    processed.append({**ze, "start": t_end,
-                                      "from": round(baseline, 4), "to": zto})
-                # Entries ending within [t_punch, t_end] are dropped — punch covers window.
-            elif t_punch <= zs < t_end and ze_end > t_end:
-                # Case 2: entry starts during punch window but extends past t_end.
-                # Trim to [t_end, end] and reset from=baseline to avoid a zoom jump:
-                # without this, a breath descent that started mid-punch would resume
-                # from its original peak (e.g. 1.3312) instead of the baseline (1.310),
-                # creating a visible +9px discontinuity.
-                processed.append({**ze, "start": t_end, "from": round(baseline, 4)})
+                if ze_end > t_peak:
+                    # Post-punch portion resumes from the punch peak. For holds (zto ≤
+                    # scale_in) this freezes at scale_in; for upward drifts it continues
+                    # toward the original target.
+                    resumed_to = round(max(float(zto), float(scale_in)), 4)
+                    processed.append({**ze, "start": t_peak,
+                                      "from": scale_in, "to": resumed_to})
+                # Entries ending within [t_punch, t_peak] are dropped — punch covers window.
+            elif t_punch <= zs < t_peak and ze_end > t_peak:
+                # Case 2: entry starts during punch window but extends past t_peak.
+                # Trim to [t_peak, end] and reset from=scale_in so GSAP / _interp_zoom_scale
+                # see a coherent starting value at the punch peak, not the original pre-punch
+                # baseline.
+                processed.append({**ze, "start": t_peak, "from": scale_in})
             else:
                 processed.append(ze)
 
         processed.append({"start": round(t_punch, 4), "end": t_peak,
                            "from": round(baseline, 4), "to": scale_in,
                            "kind": "punch_in"})
-        processed.append({"start": t_peak, "end": t_end,
-                           "from": scale_in, "to": round(baseline, 4),
-                           "kind": "pull_out"})
         result = processed
 
     return sorted(result, key=lambda e: float(e.get("start", 0)))
