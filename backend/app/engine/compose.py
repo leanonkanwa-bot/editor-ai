@@ -692,16 +692,18 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         panel_align     = "center"
         max_width_eff   = "85%"
         # Adaptive title size — prevent vertical overflow for long texts.
-        # key_phrase/quote are hero cards: their text must stay large (≥48px) so they
-        # dominate the frame. Other card types use a tighter reduction curve.
+        # key_phrase/quote: four-tier curve (Option B, 2026-08-20). Restores >25 band
+        # suppressed in b71c513 (caused 38px→64px jump on ~36-char texts).
         if title and not number:
             _tc = len(title)
             if content_style in ("key_phrase", "quote"):
                 if _tc > 60:
-                    title_size_eff = "48px"
+                    title_size_eff = "42px"
                 elif _tc > 40:
+                    title_size_eff = "48px"
+                elif _tc > 25:
                     title_size_eff = "56px"
-                # ≤40 chars: keep 64px default
+                # ≤25 chars: keep 64px default
             else:
                 if _tc > 55:
                     title_size_eff = "32px"
