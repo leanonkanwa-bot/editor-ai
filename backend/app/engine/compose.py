@@ -3110,12 +3110,12 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'.card[data-card-id="{card_id}"] .accent-line {{ display:none; }}')
         parts.append(f'.card[data-card-id="{card_id}"] .shimmer-mask {{ display:none; }}')
 
-        # Content panel: occupies the opposite 46% of the frame
+        # Content panel: occupies 62% of frame — speaker window is 38% (matches ref ratio)
         _sst_dot_color = "rgba(0,0,0,0.05)" if _sst_is_light else "rgba(255,255,255,0.05)"
         # Round only the speaker-facing edge — screen-touching edges stay flush
         _sst_radius = "0 14px 14px 0" if _sst_side == "right" else "14px 0 0 14px"
         parts.append(f'.card[data-card-id="{card_id}"] .sst-panel {{')
-        parts.append(f'  position:absolute; top:0; {_sst_panel_edge}; width:46%;')
+        parts.append(f'  position:absolute; top:0; {_sst_panel_edge}; width:62%;')
         parts.append('  height:100%; display:flex; flex-direction:column;')
         parts.append('  align-items:flex-start; justify-content:center;')
         parts.append('  padding:0 52px; box-sizing:border-box;')
@@ -3149,9 +3149,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'  color:{p["text"]}; line-height:1.35;')
             parts.append('}')
         elif _sst_mode == "caption":
-            # Rhythm-injected card: 4-word transcript fragment, large font for panel presence
             parts.append(f'.card[data-card-id="{card_id}"] .sst-caption {{')
-            parts.append(f'  font-family:{p["font"]}; font-size:64px;')
+            parts.append(f'  font-family:{p["font"]}; font-size:44px;')
             parts.append(f'  font-weight:{p["font_weight"]};')
             parts.append(f'  color:{p["text"]}; line-height:1.25;')
             parts.append('  opacity:0; max-width:100%;')
@@ -7904,17 +7903,34 @@ def _build_timeline_js(
                             f'{start + 0.38 + _ni * 0.14:.4f});'
                         )
 
-                # ── VIDEO REFRAME — snap object-position to keep face in uncovered half ──
-                # Derives face_cx from video_pos_x using the inverse of the 16:9→9:16 formula.
-                # For a portrait source (no horizontal slack), object-position has no effect.
+                # ── VIDEO ENCADRÉ — clip-path masks video to 38% window, rounded on panel-facing edge ──
+                # No transform on #video-stage → no SwiftShader re-rasterization.
+                # clip-path is GPU-composited (zero extra memory pressure).
+                # side="left" → video on LEFT → clip right 62% → show left 38%
+                # side="right" → video on RIGHT → clip left 62% → show right 38%
+                if _sst_side_g == "left":
+                    _sst_cp_show  = "inset(0 62% 0 0 round 0 14px 14px 0)"
+                    _sst_cp_hide  = "inset(0 100% 0 0 round 0 14px 14px 0)"
+                else:
+                    _sst_cp_show  = "inset(0 0 0 62% round 14px 0 0 14px)"
+                    _sst_cp_hide  = "inset(0 0 0 100% round 14px 0 0 14px)"
+
+                # Clip-path entry: reveal speaker window simultaneously with panel slide
+                lines.append(
+                    f'  tl.fromTo(\'.video-wrapper\', '
+                    f'{{ clipPath: \'{_sst_cp_hide}\' }}, '
+                    f'{{ clipPath: \'{_sst_cp_show}\', duration: 0.38, ease: "power3.out" }}, '
+                    f'{start + 0.20:.4f});'
+                )
+
+                # Object-position: center face in the 38% visible window.
+                # Panel=62%, window=38% → centers at 19% (left) or 81% (right).
                 _sst_r = 256.0 / 81.0  # (16/9)^2 — correct for any 16:9 landscape source
                 _sst_face_cx = (video_pos_x * (_sst_r - 1.0) + 50.0) / _sst_r
-                # "panel on LEFT" (side="right"): face should sit at 73% (center of right 54%)
-                # "panel on RIGHT" (side="left"): face should sit at 27% (center of left 54%)
-                _sst_target_x = 73.0 if _sst_side_g == "right" else 27.0
+                _sst_target_x = 81.0 if _sst_side_g == "right" else 19.0
                 _sst_vpos = (_sst_face_cx * _sst_r - _sst_target_x) / (_sst_r - 1.0)
                 _sst_vpos = max(0.0, min(100.0, _sst_vpos))
-                # Snap at card entry (panel fully opaque → snap invisible); restore just before exit
+                # Snap at card entry (clip hides video → snap invisible); restore just before exit
                 lines.append(
                     f'  tl.set(\'.video-wrapper video\', '
                     f'{{ objectPosition: \'{_sst_vpos:.1f}% 50%\' }}, {start:.4f});'
@@ -7924,12 +7940,21 @@ def _build_timeline_js(
                     f'{{ objectPosition: \'{video_pos_x:.1f}% 50%\' }}, {round(end - 0.54, 4):.4f});'
                 )
 
-                # ── EXIT — panel fades out; video-stage untouched (stays at scale:1/x:0) ──
+                # ── EXIT — panel + clip-path collapse simultaneously ──
                 _sst_exit_t = round(end - 0.52, 4)
                 lines.append(
                     f'  tl.to(\'{_sst_panel_s}\', '
                     f'{{ opacity: 0, duration: 0.28, ease: "power2.in" }}, '
                     f'{_sst_exit_t:.4f});'
+                )
+                lines.append(
+                    f'  tl.to(\'.video-wrapper\', '
+                    f'{{ clipPath: \'{_sst_cp_hide}\', duration: 0.28, ease: "power2.in" }}, '
+                    f'{_sst_exit_t:.4f});'
+                )
+                # Reset clip-path after exit so subsequent cards see full video
+                lines.append(
+                    f'  tl.set(\'.video-wrapper\', {{ clipPath: "none" }}, {round(end - 0.23, 4):.4f});'
                 )
             # ── number_hero GSAP — 3-act cinematic reveal ────────────────────
             elif content_style == "number_hero":

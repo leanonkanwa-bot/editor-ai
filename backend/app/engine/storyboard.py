@@ -2590,8 +2590,8 @@ def _inject_rhythm_split_stage(
         if len(span_words) - _start_idx < min_words:
             _start_idx = 0
 
-        # Max 4 words from the syntactic start — large font needs short text for panel presence
-        raw_text = " ".join(w.text for w in span_words[_start_idx:_start_idx + 4])
+        # Up to 8 words from the syntactic start (44px font fits 8 words comfortably in 62% panel)
+        raw_text = " ".join(w.text for w in span_words[_start_idx:_start_idx + 8])
         caption_text = raw_text[0].upper() + raw_text[1:] if raw_text else ""
 
         # Alternate panel side across successive PLACED cards (not free-window index)
@@ -3139,30 +3139,10 @@ def generate_storyboard(
     else:
         print("[GAP-FILL] No new cards inserted", flush=True)
 
-    # ── Rhythm split-stage injection ─────────────────────────────────────────
-    # Injects prim_split_stage(mode=caption) in any remaining window > 18s
-    # that has no graphic card. Counter is based on graphic card presence only —
-    # punch-ins/zoom NEVER reset the 18s silence clock.
-    # Runs AFTER gap-fill so rhythm cards only fire where gap-fill couldn't help.
-    _rhythm_splits = _inject_rhythm_split_stage(
-        graphic_cards=graphic_cards,
-        remapped_words=remapped_words,
-        trimmed_duration=trimmed_duration,
-        style_pack=style_pack,
-        subject_side=subject_side,
-        layout=layout,
-    )
-    if _rhythm_splits:
-        graphic_cards = sorted(
-            graphic_cards + _rhythm_splits,
-            key=lambda c: float(c.get("startSec", 0)),
-        )
-        print(
-            f"[RHYTHM-SPLIT] Merged {len(_rhythm_splits)} card(s) — total: {len(graphic_cards)}",
-            flush=True,
-        )
-    else:
-        print("[RHYTHM-SPLIT] No windows > 18s without graphic card", flush=True)
+    # Rhythm split-stage injection disabled — prim_split_stage is placed only by the
+    # planner at intentional narrative moments (framework, process, structure).
+    # The 18s-gap timer produced mechanical, non-intentional triggers.
+    print("[RHYTHM-SPLIT] disabled — planner-only placement", flush=True)
 
     # ── Full-cover exclusion pass ─────────────────────────────────────────────
     # Drop card_overlay cards that overlap a full_cover window. full_cover cards
