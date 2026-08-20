@@ -2508,121 +2508,102 @@ def _inject_rhythm_split_stage(
     style_pack: str,
     subject_side: str | None,
     layout: str,
-    threshold_s: float = 18.0,
+    rhythm_s: float = 6.0,
     min_words: int = 4,
     card_dur: float = 4.5,
-    min_gap_s: float = 25.0,
+    exclusion_pad: float = 0.5,
+    **_deprecated,  # absorbs old threshold_s / min_gap_s kwargs
 ) -> list[dict]:
-    """Inject prim_split_stage(mode=caption) in windows > 18s without any graphic card.
+    """Inject prim_split_stage(mode=caption) on a 6s grid, skipping slots covered by a rich card.
 
-    The 18s counter resets ONLY on graphic cards — punch-ins/zoom never reset it.
-    Caption text is sourced verbatim from remapped_words; nothing is fabricated.
-    Landscape only: portrait has inline captions, rhythm split adds nothing there.
+    Walk the timeline every rhythm_s seconds. At each slot check whether it overlaps
+    any existing graphic card (with exclusion_pad buffer). If not → inject a caption
+    card with word-by-word sync. Landscape only.
     """
     if layout != "landscape":
         return []
 
-    # Panel goes on the side OPPOSITE the speaker's face.
-    # subject_side="left" → panel covers right → side="left" (panel right in compose terms).
-    # subject_side="right" → panel covers left → side="right" (panel left in compose terms).
-    if subject_side == "left":
-        _side = "left"
-    elif subject_side == "right":
-        _side = "right"
-    else:
-        _side = "right"  # default: panel on left
+    _side = "left" if subject_side == "left" else "right"
 
-    # Build occupied windows (graphic card presence only — punch-ins ignored)
-    occupied = sorted(
-        [(float(c.get("startSec", 0)), float(c.get("endSec", 0))) for c in graphic_cards],
-        key=lambda x: x[0],
-    )
+    # Build exclusion intervals: graphic card windows + padding
+    exclusion: list[tuple[float, float]] = [
+        (float(c.get("startSec", 0)) - exclusion_pad,
+         float(c.get("endSec", 0)) + exclusion_pad)
+        for c in graphic_cards
+    ]
 
-    # Walk the timeline to find free windows ≥ threshold_s
-    free_windows: list[tuple[float, float]] = []
-    cursor = 0.0
-    for ws, we in occupied:
-        if ws - cursor >= threshold_s:
-            free_windows.append((cursor, ws))
-        cursor = max(cursor, we)
-    if trimmed_duration - cursor >= threshold_s:
-        free_windows.append((cursor, trimmed_duration))
+    def _overlaps(ws: float, we: float) -> bool:
+        return any(es < we and ee > ws for es, ee in exclusion)
+
+    # Anchor the grid to the first spoken word
+    _first_word_t = remapped_words[0].start if remapped_words else 0.0
+    grid_origin = max(0.5, _first_word_t - 0.2)
 
     new_cards: list[dict] = []
-    _last_card_end = -min_gap_s  # negative sentinel so first window is never gated
-    for _idx, (fw_start, fw_end) in enumerate(free_windows):
-        # Enforce minimum spacing between successive rhythm cards to avoid clustering
-        if fw_start < _last_card_end + min_gap_s:
-            continue
+    cursor = grid_origin
+    _slot = 0
 
-        # Brief breath before panel slides in (0.5s)
-        card_start = round(fw_start + 0.5, 3)
-        card_end   = round(min(card_start + card_dur, fw_end - 0.3), 3)
-        if card_end - card_start < 2.5:
-            continue  # window too short for a readable card
+    while cursor + card_dur <= trimmed_duration - 0.3:
+        card_start = round(cursor, 3)
+        card_end   = round(min(card_start + card_dur, trimmed_duration - 0.3), 3)
 
-        # Gather words spoken during the card window; fall back to wider window
-        span_words = [w for w in remapped_words if card_start <= w.start < card_end]
-        if len(span_words) < min_words:
-            span_words = [w for w in remapped_words
-                          if fw_start <= w.start < fw_start + card_dur + 1.5]
-        if len(span_words) < min_words:
-            continue  # no usable speech in this window — skip
+        if card_end - card_start >= 2.5 and not _overlaps(card_start, card_end):
+            # Gather spoken words in this window
+            span_words = [w for w in remapped_words if card_start <= w.start < card_end]
 
-        # Find best syntactic start: sentence boundary (. ? !) beats clause boundary (, ; :).
-        # Starting at a natural break prevents mid-phrase fragments like "tu dois donc faire".
-        _start_idx = 0
-        _clause_idx = 0
-        _found_clause = False
-        for _wi in range(1, len(span_words)):
-            _prev_txt = span_words[_wi - 1].text.rstrip()
-            if _prev_txt and _prev_txt[-1] in ".?!":
-                _start_idx = _wi
-                break  # strong boundary found — stop
-            if not _found_clause and _prev_txt and _prev_txt[-1] in ",;:":
-                _clause_idx = _wi
-                _found_clause = True
-        else:
-            if _found_clause:
-                _start_idx = _clause_idx
+            if len(span_words) >= min_words:
+                # Find best syntactic start (sentence > clause > word boundary)
+                _start_idx = 0
+                _clause_idx = 0
+                _found_clause = False
+                for _wi in range(1, len(span_words)):
+                    _pt = span_words[_wi - 1].text.rstrip()
+                    if _pt and _pt[-1] in ".?!":
+                        _start_idx = _wi
+                        break
+                    if not _found_clause and _pt and _pt[-1] in ",;:":
+                        _clause_idx = _wi
+                        _found_clause = True
+                else:
+                    if _found_clause:
+                        _start_idx = _clause_idx
+                if len(span_words) - _start_idx < min_words:
+                    _start_idx = 0
 
-        # Guard: boundary must leave at least min_words words; otherwise fall back to 0
-        if len(span_words) - _start_idx < min_words:
-            _start_idx = 0
+                caption_words = [
+                    {"text": w.text, "start": float(w.start), "end": float(w.end)}
+                    for w in span_words[_start_idx:_start_idx + 16]
+                ]
 
-        # All words from the syntactic start (word-by-word sync, cap at 16 for overflow safety)
-        _cap_words_raw = span_words[_start_idx:_start_idx + 16]
-        caption_words = [
-            {"text": w.text, "start": float(w.start), "end": float(w.end)}
-            for w in _cap_words_raw
-        ]
+                _card_side = _side if len(new_cards) % 2 == 0 else (
+                    "right" if _side == "left" else "left"
+                )
+                _slot += 1
+                card_id = f"card-rhythm-sst-{_slot:02d}"
+                new_cards.append({
+                    "id": card_id,
+                    "type": "graphic",
+                    "zone": "fullscreen",
+                    "startSec": card_start,
+                    "endSec": card_end,
+                    "_family": "full_cover",
+                    "contentHints": {
+                        "style": "prim_split_stage",
+                        "mode": "caption",
+                        "side": _card_side,
+                        "caption_words": caption_words,
+                    },
+                })
+                # Mark this slot as occupied so it doesn't self-conflict
+                exclusion.append((card_start - exclusion_pad, card_end + exclusion_pad))
+                print(
+                    f"[RHYTHM-SPLIT] {card_id} [{card_start:.1f}–{card_end:.1f}s]"
+                    f" side={_card_side!r} words={len(caption_words)}"
+                    f" text={' '.join(w['text'] for w in caption_words)!r}",
+                    flush=True,
+                )
 
-        # Alternate panel side across successive PLACED cards (not free-window index)
-        # so skipped windows don't break the L-R pattern.
-        _card_side = _side if len(new_cards) % 2 == 0 else ("right" if _side == "left" else "left")
-
-        card_id = f"card-rhythm-sst-{_idx + 1:02d}"
-        new_cards.append({
-            "id": card_id,
-            "type": "graphic",
-            "zone": "fullscreen",
-            "startSec": card_start,
-            "endSec": card_end,
-            "_family": "full_cover",
-            "contentHints": {
-                "style": "prim_split_stage",
-                "mode": "caption",
-                "side": _card_side,
-                "caption_words": caption_words,
-            },
-        })
-        _last_card_end = card_end
-        print(
-            f"[RHYTHM-SPLIT] {card_id} [{card_start:.1f}–{card_end:.1f}s]"
-            f" side={_card_side!r} words={len(caption_words)}"
-            f" text={' '.join(w['text'] for w in caption_words)!r}",
-            flush=True,
-        )
+        cursor = round(cursor + rhythm_s, 3)
 
     return new_cards
 
@@ -3143,8 +3124,7 @@ def generate_storyboard(
         print("[GAP-FILL] No new cards inserted", flush=True)
 
     # ── Rhythm split-stage injection ─────────────────────────────────────────
-    # Injects prim_split_stage(mode=caption) with word-by-word sync in long dead zones.
-    # threshold_s=30s (up from 18s) — fires less frequently, only in genuine gaps.
+    # ── Rhythm split-stage injection — 6s grid, skip slots covered by rich cards ──
     _rhythm_splits = _inject_rhythm_split_stage(
         graphic_cards=graphic_cards,
         remapped_words=remapped_words,
@@ -3152,8 +3132,6 @@ def generate_storyboard(
         style_pack=style_pack,
         subject_side=subject_side,
         layout=layout,
-        threshold_s=30.0,
-        min_gap_s=40.0,
     )
     if _rhythm_splits:
         graphic_cards = sorted(
@@ -3165,7 +3143,7 @@ def generate_storyboard(
             flush=True,
         )
     else:
-        print("[RHYTHM-SPLIT] No windows > 30s without graphic card", flush=True)
+        print("[RHYTHM-SPLIT] No slots available (all covered by rich cards or silence)", flush=True)
 
     # ── Full-cover exclusion pass ─────────────────────────────────────────────
     # Drop card_overlay cards that overlap a full_cover window. full_cover cards
