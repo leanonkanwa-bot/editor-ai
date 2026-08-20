@@ -3118,7 +3118,6 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'.card[data-card-id="{card_id}"] .shimmer-mask {{ display:none; }}')
 
         # Content panel: occupies 62% of frame — speaker window is 38% (matches ref ratio)
-        _sst_dot_color = "rgba(0,0,0,0.05)" if _sst_is_light else "rgba(255,255,255,0.05)"
         # Round only the speaker-facing edge — screen-touching edges stay flush
         _sst_radius = "0 14px 14px 0" if _sst_side == "right" else "14px 0 0 14px"
         parts.append(f'.card[data-card-id="{card_id}"] .sst-panel {{')
@@ -3126,17 +3125,21 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('  height:100%; display:flex; flex-direction:column;')
         parts.append('  align-items:flex-start; justify-content:center;')
         parts.append('  padding:0 52px; box-sizing:border-box;')
-        parts.append(f'  background:radial-gradient(circle, {_sst_dot_color} 1px, transparent 1px), {_sst_panel_bg};')
-        parts.append('  background-size:28px 28px, auto;')
+        parts.append(f'  background:{_sst_panel_bg};')
         parts.append(f'  border-radius:{_sst_radius};')
-        parts.append(f'  {_sst_border_side}:1px solid {p["accent"]}28;')
+        parts.append(f'  {_sst_border_side}:2px solid {p["accent"]}45;')
         parts.append('}')
 
-        # Kicker / eyebrow label
+        # Kicker — flex-column so ::before accent bar stacks above the text
         parts.append(f'.card[data-card-id="{card_id}"] .sst-kicker {{')
+        parts.append(f'  display:flex; flex-direction:column; gap:12px;')
         parts.append(f'  font-family:{p["font"]}; font-size:18px;')
         parts.append(f'  font-weight:700; letter-spacing:0.18em; text-transform:uppercase;')
         parts.append(f'  color:{p["accent"]}; margin-bottom:36px; opacity:0;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .sst-kicker::before {{')
+        parts.append(f'  content:""; display:block; width:28px; height:3px;')
+        parts.append(f'  background:{p["accent"]}; border-radius:2px; flex-shrink:0;')
         parts.append('}')
 
         if _sst_mode == "steps":
@@ -7945,36 +7948,34 @@ def _build_timeline_js(
                     f'{start + 0.20:.4f});'
                 )
 
-                # Object-position: center face in the 38% visible window.
-                # Panel=62%, window=38% → centers at 19% (left) or 81% (right).
-                _sst_r = 256.0 / 81.0  # (16/9)^2 — correct for any 16:9 landscape source
-                _sst_face_cx = (video_pos_x * (_sst_r - 1.0) + 50.0) / _sst_r
-                _sst_target_x = 81.0 if _sst_side_g == "right" else 19.0
-                _sst_vpos = (_sst_face_cx * _sst_r - _sst_target_x) / (_sst_r - 1.0)
-                _sst_vpos = max(0.0, min(100.0, _sst_vpos))
-                # Snap at card entry (clip hides video → snap invisible); restore just before exit
+                # Face centering via translateX — works for portrait 9:16 sources where
+                # object-position has zero effect (no horizontal overflow under object-fit:cover).
+                # X = window_center_pct - video_pos_x shifts the video element so the face
+                # aligns with the center of the 38% clip-path window.
+                _sst_win_ctr = 81.0 if _sst_side_g == "right" else 19.0
+                _sst_tx = round(_sst_win_ctr - video_pos_x, 1)
                 lines.append(
                     f'  tl.set(\'.video-wrapper video\', '
-                    f'{{ objectPosition: \'{_sst_vpos:.1f}% 50%\' }}, {start:.4f});'
-                )
-                lines.append(
-                    f'  tl.set(\'.video-wrapper video\', '
-                    f'{{ objectPosition: \'{video_pos_x:.1f}% 50%\' }}, {round(end - 0.54, 4):.4f});'
+                    f'{{ x: \'{_sst_tx:.1f}%\' }}, {start + 0.20:.4f});'
                 )
 
-                # ── EXIT — panel + clip-path collapse simultaneously ──
+                # ── EXIT — panel fades out; clip-path reset (no animated hide) ──
+                # Double safety prevents black screen when card.endSec is close to or beyond
+                # segment_duration — in that case Safety B at end-0.23 would never fire.
                 _sst_exit_t = round(end - 0.52, 4)
                 lines.append(
                     f'  tl.to(\'{_sst_panel_s}\', '
                     f'{{ opacity: 0, duration: 0.28, ease: "power2.in" }}, '
                     f'{_sst_exit_t:.4f});'
                 )
+                # Safety A: immediate clip-path + translateX reset at panel fade start
                 lines.append(
-                    f'  tl.to(\'.video-wrapper\', '
-                    f'{{ clipPath: \'{_sst_cp_hide}\', duration: 0.28, ease: "power2.in" }}, '
-                    f'{_sst_exit_t:.4f});'
+                    f'  tl.set(\'.video-wrapper\', {{ clipPath: "none" }}, {_sst_exit_t:.4f});'
                 )
-                # Reset clip-path after exit so subsequent cards see full video
+                lines.append(
+                    f'  tl.set(\'.video-wrapper video\', {{ x: "0%" }}, {_sst_exit_t:.4f});'
+                )
+                # Safety B: second reset as fallback
                 lines.append(
                     f'  tl.set(\'.video-wrapper\', {{ clipPath: "none" }}, {round(end - 0.23, 4):.4f});'
                 )
