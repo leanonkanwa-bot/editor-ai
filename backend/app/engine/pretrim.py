@@ -101,12 +101,15 @@ def _probe_cfr(path: Path) -> bool:
 
 
 def _probe_max_keyframe_interval(path: Path, sample_s: float = 30.0) -> float:
-    """Return maximum gap (seconds) between keyframes in the first sample_s."""
+    """Return maximum gap (seconds) between keyframes in the first sample_s.
+
+    Uses packet-level K-flag detection — reliable across H.264, HEVC, and
+    other codecs where frame-level pict_type or pkt_pts_time may be N/A.
+    """
     try:
         r = subprocess.run(
             [FFPROBE_PATH, "-v", "quiet", "-select_streams", "v:0",
-             "-skip_frame", "noref",
-             "-show_frames", "-show_entries", "frame=pkt_pts_time,pict_type",
+             "-show_packets", "-show_entries", "packet=pts_time,flags",
              "-read_intervals", f"%+{int(sample_s)}",
              "-of", "csv=p=0", str(path)],
             capture_output=True, text=True, timeout=30,
@@ -114,7 +117,7 @@ def _probe_max_keyframe_interval(path: Path, sample_s: float = 30.0) -> float:
         kf_times = []
         for line in r.stdout.splitlines():
             parts = line.strip().split(",")
-            if len(parts) >= 2 and parts[-1].strip() == "I":
+            if len(parts) >= 2 and parts[1].startswith("K"):
                 try:
                     kf_times.append(float(parts[0]))
                 except ValueError:
@@ -150,7 +153,7 @@ def _pretrim_passthrough(
     # HyperFrames only seeks once per segment clip so 2s max GOP is acceptable.
     _is_cfr = _probe_cfr(src)
     _max_kf  = _probe_max_keyframe_interval(src) if _is_cfr else 999.0
-    _use_copy = _is_cfr and _max_kf <= 2.0
+    _use_copy = _is_cfr and _max_kf <= 2.1
 
     print(
         f"[PRETRIM] src pix_fmt={_pix_fmt_src!r} cfr={_is_cfr}"
