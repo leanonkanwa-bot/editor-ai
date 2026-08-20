@@ -440,7 +440,7 @@ _LEAN_CINEMA = {
     "kicker_size": "18px",
     "detail_size": "22px",
     "border": "none",
-    "radius": "0px",
+    "radius": "8px",
     "shadow": "0 4px 24px rgba(0,0,0,0.5)",
     "shadow_inset": "",
     "panel_filter": "",
@@ -3172,7 +3172,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             # Word-by-word container — flex-wrap so words flow naturally
             parts.append(f'.card[data-card-id="{card_id}"] .sst-caption {{')
             parts.append('  display:flex; flex-wrap:wrap; align-content:flex-start;')
-            parts.append('  gap:0.22em 0.28em; max-width:100%;')
+            parts.append('  gap:0.35em 0.55em; max-width:100%;')
             parts.append('}')
             parts.append(f'.card[data-card-id="{card_id}"] .sst-cap-word {{')
             parts.append(f'  font-family:{p["font"]}; font-size:44px;')
