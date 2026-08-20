@@ -82,6 +82,51 @@ class TimingMap:
         return concat_t
 
 
+def _probe_cfr(path: Path) -> bool:
+    """Return True if the video stream is CFR (avg_frame_rate == r_frame_rate)."""
+    try:
+        r = subprocess.run(
+            [FFPROBE_PATH, "-v", "quiet", "-select_streams", "v:0",
+             "-show_entries", "stream=avg_frame_rate,r_frame_rate",
+             "-of", "default=nw=1", str(path)],
+            capture_output=True, text=True, timeout=15,
+        )
+        lines = [l.strip() for l in r.stdout.strip().splitlines() if "=" in l]
+        vals = {l.split("=")[0]: l.split("=")[1] for l in lines}
+        avg = vals.get("avg_frame_rate", "0/1")
+        rfr = vals.get("r_frame_rate", "0/1")
+        return avg == rfr and avg not in ("0/0", "0/1", "")
+    except Exception:
+        return False
+
+
+def _probe_max_keyframe_interval(path: Path, sample_s: float = 30.0) -> float:
+    """Return maximum gap (seconds) between keyframes in the first sample_s."""
+    try:
+        r = subprocess.run(
+            [FFPROBE_PATH, "-v", "quiet", "-select_streams", "v:0",
+             "-skip_frame", "noref",
+             "-show_frames", "-show_entries", "frame=pkt_pts_time,pict_type",
+             "-read_intervals", f"%+{int(sample_s)}",
+             "-of", "csv=p=0", str(path)],
+            capture_output=True, text=True, timeout=30,
+        )
+        kf_times = []
+        for line in r.stdout.splitlines():
+            parts = line.strip().split(",")
+            if len(parts) >= 2 and parts[-1].strip() == "I":
+                try:
+                    kf_times.append(float(parts[0]))
+                except ValueError:
+                    pass
+        if len(kf_times) < 2:
+            return 999.0  # can't determine — assume sparse
+        gaps = [kf_times[i + 1] - kf_times[i] for i in range(len(kf_times) - 1)]
+        return max(gaps) if gaps else 999.0
+    except Exception:
+        return 999.0
+
+
 def _pretrim_passthrough(
     src: Path,
     transcript: dict[str, Any],
@@ -89,28 +134,56 @@ def _pretrim_passthrough(
     src_duration: float,
     work_dir: Path,
 ) -> tuple[Path, TimingMap]:
-    """No-cut passthrough: re-encode source with dense keyframes, 1:1 timing."""
+    """No-cut passthrough: CFR + dense keyframes required by HyperFrames.
+
+    Fast path (copy): if source is already CFR with keyframe interval ≤ 2s,
+    copy the video stream directly (IO-bound, ~10-30s).
+    Slow path (encode): convert to CFR with dense keyframes via libx265/libx264
+    using ultrafast preset to minimise CPU time (~3-5× faster than 'fast').
+    """
     fps = 30
     final_path = work_dir / "trimmed.mp4"
     _pix_fmt_src = _probe_pix_fmt(src)
     _is_10bit = "10" in _pix_fmt_src
-    if _is_10bit:
-        # Debian apt libx264 is 8-bit only; libx265 from the same package supports 10-bit.
-        _venc = ["-c:v", "libx265", "-x265-params", "log-level=error",
-                 "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p10le"]
+
+    # Fast path: stream-copy when source is already CFR + dense keyframes (≤ 2s).
+    # HyperFrames only seeks once per segment clip so 2s max GOP is acceptable.
+    _is_cfr = _probe_cfr(src)
+    _max_kf  = _probe_max_keyframe_interval(src) if _is_cfr else 999.0
+    _use_copy = _is_cfr and _max_kf <= 2.0
+
+    print(
+        f"[PRETRIM] src pix_fmt={_pix_fmt_src!r} cfr={_is_cfr}"
+        f" max_kf_interval={_max_kf:.2f}s"
+        f" → {'stream-copy (fast path)' if _use_copy else ('libx265 yuv420p10le ultrafast' if _is_10bit else 'libx264 yuv420p ultrafast')}",
+        flush=True,
+    )
+
+    if _use_copy:
+        _run([
+            FFMPEG_PATH, "-y", "-loglevel", "error",
+            "-i", str(src),
+            "-c:v", "copy",
+            "-movflags", "+faststart",
+            "-c:a", "aac", "-b:a", "192k",
+            str(final_path),
+        ])
     else:
-        _venc = ["-c:v", "libx264", "-preset", "fast", "-crf", "18", "-pix_fmt", "yuv420p"]
-    print(f"[PRETRIM] src pix_fmt={_pix_fmt_src!r} → {'libx265 yuv420p10le' if _is_10bit else 'libx264 yuv420p'}", flush=True)
-    _run([
-        FFMPEG_PATH, "-y", "-loglevel", "error",
-        "-i", str(src),
-        "-r", str(fps), "-vsync", "cfr",
-        *_venc,
-        "-g", str(fps), "-keyint_min", str(fps),
-        "-movflags", "+faststart",
-        "-c:a", "aac", "-b:a", "192k",
-        str(final_path),
-    ])
+        if _is_10bit:
+            _venc = ["-c:v", "libx265", "-x265-params", "log-level=error",
+                     "-preset", "ultrafast", "-crf", "18", "-pix_fmt", "yuv420p10le"]
+        else:
+            _venc = ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "18", "-pix_fmt", "yuv420p"]
+        _run([
+            FFMPEG_PATH, "-y", "-loglevel", "error",
+            "-i", str(src),
+            "-r", str(fps), "-vsync", "cfr",
+            *_venc,
+            "-g", str(fps), "-keyint_min", str(fps),
+            "-movflags", "+faststart",
+            "-c:a", "aac", "-b:a", "192k",
+            str(final_path),
+        ])
 
     output_duration = _probe_duration(final_path)
 
