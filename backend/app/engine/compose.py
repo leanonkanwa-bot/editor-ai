@@ -3138,7 +3138,6 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('  padding:0 52px; box-sizing:border-box;')
         parts.append(f'  background:{_sst_panel_bg};')
         parts.append(f'  border-radius:{_sst_radius};')
-        parts.append(f'  {_sst_border_side}:2px solid {p["accent"]}45;')
         parts.append('}')
 
         # Kicker — flex-column so ::before accent bar stacks above the text
@@ -7989,33 +7988,34 @@ def _build_timeline_js(
                     f'{{ x: \'{_sst_tx:.1f}%\' }}, {start + 0.20:.4f});'
                 )
 
-                # ── EXIT — panel fades; clip-path expands to full (synced, no snap) ──
-                # Animate clip-path from show→full instead of snapping to "none".
-                # Snap was jarring: video instantly went 38%→fullscreen while panel
-                # faded — the set+to combo now syncs the expansion with the fade.
-                # Safety B at end-0.23 clears the inset() after the animation completes.
+                # ── EXIT — sequential: panel fades first, THEN video expands ──
+                # Sequential order prevents the dark panel radial-gradient from
+                # overlaying the expanding video (which created a circular vignette
+                # artifact when both animated simultaneously).
+                # Budget: exit_t to safety_B = 0.29s → panel 0.18s, video 0.12s at +0.15s.
                 _sst_exit_t = round(end - 0.52, 4)
-                # Fully-open inset keeps same round value so the transition is smooth
+                _sst_vid_t  = round(_sst_exit_t + 0.15, 4)
                 _sst_cp_exit = (
                     f"inset(0 0% 0 0 round 0 14px 14px 0)"
                     if _sst_side_g == "left"
                     else f"inset(0 0 0 0% round 14px 0 0 14px)"
                 )
+                # Step 1: panel fades out (0.18s)
                 lines.append(
                     f'  tl.to(\'{_sst_panel_s}\', '
-                    f'{{ opacity: 0, duration: 0.28, ease: "power2.in" }}, '
+                    f'{{ opacity: 0, duration: 0.18, ease: "power2.in" }}, '
                     f'{_sst_exit_t:.4f});'
                 )
-                # Expand video window in sync with panel fade (no snap)
+                # Step 2: video clip expands after 0.15s delay (panel ≥83% gone)
                 lines.append(
                     f'  tl.to(\'.video-wrapper\', '
-                    f'{{ clipPath: "{_sst_cp_exit}", duration: 0.28, ease: "power2.in" }}, '
-                    f'{_sst_exit_t:.4f});'
+                    f'{{ clipPath: "{_sst_cp_exit}", duration: 0.12, ease: "power1.out" }}, '
+                    f'{_sst_vid_t:.4f});'
                 )
                 lines.append(
                     f'  tl.to(\'.video-wrapper video\', '
-                    f'{{ x: "0%", duration: 0.28, ease: "power2.in" }}, '
-                    f'{_sst_exit_t:.4f});'
+                    f'{{ x: "0%", duration: 0.12, ease: "power1.out" }}, '
+                    f'{_sst_vid_t:.4f});'
                 )
                 # Safety B: clear residual inset() after animation completes
                 lines.append(
