@@ -2508,19 +2508,21 @@ def _inject_rhythm_split_stage(
     style_pack: str,
     subject_side: str | None,
     layout: str,
-    rhythm_s: float = 3.0,
+    rhythm_s: float = 9.0,
     min_words: int = 4,
-    card_dur: float = 3.0,
+    card_dur: float = 5.0,
     exclusion_pad: float = 0.5,
     **_deprecated,  # absorbs old threshold_s / min_gap_s kwargs
 ) -> list[dict]:
-    """Inject prim_split_stage(mode=caption) on a 3s grid, skipping slots covered by a rich card.
+    """Inject prim_split_stage(mode=caption) on a 9s grid, skipping slots covered by a rich card.
 
     Walk the timeline every rhythm_s seconds. At each slot check whether it overlaps
     any existing graphic card (with exclusion_pad buffer). If not → inject a caption
     card with word-by-word sync. Works for both portrait and landscape layouts.
-    (Was landscape-only before — that restriction was the root cause of zero triggers on
-    portrait videos, since the reference test file is 9:16 portrait.)
+
+    Rhythm design: card_dur=5s + gap=(rhythm_s - card_dur)=4s gives a visible a-roll
+    breath between SST appearances. Grid starts 3.5s after first word so the video
+    opens with a-roll before the first split.
     """
 
     _side = "left" if subject_side == "left" else "right"
@@ -2535,9 +2537,9 @@ def _inject_rhythm_split_stage(
     def _overlaps(ws: float, we: float) -> bool:
         return any(es < we and ee > ws for es, ee in exclusion)
 
-    # Anchor the grid to the first spoken word
+    # Start grid 3.5s after first word — gives ~3-4s a-roll before the first SST.
     _first_word_t = remapped_words[0].start if remapped_words else 0.0
-    grid_origin = max(0.5, _first_word_t - 0.2)
+    grid_origin = max(0.5, _first_word_t + 3.5)
 
     new_cards: list[dict] = []
     cursor = grid_origin
@@ -2572,7 +2574,7 @@ def _inject_rhythm_split_stage(
 
                 caption_words = [
                     {"text": w.text, "start": float(w.start), "end": float(w.end)}
-                    for w in span_words[_start_idx:_start_idx + 16]
+                    for w in span_words[_start_idx:_start_idx + 8]
                 ]
 
 
