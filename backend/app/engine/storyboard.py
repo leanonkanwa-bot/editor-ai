@@ -2044,9 +2044,10 @@ KEY LINES (most memorable moments):
 Design graphic overlay cards for this video — up to {target_cards} maximum. Place a card only at moments that genuinely earn one: a key claim, a surprising stat, a narrative turning point, or a concept the viewer needs to see to understand. Skip the moment if no card adds value. Quality and narrative relevance always take priority over reaching the card count ceiling."""
 
     # Scale max_tokens with target_cards so long-video responses are never truncated.
-    # ~150 tokens/card average (JSON overhead + complex types like list/tool_comparison).
+    # ~250 tokens/card average: simple cards ~100t, complex (list/comparison) ~400t, mean ~250.
+    # 150t/card was too tight — 15-min videos (48 cards × 150 = 7200) truncated JSON at ~2min.
     # Minimum 4096 preserves short-video behaviour; cap at 16384 (claude-opus-4-7 limit is 32k).
-    _max_tok = max(4096, min(16384, target_cards * 150))
+    _max_tok = max(4096, min(16384, target_cards * 250))
 
     client = Anthropic()
     try:

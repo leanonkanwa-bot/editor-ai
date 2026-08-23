@@ -7943,7 +7943,14 @@ def _build_timeline_js(
                         _cw_t = float(_cw.get("start", 0)) if isinstance(_cw, dict) else _sst_panel_ready
                         _cw_t = max(_sst_panel_ready, _cw_t)  # safety clamp only
                         _sst_cw_s = f'.card[data-card-id="{card_id}"] #{card_id}-sst-cw-{_cwi}'
-                        lines.append(f'  tl.set(\'{_sst_cw_s}\', {{ opacity: 1 }}, {_cw_t:.4f});')
+                        # fromTo instead of tl.set: explicitly declares from-state so GSAP
+                        # correctly reverts to opacity:0 when seeking before this position.
+                        # tl.set zero-duration tweens (immediateRender:true) can fail to
+                        # revert inline style properly in some seek scenarios.
+                        lines.append(
+                            f'  tl.fromTo(\'{_sst_cw_s}\', {{ opacity: 0 }}, '
+                            f'{{ opacity: 1, duration: 0.05 }}, {_cw_t:.4f});'
+                        )
                 else:
                     _sst_nn_g = min(len(_sst_nodes_g), 4)
                     for _ni in range(_sst_nn_g):
