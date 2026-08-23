@@ -2550,8 +2550,11 @@ def _inject_rhythm_split_stage(
         card_end   = round(min(card_start + card_dur, trimmed_duration - 0.3), 3)
 
         if card_end - card_start >= 2.5 and not _overlaps(card_start, card_end):
-            # Gather spoken words in this window
-            span_words = [w for w in remapped_words if card_start <= w.start < card_end]
+            # Only collect words the panel can display in sync: start ≥ panel_ready.
+            # Words spoken in the first 0.60s are before the panel is visible; showing
+            # them late (clamped or staggered) breaks audio-visual sync.
+            _panel_ready_t = card_start + 0.60
+            span_words = [w for w in remapped_words if _panel_ready_t <= w.start < card_end]
 
             if len(span_words) >= min_words:
                 # Find best syntactic start (sentence > clause > word boundary)
@@ -2577,6 +2580,18 @@ def _inject_rhythm_split_stage(
                     for w in span_words[_start_idx:_start_idx + 8]
                 ]
 
+                # Adaptive end: card expires 0.8s after the last displayed word.
+                # Panel never freezes for the remainder of card_dur if speech ends early.
+                if caption_words:
+                    _adaptive_end = float(caption_words[-1]["end"]) + 0.80
+                    card_end = round(
+                        min(
+                            max(_adaptive_end, card_start + 3.0),
+                            card_start + card_dur,
+                            trimmed_duration - 0.3,
+                        ),
+                        3,
+                    )
 
                 _card_side = _side if len(new_cards) % 2 == 0 else (
                     "right" if _side == "left" else "left"
