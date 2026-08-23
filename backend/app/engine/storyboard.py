@@ -2534,8 +2534,16 @@ def _inject_rhythm_split_stage(
         for c in graphic_cards
     ]
 
+    # Original rich-card start times (no SST cards) for the "soon" guard.
+    _orig_rich_starts: list[float] = [float(c.get("startSec", 0)) for c in graphic_cards]
+
     def _overlaps(ws: float, we: float) -> bool:
         return any(es < we and ee > ws for es, ee in exclusion)
+
+    _min_gap_after = 3.0  # skip SST if a rich card starts within this many seconds after SST end
+    def _rich_card_soon(ce: float) -> bool:
+        """Return True if any original rich card starts within _min_gap_after of the SST end."""
+        return any(ce < s <= ce + _min_gap_after for s in _orig_rich_starts)
 
     # Start grid 3.5s after first word — gives ~3-4s a-roll before the first SST.
     _first_word_t = remapped_words[0].start if remapped_words else 0.0
@@ -2593,35 +2601,45 @@ def _inject_rhythm_split_stage(
                         3,
                     )
 
-                _card_side = _side if len(new_cards) % 2 == 0 else (
-                    "right" if _side == "left" else "left"
-                )
-                _slot += 1
-                card_id = f"card-rhythm-sst-{_slot:02d}"
-                new_cards.append({
-                    "id": card_id,
-                    "type": "graphic",
-                    "zone": "fullscreen",
-                    "startSec": card_start,
-                    "endSec": card_end,
-                    "_family": "full_cover",
-                    "contentHints": {
-                        "style": "prim_split_stage",
-                        "mode": "caption",
-                        "side": _card_side,
-                        "caption_words": caption_words,
-                    },
-                })
-                # Mark this slot as occupied so it doesn't self-conflict.
-                # No right padding — SST cards are grid-aligned, right pad would push
-                # boundary past cursor + rhythm_s and block every other slot.
-                exclusion.append((card_start - exclusion_pad, card_end))
-                print(
-                    f"[RHYTHM-SPLIT] {card_id} [{card_start:.1f}–{card_end:.1f}s]"
-                    f" side={_card_side!r} words={len(caption_words)}"
-                    f" text={' '.join(w['text'] for w in caption_words)!r}",
-                    flush=True,
-                )
+                # Guard: skip if a rich card arrives within _min_gap_after seconds after
+                # this SST ends — a split that immediately precedes a rich card won't
+                # have room to breathe and would feel like a flash (KAN: "tac venu tac partie").
+                if _rich_card_soon(card_end):
+                    print(
+                        f"[RHYTHM-SPLIT] SKIP slot [{card_start:.1f}–{card_end:.1f}s]"
+                        f" — rich card arrives within {_min_gap_after}s of SST end",
+                        flush=True,
+                    )
+                else:
+                    _card_side = _side if len(new_cards) % 2 == 0 else (
+                        "right" if _side == "left" else "left"
+                    )
+                    _slot += 1
+                    card_id = f"card-rhythm-sst-{_slot:02d}"
+                    new_cards.append({
+                        "id": card_id,
+                        "type": "graphic",
+                        "zone": "fullscreen",
+                        "startSec": card_start,
+                        "endSec": card_end,
+                        "_family": "full_cover",
+                        "contentHints": {
+                            "style": "prim_split_stage",
+                            "mode": "caption",
+                            "side": _card_side,
+                            "caption_words": caption_words,
+                        },
+                    })
+                    # Mark this slot as occupied so it doesn't self-conflict.
+                    # No right padding — SST cards are grid-aligned, right pad would push
+                    # boundary past cursor + rhythm_s and block every other slot.
+                    exclusion.append((card_start - exclusion_pad, card_end))
+                    print(
+                        f"[RHYTHM-SPLIT] {card_id} [{card_start:.1f}–{card_end:.1f}s]"
+                        f" side={_card_side!r} words={len(caption_words)}"
+                        f" text={' '.join(w['text'] for w in caption_words)!r}",
+                        flush=True,
+                    )
 
         cursor = round(cursor + rhythm_s, 3)
 

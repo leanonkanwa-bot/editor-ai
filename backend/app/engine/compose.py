@@ -4626,6 +4626,7 @@ def _build_timeline_js(
     pack: dict | None = None,
     layout: str = "portrait",
     video_pos_x: float = 50.0,
+    face_cx: float = 50.0,
 ) -> str:
     """Build the master GSAP timeline script including zoom/pan on the video wrapper."""
     p = pack or _LEAN_GLASS
@@ -7900,17 +7901,25 @@ def _build_timeline_js(
 
                 # ── ENTRY ──
                 # Phase 1: content panel slides in (start+0.20)
+                # set+to instead of fromTo: fromTo pre-applies from-state at T=0 when GSAP
+                # seeks/rewinds (seek-rewind bug), hiding the panel across the whole timeline.
+                # tl.set at position P only fires when playhead reaches P — safe.
                 lines.append(
-                    f'  tl.fromTo(\'{_sst_panel_s}\', '
-                    f'{{ opacity: 0, x: {_sst_px_from} }}, '
+                    f'  tl.set(\'{_sst_panel_s}\', '
+                    f'{{ opacity: 0, x: {_sst_px_from} }}, {start + 0.20:.4f});'
+                )
+                lines.append(
+                    f'  tl.to(\'{_sst_panel_s}\', '
                     f'{{ opacity: 1, x: 0, duration: 0.38, ease: "power3.out" }}, '
                     f'{start + 0.20:.4f});'
                 )
                 # Phase 3: kicker fades in ahead of steps
                 if _sst_kicker_g:
                     lines.append(
-                        f'  tl.fromTo(\'{_sst_kicker_s}\', '
-                        f'{{ opacity: 0 }}, {{ opacity: 1, duration: 0.22, ease: "power2.out" }}, '
+                        f'  tl.set(\'{_sst_kicker_s}\', {{ opacity: 0 }}, {start + 0.22:.4f});'
+                    )
+                    lines.append(
+                        f'  tl.to(\'{_sst_kicker_s}\', {{ opacity: 1, duration: 0.22, ease: "power2.out" }}, '
                         f'{start + 0.22:.4f});'
                     )
                 # Phase 4: steps, nodes, or caption fade in
@@ -7972,12 +7981,17 @@ def _build_timeline_js(
                     f'{start + 0.20:.4f});'
                 )
 
-                # Face centering via translateX — works for portrait 9:16 sources where
-                # object-position has zero effect (no horizontal overflow under object-fit:cover).
-                # X = window_center_pct - video_pos_x shifts the video element so the face
-                # aligns with the center of the 38% clip-path window.
+                # Face centering via translateX.
+                # face_cx = raw face X position (% of video frame width).
+                # For any source aspect (landscape or portrait) the rendered face lands at
+                # face_cx% of the card after object-fit:cover when there is no horizontal
+                # overflow (same-aspect or portrait-source-in-landscape-card cases), and at
+                # ~50% when object-position has centred it (landscape-source-in-portrait-card).
+                # Using face_cx directly gives the correct shift for all common cases and
+                # is always more accurate than the transformed video_pos_x coordinate.
+                # shift = target_window_centre - current_face_position_in_card
                 _sst_win_ctr = 81.0 if _sst_side_g == "right" else 19.0
-                _sst_tx = round(_sst_win_ctr - video_pos_x, 1)
+                _sst_tx = round(_sst_win_ctr - face_cx, 1)
                 lines.append(
                     f'  tl.set(\'.video-wrapper video\', '
                     f'{{ x: \'{_sst_tx:.1f}%\' }}, {start + 0.20:.4f});'
@@ -8764,7 +8778,7 @@ def compose(
     all_cards = _rendered_cards
 
     # Build master timeline
-    timeline_js = _build_timeline_js(all_cards, zoom_entries=zoom_entries, subject_position=subject_position, pack=pack, layout=layout, video_pos_x=_video_pos_x)
+    timeline_js = _build_timeline_js(all_cards, zoom_entries=zoom_entries, subject_position=subject_position, pack=pack, layout=layout, video_pos_x=_video_pos_x, face_cx=_face_cx)
 
     # CSS custom properties from theme
     accent_vars = "\n".join(
