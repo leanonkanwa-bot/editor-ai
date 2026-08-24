@@ -1274,10 +1274,14 @@ async function poll(jobId) {
   localStorage.setItem("active_job_id", jobId);
 
   let consecutive5xx = 0;
+  let _lastStatus = null;
   const _pollStart = Date.now();
   while (true) {
     const _elapsed = (Date.now() - _pollStart) / 1000;
-    const _delay = _elapsed < 120 ? 3000 : _elapsed < 300 ? 5000 : 10000;
+    // During active render (20-60 min) poll every 20s — reduces Railway log flood
+    // by 50% vs 10s without affecting UX (render has no sub-second status changes).
+    const _delay = _lastStatus === "rendering" ? 20000
+      : _elapsed < 120 ? 3000 : _elapsed < 300 ? 5000 : 10000;
     // Sleep that can be interrupted by the visibility wake-up.
     await new Promise(r => {
       const t = setTimeout(r, _delay);
@@ -1293,6 +1297,7 @@ async function poll(jobId) {
       if (!res.ok) return fail(`Job perdu: ${res.status}`);
       consecutive5xx = 0;
       const job = await res.json();
+      _lastStatus = job.status;
       setStatus(job.status, job.message || "", job.progress || 0);
       if (job.status === "done") return showResult(jobId, job.result);
       if (job.status === "ready_for_review") {
