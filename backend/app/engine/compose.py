@@ -2719,27 +2719,34 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
     if content_style == "prim_split_compare":
         # Root: zero padding for full-bleed canvas (same fix as prim_journey_map)
         parts.append(f'.card[data-card-id="{card_id}"] .root {{ padding:0; gap:0; justify-content:flex-start; align-items:stretch; }}')
-        # Card-panel: base CSS sets flex-direction:column — must override to row for left/right split
+        # Card-panel: transparent so the speaker video shows through each half.
+        # base CSS sets flex-direction:column — must override to row for left/right split.
         parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
         parts.append('  width:100%; height:100%; max-width:none; padding:0;')
         parts.append('  display:flex; flex-direction:row; align-items:stretch;')
-        parts.append('  position:relative; overflow:hidden; background:#000;')
+        parts.append('  position:relative; overflow:hidden; background:transparent;')
         parts.append('}')
-        # Generic kicker is inside card-panel as first flex item — wrong position with flex-direction:row
+        # Hide base-card decorators that would render as stray lines over the split layout.
         parts.append(f'.card[data-card-id="{card_id}"] .kicker {{ display:none; }}')
+        parts.append(f'.card[data-card-id="{card_id}"] .accent-line {{ display:none; }}')
+        parts.append(f'.card[data-card-id="{card_id}"] .shimmer-mask {{ display:none; }}')
         parts.append(f'.card[data-card-id="{card_id}"] .spc-half {{')
         parts.append('  flex:1; display:flex; align-items:center; justify-content:center;')
         parts.append('  overflow:hidden;')
         parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .spc-left {{ background:{p["accent"]}1a; }}')
-        parts.append(f'.card[data-card-id="{card_id}"] .spc-right {{ background:{p["text"]}0d; }}')
+        # Left: vibrant accent colour overlay on the live video (speaker shows through).
+        parts.append(f'.card[data-card-id="{card_id}"] .spc-left {{ background:{p["accent"]}66; }}')
+        # Right: dark semi-transparent overlay — creates contrast without hiding speaker.
+        parts.append(f'.card[data-card-id="{card_id}"] .spc-right {{ background:rgba(0,0,0,0.62); }}')
         parts.append(f'.card[data-card-id="{card_id}"] .spc-label {{')
-        parts.append(f'  font-family:{p["font"]}; font-size:42px;')
+        parts.append(f'  font-family:{p["font"]}; font-size:46px;')
         parts.append(f'  font-weight:900; color:{p["text"]}; text-align:center;')
-        parts.append('  padding:24px; line-height:1.2; opacity:0;')
+        parts.append('  padding:28px; line-height:1.15; opacity:0;')
+        parts.append('  text-transform:uppercase; letter-spacing:0.06em;')
+        parts.append('  text-shadow:0 2px 24px rgba(0,0,0,0.75);')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .spc-divider {{')
-        parts.append('  position:absolute; left:50%; top:0; bottom:0; width:3px;')
+        parts.append('  position:absolute; left:50%; top:0; bottom:0; width:2px;')
         parts.append(f'  background:{p["accent"]}; transform:translateX(-50%) scaleY(0);')
         parts.append('  transform-origin:top center; border-radius:999px;')
         if p.get("accent_line_glow"):
