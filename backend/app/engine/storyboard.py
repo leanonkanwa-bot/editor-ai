@@ -2159,6 +2159,17 @@ Design graphic overlay cards for this video — up to {target_cards} maximum. Pl
                     f" (budget=1 PCF, kept {_keep_confess.get('id','?')})",
                     flush=True,
                 )
+        # prim_confession_frame validation: confession_text is REQUIRED.
+        # If the LLM generated the card but omitted the text, the effect (vignette/desat)
+        # shows but the content area is visually empty — drop the card entirely.
+        for _c in list(cards):
+            if _c.get("contentHints", {}).get("style", "") == "prim_confession_frame":
+                if not _c.get("contentHints", {}).get("confession_text", "").strip():
+                    cards.remove(_c)
+                    print(
+                        f"[STORYBOARD] CONFESS-DROP {_c.get('id','?')}: confession_text empty — card removed",
+                        flush=True,
+                    )
         # Landscape zone guard: video-overlay and fullscreen in landscape leave compact=False
         # for any card not in _DATA_PANEL_TYPES (those are rotated later by _remap_zone in
         # compose.py). Hero styles (key_phrase, quote, etc.) legitimately need the full canvas;
@@ -2578,17 +2589,25 @@ def _inject_rhythm_split_stage(
 
                 caption_words = [
                     {"text": w.text, "start": float(w.start), "end": float(w.end)}
-                    for w in span_words[_start_idx:_start_idx + 8]
+                    for w in span_words[_start_idx:_start_idx + 12]
                 ]
 
                 # Adaptive end: card expires 0.8s after the last displayed word.
-                # Panel never freezes for the remainder of card_dur if speech ends early.
                 if caption_words:
+                    # Shift card_start forward when first word starts too late after panel_ready
+                    # (panel_ready = card_start + 0.60). If first word is >1.4s after cursor,
+                    # the panel would be empty for >0.8s before any text appears.
+                    # Shift: card_start = first_word.start - 0.80, so panel_ready ≈ first_word - 0.20.
+                    _first_w_t = float(caption_words[0]["start"])
+                    if _first_w_t > cursor + 1.40:
+                        _ideal_start = round(_first_w_t - 0.80, 3)
+                        _max_start = round(cursor + rhythm_s - 4.50, 3)
+                        card_start = max(cursor, min(_ideal_start, _max_start))
                     _adaptive_end = float(caption_words[-1]["end"]) + 0.80
                     card_end = round(
                         min(
-                            max(_adaptive_end, card_start + 3.0),
-                            card_start + card_dur,
+                            max(_adaptive_end, card_start + 4.0),
+                            cursor + rhythm_s - 0.50,
                             trimmed_duration - 0.3,
                         ),
                         3,

@@ -7906,11 +7906,11 @@ def _build_timeline_js(
                 # tl.set at position P only fires when playhead reaches P — safe.
                 lines.append(
                     f'  tl.set(\'{_sst_panel_s}\', '
-                    f'{{ opacity: 0, x: {_sst_px_from} }}, {start + 0.20:.4f});'
+                    f'{{ opacity: 0 }}, {start + 0.20:.4f});'
                 )
                 lines.append(
                     f'  tl.to(\'{_sst_panel_s}\', '
-                    f'{{ opacity: 1, x: 0, duration: 0.38, ease: "power3.out" }}, '
+                    f'{{ opacity: 1, duration: 0.38, ease: "power2.out" }}, '
                     f'{start + 0.20:.4f});'
                 )
                 # Phase 3: kicker fades in ahead of steps
