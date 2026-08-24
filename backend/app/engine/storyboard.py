@@ -3232,7 +3232,6 @@ def generate_storyboard(
         style_pack=style_pack,
         subject_side=subject_side,
         layout=layout,
-        rhythm_s=36.0,  # one split every 36s → 31s of a-roll between cards
     )
     if _rhythm_splits:
         graphic_cards = sorted(
