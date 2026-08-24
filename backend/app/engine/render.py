@@ -2319,7 +2319,7 @@ def _render_hyperframes(
             "-i", str(trimmed),
             "-vf", (
                 f"scale={_hf_pw}:{_hf_ph}:force_original_aspect_ratio=increase"
-                f":flags=fast_bilinear,crop={_hf_pw}:{_hf_ph},fps=30"
+                f":flags=fast_bilinear,crop={_hf_pw}:{_hf_ph},fps=24"
             ),
             "-c:v", "libx264", "-preset", "fast", "-crf", "18",
             "-c:a", "copy",
@@ -2742,11 +2742,10 @@ def _render_hyperframes(
     # Per-worker frame budget — calibrated from Railway OOM data:
     #   6 workers × 345 frames/worker (2071 total) → SUCCESS
     #   6 workers × 476 frames/worker (2856 total) → OOM at frame 2760 (rc=1, timeout)
-    # 250 frames/worker gives a ~27% safety margin below the confirmed-safe threshold.
-    # The formula scales automatically with _n_workers, so if HyperFrames is ever
-    # allocated more than 6 workers the limit tightens proportionally.
-    # Revisit _SEG_FRAMES_PER_WORKER if Railway container RAM allocation changes significantly.
-    _SEG_FRAMES_PER_WORKER = 500
+    # At 24 GB RAM with 8 workers: 1500 frames/worker (~1 450 frames/worker actual) is
+    # safe — reduces segment count from ~8 to ~3 on a 15-min video, saving ~4 Chrome
+    # startups (~240 s overhead). Revisit if RAM allocation changes significantly.
+    _SEG_FRAMES_PER_WORKER = 1500
     _SEG_MAX_FRAMES_DEFAULT = _SEG_FRAMES_PER_WORKER * _n_workers  # e.g. 1500 at 6 workers
     # HF_SEG_MAX_FRAMES env var overrides the computed value — use for fast test cycles
     # (set to 500 in Railway Variables to trigger segmentation on short test videos).
@@ -3107,7 +3106,7 @@ def render(
     skip_captions = not short_form
     if short_form:
         caption_style = "twolevel"
-    fps = 30
+    fps = 24
     pad = SHORT_PAD_S if short_form else LONG_PAD_S
 
     # Detect 4K input -- preserve native resolution, don't downscale.

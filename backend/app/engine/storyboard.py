@@ -3281,7 +3281,7 @@ def generate_storyboard(
 
     storyboard = {
         "composition": {
-            "fps": 30,
+            "fps": 24,
             "width": width,
             "height": height,
             "durationSeconds": round(trimmed_duration, 3),
