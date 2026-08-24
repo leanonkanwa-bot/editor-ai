@@ -2531,6 +2531,40 @@ def _render_hyperframes(
     # expression never falls back to default_zoom (1.3) between breath tweens.
     remapped_zoom = _fill_zoom_gaps_with_holds(remapped_zoom, timing_map.output_duration)
 
+    # ── ZOOM-LOG — permanent diagnostic instrumentation ───────────────────────
+    # One line per non-hold zoom entry (holds are gap-fillers, not real movements).
+    # Complements [ZOOM-GAP] (dead zones > 8s, already logged above).
+    # coverage% = fraction of timeline covered by real movement (non-hold entries).
+    _zl_sorted = sorted(remapped_zoom, key=lambda z: float(z.get("start", 0)))
+    _zl_counts: dict[str, int] = {}
+    _zl_covered = 0.0
+    for _ze in _zl_sorted:
+        _zl_kind = _ze.get("kind", "drift")
+        _zl_counts[_zl_kind] = _zl_counts.get(_zl_kind, 0) + 1
+        _zl_s    = float(_ze.get("start", 0))
+        _zl_e    = float(_ze.get("end", _zl_s))
+        _zl_f    = float(_ze.get("from", 1.0))
+        _zl_t    = float(_ze.get("to", _zl_f))
+        _zl_amp  = round(_zl_t - _zl_f, 4)
+        _zl_dur  = round(_zl_e - _zl_s, 3)
+        if _zl_kind != "hold":
+            _zl_covered += _zl_dur
+            _zl_amp_str = f"{_zl_amp:+.3f}"
+            _zl_dur_str = "instant" if _zl_dur < 0.01 else f"{_zl_dur:.2f}s"
+            print(
+                f"[ZOOM-LOG] t={_zl_s:.2f}–{_zl_e:.2f}s kind={_zl_kind}"
+                f" scale={_zl_f:.3f}→{_zl_t:.3f} amp={_zl_amp_str} dur={_zl_dur_str}",
+                flush=True,
+            )
+    _zl_total = timing_map.output_duration
+    _zl_cov_pct = round(100.0 * _zl_covered / _zl_total, 1) if _zl_total > 0 else 0.0
+    _zl_summary = " ".join(f"{k}:{v}" for k, v in sorted(_zl_counts.items()))
+    print(
+        f"[ZOOM-LOG] summary: {len(remapped_zoom)} entries — {_zl_summary}"
+        f" | coverage: {_zl_cov_pct}%",
+        flush=True,
+    )
+
     # Stage 3+4: Compose + Render
     _t_cli = time.perf_counter()
     import os as _os
