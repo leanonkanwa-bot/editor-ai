@@ -2636,10 +2636,30 @@ def _inject_rhythm_split_stage(
                 # No right padding — SST cards are grid-aligned, right pad would push
                 # boundary past cursor + rhythm_s and block every other slot.
                 exclusion.append((card_start - exclusion_pad, card_end))
+                # ── SST-TIMING — permanent diagnostic for prim_split_stage ──────────
+                # empty_gap: seconds panel is visible but empty (first_word - panel_ready).
+                #   > 0.60s → EMPTY_PANEL flag (user sees blank panel)
+                # tail_gap: seconds panel stays after last word ends.
+                #   > 1.50s → FROZEN_TAIL flag (captions frozen while speaker continues)
+                _sst_panel_ready = round(card_start + 0.60, 3)
+                _sst_first_w     = float(caption_words[0]["start"])
+                _sst_last_w_end  = float(caption_words[-1]["end"])
+                _sst_empty_gap   = round(_sst_first_w - _sst_panel_ready, 2)
+                _sst_tail_gap    = round(card_end - _sst_last_w_end, 2)
+                _sst_flags = []
+                if _sst_empty_gap > 0.60:
+                    _sst_flags.append("EMPTY_PANEL")
+                if _sst_tail_gap > 1.50:
+                    _sst_flags.append("FROZEN_TAIL")
+                _sst_status = "|".join(_sst_flags) if _sst_flags else "OK"
                 print(
-                    f"[RHYTHM-SPLIT] {card_id} [{card_start:.1f}–{card_end:.1f}s]"
-                    f" side={_card_side!r} words={len(caption_words)}"
-                    f" text={' '.join(w['text'] for w in caption_words)!r}",
+                    f"[SST-TIMING] {card_id}"
+                    f" start={card_start:.2f} end={card_end:.2f}"
+                    f" panel_ready={_sst_panel_ready:.2f}"
+                    f" first_word={_sst_first_w:.2f} last_word_end={_sst_last_w_end:.2f}"
+                    f" empty_gap={_sst_empty_gap:.2f}s tail_gap={_sst_tail_gap:.2f}s"
+                    f" words={len(caption_words)} status={_sst_status}"
+                    f" side={_card_side!r} text={' '.join(w['text'] for w in caption_words)!r}",
                     flush=True,
                 )
 
@@ -2901,37 +2921,57 @@ def generate_storyboard(
     _seg_out.sort()
     _apply_segment_clamp(graphic_cards, _seg_out)
 
-    # Timing audit — after all anchoring passes, log per-card timing with title context.
-    # Includes card title so logs can confirm semantic alignment, not just proximity.
-    # A nearby transitional word ("en", "mais") with title far from speech still looks
-    # "fine" in proximity-only logs — title in the log makes the blind spot visible.
+    # ── CARD-TIMING — permanent diagnostic instrumentation ────────────────────
+    # Emits one [CARD-TIMING] line per graphic card after ALL anchoring passes.
+    # Fields: timing, speech-sync status, readability estimate.
+    # sync=NOSPEECH → card has no speech within [-0.3s, +1.0s] of startSec (desync risk).
+    # read=TIGHT/CRITICAL → card duration too short for text to be comfortably read.
+    def _ct_display_text(_hints: dict) -> str:
+        """Extract the primary display text used for readability estimation."""
+        for _fld in ("title", "confession_text", "qa_question", "text", "kicker"):
+            _v = _hints.get(_fld, "")
+            if isinstance(_v, list):
+                _v = " ".join(str(x) for x in _v)
+            if _v:
+                return str(_v).strip()
+        _cw = _hints.get("caption_words", [])
+        if _cw:
+            return " ".join(w.get("text", "") for w in _cw)
+        return ""
+
     for _gc in graphic_cards:
-        _start  = float(_gc.get("startSec", 0))
-        _end    = float(_gc.get("endSec", _start + 3))
-        _hints  = _gc.get("contentHints", {})
-        _style  = _hints.get("style", "?")
-        _title  = str(_hints.get("title", "") or "").strip()
-        _title_snippet = (_title[:40] + "…") if len(_title) > 40 else _title
-        _near = [w for w in remapped_words if _start - 0.3 <= w.start <= _start + 1.0]
-        if not _near:
-            _closest = min(remapped_words, key=lambda w: abs(w.start - _start), default=None)
-            _cl_str = (f"nearest='{_closest.text}'@{_closest.start:.2f}s"
-                       if _closest else "no words")
-            print(
-                f"[STORYBOARD] CRITICAL card {_gc.get('id','?')} style={_style!r} "
-                f"title={_title_snippet!r} "
-                f"startSec={_start:.2f}s endSec={_end:.2f}s "
-                f"has NO speech in [{_start-0.3:.2f},{_start+1.0:.2f}] — {_cl_str}",
-                flush=True,
-            )
+        _ct_start = float(_gc.get("startSec", 0))
+        _ct_end   = float(_gc.get("endSec", _ct_start + 3))
+        _ct_dur   = round(_ct_end - _ct_start, 3)
+        _ct_hints = _gc.get("contentHints", {})
+        _ct_style = _ct_hints.get("style", "?")
+        _ct_txt   = _ct_display_text(_ct_hints)
+        # Readability: 18 chars/sec comfortable reading pace
+        _ct_need  = round(max(0.5, len(_ct_txt) / 18.0), 2) if _ct_txt else 0.0
+        _ct_read  = ("NA" if _ct_need == 0.0
+                     else "OK" if _ct_dur >= _ct_need * 0.8
+                     else "TIGHT" if _ct_dur >= _ct_need * 0.5
+                     else "CRITICAL")
+        # Speech sync: nearest Whisper word at startSec
+        _ct_near_s = [w for w in remapped_words if _ct_start - 0.3 <= w.start <= _ct_start + 1.0]
+        if _ct_near_s:
+            _ct_ws   = f"'{_ct_near_s[0].text}'@{_ct_near_s[0].start:.2f}s"
+            _ct_sync = "OK"
         else:
-            print(
-                f"[STORYBOARD] card {_gc.get('id','?')} style={_style!r} "
-                f"title={_title_snippet!r} "
-                f"startSec={_start:.2f}s endSec={_end:.2f}s "
-                f"first nearby word='{_near[0].text}'@{_near[0].start:.2f}s",
-                flush=True,
-            )
+            _ct_cl  = min(remapped_words, key=lambda w: abs(w.start - _ct_start), default=None)
+            _ct_ws  = (f"'{_ct_cl.text}'@{_ct_cl.start:.2f}s(DISTANT)" if _ct_cl else "NONE")
+            _ct_sync = "NOSPEECH"
+        # Nearest word at endSec (for "chair" class desync: is card content still on-topic at end?)
+        _ct_near_e = [w for w in remapped_words if _ct_end - 1.0 <= w.start <= _ct_end + 0.3]
+        _ct_we = (f"'{_ct_near_e[-1].text}'@{_ct_near_e[-1].start:.2f}s"
+                  if _ct_near_e else "none")
+        print(
+            f"[CARD-TIMING] {_gc.get('id','?')} style={_ct_style}"
+            f" t={_ct_start:.2f}–{_ct_end:.2f}s dur={_ct_dur:.2f}s"
+            f" sync={_ct_sync} start_word={_ct_ws} end_word={_ct_we}"
+            f" read={_ct_read}(need≈{_ct_need:.1f}s got={_ct_dur:.1f}s)",
+            flush=True,
+        )
 
     # Generative B-roll auto-injection is disabled.
     # The engine (broll_generative.py + broll_primitive.py) drove card selection via internal
