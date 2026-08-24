@@ -2587,9 +2587,29 @@ def _inject_rhythm_split_stage(
                 if len(span_words) - _start_idx < min_words:
                     _start_idx = 0
 
+                # Boundary-aware text selection — find a clean END point.
+                # Phase 1: sentence boundary (.?!) after ≥ 4 words — best end.
+                # Phase 2: clause boundary (,;:) after ≥ 5 words — acceptable end.
+                # Phase 3: hard limit (10 words), never end on contraction opener (j', c', l').
+                _pool = span_words[_start_idx:_start_idx + 15]
+                _end_at = None
+                for _ei, _ew in enumerate(_pool):
+                    if _ew.text.rstrip()[-1:] in ".?!" and _ei >= 3:
+                        _end_at = _ei + 1
+                        break
+                if _end_at is None:
+                    for _ei, _ew in enumerate(_pool):
+                        if _ew.text.rstrip()[-1:] in ",;:" and _ei >= 4:
+                            _end_at = _ei + 1
+                            break
+                if _end_at is None:
+                    _end_at = min(10, len(_pool))
+                    while _end_at > min_words and _pool[_end_at - 1].text.rstrip().endswith("'"):
+                        _end_at -= 1
+                _end_at = max(min_words, _end_at)
                 caption_words = [
                     {"text": w.text, "start": float(w.start), "end": float(w.end)}
-                    for w in span_words[_start_idx:_start_idx + 12]
+                    for w in _pool[:_end_at]
                 ]
 
                 # Adaptive end: card expires 0.8s after the last displayed word.
@@ -3212,6 +3232,7 @@ def generate_storyboard(
         style_pack=style_pack,
         subject_side=subject_side,
         layout=layout,
+        rhythm_s=36.0,  # one split every 36s → 31s of a-roll between cards
     )
     if _rhythm_splits:
         graphic_cards = sorted(
