@@ -4634,6 +4634,8 @@ def _build_timeline_js(
     layout: str = "portrait",
     video_pos_x: float = 50.0,
     face_cx: float = 50.0,
+    vert_scale: float = 1.0,
+    vert_origin_y: float = 50.0,
 ) -> str:
     """Build the master GSAP timeline script including zoom/pan on the video wrapper."""
     p = pack or _LEAN_GLASS
@@ -4685,6 +4687,15 @@ def _build_timeline_js(
     else:
         face_cx, face_cy = 50.0, 50.0
     transform_origin = f"{face_cx:.1f}% {face_cy:.1f}%"
+
+    # Vertical reframe: for landscape→portrait the full landscape height is always shown
+    # (no vertical overflow with object-fit:cover). Scale the video element from its
+    # bottom (face_cy≥50%) or top (face_cy<50%) anchor to pull the face toward center.
+    # Applied at t=0 via GSAP so it coexists with SST x-pan tweens on the same element.
+    if vert_scale > 1.005:
+        lines.append("  // ── Vertical reframe: center speaker in portrait crop ──")
+        lines.append(f'  tl.set(".video-wrapper video", {{ scale: {vert_scale:.4f}, transformOrigin: "50% {vert_origin_y:.0f}%" }}, 0);')
+        lines.append("")
 
     if zoom_entries:
         lines.append("  // ── Zoom/pan on video wrapper ──")
@@ -8544,6 +8555,25 @@ def compose(
     _video_pos_x = (_face_cx * _r_16_9 - 50.0) / (_r_16_9 - 1.0)
     _video_pos_x = max(0.0, min(100.0, _video_pos_x))
 
+    # Vertical reframe: landscape→portrait always shows the full landscape height
+    # (object-fit:cover has zero vertical overflow for this aspect-ratio pair).
+    # Scale the video element from its bottom/top anchor to pull the face toward center.
+    # Cap at 1.5× to limit visible zoom; uncapped formula: 0.5/(1-face_cy/100).
+    _vert_scale = 1.0
+    _vert_origin_y_pct = 50.0
+    if layout == "portrait" and abs(_face_cy - 50.0) > 5.0:
+        if _face_cy >= 50.0:
+            _vert_scale = min(1.5, 0.5 / max(0.01, 1.0 - _face_cy / 100.0))
+            _vert_origin_y_pct = 100.0
+        else:
+            _vert_scale = min(1.5, 0.5 / max(0.01, _face_cy / 100.0))
+            _vert_origin_y_pct = 0.0
+        print(
+            f"[COMPOSE] vertical-reframe: face_cy={_face_cy:.1f}%"
+            f" scale={_vert_scale:.3f} origin_y={_vert_origin_y_pct:.0f}%",
+            flush=True,
+        )
+
     def _remap_zone(card: dict, data_card_idx: int = 0) -> dict:
         style = card.get("contentHints", {}).get("style", "")
         zone = card.get("zone", "video-overlay")
@@ -8792,7 +8822,7 @@ def compose(
     all_cards = _rendered_cards
 
     # Build master timeline
-    timeline_js = _build_timeline_js(all_cards, zoom_entries=zoom_entries, subject_position=subject_position, pack=pack, layout=layout, video_pos_x=_video_pos_x, face_cx=_face_cx)
+    timeline_js = _build_timeline_js(all_cards, zoom_entries=zoom_entries, subject_position=subject_position, pack=pack, layout=layout, video_pos_x=_video_pos_x, face_cx=_face_cx, vert_scale=_vert_scale, vert_origin_y=_vert_origin_y_pct)
 
     # CSS custom properties from theme
     accent_vars = "\n".join(
