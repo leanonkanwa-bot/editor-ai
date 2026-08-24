@@ -2513,6 +2513,21 @@ Return ONE JSON object — a card or {{}}, nothing else:
         return None
 
 
+def _join_sst_words(words: list[dict]) -> str:
+    """Join caption_words texts without space before apostrophe-starting tokens.
+
+    Whisper tokenizes French contractions as separate words: "c", "'est".
+    A naive ' '.join() produces "c 'est"; this join produces "c'est".
+    """
+    parts: list[str] = []
+    for w in words:
+        t = (w.get("text", "") if isinstance(w, dict) else str(w)).strip()
+        if parts and not t.startswith("'"):
+            parts.append(" ")
+        parts.append(t)
+    return "".join(parts)
+
+
 def _inject_rhythm_split_stage(
     graphic_cards: list[dict],
     remapped_words: list[WordTiming],
@@ -2679,7 +2694,7 @@ def _inject_rhythm_split_stage(
                     f" first_word={_sst_first_w:.2f} last_word_end={_sst_last_w_end:.2f}"
                     f" empty_gap={_sst_empty_gap:.2f}s tail_gap={_sst_tail_gap:.2f}s"
                     f" words={len(caption_words)} status={_sst_status}"
-                    f" side={_card_side!r} text={' '.join(w['text'] for w in caption_words)!r}",
+                    f" side={_card_side!r} text={_join_sst_words(caption_words)!r}",
                     flush=True,
                 )
 
@@ -2956,7 +2971,7 @@ def generate_storyboard(
                 return str(_v).strip()
         _cw = _hints.get("caption_words", [])
         if _cw:
-            return " ".join(w.get("text", "") for w in _cw)
+            return _join_sst_words(_cw)
         return ""
 
     for _gc in graphic_cards:

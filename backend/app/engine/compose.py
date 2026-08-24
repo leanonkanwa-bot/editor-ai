@@ -4527,11 +4527,20 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         elif _sst_mode_h == "caption":
             _sst_cap_words = hints.get("caption_words", [])
             if _sst_cap_words:
-                parts.append(f'      <div class="sst-caption" id="{card_id}-sst-caption">')
+                # Emit all word spans on ONE line with explicit spaces between words.
+                # Newlines between spans create implicit HTML whitespace that renders as
+                # a space — causing Whisper apostrophe tokens ("'est", "'ai") to display
+                # as "c 'est" instead of "c'est". Explicit inter-word spacing fixes this:
+                # no space is prepended before tokens that start with an apostrophe.
+                _sst_span_parts: list[str] = []
                 for _cwi, _cw in enumerate(_sst_cap_words):
-                    _cw_text = _esc(str(_cw.get("text", "") if isinstance(_cw, dict) else _cw))
-                    parts.append(f'        <span class="sst-cap-word" id="{card_id}-sst-cw-{_cwi}">{_cw_text}</span>')
-                parts.append('      </div>')
+                    _cw_raw = str(_cw.get("text", "") if isinstance(_cw, dict) else _cw).strip()
+                    _cw_text = _esc(_cw_raw)
+                    span = f'<span class="sst-cap-word" id="{card_id}-sst-cw-{_cwi}">{_cw_text}</span>'
+                    if _sst_span_parts and not _cw_raw.startswith("'"):
+                        _sst_span_parts.append(" ")
+                    _sst_span_parts.append(span)
+                parts.append(f'      <div class="sst-caption" id="{card_id}-sst-caption">{"".join(_sst_span_parts)}</div>')
         else:
             parts.append(f'      <div class="sst-diagram" id="{card_id}-sst-diagram">')
             for _ni, _node in enumerate(_sst_nodes_data[:4]):

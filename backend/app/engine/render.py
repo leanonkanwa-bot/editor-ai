@@ -2457,8 +2457,9 @@ def _render_hyperframes(
     # ~1 subliminal movement per 3s, aligned to natural speech pauses.
     remapped_zoom = _inject_speech_breath_zooms(remapped_zoom, timing_map.remapped_words)
 
-    # Zoom coverage audit + fill: log gaps > 8s; inject micro-bumps for gaps > 45s
-    # of pure silence (no speech). Speech sections are now covered by breath layer.
+    # Zoom coverage audit + fill: log gaps > 8s; inject micro-bumps for gaps > 20s.
+    # Gaps 20-45s with speech: breath layer may have missed the window — inject anyway.
+    # Gaps > 45s with speech: breath layer is reliable at this scale — skip.
     _zoom_audit_sorted = sorted(remapped_zoom, key=lambda z: float(z.get("start", 0)))
     _zg_prev_end = 0.0
     _zoom_gaps: list[tuple[float, float]] = []
@@ -2466,11 +2467,12 @@ def _render_hyperframes(
 
     def _zg_fill(gap_start: float, gap_end: float) -> None:
         gap = gap_end - gap_start
-        if gap <= 45.0:
+        if gap <= 20.0:
             return
-        # Skip if any speech falls in this window — breath layer already covers it.
-        if any(float(w.end) > gap_start and float(w.start) < gap_end
-               for w in timing_map.remapped_words):
+        has_speech = any(float(w.end) > gap_start and float(w.start) < gap_end
+                         for w in timing_map.remapped_words)
+        # For very long gaps (>45s) with speech: breath layer should cover — skip.
+        if gap > 45.0 and has_speech:
             return
         n_ideal = max(1, int(gap / 25.0))
         n = min(5, n_ideal)
