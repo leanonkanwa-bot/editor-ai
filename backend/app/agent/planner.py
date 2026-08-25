@@ -390,6 +390,326 @@ Reply with ONLY the JSON object, no preamble, no explanation."""
         return {}
 
 
+# ── Chunked planning constants ───────────────────────────────────────────────
+_CHUNK_SIZE_S      = 600.0   # 10-minute core window per chunk
+_CHUNK_OVERLAP_S   = 90.0    # 45s bleed into each adjacent chunk (90s total overlap zone)
+_CHUNK_THRESHOLD_S = 25 * 60  # only chunk videos >= 25 min
+
+
+def _build_chunk_context(
+    chunk_idx: int,
+    n_chunks: int,
+    chunk_start_abs: float,
+    chunk_end_abs: float,
+    total_duration: float,
+    narrative_map: dict,
+    prev_keep_segments_abs: list[dict],
+) -> str:
+    """Build the narrative context block injected into each chunk's planner prompt.
+
+    All timestamps in this block use ABSOLUTE source time so the LLM can match
+    them to the remapped transcript.  A header note clarifies the offset.
+    The block is clearly framed as hints — the LLM can deviate if local content
+    warrants it, keeping Pass 2 robust to imperfect Pass 1 output.
+    """
+    lines: list[str] = [
+        "╔═══ CHUNKED PLANNING CONTEXT ════════════════════════════════════════╗",
+        f"  Chunk {chunk_idx + 1} of {n_chunks}.",
+        f"  Source window: {chunk_start_abs:.0f}s–{chunk_end_abs:.0f}s"
+        f" of a {total_duration:.0f}s ({total_duration/60:.1f} min) video.",
+        f"  NOTE: transcript timestamps are REMAPPED — segment at absolute t={chunk_start_abs:.0f}s",
+        f"        appears as t≈0s in the transcript above. Add {chunk_start_abs:.0f}s to recover",
+        f"        absolute source time if needed.",
+        "╚══════════════════════════════════════════════════════════════════════╝",
+        "",
+    ]
+
+    if narrative_map:
+        lines.append("GLOBAL NARRATIVE HINTS (guidance from full-video analysis — deviate if")
+        lines.append("local content clearly justifies it; these are NOT hard constraints):")
+        lines.append("")
+
+        hook_ts    = narrative_map.get("hook_ts")
+        hook_end   = narrative_map.get("hook_end_ts")
+        hook_sum   = narrative_map.get("hook_summary", "")
+        payoff_ts  = narrative_map.get("payoff_ts")
+        payoff_end = narrative_map.get("payoff_end_ts")
+        payoff_sum = narrative_map.get("payoff_summary", "")
+
+        if hook_ts is not None:
+            in_win = chunk_start_abs <= hook_ts < chunk_end_abs
+            if in_win:
+                local_ts = hook_ts - chunk_start_abs
+                lines.append(f"  • GLOBAL HOOK is in THIS chunk (local t≈{local_ts:.0f}s,"
+                              f" absolute {hook_ts:.0f}s). Prioritize keeping it. \"{hook_sum}\"")
+            else:
+                lines.append(f"  • Global hook is in another chunk (absolute t={hook_ts:.0f}s)."
+                              f" Do NOT create a competing hook or open a new tension loop.")
+
+        if payoff_ts is not None:
+            in_win = chunk_start_abs <= payoff_ts < chunk_end_abs
+            if in_win:
+                local_ts = payoff_ts - chunk_start_abs
+                lines.append(f"  • GLOBAL PAYOFF is in THIS chunk (local t≈{local_ts:.0f}s,"
+                              f" absolute {payoff_ts:.0f}s). Place it in the last 20% of kept segments."
+                              f" \"{payoff_sum}\"")
+            else:
+                lines.append(f"  • Global payoff is in another chunk (absolute t={payoff_ts:.0f}s)."
+                              f" Do NOT resolve the main tension in this chunk.")
+
+        protected = narrative_map.get("protected", [])
+        in_win_protected = [
+            p for p in protected
+            if chunk_start_abs <= float(p.get("start", 0)) < chunk_end_abs
+        ]
+        if in_win_protected:
+            lines.append("  • Protected segments in this window (MUST survive keep/drop):")
+            for p in in_win_protected:
+                abs_s, abs_e = float(p.get("start", 0)), float(p.get("end", 0))
+                loc_s, loc_e = abs_s - chunk_start_abs, abs_e - chunk_start_abs
+                lines.append(f"    – local [{loc_s:.0f}s–{loc_e:.0f}s]"
+                              f" role={p.get('role','')} — {p.get('reason','')}")
+
+        recurring = narrative_map.get("recurring_themes", [])
+        if recurring:
+            lines.append("  • Recurring themes (keep only the best occurrence):")
+            for r in recurring:
+                theme = r.get("theme", "")
+                timestamps = r.get("timestamps", [])
+                best_at = r.get("keep_best_at")
+                in_win_ts = [t for t in timestamps if chunk_start_abs <= t < chunk_end_abs]
+                if in_win_ts:
+                    best_here = best_at is not None and chunk_start_abs <= best_at < chunk_end_abs
+                    local_best = (best_at - chunk_start_abs) if best_at is not None else None
+                    local_in_win = [f"{t - chunk_start_abs:.0f}s" for t in in_win_ts]
+                    if best_here:
+                        lines.append(f"    – \"{theme}\": best occurrence IS here"
+                                     f" (local t≈{local_best:.0f}s). Keep it; cut other occurrences.")
+                    else:
+                        lines.append(f"    – \"{theme}\": occurs here at {local_in_win},"
+                                     f" but best occurrence is elsewhere. Cut if no new info added.")
+        lines.append("")
+
+    if prev_keep_segments_abs:
+        lines.append("ALREADY SELECTED by previous chunks (do not re-select these):")
+        # Show the last 12 to limit context bloat
+        for seg in prev_keep_segments_abs[-12:]:
+            s, e = float(seg.get("start", 0)), float(seg.get("end", 0))
+            beat = seg.get("beat", "")
+            lines.append(f"  [{s:.0f}s–{e:.0f}s] beat={beat}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def _merge_chunk_plans(
+    chunk_plans_abs: list[dict],
+    chunk_ranges: list[tuple[float, float]],
+) -> dict:
+    """Merge keep_segments from all chunks into one plan, deduplicating overlap zones.
+
+    Dedup strategy: maintain a sorted list of accepted intervals; skip any new
+    segment whose start is within 0.5s of an already-accepted segment that covers it.
+    The earlier chunk always wins on a tie (it has more global context from narrative_map).
+    """
+    accepted: list[dict] = []
+
+    def _is_duplicate(s: float, e: float) -> bool:
+        for a in accepted:
+            a_s, a_e = float(a.get("start", 0)), float(a.get("end", 0))
+            # Consider duplicate if intervals overlap by more than 70%
+            overlap = max(0.0, min(e, a_e) - max(s, a_s))
+            span = max(e - s, 0.01)
+            if overlap / span > 0.70:
+                return True
+        return False
+
+    total_raw = 0
+    for plan in chunk_plans_abs:
+        for seg in plan.get("keep_segments", []):
+            if not isinstance(seg, dict):
+                continue
+            total_raw += 1
+            s, e = float(seg.get("start", 0)), float(seg.get("end", 0))
+            if not _is_duplicate(s, e):
+                accepted.append(seg)
+
+    accepted.sort(key=lambda s: float(s.get("start", 0)))
+
+    # Use first chunk's plan as the base (carries format, language, etc.)
+    base = chunk_plans_abs[0] if chunk_plans_abs else {}
+    merged = {**base, "keep_segments": accepted}
+
+    # Aggregate script_structure and key_lines across all chunks
+    ss: list[dict] = []
+    kl: list[str] = []
+    for plan in chunk_plans_abs:
+        ss.extend(plan.get("script_structure", []))
+        for line in plan.get("key_lines", []):
+            if line not in kl:
+                kl.append(line)
+    if ss:
+        merged["script_structure"] = ss
+    if kl:
+        merged["key_lines"] = kl
+
+    n_deduped = total_raw - len(accepted)
+    print(
+        f"[CHUNK-MERGE] {len(chunk_plans_abs)} chunks,"
+        f" {total_raw} raw segs → {len(accepted)} kept"
+        f" ({n_deduped} overlap-deduped)",
+        flush=True,
+    )
+    return merged
+
+
+def _plan_edit_chunked(
+    transcript: dict[str, Any],
+    narrative_map: dict,
+    user_instructions: str,
+    format_hint: FormatHint,
+    brand_color: str | None,
+    caption_color: str | None,
+    caption_position: str | None,
+    caption_font: str | None,
+    subject_position: dict[str, float] | None,
+    coach_profile: dict[str, Any] | None,
+    editing_style: str,
+) -> "EditPlan":
+    """Orchestrate chunked planning for videos >= 25 min.
+
+    Each chunk receives a remapped (local t=0) transcript so timestamps stay
+    valid for the planner's guards.  After planning, segments are un-remapped
+    back to absolute source time before merging.
+    """
+    segments = transcript.get("segments", [])
+    total_duration = float(transcript.get("duration", 0))
+
+    # Build chunk boundary list: [start, start + core + half-overlap)
+    chunk_ranges: list[tuple[float, float]] = []
+    cur = 0.0
+    while cur < total_duration:
+        end = min(cur + _CHUNK_SIZE_S + _CHUNK_OVERLAP_S / 2, total_duration)
+        chunk_ranges.append((cur, end))
+        if end >= total_duration:
+            break
+        cur += _CHUNK_SIZE_S
+
+    print(
+        f"[CHUNK-PLAN] {total_duration/60:.1f}min → {len(chunk_ranges)} chunks:"
+        f" {[f'{s:.0f}-{e:.0f}s' for s, e in chunk_ranges]}",
+        flush=True,
+    )
+
+    chunk_plans_abs: list[dict] = []
+    prev_keep_abs: list[dict] = []
+
+    for chunk_idx, (chunk_start, chunk_end) in enumerate(chunk_ranges):
+        # Filter segments to this chunk window
+        chunk_segs_abs = [
+            seg for seg in segments
+            if chunk_start <= float(seg.get("start", 0)) < chunk_end
+        ]
+        if not chunk_segs_abs:
+            print(f"[CHUNK-PLAN] chunk {chunk_idx+1}/{len(chunk_ranges)}: no segments — skip", flush=True)
+            continue
+
+        # Remap timestamps to local (t=0 at chunk_start) so plan_edit guards work correctly
+        chunk_segs_local = [
+            {**seg,
+             "start": round(float(seg["start"]) - chunk_start, 3),
+             "end":   round(float(seg["end"])   - chunk_start, 3)}
+            for seg in chunk_segs_abs
+        ]
+        local_duration = round(max(float(s["end"]) for s in chunk_segs_local), 3)
+
+        chunk_transcript = {
+            **transcript,
+            "segments": chunk_segs_local,
+            "duration": local_duration,
+        }
+
+        ctx = _build_chunk_context(
+            chunk_idx=chunk_idx,
+            n_chunks=len(chunk_ranges),
+            chunk_start_abs=chunk_start,
+            chunk_end_abs=chunk_end,
+            total_duration=total_duration,
+            narrative_map=narrative_map,
+            prev_keep_segments_abs=prev_keep_abs,
+        )
+
+        print(
+            f"[CHUNK-PLAN] chunk {chunk_idx+1}/{len(chunk_ranges)}:"
+            f" abs {chunk_start:.0f}–{chunk_end:.0f}s,"
+            f" local 0–{local_duration:.0f}s,"
+            f" {len(chunk_segs_local)} segs …",
+            flush=True,
+        )
+
+        try:
+            chunk_plan_local = plan_edit(
+                transcript=chunk_transcript,
+                user_instructions=user_instructions,
+                format_hint=format_hint,
+                brand_color=brand_color,
+                caption_color=caption_color,
+                caption_position=caption_position,
+                caption_font=caption_font,
+                subject_position=subject_position,
+                coach_profile=coach_profile,
+                editing_style=editing_style,
+                _chunk_context=ctx,
+                # narrative_map intentionally NOT passed — chunks always use single-pass
+            )
+            # Un-remap timestamps back to absolute source time
+            keep_abs = [
+                {**seg,
+                 "start": round(float(seg["start"]) + chunk_start, 3),
+                 "end":   round(float(seg["end"])   + chunk_start, 3)}
+                for seg in chunk_plan_local.raw.get("keep_segments", [])
+                if isinstance(seg, dict)
+            ]
+            chunk_plans_abs.append({**chunk_plan_local.raw, "keep_segments": keep_abs})
+            prev_keep_abs.extend(keep_abs)
+            print(
+                f"[CHUNK-PLAN] chunk {chunk_idx+1}: {len(keep_abs)} segs kept"
+                f" (abs range {min((s['start'] for s in keep_abs), default=0):.0f}s–"
+                f"{max((s['end'] for s in keep_abs), default=0):.0f}s)",
+                flush=True,
+            )
+        except Exception as exc:
+            print(
+                f"[CHUNK-PLAN] chunk {chunk_idx+1} FAILED: {exc}"
+                f" — fallback: keep all {len(chunk_segs_abs)} segs in this window",
+                flush=True,
+            )
+            fallback_abs = [
+                {"start": seg["start"], "end": seg["end"], "beat": "story", "score": 0}
+                for seg in chunk_segs_abs
+            ]
+            chunk_plans_abs.append({"keep_segments": fallback_abs})
+            prev_keep_abs.extend(fallback_abs)
+
+    if not chunk_plans_abs:
+        print("[CHUNK-PLAN] all chunks failed — falling back to single-pass plan_edit", flush=True)
+        return plan_edit(
+            transcript=transcript,
+            user_instructions=user_instructions,
+            format_hint=format_hint,
+            brand_color=brand_color,
+            caption_color=caption_color,
+            caption_position=caption_position,
+            caption_font=caption_font,
+            subject_position=subject_position,
+            coach_profile=coach_profile,
+            editing_style=editing_style,
+        )
+
+    merged = _merge_chunk_plans(chunk_plans_abs, chunk_ranges)
+    return EditPlan(raw=merged)
+
+
 def plan_edit(
     transcript: dict[str, Any],
     user_instructions: str,
@@ -402,10 +722,16 @@ def plan_edit(
     aesthetic: str = "high-energy",  # kept for API compat, ignored internally
     coach_profile: dict[str, Any] | None = None,
     editing_style: str = "viral",
+    narrative_map: dict | None = None,
+    _chunk_context: str = "",        # injected by _plan_edit_chunked; empty for top-level calls
 ) -> EditPlan:
     """
     Ask Claude to produce an edit plan for the given transcript.
     Returns an EditPlan with the raw JSON the model emitted.
+
+    For videos >= 25 min: pass narrative_map (output of analyze_narrative_map) to
+    activate chunked planning (_CHUNK_THRESHOLD_S check).  Single-pass is always
+    used for chunks themselves (_chunk_context is set; narrative_map stays None).
     """
     if settings.is_test_model:
         logger.warning(
@@ -425,6 +751,23 @@ def plan_edit(
 
     duration = float(transcript.get("duration", 0.0))
     fmt = _decide_format(duration, format_hint)
+
+    # Dispatch to chunked planning when a narrative map is provided and video is long.
+    # Chunks always call plan_edit without narrative_map → single-pass, no infinite recursion.
+    if narrative_map is not None and duration >= _CHUNK_THRESHOLD_S:
+        return _plan_edit_chunked(
+            transcript=transcript,
+            narrative_map=narrative_map,
+            user_instructions=user_instructions,
+            format_hint=format_hint,
+            brand_color=brand_color,
+            caption_color=caption_color,
+            caption_position=caption_position,
+            caption_font=caption_font,
+            subject_position=subject_position,
+            coach_profile=coach_profile,
+            editing_style=editing_style,
+        )
 
     # Motion graphics disabled — no face-safe-zone context needed.
     face_context = ""
@@ -668,9 +1011,10 @@ def plan_edit(
                     "  - momentum style: bold, kinetic, Anton font, aggressive pop-in\n"
                     "  - viral style: maximum energy, brand colors, fast animations\n\n"
                     f"USER INSTRUCTIONS:\n{user_instructions or '(none — apply default high-retention edit)'}\n\n"
-                    "TRANSCRIPT WITH WORD TIMESTAMPS (JSON):\n"
+                    "TRANSCRIPT (JSON):\n"
                     f"{json.dumps(transcript, ensure_ascii=False)}\n\n"
-                    "Before outputting the edit plan, complete all 5 phases:\n\n"
+                    + (f"{_chunk_context}\n\n" if _chunk_context else "")
+                    + "Before outputting the edit plan, complete all 5 phases:\n\n"
                     "PHASE 0 — IMAGINATION (before reading the transcript)\n"
                     "State:\n"
                     "  'The final video must make the viewer feel: [ONE EMOTION]'\n"

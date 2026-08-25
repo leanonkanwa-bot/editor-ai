@@ -1175,6 +1175,7 @@ def run_job(
             subject_position=subject_pos,
             coach_profile=coach_profile,
             editing_style=editing_style,
+            narrative_map=_narrative_map if _narrative_map else None,
         )
         print(f"[TIMING] planning: {time.perf_counter()-_t:.1f}s", flush=True)
 
