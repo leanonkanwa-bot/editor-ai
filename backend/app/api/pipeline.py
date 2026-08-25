@@ -26,7 +26,7 @@ _TRANSCRIPTION_TIMEOUT_S = 1200  # 20 min — Whisper hang guard; sets status=er
 #   - queued renders waiting on the semaphore abort rather than block forever
 _shutdown_event = threading.Event()
 
-from app.agent.planner import FormatHint, analyze_subject_position, plan_edit, rewrite_hook
+from app.agent.planner import FormatHint, analyze_narrative_map, analyze_subject_position, plan_edit, rewrite_hook
 from app.api.jobs import store
 from app.core.config import settings
 from app.core.plans import has_4k_access
@@ -1128,6 +1128,42 @@ def run_job(
             f" (~{_full_words * 40 // 4:,} tokens saved from planner input)",
             flush=True,
         )
+
+        # ── Pass 1: global narrative map (videos > 25 min only) ───────────────
+        # Identifies hook/payoff/beats/protected segments/recurring themes in one
+        # lightweight call BEFORE chunked planning. Pass 2 (not yet built) will
+        # use this map to give each chunk cross-video context.
+        _video_duration_s = float(_transcript_for_planning.get("duration", 0))
+        _narrative_map: dict = {}
+        _CHUNKED_PLANNING_MIN_S = 25 * 60  # 1500s
+        if _video_duration_s >= _CHUNKED_PLANNING_MIN_S:
+            print(
+                f"[NARRATIVE-MAP] Pass 1 — video {_video_duration_s/60:.1f}min > 25min threshold,"
+                f" running global narrative analysis…",
+                flush=True,
+            )
+            _t_nm = time.perf_counter()
+            _narrative_map = analyze_narrative_map(_transcript_for_planning)
+            _nm_elapsed = time.perf_counter() - _t_nm
+            if _narrative_map:
+                print(
+                    f"[NARRATIVE-MAP] done in {_nm_elapsed:.1f}s"
+                    f" — hook_ts={_narrative_map.get('hook_ts')}s"
+                    f" payoff_ts={_narrative_map.get('payoff_ts')}s"
+                    f" beats={len(_narrative_map.get('major_beats', []))}"
+                    f" protected={len(_narrative_map.get('protected', []))}"
+                    f" recurring_themes={len(_narrative_map.get('recurring_themes', []))}",
+                    flush=True,
+                )
+                print(f"[NARRATIVE-MAP] full={_narrative_map}", flush=True)
+            else:
+                print("[NARRATIVE-MAP] returned empty — skipping (non-fatal)", flush=True)
+        else:
+            print(
+                f"[NARRATIVE-MAP] skipped — video {_video_duration_s/60:.1f}min < 25min threshold",
+                flush=True,
+            )
+
         plan = plan_edit(
             _transcript_for_planning,
             enriched_instructions,

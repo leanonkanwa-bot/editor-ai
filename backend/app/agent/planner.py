@@ -303,6 +303,93 @@ def _build_coach_context(coach_profile: dict[str, Any] | None) -> str:
     return "\n".join(lines)
 
 
+def analyze_narrative_map(transcript: dict[str, Any]) -> dict[str, Any]:
+    """Pass 1 of chunked planning — global narrative skeleton analysis.
+
+    Activated only for videos > 25 min. Receives the word-stripped transcript dict
+    (no word-level timestamps) and returns a compact JSON map identifying:
+    - The single best hook and payoff (with timestamps)
+    - 3-6 major structural beats
+    - Protected segments that must survive any chunk's keep/drop decisions
+    - Recurring themes where only one occurrence should be kept
+
+    Does NOT make keep/drop decisions — that is Pass 2's job.
+    The returned dict is passed into each chunk's plan_edit call as context.
+
+    Estimated cost: ~500 tokens input + 1500 output per call, once per video.
+    """
+    segments = transcript.get("segments", [])
+    duration = float(transcript.get("duration", 0))
+    language = transcript.get("language", "fr")
+
+    # Format as readable timestamped lines — far more compact and legible than raw JSON.
+    # Each line: [start-end] text  (~50-70 chars vs ~180 chars for equivalent JSON segment)
+    _lines: list[str] = []
+    for seg in segments:
+        s = float(seg.get("start", 0))
+        e = float(seg.get("end", 0))
+        t = str(seg.get("text", "")).strip()
+        if t:
+            _lines.append(f"[{s:.1f}-{e:.1f}] {t}")
+    transcript_text = "\n".join(_lines)
+
+    system_prompt_nm = f"""\
+You are a narrative structure analyst for video editing. Your job is ONLY to identify
+the global narrative skeleton — not to make editing decisions.
+
+OUTPUT: a single JSON object:
+{{
+  "hook_ts": <float — timestamp in seconds where the single strongest hook begins>,
+  "hook_end_ts": <float — where the hook segment ends>,
+  "hook_summary": "<why this is the hook, ≤15 words>",
+  "payoff_ts": <float — where the main tension resolves>,
+  "payoff_end_ts": <float>,
+  "payoff_summary": "<≤15 words>",
+  "major_beats": [
+    {{"ts": <float>, "end_ts": <float>, "role": "tension|revelation|principle|story|contrast", "summary": "<≤10 words>"}}
+  ],
+  "protected": [
+    {{"start": <float>, "end": <float>, "role": "hook|payoff|critical_context", "reason": "<≤10 words>"}}
+  ],
+  "recurring_themes": [
+    {{"theme": "<≤4 words>", "timestamps": [<float>, ...], "keep_best_at": <float>, "reason": "<≤10 words>"}}
+  ]
+}}
+
+Rules:
+- major_beats: 3–6 entries, chronological order, DIFFERENT timestamps than hook/payoff
+- protected: always include hook + payoff; add critical_context only if removing it breaks narrative comprehension
+- recurring_themes: only themes said ≥2 times where keeping one instance is clearly better
+- All timestamps must be within [0, {duration:.0f}]
+- Language: {language}
+
+Reply with ONLY the JSON object, no preamble, no explanation."""
+
+    user_msg = (
+        f"VIDEO DURATION: {duration:.0f}s ({duration/60:.1f} min)\n\n"
+        f"TRANSCRIPT:\n{transcript_text}"
+    )
+
+    client = Anthropic()
+    try:
+        response = client.messages.create(
+            model=settings.effective_model,
+            max_tokens=1500,
+            system=system_prompt_nm,
+            messages=[{"role": "user", "content": user_msg}],
+        )
+        raw = response.content[0].text.strip()
+        # Reuse existing JSON extractor to handle ```json fences gracefully
+        start = raw.find("{")
+        end = raw.rfind("}")
+        if start == -1 or end == -1:
+            raise ValueError(f"analyze_narrative_map: no JSON in response: {raw[:300]}")
+        return json.loads(raw[start: end + 1])
+    except Exception as exc:
+        print(f"[NARRATIVE-MAP] ERROR: {exc}", flush=True)
+        return {}
+
+
 def plan_edit(
     transcript: dict[str, Any],
     user_instructions: str,
