@@ -22,6 +22,7 @@ os.environ["OPENBLAS_NUM_THREADS"] = "8"
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -175,6 +176,173 @@ class Transcript:
         }
 
 
+# ---------------------------------------------------------------------------
+# Groq Whisper API — fast cloud transcription with local fallback.
+#
+# Activated when GROQ_API_KEY is set in Railway Variables.
+# Falls back to local faster-whisper transparently on any error.
+# ---------------------------------------------------------------------------
+
+# Groq returns language as full English names; map to ISO 639-1.
+_GROQ_LANG_MAP: dict[str, str] = {
+    "afrikaans": "af", "arabic": "ar", "armenian": "hy", "azerbaijani": "az",
+    "belarusian": "be", "bosnian": "bs", "bulgarian": "bg", "catalan": "ca",
+    "chinese": "zh", "croatian": "hr", "czech": "cs", "danish": "da",
+    "dutch": "nl", "english": "en", "estonian": "et", "finnish": "fi",
+    "french": "fr", "galician": "gl", "german": "de", "greek": "el",
+    "hebrew": "he", "hindi": "hi", "hungarian": "hu", "icelandic": "is",
+    "indonesian": "id", "italian": "it", "japanese": "ja", "kannada": "kn",
+    "kazakh": "kk", "korean": "ko", "latvian": "lv", "lithuanian": "lt",
+    "macedonian": "mk", "malay": "ms", "marathi": "mr", "maori": "mi",
+    "nepali": "ne", "norwegian": "no", "persian": "fa", "polish": "pl",
+    "portuguese": "pt", "romanian": "ro", "russian": "ru", "serbian": "sr",
+    "slovak": "sk", "slovenian": "sl", "spanish": "es", "swahili": "sw",
+    "swedish": "sv", "tagalog": "tl", "tamil": "ta", "thai": "th",
+    "turkish": "tr", "ukrainian": "uk", "urdu": "ur", "vietnamese": "vi",
+    "welsh": "cy",
+}
+
+# WAV at 16kHz/16-bit = ~32 KB/s → 25 MB limit hit at ~13 min.
+# Above this threshold we compress to OGG/opus (32 kbps, holds up to ~109 min).
+_GROQ_WAV_MAX_BYTES = 24 * 1024 * 1024  # 24 MB — 1 MB safety margin
+
+
+def _parse_groq_response(response: Any) -> "Transcript":
+    """Map a Groq verbose_json transcription response to our Transcript dataclass."""
+    lang_raw = (getattr(response, "language", "") or "").lower().strip()
+    language = _GROQ_LANG_MAP.get(lang_raw, lang_raw[:2] if len(lang_raw) >= 2 else "fr")
+
+    duration = float(getattr(response, "duration", 0) or 0)
+    full_text = (getattr(response, "text", "") or "").strip()
+
+    raw_words: list[Any] = list(getattr(response, "words", None) or [])
+    raw_segs: list[Any] = list(getattr(response, "segments", None) or [])
+
+    _MIN_DUR = 0.010
+    segments: list[Segment] = []
+    word_idx = 0
+
+    for i, seg in enumerate(raw_segs):
+        seg_start = float(getattr(seg, "start", 0))
+        seg_end = float(getattr(seg, "end", seg_start))
+        seg_text = (getattr(seg, "text", "") or "").strip()
+        seg_words: list[Word] = []
+
+        while word_idx < len(raw_words):
+            w = raw_words[word_idx]
+            w_start = float(getattr(w, "start", 0))
+            w_end = float(getattr(w, "end", w_start))
+            w_text = (getattr(w, "word", "") or "").strip()
+            # Stop collecting for this segment when we reach the next segment's start,
+            # unless this is the last segment (then collect all remaining words).
+            if w_start >= seg_end and i < len(raw_segs) - 1:
+                break
+            word_idx += 1
+            if not w_text or (w_end - w_start) < _MIN_DUR:
+                continue
+            seg_words.append(Word(text=w_text, start=w_start, end=w_end))
+
+        segments.append(Segment(start=seg_start, end=seg_end, text=seg_text, words=seg_words))
+
+    # Assign any trailing words (float precision edge cases) to the last segment.
+    if word_idx < len(raw_words) and segments:
+        for w in raw_words[word_idx:]:
+            w_start = float(getattr(w, "start", 0))
+            w_end = float(getattr(w, "end", w_start))
+            w_text = (getattr(w, "word", "") or "").strip()
+            if w_text and (w_end - w_start) >= _MIN_DUR:
+                segments[-1].words.append(Word(text=w_text, start=w_start, end=w_end))
+
+    if not duration and segments:
+        duration = max(s.end for s in segments)
+
+    _total_words = sum(len(s.words) for s in segments)
+    print(f"[GROQ] Parsed: {len(segments)} segments, {_total_words} words", flush=True)
+    _all_flat = [(w.text, round(w.start, 2), round(w.end, 2))
+                 for s in segments for w in s.words]
+    print(f"[GROQ] First 10 words: {_all_flat[:10]}", flush=True)
+
+    return Transcript(language=language, duration=duration, text=full_text, segments=segments)
+
+
+def _transcribe_groq(wav_path: Path) -> "Transcript | None":
+    """Attempt Groq Whisper transcription. Returns None to trigger local fallback.
+
+    Never raises — all errors are caught and logged.  The caller falls back to
+    local faster-whisper transparently so the pipeline never breaks on API issues.
+    """
+    api_key = os.getenv("GROQ_API_KEY", "").strip()
+    if not api_key:
+        return None  # not configured — silent skip
+
+    _t0 = time.perf_counter()
+    _compressed: Path | None = None
+
+    try:
+        audio_path = wav_path
+        size_bytes = wav_path.stat().st_size
+
+        # WAV > 24 MB (audio > ~13 min): compress to OGG/opus to stay under 25 MB limit.
+        if size_bytes > _GROQ_WAV_MAX_BYTES:
+            _compressed = wav_path.with_suffix(".groq.ogg")
+            _t_comp = time.perf_counter()
+            subprocess.run(
+                [FFMPEG_PATH, "-y", "-loglevel", "error",
+                 "-i", str(wav_path),
+                 "-c:a", "libopus", "-b:a", "32k", "-ar", "16000", "-ac", "1",
+                 str(_compressed)],
+                check=True, capture_output=True, timeout=300,
+            )
+            size_mb_after = _compressed.stat().st_size / (1024 ** 2)
+            print(
+                f"[GROQ] Compressed {size_bytes / (1024**2):.1f}MB WAV"
+                f" → {size_mb_after:.1f}MB OGG/opus in {time.perf_counter()-_t_comp:.1f}s",
+                flush=True,
+            )
+            audio_path = _compressed
+
+        model_name = os.getenv("GROQ_WHISPER_MODEL", "whisper-large-v3").strip()
+        prompt: str | None = None
+        if _VERBATIM_ASR:
+            prompt = (
+                "Euh, bah, ben, hein, ouais, hm, enfin voilà. "
+                "Je je pense, il il faut, parce que parce que, c'est c'est."
+            )
+
+        from groq import Groq  # noqa: PLC0415 — lazy import (not installed locally)
+        client = Groq(api_key=api_key)
+
+        with open(audio_path, "rb") as _f:
+            response = client.audio.transcriptions.create(
+                file=(audio_path.name, _f),
+                model=model_name,
+                response_format="verbose_json",
+                timestamp_granularities=["word", "segment"],
+                prompt=prompt,
+            )
+
+        _elapsed = time.perf_counter() - _t0
+        print(
+            f"[GROQ] Transcription done in {_elapsed:.1f}s"
+            f" (model={model_name} lang={getattr(response, 'language', '?')})",
+            flush=True,
+        )
+        return _parse_groq_response(response)
+
+    except Exception as exc:
+        print(
+            f"[GROQ] {type(exc).__name__}: {exc} — falling back to local Whisper",
+            flush=True,
+        )
+        return None
+    finally:
+        if _compressed is not None:
+            try:
+                _compressed.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+
 def _has_audio_stream(video_path: Path) -> bool:
     """Return True iff the video contains at least one audio stream."""
     try:
@@ -209,6 +377,15 @@ def transcribe(video_path: Path) -> Transcript:
     try:
         _extract_audio_wav(video_path, wav_path)
 
+        # ── Groq Whisper (fast path) ───────────────────────────────────────
+        # Activate by setting GROQ_API_KEY in Railway Variables.
+        # Falls back to local faster-whisper on any error (key missing, network
+        # failure, model error, file size exceeded even after compression).
+        _groq_result = _transcribe_groq(wav_path)
+        if _groq_result is not None:
+            return _groq_result
+
+        # ── Local faster-whisper (fallback) ────────────────────────────────
         model = _load_model()
 
         # Select transcription params based on mode.
