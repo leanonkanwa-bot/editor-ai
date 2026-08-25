@@ -1108,8 +1108,28 @@ def run_job(
         _t = time.perf_counter()
         store.update(job_id, status="planning", progress=40,
                      message="Asking the agent for an edit plan…")
+        # Strip word-level timestamps before sending to the planner LLM.
+        # The planner only needs segment text+timestamps for keep/drop decisions —
+        # word arrays add ~83% token bloat with zero editorial value at this stage.
+        # For a 15-min video this reduces planner input from ~32k → ~5k tokens.
+        _transcript_for_planning = {
+            **transcript_clean,
+            "segments": [
+                {k: v for k, v in seg.items() if k != "words"}
+                for seg in transcript_clean.get("segments", [])
+            ],
+        }
+        _n_segs = len(transcript_clean.get("segments", []))
+        _full_words = sum(
+            len(seg.get("words", [])) for seg in transcript_clean.get("segments", [])
+        )
+        print(
+            f"[PLANNER-STRIP] {_n_segs} segments, {_full_words} word-tokens stripped"
+            f" (~{_full_words * 40 // 4:,} tokens saved from planner input)",
+            flush=True,
+        )
         plan = plan_edit(
-            transcript_clean,
+            _transcript_for_planning,
             enriched_instructions,
             format_hint=format_hint,
             brand_color=brand_color,

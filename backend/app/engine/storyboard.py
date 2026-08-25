@@ -2083,8 +2083,9 @@ Design graphic overlay cards for this video — up to {target_cards} maximum. Pl
     # Scale max_tokens with target_cards so long-video responses are never truncated.
     # ~250 tokens/card average: simple cards ~100t, complex (list/comparison) ~400t, mean ~250.
     # 150t/card was too tight — 15-min videos (48 cards × 150 = 7200) truncated JSON at ~2min.
-    # Minimum 4096 preserves short-video behaviour; cap at 16384 (claude-opus-4-7 limit is 32k).
-    _max_tok = max(4096, min(16384, target_cards * 250))
+    # Cap raised 16384→32768: Sonnet 4.6 supports 64k output. 30-min videos need ~17k
+    # (68 cards × 250); 60-min videos need ~32k (129 cards × 250) — both now fit.
+    _max_tok = max(4096, min(32768, target_cards * 250))
 
     client = Anthropic()
     try:
