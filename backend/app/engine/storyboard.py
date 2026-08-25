@@ -2572,6 +2572,7 @@ def _inject_rhythm_split_stage(
     style_pack: str,
     subject_side: str | None,
     layout: str,
+    transcript_segments: list[dict] | None = None,
     rhythm_s: float = 12.0,
     min_words: int = 4,
     card_dur: float = 7.0,
@@ -2590,6 +2591,31 @@ def _inject_rhythm_split_stage(
     """
 
     _side = "left" if subject_side == "left" else "right"
+
+    # Build punct map: word.start → trailing punctuation char to append.
+    # For each transcript segment whose text ends with . ? ! , ; :, find the last
+    # remapped_word in that segment's time range and record the punctuation.
+    # This recovers punctuation that Whisper includes in seg.text but omits from
+    # individual word tokens (common with tiny/base models).
+    _seg_punct_map: dict[float, str] = {}
+    _PUNCT_CHARS = frozenset(".?!,;:")
+    if transcript_segments:
+        for _seg in transcript_segments:
+            _seg_txt = str(_seg.get("text", "")).rstrip()
+            if not _seg_txt:
+                continue
+            _trail = _seg_txt[-1]
+            if _trail not in _PUNCT_CHARS:
+                continue
+            _seg_s = float(_seg.get("start", 0))
+            _seg_e = float(_seg.get("end", 0))
+            # Last word whose start falls within the segment window
+            _seg_ws = [w for w in remapped_words if _seg_s <= w.start < _seg_e]
+            if _seg_ws:
+                _lw = _seg_ws[-1]
+                # Only inject if the word token doesn't already end with punctuation
+                if _lw.text.rstrip()[-1:] not in _PUNCT_CHARS:
+                    _seg_punct_map[_lw.start] = _trail
 
     # Build exclusion intervals: graphic card windows + padding
     exclusion: list[tuple[float, float]] = [
@@ -2661,10 +2687,18 @@ def _inject_rhythm_split_stage(
                     while _end_at > min_words and _pool[_end_at - 1].text.rstrip().endswith("'"):
                         _end_at -= 1
                 _end_at = max(min_words, _end_at)
+                _raw_words = _pool[:_end_at]
                 caption_words = [
-                    {"text": w.text, "start": float(w.start), "end": float(w.end)}
-                    for w in _pool[:_end_at]
+                    {
+                        "text": w.text + _seg_punct_map.get(w.start, ""),
+                        "start": float(w.start),
+                        "end": float(w.end),
+                    }
+                    for w in _raw_words
                 ]
+                _punct_injected = sum(
+                    1 for w in _raw_words if w.start in _seg_punct_map
+                )
 
                 # Adaptive end: card expires 0.8s after the last displayed word.
                 if caption_words:
@@ -2736,6 +2770,18 @@ def _inject_rhythm_split_stage(
                     f" side={_card_side!r} text={_join_sst_words(caption_words)!r}",
                     flush=True,
                 )
+                # SST-PUNCT: segment-boundary punctuation injected into word tokens
+                if _punct_injected:
+                    _punct_dbg = [
+                        f"{(w.text + _seg_punct_map[w.start])!r}@{w.start:.2f}"
+                        for w in _raw_words
+                        if w.start in _seg_punct_map
+                    ]
+                    print(
+                        f"[SST-PUNCT] {card_id}: {_punct_injected} punct injected"
+                        f" — {_punct_dbg}",
+                        flush=True,
+                    )
 
         cursor = round(cursor + rhythm_s, 3)
 
@@ -3310,6 +3356,7 @@ def generate_storyboard(
         style_pack=style_pack,
         subject_side=subject_side,
         layout=layout,
+        transcript_segments=transcript_segments,
     )
     if _rhythm_splits:
         graphic_cards = sorted(
