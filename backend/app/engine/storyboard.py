@@ -2011,6 +2011,36 @@ LANGUAGE: {language}
 
 BRAND: accent color {brand_color}, content type: {content_type}, style: {editing_style}
 
+MID-VIDEO PLATEAU GUARD — apply only when VIDEO DURATION ≥ 300s (5 minutes).
+
+After designing all cards, run this check exactly once before emitting the JSON.
+
+STEP 1 — CONDITION: compute plateau_start = duration × 0.30, plateau_end = duration × 0.70.
+  Is there already at least one card with startSec in [plateau_start, plateau_end] whose
+  style is one of: prim_shatter_truth, prim_split_stage, prim_confession_frame,
+  prim_journey_map, number_hero, quote_card, myth_vs_fact ?
+  If YES → guard passes, no action. Proceed to output.
+
+STEP 2 — SCAN (only if STEP 1 fails): among ALL cards placed in [plateau_start, plateau_end],
+  find the single card whose content carries the strongest dramatic charge —
+  highest vulnerability, strongest confrontation, or most emotionally loaded content.
+
+STEP 3 — UPGRADE ATTEMPT (only if STEP 2 found a candidate): apply EXISTING trigger
+  conditions (no threshold lowering) for each qualifying primitive:
+  — Speaker admits shame/doubt/personal low in first-person past tense → prim_confession_frame
+  — Speaker delivers a named framework/method with 2-5 steps → prim_split_stage
+  — Speaker uses an explicit "Faux." / confrontation marker from its trigger list → prim_shatter_truth
+  — Speaker narrates a geographic/journey revelation → prim_journey_map
+  — Strong quotable conviction or personal truth → quote_card
+  If an upgrade is valid → apply it and add "plateau_fix": true to that card's contentHints.
+
+STEP 4 — ACCEPT (only if STEP 3 found nothing): no content in the plateau window
+  passes any existing trigger condition. Do NOT force any primitive. Output your
+  existing cards unchanged — a truthful plateau is the correct output.
+
+ABSOLUTE CONSTRAINT: never invent content. Every upgraded primitive must be justified
+by words actually spoken in the transcript. A truthful plateau beats a hallucinated climax.
+
 Reply with ONLY a JSON array, no explanation."""
 
     # Append prosodic block when signal is available (branchement fix + Option B)
