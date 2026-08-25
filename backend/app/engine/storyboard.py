@@ -49,10 +49,14 @@ _TRIGGER_STYLES: frozenset[str] = frozenset({
 _GROUNDING_OVERLAP_THRESHOLD = 0.40   # fraction of trigger content-words that must match speech
 _GROUNDING_WINDOW_PRE_S  = 0.5        # seconds before startSec included in the speech window
 _GROUNDING_WINDOW_POST_S = 3.0        # seconds after  startSec included in the speech window
-_ANCHOR_SEARCH_FORWARD_S      = 6.0    # how far ahead to scan for trigger keyword position
+_ANCHOR_SEARCH_FORWARD_S      = 10.0   # how far ahead to scan for trigger keyword position
+                                       # (raised 6→10 to catch cases where LLM places startSec
+                                       # at segment start and the anchor word is 7-9s later)
 _DATA_ANCHOR_SEARCH_FORWARD_S = 12.0  # wider window for data cards (number/age/result) whose
                                        # LLM startSec can be 4-9s before the spoken value
-_ANCHOR_LEAD_S           = 0.20       # card appears this many seconds before the trigger word
+_ANCHOR_LEAD_S           = 0.45       # card appears this many seconds before the trigger word
+                                       # (raised 0.20→0.45 so animation completes before anchor
+                                       # word is spoken: typical entry animation = 0.35s)
 
 # French stopwords stripped before grounding overlap computation so that invented phrases
 # sharing only function words with genuine speech (e.g. "je vais dire que…" vs "je vais
@@ -2000,8 +2004,11 @@ RULES:
   trigger-phrase type based on beat-spine lines alone when those lines are
   absent from KEY LINES. When uncertain between a trigger-phrase type and a
   generic type (callout, key_phrase, quote), always prefer the generic type.
-- TIMING: startSec should match when the speaker BEGINS saying the
-  words the card references — synchronous with speech, like captions.
+- TIMING: startSec = the timestamp where the speaker says the SPECIFIC WORDS shown on
+  the card (title / key phrase), not the start of the surrounding sentence or segment.
+  Example: if the card title is "ma méthode" and those words appear at t=47.8s,
+  set startSec=47.5 (0.3–0.5s before the key phrase). Never place startSec more than
+  2s before the exact words — the code anchors to the nearest speech match automatically.
 - Place cards at NARRATIVELY IMPORTANT moments — not evenly spaced
 
 LANGUAGE: {language}
@@ -2565,9 +2572,9 @@ def _inject_rhythm_split_stage(
     style_pack: str,
     subject_side: str | None,
     layout: str,
-    rhythm_s: float = 9.0,
+    rhythm_s: float = 12.0,
     min_words: int = 4,
-    card_dur: float = 5.0,
+    card_dur: float = 7.0,
     exclusion_pad: float = 0.5,
     **_deprecated,  # absorbs old threshold_s / min_gap_s kwargs
 ) -> list[dict]:
@@ -2635,8 +2642,10 @@ def _inject_rhythm_split_stage(
                 # Boundary-aware text selection — find a clean END point.
                 # Phase 1: sentence boundary (.?!) after ≥ 4 words — best end.
                 # Phase 2: clause boundary (,;:) after ≥ 5 words — acceptable end.
-                # Phase 3: hard limit (10 words), never end on contraction opener (j', c', l').
-                _pool = span_words[_start_idx:_start_idx + 15]
+                # Phase 3: hard limit (18 words), never end on contraction opener (j', c', l').
+                # Raised from 10→18 to reduce the frozen-caption window (speaker keeps talking
+                # after only 10 words showed; the panel stays visible with words frozen).
+                _pool = span_words[_start_idx:_start_idx + 25]
                 _end_at = None
                 for _ei, _ew in enumerate(_pool):
                     if _ew.text.rstrip()[-1:] in ".?!" and _ei >= 3:
@@ -2648,7 +2657,7 @@ def _inject_rhythm_split_stage(
                             _end_at = _ei + 1
                             break
                 if _end_at is None:
-                    _end_at = min(10, len(_pool))
+                    _end_at = min(18, len(_pool))
                     while _end_at > min_words and _pool[_end_at - 1].text.rstrip().endswith("'"):
                         _end_at -= 1
                 _end_at = max(min_words, _end_at)
@@ -2671,7 +2680,7 @@ def _inject_rhythm_split_stage(
                     _adaptive_end = float(caption_words[-1]["end"]) + 0.80
                     card_end = round(
                         min(
-                            max(_adaptive_end, card_start + 4.0),
+                            max(_adaptive_end, card_start + 5.5),
                             cursor + rhythm_s - 0.50,
                             trimmed_duration - 0.3,
                         ),
@@ -2714,7 +2723,7 @@ def _inject_rhythm_split_stage(
                 _sst_flags = []
                 if _sst_empty_gap > 0.60:
                     _sst_flags.append("EMPTY_PANEL")
-                if _sst_tail_gap > 1.50:
+                if _sst_tail_gap > 2.50:
                     _sst_flags.append("FROZEN_TAIL")
                 _sst_status = "|".join(_sst_flags) if _sst_flags else "OK"
                 print(
@@ -2920,7 +2929,7 @@ def generate_storyboard(
                 _matched = _w.start
                 _matched_word = _w.text
                 break
-        if _matched is not None and _matched - _start_s > 0.5:
+        if _matched is not None and _matched - _start_s > 0.25:
             _orig_start = float(_gc["startSec"])
             _gc["startSec"] = round(max(_matched - _ANCHOR_LEAD_S, _start_s), 3)
             if float(_gc.get("endSec", 0)) < _gc["startSec"] + 1.5:
@@ -2986,10 +2995,34 @@ def generate_storyboard(
     _seg_out.sort()
     _apply_segment_clamp(graphic_cards, _seg_out)
 
+    # endSec topic-boundary clamp — prevents cards from overstaying after the speaker
+    # has moved to the next topic. Logic: find the speech segment that contains startSec;
+    # if endSec extends past that segment's end by more than 0.5s, clamp it there.
+    # Never shortens below startSec + 1.5s so the card remains readable.
+    _MIN_CARD_DISPLAY_S = 1.5
+    for _gc in graphic_cards:
+        _gs = float(_gc.get("startSec", 0))
+        _ge = float(_gc.get("endSec", 0))
+        _seg_end: float | None = None
+        for _ss2, _se2 in _seg_out:
+            if _ss2 <= _gs <= _se2:
+                _seg_end = _se2
+                break
+        if _seg_end is not None and _ge > _seg_end + 0.5:
+            _new_end = round(max(_gs + _MIN_CARD_DISPLAY_S, _seg_end + 0.3), 3)
+            if _new_end < _ge:
+                print(
+                    f"[STORYBOARD] ENDSEC-CLAMP card {_gc.get('id','?')} "
+                    f"endSec {_ge:.2f}→{_new_end:.2f}s "
+                    f"(segment ends {_seg_end:.2f}s, was overstaying by {_ge - _seg_end:.2f}s)",
+                    flush=True,
+                )
+                _gc["endSec"] = _new_end
+
     # ── CARD-TIMING — permanent diagnostic instrumentation ────────────────────
     # Emits one [CARD-TIMING] line per graphic card after ALL anchoring passes.
     # Fields: timing, speech-sync status, readability estimate.
-    # sync=NOSPEECH → card has no speech within [-0.3s, +1.0s] of startSec (desync risk).
+    # sync=NOSPEECH → card has no speech within [-0.3s, +0.5s] of startSec (desync risk).
     # read=TIGHT/CRITICAL → card duration too short for text to be comfortably read.
     def _ct_display_text(_hints: dict) -> str:
         """Extract the primary display text used for readability estimation."""
@@ -3018,7 +3051,7 @@ def generate_storyboard(
                      else "TIGHT" if _ct_dur >= _ct_need * 0.5
                      else "CRITICAL")
         # Speech sync: nearest Whisper word at startSec
-        _ct_near_s = [w for w in remapped_words if _ct_start - 0.3 <= w.start <= _ct_start + 1.0]
+        _ct_near_s = [w for w in remapped_words if _ct_start - 0.3 <= w.start <= _ct_start + 0.5]
         if _ct_near_s:
             _ct_ws   = f"'{_ct_near_s[0].text}'@{_ct_near_s[0].start:.2f}s"
             _ct_sync = "OK"

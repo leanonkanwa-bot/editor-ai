@@ -2726,27 +2726,47 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('  display:flex; flex-direction:row; align-items:stretch;')
         parts.append('  position:relative; overflow:hidden; background:transparent;')
         parts.append('}')
-        # Hide base-card decorators that would render as stray lines over the split layout.
+        # Hide base-card decorators.
         parts.append(f'.card[data-card-id="{card_id}"] .kicker {{ display:none; }}')
         parts.append(f'.card[data-card-id="{card_id}"] .accent-line {{ display:none; }}')
         parts.append(f'.card[data-card-id="{card_id}"] .shimmer-mask {{ display:none; }}')
+        # Halves: clip-path starts hidden (set by GSAP), flex column layout
         parts.append(f'.card[data-card-id="{card_id}"] .spc-half {{')
-        parts.append('  flex:1; display:flex; align-items:center; justify-content:center;')
-        parts.append('  overflow:hidden;')
+        parts.append('  flex:1; display:flex; flex-direction:column;')
+        parts.append('  align-items:flex-start; justify-content:flex-end;')
+        parts.append('  overflow:hidden; position:relative;')
+        parts.append('  padding:0 44px 60px;')
         parts.append('}')
-        # Left: vibrant accent colour overlay on the live video (speaker shows through).
-        parts.append(f'.card[data-card-id="{card_id}"] .spc-left {{ background:{p["accent"]}66; }}')
-        # Right: dark semi-transparent overlay — creates contrast without hiding speaker.
-        parts.append(f'.card[data-card-id="{card_id}"] .spc-right {{ background:rgba(0,0,0,0.62); }}')
+        # Left: deep dark overlay — represents the "problem / before" state
+        parts.append(f'.card[data-card-id="{card_id}"] .spc-left {{ background:rgba(4,4,14,0.82); align-items:flex-start; }}')
+        # Right: saturated accent gradient — represents the "solution / after" state
+        parts.append(f'.card[data-card-id="{card_id}"] .spc-right {{ background:linear-gradient(150deg, {p["accent"]}99, {p["accent"]}E8); align-items:flex-end; }}')
+        # Top tag: small uppercase badge at the top of each half
+        parts.append(f'.card[data-card-id="{card_id}"] .spc-tag {{')
+        parts.append(f'  position:absolute; top:44px;')
+        parts.append(f'  font-family:{p["font"]}; font-size:13px;')
+        parts.append(f'  font-weight:700; letter-spacing:0.20em; text-transform:uppercase;')
+        parts.append(f'  color:{p["text"]}; opacity:0;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .spc-left .spc-tag {{ left:44px; }}')
+        parts.append(f'.card[data-card-id="{card_id}"] .spc-right .spc-tag {{ right:44px; }}')
+        # Accent bar under tag
+        parts.append(f'.card[data-card-id="{card_id}"] .spc-tag::before {{')
+        parts.append(f'  content:""; display:block; width:22px; height:2px;')
+        parts.append(f'  background:{p["accent"]}; border-radius:1px; margin-bottom:10px;')
+        parts.append('}')
+        # Main label: large bottom-anchored text
         parts.append(f'.card[data-card-id="{card_id}"] .spc-label {{')
-        parts.append(f'  font-family:{p["font"]}; font-size:46px;')
-        parts.append(f'  font-weight:900; color:{p["text"]}; text-align:center;')
-        parts.append('  padding:28px; line-height:1.15; opacity:0;')
-        parts.append('  text-transform:uppercase; letter-spacing:0.06em;')
-        parts.append('  text-shadow:0 2px 24px rgba(0,0,0,0.75);')
+        parts.append(f'  font-family:{p["font"]}; font-size:60px;')
+        parts.append(f'  font-weight:900; color:{p["text"]}; line-height:1.05;')
+        parts.append('  text-transform:uppercase; letter-spacing:0.04em;')
+        parts.append('  text-shadow:0 3px 20px rgba(0,0,0,0.6);')
+        parts.append('  opacity:0; text-align:left;')
         parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .spc-right .spc-label {{ text-align:right; }}')
+        # Divider: glowing 3px vertical bar at center
         parts.append(f'.card[data-card-id="{card_id}"] .spc-divider {{')
-        parts.append('  position:absolute; left:50%; top:0; bottom:0; width:2px;')
+        parts.append('  position:absolute; left:50%; top:0; bottom:0; width:3px;')
         parts.append(f'  background:{p["accent"]}; transform:translateX(-50%) scaleY(0);')
         parts.append('  transform-origin:top center; border-radius:999px;')
         if p.get("accent_line_glow"):
@@ -2754,9 +2774,11 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('}')
         if kicker:
             parts.append(f'.card[data-card-id="{card_id}"] .spc-kicker {{')
-            parts.append(f'  position:absolute; top:32px; left:50%; transform:translateX(-50%);')
-            parts.append(f'  font-family:{p["font"]}; font-size:{kicker_size_eff};')
-            parts.append(f'  font-weight:700; letter-spacing:0.15em; text-transform:uppercase;')
+            parts.append(f'  position:absolute; bottom:28px; left:50%; transform:translateX(-50%);')
+            parts.append(f'  font-family:{p["font"]}; font-size:11px;')
+            parts.append(f'  font-weight:700; letter-spacing:0.20em; text-transform:uppercase;')
+            parts.append(f'  padding:5px 16px; border-radius:999px;')
+            parts.append(f'  background:{p["accent"]}30; border:1px solid {p["accent"]}60;')
             parts.append(f'  color:{p["accent"]}; white-space:nowrap; opacity:0; z-index:10;')
             parts.append('}')
     elif content_style == "prim_journey_map":
@@ -4391,9 +4413,11 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         if kicker:
             parts.append(f'    <div class="spc-kicker" id="{card_id}-spc-kicker">{_esc(kicker)}</div>')
         parts.append(f'    <div class="spc-half spc-left" id="{card_id}-spc-left">')
+        parts.append(f'      <div class="spc-tag" id="{card_id}-spc-tag-l">avant</div>')
         parts.append(f'      <div class="spc-label" id="{card_id}-spc-label-l">{_spc_l}</div>')
         parts.append(f'    </div>')
         parts.append(f'    <div class="spc-half spc-right" id="{card_id}-spc-right">')
+        parts.append(f'      <div class="spc-tag" id="{card_id}-spc-tag-r">après</div>')
         parts.append(f'      <div class="spc-label" id="{card_id}-spc-label-r">{_spc_r}</div>')
         parts.append(f'    </div>')
         parts.append(f'    <div class="spc-divider" id="{card_id}-spc-divider"></div>')
@@ -7658,19 +7682,24 @@ def _build_timeline_js(
                 _spc_r_sel   = f'.card[data-card-id="{card_id}"] #{card_id}-spc-right'
                 _spc_ll_sel  = f'.card[data-card-id="{card_id}"] #{card_id}-spc-label-l'
                 _spc_rl_sel  = f'.card[data-card-id="{card_id}"] #{card_id}-spc-label-r'
+                _spc_tl_sel  = f'.card[data-card-id="{card_id}"] #{card_id}-spc-tag-l'
+                _spc_tr_sel  = f'.card[data-card-id="{card_id}"] #{card_id}-spc-tag-r'
                 _spc_div_sel = f'.card[data-card-id="{card_id}"] #{card_id}-spc-divider'
-                # Panels slide from opposite edges simultaneously
-                lines.append(f'  tl.fromTo(\'{_spc_l_sel}\', {{ xPercent: -100 }}, {{ xPercent: 0, duration: 0.480, ease: "power3.out" }}, {start:.4f});')
-                lines.append(f'  tl.fromTo(\'{_spc_r_sel}\', {{ xPercent: 100 }}, {{ xPercent: 0, duration: 0.480, ease: "power3.out" }}, {start:.4f});')
-                # Divider line grows down after panels land
-                lines.append(f'  tl.fromTo(\'{_spc_div_sel}\', {{ scaleY: 0 }}, {{ scaleY: 1, duration: 0.180, ease: "power2.inOut" }}, {start + 0.430:.4f});')
-                # Labels fade in after divider
-                lines.append(f'  tl.fromTo(\'{_spc_ll_sel}\', {{ opacity: 0, scale: 0.88 }}, {{ opacity: 1, scale: 1, duration: 0.260, ease: _eIn }}, {start + 0.530:.4f});')
-                lines.append(f'  tl.fromTo(\'{_spc_rl_sel}\', {{ opacity: 0, scale: 0.88 }}, {{ opacity: 1, scale: 1, duration: 0.260, ease: _eIn }}, {start + 0.580:.4f});')
+                # Panels clip-in from opposite edges (clip-path: inset() on each half)
+                lines.append(f'  tl.fromTo(\'{_spc_l_sel}\', {{ clipPath: "inset(0 100% 0 0)" }}, {{ clipPath: "inset(0 0% 0 0)", duration: 0.520, ease: "power3.out" }}, {start:.4f});')
+                lines.append(f'  tl.fromTo(\'{_spc_r_sel}\', {{ clipPath: "inset(0 0 0 100%)" }}, {{ clipPath: "inset(0 0 0 0%)", duration: 0.520, ease: "power3.out" }}, {start:.4f});')
+                # Divider grows down from top after panels land
+                lines.append(f'  tl.fromTo(\'{_spc_div_sel}\', {{ scaleY: 0 }}, {{ scaleY: 1, duration: 0.220, ease: "power2.inOut" }}, {start + 0.460:.4f});')
+                # Tags fade in (left tag, then right tag)
+                lines.append(f'  tl.fromTo(\'{_spc_tl_sel}\', {{ opacity: 0, y: 6 }}, {{ opacity: 0.70, y: 0, duration: 0.220, ease: _eIn }}, {start + 0.500:.4f});')
+                lines.append(f'  tl.fromTo(\'{_spc_tr_sel}\', {{ opacity: 0, y: 6 }}, {{ opacity: 0.70, y: 0, duration: 0.220, ease: _eIn }}, {start + 0.540:.4f});')
+                # Main labels rise from below
+                lines.append(f'  tl.fromTo(\'{_spc_ll_sel}\', {{ opacity: 0, y: 22 }}, {{ opacity: 1, y: 0, duration: 0.300, ease: _eIn }}, {start + 0.580:.4f});')
+                lines.append(f'  tl.fromTo(\'{_spc_rl_sel}\', {{ opacity: 0, y: 22 }}, {{ opacity: 1, y: 0, duration: 0.300, ease: _eIn }}, {start + 0.620:.4f});')
                 _spc_kicker_txt = card.get("contentHints", {}).get("kicker", "")
                 if _spc_kicker_txt:
                     _spc_k_sel = f'.card[data-card-id="{card_id}"] #{card_id}-spc-kicker'
-                    lines.append(f'  tl.fromTo(\'{_spc_k_sel}\', {{ opacity: 0, y: -8 }}, {{ opacity: 1, y: 0, duration: 0.200, ease: _eIn }}, {start + 0.600:.4f});')
+                    lines.append(f'  tl.fromTo(\'{_spc_k_sel}\', {{ opacity: 0, scale: 0.85 }}, {{ opacity: 1, scale: 1, duration: 0.220, ease: _eIn }}, {start + 0.650:.4f});')
             elif content_style == "prim_journey_map":
                 # ── prim_journey_map GSAP — bezier flight, pure JS onUpdate ──────
                 _jmt_hd_sel  = f'.card[data-card-id="{card_id}"] #{card_id}-jmt-header'
@@ -8054,6 +8083,12 @@ def _build_timeline_js(
                     f'  tl.to(\'.video-wrapper\', '
                     f'{{ clipPath: "{_sst_cp_exit}", duration: 0.12, ease: "power1.out" }}, '
                     f'{_sst_vid_t:.4f});'
+                )
+                # Step 3: reset x-pan so the video returns to center after SST exit.
+                # Without this, the translateX from the SST entry persists for the rest
+                # of the composition, making the speaker off-center on all subsequent shots.
+                lines.append(
+                    f'  tl.set(\'.video-wrapper video\', {{ x: \'0%\' }}, {_sst_vid_t + 0.12:.4f});'
                 )
                 lines.append(
                     f'  tl.to(\'.video-wrapper video\', '
@@ -8572,10 +8607,10 @@ def compose(
     _vert_origin_y_pct = 50.0
     if layout == "portrait" and abs(_face_cy - 50.0) > 5.0:
         if _face_cy >= 50.0:
-            _vert_scale = min(1.5, 0.5 / max(0.01, 1.0 - _face_cy / 100.0))
+            _vert_scale = min(2.0, 0.5 / max(0.01, 1.0 - _face_cy / 100.0))
             _vert_origin_y_pct = 100.0
         else:
-            _vert_scale = min(1.5, 0.5 / max(0.01, _face_cy / 100.0))
+            _vert_scale = min(2.0, 0.5 / max(0.01, _face_cy / 100.0))
             _vert_origin_y_pct = 0.0
         print(
             f"[COMPOSE] vertical-reframe: face_cy={_face_cy:.1f}%"
