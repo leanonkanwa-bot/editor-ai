@@ -2052,7 +2052,7 @@ Design graphic overlay cards for this video — up to {target_cards} maximum. Pl
     client = Anthropic()
     try:
         response = client.messages.create(
-            model=settings.anthropic_model,
+            model=settings.effective_model,
             max_tokens=_max_tok,
             system=system_prompt,
             messages=[{"role": "user", "content": user_msg}],
@@ -2455,7 +2455,7 @@ Return ONE JSON object — a card or {{}}, nothing else:
     client = Anthropic(api_key=settings.anthropic_api_key)
     try:
         response = client.messages.create(
-            model=settings.anthropic_model,
+            model=settings.effective_model,
             max_tokens=256,
             system=system_prompt,
             messages=[{"role": "user", "content": user_msg}],

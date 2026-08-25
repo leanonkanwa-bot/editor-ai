@@ -1779,7 +1779,7 @@ async def generate_hooks(payload: dict = Body(...)) -> dict:
         import anthropic as _ant
         client = _ant.Anthropic(api_key=settings.anthropic_api_key)
         resp = client.messages.create(
-            model=settings.anthropic_model,
+            model=settings.effective_model,
             max_tokens=1500,
             system=(
                 "You are a viral short-form content strategist. "
@@ -1886,7 +1886,7 @@ async def coach_chat(payload: dict = Body(...)) -> dict:
         import anthropic as _ant
         client = _ant.Anthropic(api_key=settings.anthropic_api_key)
         resp = client.messages.create(
-            model=settings.anthropic_model,
+            model=settings.effective_model,
             max_tokens=800,
             system=(
                 "Tu es un coach vidéo expert en short-form content (TikTok, Reels, Shorts). "
@@ -1925,7 +1925,7 @@ async def analyze_competitor(payload: dict = Body(...)) -> dict:
         import anthropic as _ant
         client = _ant.Anthropic(api_key=settings.anthropic_api_key)
         resp = client.messages.create(
-            model=settings.anthropic_model,
+            model=settings.effective_model,
             max_tokens=1000,
             system=(
                 "Tu es un expert en analyse de contenu viral (TikTok, YouTube Shorts, Reels). "
@@ -2202,7 +2202,7 @@ Respond ONLY with valid JSON in this exact format:
 {{"youtube": "...", "tiktok": "...", "instagram": "...", "linkedin": "..."}}"""
 
     msg = client.messages.create(
-        model=settings.anthropic_model,
+        model=settings.effective_model,
         max_tokens=2000,
         messages=[{"role": "user", "content": prompt}],
     )

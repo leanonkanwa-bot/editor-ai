@@ -15,6 +15,10 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-opus-4-7"
+    # Test-only model override. Set ANTHROPIC_MODEL_TEST=claude-haiku-4-5 in Railway
+    # to cut LLM costs during debugging. Leave empty in production — NEVER set this
+    # in Railway production variables. Every render will log a loud warning when active.
+    anthropic_model_test: str = ""
     # tiny ≈ 390 MB RAM, base ≈ 1 GB. Default to tiny so the app fits on
     # small Railway / Render dynos. Set WHISPER_MODEL=base|small|medium|large
     # in your env to trade RAM for accuracy.
@@ -121,6 +125,20 @@ class Settings(BaseSettings):
     # secret) -- set a dedicated SESSION_SECRET on Railway for stronger
     # isolation if desired, but it isn't required to get started.
     session_secret: str = ""
+
+    @property
+    def effective_model(self) -> str:
+        """The LLM model to use for all Anthropic API calls.
+        Returns anthropic_model_test when set (test mode), otherwise anthropic_model.
+        Never call client.messages.create(model=settings.anthropic_model) directly —
+        always use settings.effective_model so this guard applies automatically.
+        """
+        return self.anthropic_model_test if self.anthropic_model_test else self.anthropic_model
+
+    @property
+    def is_test_model(self) -> bool:
+        """True when ANTHROPIC_MODEL_TEST is set — use to emit warnings in render jobs."""
+        return bool(self.anthropic_model_test)
 
     @property
     def _data_root(self) -> Path:

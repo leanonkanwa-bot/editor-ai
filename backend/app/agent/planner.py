@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +17,8 @@ from anthropic import Anthropic
 
 from app.agent.rules import system_prompt
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 FormatHint = Literal["short", "long", "auto"]
@@ -208,7 +211,7 @@ def analyze_subject_position(src: Path) -> dict[str, float]:
     try:
         frame_b64 = base64.standard_b64encode(frame).decode()
         resp = _client().messages.create(
-            model=settings.anthropic_model,
+            model=settings.effective_model,
             max_tokens=256,
             messages=[{
                 "role": "user",
@@ -317,6 +320,22 @@ def plan_edit(
     Ask Claude to produce an edit plan for the given transcript.
     Returns an EditPlan with the raw JSON the model emitted.
     """
+    if settings.is_test_model:
+        logger.warning(
+            "⚠️  TEST MODEL ACTIVE — using %s instead of %s. "
+            "DO NOT deliver this render to a real client. "
+            "Unset ANTHROPIC_MODEL_TEST in Railway to restore production quality.",
+            settings.effective_model,
+            settings.anthropic_model,
+        )
+        print(
+            f"\n{'='*70}\n"
+            f"⚠️  TEST MODEL ACTIVE: {settings.effective_model}\n"
+            f"    Production model: {settings.anthropic_model}\n"
+            f"    Unset ANTHROPIC_MODEL_TEST to restore production quality.\n"
+            f"{'='*70}\n"
+        )
+
     duration = float(transcript.get("duration", 0.0))
     fmt = _decide_format(duration, format_hint)
 
@@ -742,7 +761,7 @@ def plan_edit(
         else:
             msg_text = base_text
         resp = _client().messages.create(
-            model=settings.anthropic_model,
+            model=settings.effective_model,
             max_tokens=16000,
             system=sys_prompt,
             messages=[{"role": "user", "content": [{"type": "text", "text": msg_text}]}],
@@ -817,7 +836,7 @@ def rewrite_hook(
     """
     try:
         resp = _client().messages.create(
-            model=settings.anthropic_model,
+            model=settings.effective_model,
             max_tokens=256,
             messages=[{
                 "role": "user",

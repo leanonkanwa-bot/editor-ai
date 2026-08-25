@@ -466,7 +466,7 @@ def generate_metadata(
 
     try:
         resp = client.messages.create(
-            model=settings.anthropic_model,
+            model=settings.effective_model,
             max_tokens=512,
             messages=[{"role": "user", "content": prompt}],
         )
