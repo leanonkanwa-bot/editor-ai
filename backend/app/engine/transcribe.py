@@ -207,34 +207,41 @@ _GROQ_LANG_MAP: dict[str, str] = {
 _GROQ_WAV_MAX_BYTES = 24 * 1024 * 1024  # 24 MB — 1 MB safety margin
 
 
-def _parse_groq_response(response: Any) -> "Transcript":
-    """Map a Groq verbose_json transcription response to our Transcript dataclass."""
-    lang_raw = (getattr(response, "language", "") or "").lower().strip()
+def _parse_groq_dict(data: dict) -> "Transcript":
+    """Parse a Groq verbose_json response dict into our Transcript dataclass.
+
+    Works on the raw JSON dict (not the groq library object) so no attribute
+    mapping issues can silently drop word timestamps.
+    """
+    lang_raw = (data.get("language") or "").lower().strip()
     language = _GROQ_LANG_MAP.get(lang_raw, lang_raw[:2] if len(lang_raw) >= 2 else "fr")
+    duration = float(data.get("duration") or 0)
+    full_text = (data.get("text") or "").strip()
 
-    duration = float(getattr(response, "duration", 0) or 0)
-    full_text = (getattr(response, "text", "") or "").strip()
+    raw_words: list[dict] = list(data.get("words") or [])
+    raw_segs: list[dict] = list(data.get("segments") or [])
 
-    raw_words: list[Any] = list(getattr(response, "words", None) or [])
-    raw_segs: list[Any] = list(getattr(response, "segments", None) or [])
+    print(
+        f"[GROQ] API returned: {len(raw_segs)} segments, {len(raw_words)} words"
+        f" (lang={lang_raw!r} dur={duration:.1f}s)",
+        flush=True,
+    )
 
     _MIN_DUR = 0.010
     segments: list[Segment] = []
     word_idx = 0
 
     for i, seg in enumerate(raw_segs):
-        seg_start = float(getattr(seg, "start", 0))
-        seg_end = float(getattr(seg, "end", seg_start))
-        seg_text = (getattr(seg, "text", "") or "").strip()
+        seg_start = float(seg.get("start") or 0)
+        seg_end = float(seg.get("end") or seg_start)
+        seg_text = (seg.get("text") or "").strip()
         seg_words: list[Word] = []
 
         while word_idx < len(raw_words):
             w = raw_words[word_idx]
-            w_start = float(getattr(w, "start", 0))
-            w_end = float(getattr(w, "end", w_start))
-            w_text = (getattr(w, "word", "") or "").strip()
-            # Stop collecting for this segment when we reach the next segment's start,
-            # unless this is the last segment (then collect all remaining words).
+            w_start = float(w.get("start") or 0)
+            w_end = float(w.get("end") or w_start)
+            w_text = (w.get("word") or "").strip()
             if w_start >= seg_end and i < len(raw_segs) - 1:
                 break
             word_idx += 1
@@ -244,12 +251,11 @@ def _parse_groq_response(response: Any) -> "Transcript":
 
         segments.append(Segment(start=seg_start, end=seg_end, text=seg_text, words=seg_words))
 
-    # Assign any trailing words (float precision edge cases) to the last segment.
     if word_idx < len(raw_words) and segments:
         for w in raw_words[word_idx:]:
-            w_start = float(getattr(w, "start", 0))
-            w_end = float(getattr(w, "end", w_start))
-            w_text = (getattr(w, "word", "") or "").strip()
+            w_start = float(w.get("start") or 0)
+            w_end = float(w.get("end") or w_start)
+            w_text = (w.get("word") or "").strip()
             if w_text and (w_end - w_start) >= _MIN_DUR:
                 segments[-1].words.append(Word(text=w_text, start=w_start, end=w_end))
 
@@ -268,12 +274,13 @@ def _parse_groq_response(response: Any) -> "Transcript":
 def _transcribe_groq(wav_path: Path) -> "Transcript | None":
     """Attempt Groq Whisper transcription. Returns None to trigger local fallback.
 
-    Never raises — all errors are caught and logged.  The caller falls back to
-    local faster-whisper transparently so the pipeline never breaks on API issues.
+    Uses requests directly (bypasses groq library) so timestamp_granularities[]
+    is sent as correct multipart form-data arrays and the response is parsed
+    from raw JSON — no attribute-mapping issues.
     """
     api_key = os.getenv("GROQ_API_KEY", "").strip()
     if not api_key:
-        return None  # not configured — silent skip
+        return None
 
     _t0 = time.perf_counter()
     _compressed: Path | None = None
@@ -302,32 +309,52 @@ def _transcribe_groq(wav_path: Path) -> "Transcript | None":
             audio_path = _compressed
 
         model_name = os.getenv("GROQ_WHISPER_MODEL", "whisper-large-v3").strip()
-        prompt: str | None = None
+        mime = "audio/ogg" if audio_path.suffix == ".ogg" else "audio/wav"
+        prompt = None
         if _VERBATIM_ASR:
             prompt = (
                 "Euh, bah, ben, hein, ouais, hm, enfin voilà. "
                 "Je je pense, il il faut, parce que parce que, c'est c'est."
             )
 
-        from groq import Groq  # noqa: PLC0415 — lazy import (not installed locally)
-        client = Groq(api_key=api_key)
+        import requests as _req  # noqa: PLC0415 — lazy; already in requirements
 
         with open(audio_path, "rb") as _f:
-            response = client.audio.transcriptions.create(
-                file=(audio_path.name, _f),
-                model=model_name,
-                response_format="verbose_json",
-                timestamp_granularities=["word", "segment"],
-                prompt=prompt,
+            # Multipart form-data: repeated timestamp_granularities[] keys for array values.
+            # This is the correct wire format for the Groq/OpenAI audio API — the groq
+            # Python library silently dropped this parameter in <=0.13, causing 0 words.
+            _fields = [
+                ("model",                      (None, model_name)),
+                ("response_format",            (None, "verbose_json")),
+                ("timestamp_granularities[]",  (None, "word")),
+                ("timestamp_granularities[]",  (None, "segment")),
+                ("file",                       (audio_path.name, _f, mime)),
+            ]
+            if prompt:
+                _fields.append(("prompt", (None, prompt)))
+
+            resp = _req.post(
+                "https://api.groq.com/openai/v1/audio/transcriptions",
+                headers={"Authorization": f"Bearer {api_key}"},
+                files=_fields,
+                timeout=300,
             )
 
+        if resp.status_code != 200:
+            print(
+                f"[GROQ] HTTP {resp.status_code} — falling back to local Whisper:"
+                f" {resp.text[:300]}",
+                flush=True,
+            )
+            return None
+
         _elapsed = time.perf_counter() - _t0
+        data: dict = resp.json()
         print(
-            f"[GROQ] Transcription done in {_elapsed:.1f}s"
-            f" (model={model_name} lang={getattr(response, 'language', '?')})",
+            f"[GROQ] HTTP 200 in {_elapsed:.1f}s (model={model_name})",
             flush=True,
         )
-        return _parse_groq_response(response)
+        return _parse_groq_dict(data)
 
     except Exception as exc:
         print(
