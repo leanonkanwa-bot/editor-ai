@@ -678,9 +678,11 @@ def _plan_edit_chunked(
                 f"{max((s['end'] for s in keep_abs), default=0):.0f}s)",
                 flush=True,
             )
-        except Exception as exc:
+        except BaseException as exc:
+            # BaseException (not just Exception) catches SIGTERM-triggered SystemExit
+            # so a Railway deployment mid-render doesn't silently drop a chunk.
             print(
-                f"[CHUNK-PLAN] chunk {chunk_idx+1} FAILED: {exc}"
+                f"[CHUNK-PLAN] chunk {chunk_idx+1} FAILED ({type(exc).__name__}): {exc}"
                 f" — fallback: keep all {len(chunk_segs_abs)} segs in this window",
                 flush=True,
             )
@@ -690,6 +692,8 @@ def _plan_edit_chunked(
             ]
             chunk_plans_abs.append({"keep_segments": fallback_abs})
             prev_keep_abs.extend(fallback_abs)
+            if isinstance(exc, (SystemExit, KeyboardInterrupt)):
+                raise  # re-raise so the process can actually shut down
 
     if not chunk_plans_abs:
         print("[CHUNK-PLAN] all chunks failed — falling back to single-pass plan_edit", flush=True)

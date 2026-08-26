@@ -2393,18 +2393,16 @@ def _render_hyperframes(
     else:
         print("[HF] subject_side=None (no face data — full rotation active)", flush=True)
 
-    # In passthrough mode (CUT_FILLERS=false or DISABLE_CUTS=true), pretrim rendered
-    # the full source video but plan.keep_segments only covers what the LLM would have
-    # kept (~96%). Override to a single full-coverage segment so the storyboard places
-    # cards across 100% of the rendered content, not just the LLM-approved portion.
     _keep_segs = plan.keep_segments or []
     _prosodic_segs = _keep_segs  # preserve original planner segments for prosodic scoring
     if timing_map.compressed_intervals is None:
-        _n_before = len(_keep_segs)
-        _keep_segs = [{"start": 0.0, "end": timing_map.output_duration, "beat": "", "score": 0}]
+        # Passthrough mode: source timestamps == output timestamps (identity mapping).
+        # Keep the LLM segments as-is — they carry beats/scores needed for card placement.
+        # Former override to a flat single segment stripped all narrative structure and
+        # caused zero cards across the second half of long videos.
         print(
-            f"[STORYBOARD] passthrough: keep_segments expanded to 100%"
-            f" ({timing_map.output_duration:.1f}s) — was {_n_before} LLM segments",
+            f"[STORYBOARD] passthrough: keeping {len(_keep_segs)} LLM segments"
+            f" (source=output, no remap needed)",
             flush=True,
         )
 
