@@ -1004,7 +1004,7 @@ function showCancelingBanner(profile) {
 }
 
 
-const CHUNK_SIZE = 200 * 1024 * 1024; // 200 MB
+const CHUNK_SIZE = 20 * 1024 * 1024; // 20 MB
 
 // ── Drop zone ─────────────────────────────────────────────────────────────────
 const VALID_EXTS = ["mp4", "mov", "mkv"];
@@ -1147,8 +1147,22 @@ async function chunkedUpload(file) {
     const sentMb = Math.min((i * CHUNK_SIZE) / (1024 * 1024), file.size / (1024 * 1024)).toFixed(0);
     const uiPct = Math.round(((i + 1) / totalChunks) * 25);
     setStatus("queued", `Upload ${sentMb} / ${totalMb} Mo (chunk ${i + 1}/${totalChunks})…`, uiPct);
-    const res = await apiFetch(`/api/upload/chunk/${upload_id}/${i}`, { method: "PUT", body: chunk });
-    if (!res.ok) throw new Error(`Chunk ${i} failed: ${res.status}`);
+    // Retry up to 3 times with exponential backoff for transient network errors (499, 502, 503, 504).
+    let lastErr;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+      let res;
+      try {
+        res = await apiFetch(`/api/upload/chunk/${upload_id}/${i}`, { method: "PUT", body: chunk });
+      } catch (fetchErr) {
+        lastErr = fetchErr; continue;
+      }
+      if (res.ok) { lastErr = null; break; }
+      const retryable = [499, 502, 503, 504].includes(res.status);
+      lastErr = new Error(`Chunk ${i} failed: ${res.status}`);
+      if (!retryable) throw lastErr;
+    }
+    if (lastErr) throw lastErr;
   }
 
   setStatus("queued", "Assemblage du fichier sur le serveur…", 26);

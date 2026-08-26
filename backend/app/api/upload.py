@@ -20,6 +20,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
+from starlette.requests import ClientDisconnect
 
 from app.core.config import settings
 
@@ -66,14 +67,21 @@ async def upload_chunk(
 
     chunk_path = d / f"chunk_{chunk_index:08d}"
     received = 0
-    with chunk_path.open("wb") as fh:
-        async for piece in request.stream():
-            received += len(piece)
-            if received > _MAX_CHUNK_BYTES:
-                fh.close()
-                chunk_path.unlink(missing_ok=True)
-                raise HTTPException(413, f"Chunk too large (max {_MAX_CHUNK_BYTES // (1024*1024)} MB).")
-            fh.write(piece)
+    try:
+        with chunk_path.open("wb") as fh:
+            async for piece in request.stream():
+                received += len(piece)
+                if received > _MAX_CHUNK_BYTES:
+                    fh.close()
+                    chunk_path.unlink(missing_ok=True)
+                    raise HTTPException(413, f"Chunk too large (max {_MAX_CHUNK_BYTES // (1024*1024)} MB).")
+                fh.write(piece)
+    except ClientDisconnect:
+        # Client dropped the connection mid-upload — delete the partial chunk
+        # so a retry sends a clean file. Return 499 so the frontend knows it
+        # can retry this specific chunk without restarting the whole upload.
+        chunk_path.unlink(missing_ok=True)
+        return JSONResponse({"error": "client_disconnect", "chunk_index": chunk_index}, status_code=499)
 
     return JSONResponse({"chunk_index": chunk_index, "received": received})
 
