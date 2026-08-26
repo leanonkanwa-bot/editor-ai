@@ -2067,6 +2067,39 @@ the highest emphasis_score / prosodic_peak:true. The prosodic signal confirms th
 speaker's physical emphasis — it does NOT replace linguistic requirements. Never
 assign a climax card based on prosodic_peak alone if the linguistic conditions fail."""
 
+    # Compute dead zones — spans >60s where all beat_summary entries have score=0.
+    # Injected into the prompt to force the LLM to cover the full video.
+    _dz_sorted = sorted(beat_summary, key=lambda b: b.get("outStart", 0))
+    _dead_zones: list[str] = []
+    _dz_start: float | None = None
+    _dz_prev_end: float = 0.0
+    for _b in _dz_sorted:
+        _b_s = float(_b.get("outStart", 0))
+        _b_e = float(_b.get("outEnd", 0))
+        _b_score = int(_b.get("score", 0))
+        if _b_score == 0:
+            if _dz_start is None:
+                _dz_start = max(_dz_prev_end, _b_s)
+        else:
+            if _dz_start is not None and _b_s - _dz_start >= 60:
+                _dead_zones.append(
+                    f"  t={_dz_start:.0f}s–{_b_s:.0f}s ({(_b_s - _dz_start)/60:.1f}min, no high-score segments)"
+                )
+            _dz_start = None
+        _dz_prev_end = _b_e
+    if _dz_start is not None and trimmed_duration - _dz_start >= 60:
+        _dead_zones.append(
+            f"  t={_dz_start:.0f}s–{trimmed_duration:.0f}s ({(trimmed_duration - _dz_start)/60:.1f}min, no high-score segments)"
+        )
+    _dead_zone_block = (
+        "\n\nCOVERAGE GAPS (spans with no scored anchor — MUST place cards here):\n"
+        + "\n".join(_dead_zones)
+        + "\nFor each gap above: use callout, quote, cause_effect, contrarian_take, or question."
+        " Low-score segments still contain watchable content that benefits from visual reinforcement."
+        " 'score=0' means 'not specifically annotated', not 'skip'."
+        " Any gap longer than 60s with zero cards is a failure mode — see DEAD ZONE RULE above."
+    ) if _dead_zones else ""
+
     user_msg = f"""VIDEO DURATION: {trimmed_duration:.1f}s
 
 BEAT SPINE (the narrative structure):
@@ -2076,9 +2109,9 @@ SEGMENT DETAILS (scores, reasons, retention notes):
 {json.dumps(beat_summary, indent=2)}
 
 KEY LINES (most memorable moments):
-{json.dumps(key_lines)}
+{json.dumps(key_lines)}{_dead_zone_block}
 
-Design graphic overlay cards for this video — up to {target_cards} maximum. Place a card only at moments that genuinely earn one: a key claim, a surprising stat, a narrative turning point, or a concept the viewer needs to see to understand. Skip the moment if no card adds value. Quality and narrative relevance always take priority over reaching the card count ceiling."""
+Design graphic overlay cards for this video — target {target_cards} cards for {trimmed_duration:.0f}s of content. Aim for 70-90% of this budget. Under-coverage across a long video is its own quality failure — a viewer watching 10+ minutes without visual reinforcement loses engagement. The budget ceiling is a cap, not a reason to stop early. Place a card whenever the speaker teaches, reveals, contrasts, or drives home a point worth remembering, even on narrative or elaborative passages where no explicit structure is present."""
 
     # Scale max_tokens with target_cards so long-video responses are never truncated.
     # ~250 tokens/card average: simple cards ~100t, complex (list/comparison) ~400t, mean ~250.

@@ -690,7 +690,24 @@ def _plan_edit_chunked(
                 {"start": seg["start"], "end": seg["end"], "beat": "story", "score": 0}
                 for seg in chunk_segs_abs
             ]
-            chunk_plans_abs.append({"keep_segments": fallback_abs})
+            # Build a minimal script_structure so the storyboard LLM has BEAT SPINE
+            # coverage for this chunk's time range (otherwise script_out in the
+            # storyboard prompt is blank for this zone → LLM skips it entirely).
+            _fb_ss: list[dict] = []
+            _fb_g_start = chunk_segs_abs[0]["start"] if chunk_segs_abs else chunk_start
+            _fb_g_lines: list[str] = []
+            for _fb_seg in chunk_segs_abs:
+                _fb_g_lines.append(str(_fb_seg.get("text", "")).strip())
+                if float(_fb_seg["end"]) - _fb_g_start >= 60.0 or _fb_seg is chunk_segs_abs[-1]:
+                    _fb_ss.append({
+                        "beat": "story",
+                        "lines": [" ".join(_fb_g_lines).strip()],
+                        "start": _fb_g_start,
+                        "end": float(_fb_seg["end"]),
+                    })
+                    _fb_g_start = float(_fb_seg["end"])
+                    _fb_g_lines = []
+            chunk_plans_abs.append({"keep_segments": fallback_abs, "script_structure": _fb_ss})
             prev_keep_abs.extend(fallback_abs)
             if isinstance(exc, (SystemExit, KeyboardInterrupt)):
                 raise  # re-raise so the process can actually shut down
