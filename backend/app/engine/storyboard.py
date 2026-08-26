@@ -2574,21 +2574,23 @@ def _inject_rhythm_split_stage(
     subject_side: str | None,
     layout: str,
     transcript_segments: list[dict] | None = None,
-    rhythm_s: float = 12.0,
+    void_min_s: float = 25.0,
+    r2_buffer_s: float = 8.0,
+    internal_min_s: float = 20.0,
     min_words: int = 4,
     card_dur: float = 7.0,
     exclusion_pad: float = 0.5,
-    **_deprecated,  # absorbs old threshold_s / min_gap_s kwargs
+    **_deprecated,  # absorbs rhythm_s / threshold_s / min_gap_s legacy kwargs
 ) -> list[dict]:
-    """Inject prim_split_stage(mode=caption) on a 9s grid, skipping slots covered by a rich card.
+    """Inject prim_split_stage(mode=caption) into true voids — 3-role visual rhythm.
 
-    Walk the timeline every rhythm_s seconds. At each slot check whether it overlaps
-    any existing graphic card (with exclusion_pad buffer). If not → inject a caption
-    card with word-by-word sync. Works for both portrait and landscape layouts.
+    R1 = speaker alone (a-roll breath — no overlay)
+    R2 = narrative LLM cards (rich cards from storyboard pass)
+    R3 = caption split (this function) — fires ONLY when no R2 for > void_min_s
 
-    Rhythm design: card_dur=5s + gap=(rhythm_s - card_dur)=4s gives a visible a-roll
-    breath between SST appearances. Grid starts 3.5s after first word so the video
-    opens with a-roll before the first split.
+    Algorithm: expand R2 card windows by r2_buffer_s on each side, merge overlaps,
+    find uncovered void zones >= void_min_s, place candidates every internal_min_s
+    within each void. Works for both portrait and landscape layouts.
     """
 
     _side = "left" if subject_side == "left" else "right"
@@ -2618,7 +2620,53 @@ def _inject_rhythm_split_stage(
                 if _lw.text.rstrip()[-1:] not in _PUNCT_CHARS:
                     _seg_punct_map[_lw.start] = _trail
 
-    # Build exclusion intervals: graphic card windows + padding
+    # ── Void detection: R3 fires only when no R2 card for > void_min_s ──────────
+    _first_word_t = remapped_words[0].start if remapped_words else 0.0
+    _tl_start = max(0.5, _first_word_t + 2.0)  # a-roll open before first R3
+
+    # Expand R2 card windows by r2_buffer_s on each side, then merge
+    _cov_raw: list[tuple[float, float]] = sorted(
+        (
+            max(0.0, float(c.get("startSec", 0)) - r2_buffer_s),
+            float(c.get("endSec", 0)) + r2_buffer_s,
+        )
+        for c in graphic_cards
+    )
+    _coverage: list[tuple[float, float]] = []
+    for _cs, _ce in _cov_raw:
+        if _coverage and _cs <= _coverage[-1][1]:
+            _coverage[-1] = (_coverage[-1][0], max(_coverage[-1][1], _ce))
+        else:
+            _coverage.append((_cs, _ce))
+
+    # Void zones = uncovered gaps; only those >= void_min_s are eligible for R3
+    _void_bounds: list[tuple[float, float]] = []
+    _prev_end = _tl_start
+    for _cs, _ce in _coverage:
+        if _cs > _prev_end:
+            _void_bounds.append((_prev_end, _cs))
+        _prev_end = max(_prev_end, _ce)
+    if _prev_end < trimmed_duration - 0.3:
+        _void_bounds.append((_prev_end, trimmed_duration - 0.3))
+
+    # Candidate positions: first at void_start + internal_min_s/2, then every internal_min_s
+    _candidates: list[float] = []
+    for _vs, _ve in _void_bounds:
+        if _ve - _vs < void_min_s:
+            continue
+        _pos = round(_vs + internal_min_s * 0.5, 3)
+        while _pos + card_dur <= _ve:
+            _candidates.append(_pos)
+            _pos = round(_pos + internal_min_s, 3)
+
+    _n_eligible = sum(1 for _vs, _ve in _void_bounds if _ve - _vs >= void_min_s)
+    print(
+        f"[RHYTHM-SPLIT] voids: {_n_eligible}/{len(_void_bounds)} >= {void_min_s}s"
+        f" — {len(_candidates)} candidate(s)",
+        flush=True,
+    )
+
+    # Self-exclusion: prevents newly injected R3 cards from overlapping each other
     exclusion: list[tuple[float, float]] = [
         (float(c.get("startSec", 0)) - exclusion_pad,
          float(c.get("endSec", 0)) + exclusion_pad)
@@ -2628,15 +2676,11 @@ def _inject_rhythm_split_stage(
     def _overlaps(ws: float, we: float) -> bool:
         return any(es < we and ee > ws for es, ee in exclusion)
 
-    # Start grid 3.5s after first word — gives ~3-4s a-roll before the first SST.
-    _first_word_t = remapped_words[0].start if remapped_words else 0.0
-    grid_origin = max(0.5, _first_word_t + 3.5)
-
     new_cards: list[dict] = []
-    cursor = grid_origin
     _slot = 0
+    _win = 12.0  # window for adaptive start/end bounds within each candidate slot
 
-    while cursor + card_dur <= trimmed_duration - 0.3:
+    for cursor in _candidates:
         card_start = round(cursor, 3)
         card_end   = round(min(card_start + card_dur, trimmed_duration - 0.3), 3)
 
@@ -2710,13 +2754,13 @@ def _inject_rhythm_split_stage(
                     _first_w_t = float(caption_words[0]["start"])
                     if _first_w_t > cursor + 1.40:
                         _ideal_start = round(_first_w_t - 0.80, 3)
-                        _max_start = round(cursor + rhythm_s - 4.50, 3)
+                        _max_start = round(cursor + _win - 4.50, 3)
                         card_start = max(cursor, min(_ideal_start, _max_start))
                     _adaptive_end = float(caption_words[-1]["end"]) + 0.80
                     card_end = round(
                         min(
                             max(_adaptive_end, card_start + 5.5),
-                            cursor + rhythm_s - 0.50,
+                            cursor + _win - 0.50,
                             trimmed_duration - 0.3,
                         ),
                         3,
@@ -2742,8 +2786,6 @@ def _inject_rhythm_split_stage(
                     },
                 })
                 # Mark this slot as occupied so it doesn't self-conflict.
-                # No right padding — SST cards are grid-aligned, right pad would push
-                # boundary past cursor + rhythm_s and block every other slot.
                 exclusion.append((card_start - exclusion_pad, card_end))
                 # ── SST-TIMING — permanent diagnostic for prim_split_stage ──────────
                 # empty_gap: seconds panel is visible but empty (first_word - panel_ready).
@@ -2784,7 +2826,6 @@ def _inject_rhythm_split_stage(
                         flush=True,
                     )
 
-        cursor = round(cursor + rhythm_s, 3)
 
     return new_cards
 
