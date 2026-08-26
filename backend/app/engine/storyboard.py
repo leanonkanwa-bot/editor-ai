@@ -3087,7 +3087,7 @@ def generate_storyboard(
     # has moved to the next topic. Logic: find the speech segment that contains startSec;
     # if endSec extends past that segment's end by more than 0.5s, clamp it there.
     # Never shortens below startSec + 1.5s so the card remains readable.
-    _MIN_CARD_DISPLAY_S = 1.5
+    _MIN_CARD_DISPLAY_S = 3.0  # raised from 1.5: floor must exceed DUR-EXT's 2.5s minimum
     for _gc in graphic_cards:
         _gs = float(_gc.get("startSec", 0))
         _ge = float(_gc.get("endSec", 0))
