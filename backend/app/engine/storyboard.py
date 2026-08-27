@@ -2522,7 +2522,12 @@ def _gap_fill_call(
 
     lang_label = "French" if language.startswith("fr") else ("English" if language.startswith("en") else language)
 
-    system_prompt = f"""You are a video card classifier. A specific passage from a coaching/entrepreneur video has NO graphic overlay card despite having substantive spoken content. Your task: find THE SINGLE BEST card moment in this passage — the moment with the highest insight density.
+    system_prompt = f"""You are a video card classifier. A specific passage from a video has NO graphic overlay card despite having substantive spoken content. Your task: find THE SINGLE BEST card moment in this passage — the moment with the highest insight density.
+
+CONTENT TYPE NOTE: This passage may come from structured coaching, a stream, a podcast, a Q&A,
+or any informal conversational format. Conversational and informal content deserves the same
+card density as structured teaching — a well-phrased thought in a stream is just as valid as a
+formal teaching moment. Do NOT penalise content for lacking explicit structure markers.
 
 AVAILABLE TYPES (narrative-focused, no special structural signal required):
 - "callout"         : conceptual anchor — the one idea the viewer must grasp to follow the next 30s
@@ -2540,8 +2545,10 @@ STRICT RULES:
 4. title: in {lang_label}, extracted from what the speaker actually says — no invention
 5. kicker: optional short UPPERCASE label (e.g. "L'INSIGHT CLÉ", "RETENIR ÇA")
 
-ABSTAIN RULE: If no moment in this passage genuinely earns a card (content too thin,
-purely transitional, no extractable insight), return exactly: {{}}
+ABSTAIN RULE: Abstain (return {{}}) ONLY if this passage contains ZERO extractable content —
+pure filler words ("um", "so basically", "you know"), greetings, or fewer than 3 words of real
+speech. Any passage with substantive elaboration, even informal or conversational, warrants a
+card — treat it as a quota to fill, not a test to pass.
 
 Return ONE JSON object — a card or {{}}, nothing else:
 {{"startSec": X, "endSec": Y, "contentHints": {{"style": "...", "title": "...", "kicker": "...", "anchor_word": "..."}}}}"""
@@ -2549,7 +2556,8 @@ Return ONE JSON object — a card or {{}}, nothing else:
     user_msg = (
         f"PASSAGE [{gap_start:.1f}s–{gap_end:.1f}s | {gap_dur:.0f}s | {n_words} words]:\n"
         f"{passage_text}\n\n"
-        f"Find the single best card moment in this passage, or return {{}} if none earns a card."
+        f"Find the single best card moment in this passage."
+        f" Abstain (return {{}}) ONLY if the passage is pure filler with zero extractable content."
     )
 
     client = Anthropic(api_key=settings.anthropic_api_key)
