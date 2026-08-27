@@ -563,7 +563,7 @@ def _generate_graphic_cards(
     timing_map: TimingMap,
     language: str = "en",
     subject_side: str | None = None,
-) -> list[dict]:
+) -> tuple[list[dict], list[dict]]:
     """Generate graphic overlay cards via Claude API call.
 
     Uses the narrative context (beat spine, key lines, retention notes)
@@ -2273,10 +2273,10 @@ Design graphic overlay cards for this video — target {target_cards} cards for 
                         flush=True,
                     )
         print(f"[STORYBOARD] Generated {len(cards)} graphic cards", flush=True)
-        return cards
+        return cards, beat_summary
     except Exception as e:
         print(f"[STORYBOARD] Claude API error: {e}", flush=True)
-        return []
+        return [], beat_summary
 
 
 def _tokenize_text(text: str) -> frozenset[str]:
@@ -2599,6 +2599,64 @@ def _join_sst_words(words: list[dict]) -> str:
     return "".join(parts)
 
 
+def _void_tolerance(
+    void_start: float,
+    void_end: float,
+    beat_summary: list[dict],
+    placed_cards: list[dict],
+    base: float = 25.0,
+) -> float:
+    """Compute dynamic void tolerance — replaces fixed void_min_s threshold.
+
+    tolerance = base × tension_mult × density_mult
+
+    tension_mult: score of segments adjacent to the void boundary (within 30s).
+      High-score segments (hook/revelation) mean the narrative carries attention →
+      tolerate a longer void.  Low-score (transition/flat) → need stimulus sooner.
+
+    density_mult: number of rich cards placed in the 90s window before the void.
+      Recent visual activity → audience can breathe → tolerate longer.
+      Visual desert → lower threshold, inject sooner.
+
+    CALIBRATION NOTE: multiplier values below are initial estimates.
+    Adjust after watching real test renders — they are NOT tuned constants yet.
+    """
+    # --- Signal 1: narrative tension (beat_summary score adjacent to void) ---
+    _adj_score = 0
+    for _b in beat_summary:
+        _bs = float(_b.get("outStart", 0))
+        _be = float(_b.get("outEnd", 0))
+        _sc = int(_b.get("score", 0))
+        # "adjacent" = ends within 30s before void_start, or starts within 30s after void_end
+        _near_before = (_be <= void_start) and (_be >= void_start - 30.0)
+        _near_after  = (_bs >= void_end)   and (_bs <= void_end + 30.0)
+        if _near_before or _near_after:
+            _adj_score = max(_adj_score, _sc)
+
+    if _adj_score >= 7:
+        _tension_mult = 1.6   # TO CALIBRATE: hook/revelation — narrative itself holds attention
+    elif _adj_score >= 4:
+        _tension_mult = 1.0   # neutral: standard threshold
+    else:
+        _tension_mult = 0.6   # TO CALIBRATE: transition/flat — visual stimulus needed sooner
+
+    # --- Signal 2: recent visual density (cards in 90s window before void_start) ---
+    _density_window_s = 90.0
+    _recent_cards = sum(
+        1 for c in placed_cards
+        if void_start - _density_window_s <= float(c.get("startSec", 0)) <= void_start
+    )
+
+    if _recent_cards >= 3:
+        _density_mult = 1.5   # TO CALIBRATE: audience recently active — let it breathe
+    elif _recent_cards >= 1:
+        _density_mult = 1.0   # neutral
+    else:
+        _density_mult = 0.65  # TO CALIBRATE: visual desert — need stimulus
+
+    return base * _tension_mult * _density_mult
+
+
 def _inject_rhythm_split_stage(
     graphic_cards: list[dict],
     remapped_words: list[WordTiming],
@@ -2607,6 +2665,7 @@ def _inject_rhythm_split_stage(
     subject_side: str | None,
     layout: str,
     transcript_segments: list[dict] | None = None,
+    beat_summary: list[dict] | None = None,
     void_min_s: float = 25.0,
     r2_buffer_s: float = 8.0,
     internal_min_s: float = 20.0,
@@ -2682,20 +2741,35 @@ def _inject_rhythm_split_stage(
     if _prev_end < trimmed_duration - 0.3:
         _void_bounds.append((_prev_end, trimmed_duration - 0.3))
 
-    # Candidate positions: first at void_start + internal_min_s/2, then every internal_min_s
+    # Candidate positions using dynamic per-void tolerance.
+    # Each void gets its own threshold based on narrative tension + recent visual density.
+    _bs_list = beat_summary or []
     _candidates: list[float] = []
+    _n_eligible = 0
     for _vs, _ve in _void_bounds:
-        if _ve - _vs < void_min_s:
+        _tol = _void_tolerance(_vs, _ve, _bs_list, graphic_cards, base=void_min_s)
+        _void_dur = _ve - _vs
+        if _void_dur < _tol:
+            print(
+                f"[RHYTHM-SPLIT] void t={_vs:.0f}-{_ve:.0f}s ({_void_dur:.0f}s)"
+                f" skipped — tol={_tol:.1f}s (base={void_min_s})",
+                flush=True,
+            )
             continue
+        _n_eligible += 1
+        print(
+            f"[RHYTHM-SPLIT] void t={_vs:.0f}-{_ve:.0f}s ({_void_dur:.0f}s)"
+            f" eligible — tol={_tol:.1f}s",
+            flush=True,
+        )
         _pos = round(_vs + internal_min_s * 0.5, 3)
         while _pos + card_dur <= _ve:
             _candidates.append(_pos)
             _pos = round(_pos + internal_min_s, 3)
 
-    _n_eligible = sum(1 for _vs, _ve in _void_bounds if _ve - _vs >= void_min_s)
     print(
-        f"[RHYTHM-SPLIT] voids: {_n_eligible}/{len(_void_bounds)} >= {void_min_s}s"
-        f" — {len(_candidates)} candidate(s)",
+        f"[RHYTHM-SPLIT] voids: {_n_eligible}/{len(_void_bounds)} eligible"
+        f" (dynamic tol, base={void_min_s}s) — {len(_candidates)} candidate(s)",
         flush=True,
     )
 
@@ -2934,8 +3008,8 @@ def generate_storyboard(
             if _ep_entry and "energy_level" not in seg:
                 seg["energy_level"] = _ep_entry.get("energy_level", "MEDIUM")
 
-    # Generate graphic overlay cards via Claude
-    graphic_cards = _generate_graphic_cards(
+    # Generate graphic overlay cards via Claude (also returns beat_summary for RHYTHM-SPLIT)
+    graphic_cards, beat_summary = _generate_graphic_cards(
         trimmed_duration=trimmed_duration,
         script_structure=script_structure,
         keep_segments=keep_segments,
@@ -3432,6 +3506,7 @@ def generate_storyboard(
         subject_side=subject_side,
         layout=layout,
         transcript_segments=transcript_segments,
+        beat_summary=beat_summary,
     )
     if _rhythm_splits:
         graphic_cards = sorted(

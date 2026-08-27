@@ -1437,7 +1437,7 @@ def pretrim(
                 _wl_a_dist   = float("inf")
                 for _wl_pi in range(len(_planned)):
                     _ep = _planned[_wl_pi][4]
-                    if _wl_ws < _ep - 0.100:       # word starts well before seg end
+                    if _wl_ws > _ep + 0.100:       # word starts well after seg end — seg too early
                         continue
                     _gap = 0.0 if _wl_pi in _resolved else 0.010
                     _ne  = _wl_we + 0.010

@@ -506,11 +506,18 @@ def _merge_chunk_plans(
     chunk_plans_abs: list[dict],
     chunk_ranges: list[tuple[float, float]],
 ) -> dict:
-    """Merge keep_segments from all chunks into one plan, deduplicating overlap zones.
+    """Merge all per-chunk plan fields into one unified plan.
 
-    Dedup strategy: maintain a sorted list of accepted intervals; skip any new
-    segment whose start is within 0.5s of an already-accepted segment that covers it.
-    The earlier chunk always wins on a tie (it has more global context from narrative_map).
+    Strategy per field type:
+    - Time-specific lists (zoom_plan, broll_suggestions, hyperframes,
+      motion_graphics, silences, sfx_cues, speed_ramps, caption_moments,
+      music_energy): concatenate across all chunks — each chunk covers its own
+      time window, so there are no duplicates to worry about.
+    - keep_segments: concatenate + 70%-overlap deduplication (overlap zones).
+    - script_structure, key_lines: concatenate / dedup-append.
+    - Video-wide word lists (caption_emphasis_words, titres_ctr): dedup-append.
+    - word_categories (dict word→category): union, later chunks supplement chunk 1.
+    - Scalars (format, packaging, thumbnail_mot, …): chunk 1 (base) wins.
     """
     accepted: list[dict] = []
 
@@ -536,31 +543,128 @@ def _merge_chunk_plans(
 
     accepted.sort(key=lambda s: float(s.get("start", 0)))
 
-    # Use first chunk's plan as the base (carries format, language, etc.)
+    # Use first chunk's plan as the base (carries format, packaging, thumbnail_mot, etc.)
     base = chunk_plans_abs[0] if chunk_plans_abs else {}
     merged = {**base, "keep_segments": accepted}
 
-    # Aggregate script_structure and key_lines across all chunks
-    ss: list[dict] = []
+    # ── Time-specific lists: concatenate across all chunks ────────────────────
+    # Each chunk covers a distinct time window — no duplication expected.
+    _TIME_LIST_FIELDS = (
+        "script_structure",   # already was aggregated; keep here for single loop
+        "zoom_plan",          # LLM-directed drift/punch_in entries per time window
+        "broll_suggestions",  # B-roll anchored to source timestamps
+        "hyperframes",        # color flash at specific beats
+        "motion_graphics",    # motion graphic overlays at specific moments
+        "silences",           # silence overlay cues at specific timestamps
+        "sfx_cues",           # sound-effect cues at specific timestamps
+        "speed_ramps",        # speed ramp sub-segments
+        "caption_moments",    # caption overlay windows
+        "music_energy",       # music intensity sections
+    )
+    for field in _TIME_LIST_FIELDS:
+        agg: list = []
+        for cp in chunk_plans_abs:
+            agg.extend(cp.get(field) or [])
+        if agg:
+            merged[field] = agg
+
+    # ── Video-wide word lists: dedup-append ───────────────────────────────────
     kl: list[str] = []
-    for plan in chunk_plans_abs:
-        ss.extend(plan.get("script_structure", []))
-        for line in plan.get("key_lines", []):
+    for cp in chunk_plans_abs:
+        for line in (cp.get("key_lines") or []):
             if line not in kl:
                 kl.append(line)
-    if ss:
-        merged["script_structure"] = ss
     if kl:
         merged["key_lines"] = kl
 
+    ew: list[str] = []
+    for cp in chunk_plans_abs:
+        for w in (cp.get("caption_emphasis_words") or []):
+            if w not in ew:
+                ew.append(w)
+    if ew:
+        merged["caption_emphasis_words"] = ew
+
+    tc: list[str] = []
+    for cp in chunk_plans_abs:
+        for t in (cp.get("titres_ctr") or []):
+            if t not in tc:
+                tc.append(t)
+    if tc:
+        merged["titres_ctr"] = tc
+
+    # ── word_categories dict: union (later chunks supplement chunk 1) ─────────
+    wc: dict = {}
+    for cp in chunk_plans_abs:
+        wc.update(cp.get("word_categories") or {})
+    if wc:
+        merged["word_categories"] = wc
+
     n_deduped = total_raw - len(accepted)
+    _merge_counts = {f: len(merged.get(f) or []) for f in _TIME_LIST_FIELDS}
     print(
         f"[CHUNK-MERGE] {len(chunk_plans_abs)} chunks,"
-        f" {total_raw} raw segs → {len(accepted)} kept"
-        f" ({n_deduped} overlap-deduped)",
+        f" {total_raw} raw segs → {len(accepted)} kept ({n_deduped} overlap-deduped)"
+        f" | zoom={_merge_counts['zoom_plan']}"
+        f" cap_moments={_merge_counts['caption_moments']}"
+        f" broll={_merge_counts['broll_suggestions']}"
+        f" sfx={_merge_counts['sfx_cues']}"
+        f" hf={_merge_counts['hyperframes']}",
         flush=True,
     )
     return merged
+
+
+def _unremap_chunk_timestamps(raw: dict, offset: float) -> dict:
+    """Shift all timestamp fields in a chunk plan from local (chunk-relative) to absolute time.
+
+    The LLM plans each chunk with t=0 at chunk_start.  Before appending to
+    chunk_plans_abs we add `offset` (= chunk_start) to every timestamp field so
+    that downstream consumers (render.py zoom_plan, storyboard.py script_structure,
+    etc.) all see absolute source-file timestamps.
+    """
+    if offset == 0.0:
+        return raw  # chunk 1: local == absolute, nothing to shift
+
+    result = dict(raw)
+
+    # Items that carry "start" / "end" keys
+    for field in ("keep_segments", "zoom_plan", "script_structure",
+                  "speed_ramps", "caption_moments", "music_energy"):
+        items = raw.get(field)
+        if not items:
+            continue
+        shifted = []
+        for item in items:
+            if not isinstance(item, dict):
+                shifted.append(item)
+                continue
+            entry = dict(item)
+            if "start" in entry:
+                entry["start"] = round(float(entry["start"]) + offset, 3)
+            if "end" in entry:
+                entry["end"] = round(float(entry["end"]) + offset, 3)
+            shifted.append(entry)
+        result[field] = shifted
+
+    # Items that carry an "at" key
+    for field in ("broll_suggestions", "hyperframes", "motion_graphics",
+                  "silences", "sfx_cues"):
+        items = raw.get(field)
+        if not items:
+            continue
+        shifted = []
+        for item in items:
+            if not isinstance(item, dict):
+                shifted.append(item)
+                continue
+            entry = dict(item)
+            if "at" in entry:
+                entry["at"] = round(float(entry["at"]) + offset, 3)
+            shifted.append(entry)
+        result[field] = shifted
+
+    return result
 
 
 def _plan_edit_chunked(
@@ -662,15 +766,10 @@ def _plan_edit_chunked(
                 _chunk_context=ctx,
                 # narrative_map intentionally NOT passed — chunks always use single-pass
             )
-            # Un-remap timestamps back to absolute source time
-            keep_abs = [
-                {**seg,
-                 "start": round(float(seg["start"]) + chunk_start, 3),
-                 "end":   round(float(seg["end"])   + chunk_start, 3)}
-                for seg in chunk_plan_local.raw.get("keep_segments", [])
-                if isinstance(seg, dict)
-            ]
-            chunk_plans_abs.append({**chunk_plan_local.raw, "keep_segments": keep_abs})
+            # Shift ALL timestamp fields from local (chunk-relative) to absolute time
+            chunk_abs = _unremap_chunk_timestamps(chunk_plan_local.raw, chunk_start)
+            keep_abs = [s for s in chunk_abs.get("keep_segments", []) if isinstance(s, dict)]
+            chunk_plans_abs.append(chunk_abs)
             prev_keep_abs.extend(keep_abs)
             print(
                 f"[CHUNK-PLAN] chunk {chunk_idx+1}: {len(keep_abs)} segs kept"
