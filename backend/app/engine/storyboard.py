@@ -2230,6 +2230,35 @@ Design graphic overlay cards for this video — target {target_cards} cards for 
                     f" (budget=1 PCF, kept {_keep_confess.get('id','?')})",
                     flush=True,
                 )
+        # Budget=1 guard: prim_shatter_truth — exactly 1 per video, independent slot.
+        # Tiebreak: keep latest startSec (consistent with climax/confession policy).
+        _shatter_cards = [c for c in cards if c.get("contentHints", {}).get("style", "") == "prim_shatter_truth"]
+        if len(_shatter_cards) > 1:
+            _shatter_cards.sort(key=lambda c: float(c.get("startSec", 0)), reverse=True)
+            _keep_shatter = _shatter_cards[0]
+            for _rc in _shatter_cards[1:]:
+                cards.remove(_rc)
+                print(
+                    f"[STORYBOARD] SHATTER-BUDGET evicted {_rc.get('id','?')}"
+                    f" style='prim_shatter_truth'"
+                    f" t={_rc.get('startSec','?')}s"
+                    f" (budget=1, kept {_keep_shatter.get('id','?')})",
+                    flush=True,
+                )
+        # Budget=2 guard: prim_split_stage — at most 2 per video.
+        # Tiebreak: keep the 2 latest by startSec (payoff > hook policy).
+        _split_stage_cards = [c for c in cards if c.get("contentHints", {}).get("style", "") == "prim_split_stage"]
+        if len(_split_stage_cards) > 2:
+            _split_stage_cards.sort(key=lambda c: float(c.get("startSec", 0)), reverse=True)
+            for _rc in _split_stage_cards[2:]:
+                cards.remove(_rc)
+                print(
+                    f"[STORYBOARD] SPLITSTAGE-BUDGET evicted {_rc.get('id','?')}"
+                    f" style='prim_split_stage'"
+                    f" t={_rc.get('startSec','?')}s"
+                    f" (budget=2, kept 2 latest)",
+                    flush=True,
+                )
         # prim_confession_frame validation: confession_text is REQUIRED.
         # If the LLM generated the card but omitted the text, the effect (vignette/desat)
         # shows but the content area is visually empty — drop the card entirely.
