@@ -13,9 +13,9 @@
       nav_cta: "Commencer gratuitement",
 
       // ── HERO ─────────────────────────────────────────────────────────────────
-      hero_title1: "Vos vidéos brutes.",
-      hero_glow: "Éditées comme un pro.",
-      hero_sub: "LeanRetention analyse votre contenu, ajoute des captions synchronisées, des graphics animés et exporte en 9:16 ou 16:9 automatiquement.",
+      hero_title1: "Monteur vidéo. Stratège rétention. Motion designer.",
+      hero_glow: "Le tout en un : LeanRetention.",
+      hero_sub: "LeanRetention analyse ton contenu, ajoute des captions synchronisées, des graphics animés et exporte en 9:16 ou 16:9 automatiquement.",
       hero_cta1: "Éditer ma première vidéo →",
       hero_cta2: "Voir comment ça marche",
       trust_free: "Première vidéo gratuite",
@@ -25,7 +25,7 @@
       demo_after: "Après",
 
       // ── EMAIL CAPTURE ─────────────────────────────────────────────────────────
-      email_title: "Obtenez votre première vidéo éditée gratuitement",
+      email_title: "Obtiens ta première vidéo éditée gratuitement",
       email_sub: "Sans carte bancaire. Connexion en un clic.",
       google_btn: "Continuer avec Google",
 
@@ -33,33 +33,33 @@
       how_tag: "Comment ça marche",
       how_title: "De la vidéo brute au contenu viral<br>en 3 étapes",
       how_sub: "Aucune compétence en montage requise. L'IA gère tout de A à Z.",
-      step1_title: "Uploadez votre vidéo brute",
-      step1_desc: "Glissez-déposez votre fichier mp4, mov ou webm, jusqu'à 20 Go. Notre upload sécurisé par chunks gère les fichiers lourds sans problème.",
+      step1_title: "Upload ta vidéo brute",
+      step1_desc: "Glisse-dépose ton fichier mp4, mov ou webm, jusqu'à 20 Go. Notre upload sécurisé par chunks gère les fichiers lourds sans problème.",
       step2_title: "L'IA analyse et édite automatiquement",
       step2_desc: "Transcription, réécriture du hook, suppression des silences, ajout de captions et de graphics IA : tout en quelques minutes, pas des heures.",
       step3_title: "Téléchargez ou publiez directement",
-      step3_desc: "Récupérez votre MP4 prêt à poster, ou publiez en 1 clic sur YouTube, TikTok, Instagram et LinkedIn.",
+      step3_desc: "Récupère ton MP4 prêt à poster, ou publie en 1 clic sur YouTube, TikTok, Instagram et LinkedIn.",
 
       // ── FEATURES ─────────────────────────────────────────────────────────────
       feat_tag: "Fonctionnalités",
       feat_title: "Tout ce dont un créateur a besoin",
-      feat_sub: "Un seul outil. Six fonctionnalités qui remplacent une équipe entière.",
-      feat1_desc: "L'IA réécrit les 3 premières secondes de votre vidéo pour maximiser la rétention dès le départ.",
+      feat_sub: "Un seul outil. Tout ce que tu aurais demandé à ton monteur.",
+      feat1_desc: "L'IA réécrit les 3 premières secondes de ta vidéo pour maximiser la rétention dès le départ.",
       feat2_title: "Suppression des silences",
-      feat2_desc: "Détecte et met en évidence les pauses et hésitations pour que vous gardiez le contrôle de votre rythme.",
+      feat2_desc: "Détecte et met en évidence les pauses et hésitations pour que tu gardes le contrôle de ton rythme.",
       feat3_title: "Captions automatiques",
       feat3_desc: "Sous-titres word-by-word précis en français, anglais, espagnol et plus encore.",
       feat4_title: "Graphics IA",
-      feat4_desc: "16 types de cartes graphiques animées : stats, timelines, comparaisons, listes, générées et synchronisées avec votre discours.",
+      feat4_desc: "16 types de cartes graphiques animées : stats, timelines, comparaisons, listes, générées et synchronisées avec ton discours.",
       feat5_title: "Export multi-formats",
-      feat5_desc: "Téléchargez votre vidéo prête en vertical 9:16 (TikTok/Reels) et horizontal 16:9 (YouTube), sans ré-éditer.",
+      feat5_desc: "Télécharge ta vidéo prête en vertical 9:16 (TikTok/Reels) et horizontal 16:9 (YouTube), sans ré-éditer.",
       feat6_title: "6 styles visuels",
       feat6_desc: "Choisissez parmi 6 identités visuelles, du premium dark au manuscrit authentique, chacune avec ses propres animations et transitions.",
 
       // ── PRICING ──────────────────────────────────────────────────────────────
       pricing_tag: "Tarifs",
       pricing_title: "Simple. Transparent. Sans surprise.",
-      pricing_sub: "Commencez gratuitement. Évoluez quand vous en avez besoin.",
+      pricing_sub: "Commence gratuitement. Évolue quand tu en as besoin.",
       pricing_per_month: "/ mois",
       pricing_popular: "POPULAIRE",
       plan_free_name: "Essai gratuit",
@@ -83,20 +83,20 @@
       // ── FAQ ───────────────────────────────────────────────────────────────────
       faq_tag: "FAQ",
       faq_title: "Questions fréquentes",
-      faq_sub: "Tout ce que vous devez savoir avant de commencer.",
+      faq_sub: "Tout ce que tu dois savoir avant de commencer.",
       faq1_q: "Mes vidéos sont-elles en sécurité ?",
-      faq1_answer: "Vos vidéos sont hébergées sur des serveurs sécurisés, supprimées après traitement et jamais partagées avec des tiers. Nous n'utilisons jamais votre contenu pour entraîner des modèles d'IA.",
+      faq1_answer: "Tes vidéos sont hébergées sur des serveurs sécurisés, supprimées après traitement et jamais partagées avec des tiers. Nous n'utilisons jamais ton contenu pour entraîner des modèles d'IA.",
       faq2_q: "Quelles langues sont supportées ?",
       faq2_answer: "Nous utilisons Whisper d'OpenAI, qui supporte plus de 50 langues. Les captions, le découpage et la synchronisation fonctionnent pour toutes les langues détectées automatiquement.",
       faq3_q: "Combien de temps prend le montage ?",
-      faq3_answer: "En général entre 3 et 8 minutes selon la durée de votre vidéo. Vous recevez une notification par email dès que c'est prêt — vous n'avez pas besoin de rester sur la page.",
+      faq3_answer: "En général entre 3 et 8 minutes selon la durée de ta vidéo. Tu reçois une notification par email dès que c'est prêt — tu n'as pas besoin de rester sur la page.",
       faq4_q: "Puis-je modifier le résultat ?",
-      faq4_answer: "Oui. Vous pouvez télécharger la vidéo en MP4 et la retravailler dans l'éditeur de votre choix : CapCut, Premiere Pro, DaVinci Resolve, Final Cut... EDITOR AI vous donne une base montée, pas un produit fini imposé.",
+      faq4_answer: "Oui. Tu peux télécharger la vidéo en MP4 et la retravailler dans l'éditeur de ton choix : CapCut, Premiere Pro, DaVinci Resolve, Final Cut... LeanRetention te donne une base montée, pas un produit fini imposé.",
       faq5_q: "Mon abonnement se renouvelle quand ?",
-      faq5_answer: "Le renouvellement a lieu le même jour chaque mois. Vous pouvez annuler à tout moment depuis votre profil — votre accès reste actif jusqu'à la fin de la période en cours.",
+      faq5_answer: "Le renouvellement a lieu le même jour chaque mois. Tu peux annuler à tout moment depuis ton profil — ton accès reste actif jusqu'à la fin de la période en cours.",
 
       // ── FINAL CTA ────────────────────────────────────────────────────────────
-      cta_title: "Prêt à arrêter de perdre<br>des heures à éditer&nbsp;?",
+      cta_title: "Le monteur que tu n'as jamais pu te payer.<br>Maintenant tu peux.",
       cta_sub: "Première vidéo offerte. Aucune carte requise.",
 
       // ── FOOTER ───────────────────────────────────────────────────────────────
@@ -209,8 +209,8 @@
       nav_cta: "Start for free",
 
       // ── HERO ─────────────────────────────────────────────────────────────────
-      hero_title1: "Your raw footage.",
-      hero_glow: "Edited like a pro.",
+      hero_title1: "Video editor. Retention strategist. Motion designer.",
+      hero_glow: "All in one: LeanRetention.",
       hero_sub: "LeanRetention analyzes your content, adds synced captions, animated graphics, and exports in 9:16 or 16:9 automatically.",
       hero_cta1: "Edit my first video →",
       hero_cta2: "See how it works",
@@ -239,7 +239,7 @@
       // ── FEATURES ─────────────────────────────────────────────────────────────
       feat_tag: "Features",
       feat_title: "Everything a creator needs",
-      feat_sub: "One tool. Six features that replace an entire team.",
+      feat_sub: "One tool. Everything you'd ask your editor to do.",
       feat1_desc: "AI rewrites the first 3 seconds of your video to maximize retention from the very first frame.",
       feat2_title: "Silence removal",
       feat2_desc: "Highlights pauses and hesitations so you stay in control of your own rhythm.",
@@ -292,7 +292,7 @@
       faq5_answer: "Your subscription renews on the same date each month. You can cancel at any time from your profile - your access stays active until the end of the current period.",
 
       // ── FINAL CTA ────────────────────────────────────────────────────────────
-      cta_title: "Ready to stop spending<br>hours editing?",
+      cta_title: "The editor you never could afford.<br>Now you can.",
       cta_sub: "First video free. No card required.",
 
       // ── FOOTER ───────────────────────────────────────────────────────────────
