@@ -435,9 +435,45 @@
         <span class="hero-glow" data-i18n="hero_glow">Éditées comme un pro.</span>
       </h1>
       <p class="hero-sub" data-i18n="hero_sub">LeanRetention analyse votre contenu, ajoute des captions synchronisées, des graphics animés et exporte en 9:16 ou 16:9 automatiquement.</p>
-      <div class="hero-ctas">
-        <a href="/api/auth/google/login" class="btn btn-salmon btn-lg" data-i18n="hero_cta1">Éditer ma première vidéo →</a>
-        <a href="#how-it-works" class="btn btn-ghost btn-lg" data-i18n="hero_cta2">Voir comment ça marche</a>
+      <!-- Upload widget — drop zone + background upload + auth-on-click -->
+      <div class="lp-upload-widget" id="lpWidget">
+        <div class="lp-drop" id="lpDrop">
+          <input type="file" id="lpFile" accept="video/*" />
+          <svg class="lp-drop-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <div class="lp-drop-title">Déposez votre vidéo ici</div>
+          <div class="lp-drop-hint">MP4, MOV, MKV · Jusqu'à 30 Go · Sans compte requis</div>
+          <button class="lp-drop-browse" type="button">Parcourir les fichiers</button>
+        </div>
+        <div class="lp-uploading" id="lpUploading" style="display:none">
+          <div class="lp-file-row">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--salmon)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span class="lp-file-name" id="lpFileName">video.mp4</span>
+            <span class="lp-file-size" id="lpFileSize"></span>
+          </div>
+          <div class="lp-progress-track"><div class="lp-progress-fill" id="lpProgressFill"></div></div>
+          <div class="lp-progress-text" id="lpProgressText">Upload en cours…</div>
+        </div>
+        <div class="lp-packs" id="lpPacks" style="display:none">
+          <div class="lp-packs-label">Style visuel</div>
+          <div class="lp-packs-grid">
+            <button type="button" class="lp-pack active" data-pack="lean_cinema">
+              <video class="lp-pack-vid" src="/previews/lean_cinema.mp4" autoplay muted loop playsinline></video>
+              <div class="lp-pack-info"><div class="lp-pack-name">LeanCinema</div><div class="lp-pack-desc">Cinématique · Impact</div></div>
+              <span class="lp-pack-check">✓</span>
+            </button>
+            <button type="button" class="lp-pack" data-pack="lean_craft">
+              <video class="lp-pack-vid" src="/previews/lean_craft.mp4" autoplay muted loop playsinline></video>
+              <div class="lp-pack-info"><div class="lp-pack-name">LeanCraft</div><div class="lp-pack-desc">Authentique · Humain</div></div>
+              <span class="lp-pack-check">✓</span>
+            </button>
+            <button type="button" class="lp-pack" data-pack="lean_glass">
+              <video class="lp-pack-vid" src="/previews/lean_glass.mp4" autoplay muted loop playsinline></video>
+              <div class="lp-pack-info"><div class="lp-pack-name">LeanGlass</div><div class="lp-pack-desc">Premium · Autorité</div></div>
+              <span class="lp-pack-check">✓</span>
+            </button>
+          </div>
+        </div>
+        <button type="button" class="btn btn-salmon btn-lg lp-submit" id="lpSubmit" style="display:none" disabled>Éditer ma vidéo →</button>
       </div>
       <div class="hero-trust">
         <span><span class="check">✓</span> <span data-i18n="trust_free">Première vidéo gratuite</span></span>
@@ -1228,5 +1264,301 @@
   <div id="activityBar" aria-hidden="true">
     <div id="activityTicker"></div>
   </div>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       LANDING UPLOAD WIDGET — styles + modal + script
+  ══════════════════════════════════════════════════════════════════ -->
+  <style>
+    /* ── Upload widget ── */
+    .lp-upload-widget { width: 100%; max-width: 680px; margin: 0 auto 2rem; position: relative; z-index: 1; }
+    .lp-drop {
+      border: 1.5px dashed rgba(255,119,81,.35); border-radius: 14px;
+      background: rgba(255,255,255,.02); padding: 2.5rem 2rem;
+      display: flex; flex-direction: column; align-items: center; gap: .6rem;
+      cursor: pointer; transition: border-color .2s, background .2s; text-align: center;
+    }
+    .lp-drop:hover, .lp-drop.dragover { border-color: var(--salmon); background: rgba(255,119,81,.05); }
+    .lp-drop input[type="file"] { display: none; }
+    .lp-drop-icon { color: var(--salmon); margin-bottom: .2rem; }
+    .lp-drop-title { font-size: 1rem; font-weight: 600; color: var(--text); }
+    .lp-drop-hint { font-size: .8rem; color: var(--muted); }
+    .lp-drop-browse {
+      margin-top: .4rem; background: rgba(255,119,81,.12); border: 1px solid rgba(255,119,81,.3);
+      border-radius: 8px; color: var(--salmon); padding: .4rem 1rem;
+      font-family: var(--font); font-size: .82rem; font-weight: 600; cursor: pointer;
+      transition: background .15s;
+    }
+    .lp-drop-browse:hover { background: rgba(255,119,81,.22); }
+    /* Progress */
+    .lp-uploading {
+      background: rgba(255,255,255,.03); border: 1px solid var(--border);
+      border-radius: 14px; padding: 1.1rem 1.4rem; margin-bottom: .85rem;
+    }
+    .lp-file-row { display: flex; align-items: center; gap: .55rem; margin-bottom: .75rem; }
+    .lp-file-name { flex: 1; font-size: .875rem; font-weight: 500; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+    .lp-file-size { font-size: .75rem; color: var(--muted); flex-shrink: 0; }
+    .lp-progress-track { height: 4px; background: rgba(255,255,255,.09); border-radius: 999px; overflow: hidden; margin-bottom: .5rem; }
+    .lp-progress-fill { height: 100%; background: var(--salmon); border-radius: 999px; width: 0%; transition: width .3s ease; }
+    .lp-progress-text { font-size: .75rem; color: var(--muted); }
+    .lp-progress-done { color: #4ade80 !important; }
+    /* Style packs */
+    .lp-packs { margin: .85rem 0 .6rem; }
+    .lp-packs-label { font-size: .68rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: .6rem; text-align: left; }
+    .lp-packs-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: .55rem; }
+    .lp-pack {
+      background: rgba(255,255,255,.025); border: 1.5px solid var(--border);
+      border-radius: 10px; overflow: hidden; cursor: pointer;
+      transition: border-color .15s, background .15s; text-align: left;
+      padding: 0; position: relative; display: flex; flex-direction: column;
+    }
+    .lp-pack:hover { border-color: rgba(255,119,81,.45); }
+    .lp-pack.active { border-color: var(--salmon); background: rgba(255,119,81,.06); }
+    .lp-pack-vid { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; }
+    .lp-pack-info { padding: .45rem .55rem; }
+    .lp-pack-name { font-size: .78rem; font-weight: 700; color: var(--text); }
+    .lp-pack-desc { font-size: .68rem; color: var(--muted); margin-top: .08rem; }
+    .lp-pack-check {
+      position: absolute; top: .3rem; right: .3rem; width: 17px; height: 17px;
+      border-radius: 50%; background: var(--salmon); color: #fff;
+      font-size: .6rem; font-weight: 800; display: none;
+      align-items: center; justify-content: center;
+    }
+    .lp-pack.active .lp-pack-check { display: flex; }
+    /* Submit */
+    .lp-submit { width: 100%; justify-content: center; margin-top: .6rem; }
+    .lp-submit:disabled { opacity: .4; cursor: not-allowed; box-shadow: none !important; }
+    @media (max-width: 560px) { .lp-packs-grid { grid-template-columns: 1fr; } }
+    /* Auth modal */
+    .lp-auth-overlay {
+      position: fixed; inset: 0; z-index: 9100;
+      background: rgba(0,0,0,.72); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+      display: none; align-items: center; justify-content: center; padding: 1.5rem;
+    }
+    .lp-auth-overlay.open { display: flex; }
+    .lp-auth-modal {
+      background: #141414; border: 1px solid rgba(255,119,81,.28);
+      border-radius: 18px; padding: 2.5rem 2rem; max-width: 400px; width: 100%;
+      text-align: center; position: relative;
+      box-shadow: 0 0 80px rgba(255,119,81,.16), 0 24px 60px rgba(0,0,0,.55);
+    }
+    .lp-auth-close { position: absolute; top: .9rem; right: 1rem; background: none; border: none; color: var(--muted); font-size: 1.3rem; cursor: pointer; line-height: 1; }
+    .lp-auth-close:hover { color: var(--text); }
+    .lp-auth-badge { font-size: 2.4rem; margin-bottom: .65rem; }
+    .lp-auth-modal h3 { font-size: 1.3rem; font-weight: 800; letter-spacing: -.025em; margin-bottom: .45rem; }
+    .lp-auth-modal p { font-size: .88rem; color: var(--muted); margin-bottom: 1.4rem; line-height: 1.6; }
+    .lp-auth-trust { font-size: .73rem; color: var(--muted); margin-top: .9rem; }
+  </style>
+
+  <!-- Auth modal -->
+  <div class="lp-auth-overlay" id="lpAuthOverlay">
+    <div class="lp-auth-modal">
+      <button class="lp-auth-close" id="lpAuthClose" aria-label="Fermer">×</button>
+      <div class="lp-auth-badge">🎬</div>
+      <h3>Votre vidéo est prête</h3>
+      <p>Connectez-vous pour lancer le montage IA.<br>Résultats en 3 à 5 minutes.</p>
+      <a href="/api/auth/google/login" class="btn-google" id="lpGoogleBtn" style="display:inline-flex">
+        <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+          <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/>
+          <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/>
+          <path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/>
+          <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/>
+        </svg>
+        <span>Continuer avec Google</span>
+      </a>
+      <div class="lp-auth-trust">Sans carte bancaire · Première vidéo offerte</div>
+    </div>
+  </div>
+
+  <script>
+  (function landingUpload() {
+    var CHUNK = 20 * 1024 * 1024; // 20 MB
+    var _uploadId   = null;
+    var _uploadDone = false;
+    var _selectedPack   = 'lean_cinema';
+    var _isAuthenticated = false;
+
+    var drop      = document.getElementById('lpDrop');
+    var fileInp   = document.getElementById('lpFile');
+    var uploading = document.getElementById('lpUploading');
+    var packsEl   = document.getElementById('lpPacks');
+    var submitEl  = document.getElementById('lpSubmit');
+    var overlay   = document.getElementById('lpAuthOverlay');
+
+    if (!drop) return;
+
+    // Check if already logged in (silently)
+    fetch('/api/auth/me', { credentials: 'same-origin' })
+      .then(function(r) { if (r.ok) _isAuthenticated = true; })
+      .catch(function() {});
+
+    // Drop zone
+    drop.addEventListener('click', function(e) {
+      if (!e.target.classList.contains('lp-drop-browse')) fileInp.click();
+    });
+    document.querySelector('.lp-drop-browse').addEventListener('click', function(e) {
+      e.stopPropagation(); fileInp.click();
+    });
+    drop.addEventListener('dragover', function(e) { e.preventDefault(); drop.classList.add('dragover'); });
+    drop.addEventListener('dragleave', function() { drop.classList.remove('dragover'); });
+    drop.addEventListener('drop', function(e) {
+      e.preventDefault(); drop.classList.remove('dragover');
+      var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) beginUpload(f);
+    });
+    fileInp.addEventListener('change', function() {
+      if (fileInp.files && fileInp.files[0]) beginUpload(fileInp.files[0]);
+    });
+
+    // Style pack selection
+    document.querySelectorAll('.lp-pack').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.lp-pack').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        _selectedPack = btn.dataset.pack;
+      });
+    });
+
+    // Submit → auth modal or /app if already logged in
+    submitEl.addEventListener('click', function() {
+      sessionStorage.setItem('lle_pending_upload', JSON.stringify({
+        upload_id:       _uploadId,
+        upload_complete: _uploadDone,
+        style_pack:      _selectedPack,
+        format:          'short',
+      }));
+      if (_isAuthenticated) {
+        window.location.href = '/app';
+      } else {
+        overlay.classList.add('open');
+      }
+    });
+
+    // Modal close
+    document.getElementById('lpAuthClose').addEventListener('click', function() {
+      overlay.classList.remove('open');
+    });
+    overlay.addEventListener('click', function(e) {
+      if (e.target === overlay) overlay.classList.remove('open');
+    });
+
+    // ── Upload logic ────────────────────────────────────────────────────
+    function beginUpload(file) {
+      drop.style.display = 'none';
+      uploading.style.display = '';
+      packsEl.style.display = '';
+      submitEl.style.display = '';
+      submitEl.disabled = true;
+      submitEl.textContent = 'Upload en cours…';
+
+      var nm = document.getElementById('lpFileName');
+      var sz = document.getElementById('lpFileSize');
+      if (nm) nm.textContent = file.name;
+      if (sz) sz.textContent = (file.size / (1024 * 1024)).toFixed(0) + ' Mo';
+
+      var p = file.size > 50 * 1024 * 1024 ? chunkedUpload(file) : smallUpload(file);
+      p.then(function() {
+        _uploadDone = true;
+        submitEl.disabled = false;
+        submitEl.textContent = 'Éditer ma vidéo →';
+        setProgress(100, '✓ Vidéo prête — cliquez pour lancer le montage', true);
+      }).catch(function(err) {
+        console.error('[LandingUpload]', err);
+        setProgress(0, 'Erreur d\'upload. Rechargez et réessayez.', false);
+        drop.style.display = '';
+        uploading.style.display = 'none';
+        submitEl.style.display = 'none';
+        packsEl.style.display = 'none';
+      });
+    }
+
+    function setProgress(pct, text, done) {
+      var fill = document.getElementById('lpProgressFill');
+      var txt  = document.getElementById('lpProgressText');
+      if (fill) fill.style.width = pct + '%';
+      if (txt) {
+        txt.textContent = text;
+        txt.className = done ? 'lp-progress-text lp-progress-done' : 'lp-progress-text';
+      }
+    }
+
+    function chunkedUpload(file) {
+      var totalChunks = Math.ceil(file.size / CHUNK);
+      var totalMb = (file.size / (1024 * 1024)).toFixed(0);
+      return fetch('/api/upload/init', { method: 'POST', credentials: 'same-origin' })
+        .then(function(r) {
+          if (!r.ok) throw new Error('Init ' + r.status);
+          return r.json();
+        })
+        .then(function(d) {
+          _uploadId = d.upload_id;
+          var chain = Promise.resolve();
+          for (var i = 0; i < totalChunks; i++) {
+            (function(idx) {
+              chain = chain.then(function() {
+                var chunk  = file.slice(idx * CHUNK, (idx + 1) * CHUNK);
+                var sentMb = Math.min(((idx + 1) * CHUNK) / (1024 * 1024), file.size / (1024 * 1024)).toFixed(0);
+                setProgress(Math.round(((idx + 1) / totalChunks) * 90), 'Upload ' + sentMb + ' / ' + totalMb + ' Mo…', false);
+                return sendChunkWithRetry(_uploadId, idx, chunk);
+              });
+            })(i);
+          }
+          return chain;
+        })
+        .then(function() {
+          setProgress(95, 'Assemblage…', false);
+          return fetch('/api/upload/assemble/' + _uploadId, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: file.name }),
+            credentials: 'same-origin',
+          });
+        })
+        .then(function(r) { if (!r.ok) throw new Error('Assembly ' + r.status); });
+    }
+
+    function sendChunkWithRetry(uploadId, idx, chunk) {
+      var attempt = 0;
+      function tryOnce() {
+        return fetch('/api/upload/chunk/' + uploadId + '/' + idx, {
+          method: 'PUT', body: chunk, credentials: 'same-origin',
+        }).then(function(r) {
+          if (r.ok) return;
+          if (attempt < 2 && [499, 502, 503, 504].indexOf(r.status) !== -1) {
+            attempt++;
+            return new Promise(function(res) { setTimeout(res, 1000 * Math.pow(2, attempt - 1)); }).then(tryOnce);
+          }
+          throw new Error('Chunk ' + idx + ': ' + r.status);
+        }).catch(function(e) {
+          if (attempt < 2) { attempt++; return new Promise(function(res) { setTimeout(res, 1000); }).then(tryOnce); }
+          throw e;
+        });
+      }
+      return tryOnce();
+    }
+
+    function smallUpload(file) {
+      return fetch('/api/upload/init', { method: 'POST', credentials: 'same-origin' })
+        .then(function(r) { if (!r.ok) throw new Error('Init'); return r.json(); })
+        .then(function(d) {
+          _uploadId = d.upload_id;
+          setProgress(40, 'Upload…', false);
+          return fetch('/api/upload/chunk/' + _uploadId + '/0', {
+            method: 'PUT', body: file, credentials: 'same-origin',
+          });
+        })
+        .then(function(r) {
+          if (!r.ok) throw new Error('Upload ' + r.status);
+          setProgress(88, 'Finalisation…', false);
+          return fetch('/api/upload/assemble/' + _uploadId, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: file.name }),
+            credentials: 'same-origin',
+          });
+        })
+        .then(function(r) { if (!r.ok) throw new Error('Assembly'); });
+    }
+  })();
+  </script>
 </body>
 </html>

@@ -2180,23 +2180,45 @@ async def generate_descriptions(payload: dict = Body(...)) -> dict:
     from app.core.config import settings
     import anthropic
 
-    job_id = payload.get("job_id", "")
-    title = payload.get("title", "")
-    fmt = payload.get("format", "")
-    context = payload.get("context", "")
+    job_id          = payload.get("job_id", "")
+    title           = payload.get("title", "")
+    fmt             = payload.get("format", "")
+    context         = payload.get("context", "")
+    packaging_title = payload.get("packaging_title", "")
+    end_caption     = payload.get("end_caption", "")
+    thumbnail_word  = payload.get("thumbnail_word", "")
+    titres_ctr      = payload.get("titres_ctr", [])
+    beat_summary    = payload.get("beat_summary", [])
+
+    packaging_block = ""
+    if packaging_title or end_caption or thumbnail_word or titres_ctr or beat_summary:
+        parts = []
+        if packaging_title:
+            parts.append(f"Packaging title: {packaging_title}")
+        if titres_ctr:
+            parts.append("CTR title variations:\n" + "\n".join(f"- {t}" for t in titres_ctr))
+        if beat_summary:
+            parts.append("Key moments / beats:\n" + "\n".join(f"- {b}" for b in beat_summary))
+        if end_caption:
+            parts.append(f"End caption (comment trigger): {end_caption}")
+        if thumbnail_word:
+            parts.append(f"Thumbnail word: {thumbnail_word}")
+        packaging_block = "\n\n" + "\n".join(parts)
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     prompt = f"""You are a social media copywriter expert. Generate platform-specific descriptions for a video.
 
-Video title: {title}
+Video title: {title or packaging_title}
 Format: {fmt}
-Context: {context}
+User instructions: {context}{packaging_block}
 
 Generate descriptions in French for:
 1. YouTube (SEO-optimized, ~500 words, include timestamps placeholder, 5 keywords)
 2. TikTok (max 150 chars + 5 hashtags)
 3. Instagram (emotional hook + CTA + 10 hashtags)
 4. LinkedIn (professional tone, insights, 3 paragraphs)
+
+Use the video's actual content (beats, CTR titles, end caption) to write specific descriptions, not generic ones.
 
 Respond ONLY with valid JSON in this exact format:
 {{"youtube": "...", "tiktok": "...", "instagram": "...", "linkedin": "..."}}"""

@@ -155,10 +155,66 @@ $("dashEditBtn")?.addEventListener("click", () => switchSection("editorArea"));
     } else {
       switchSection("editorArea");
     }
+
+    // Auto-trigger job if returning from landing page upload flow
+    const _lpPending = sessionStorage.getItem("lle_pending_upload");
+    if (_lpPending && _hasOAuthSession) {
+      try {
+        const _p = JSON.parse(_lpPending);
+        sessionStorage.removeItem("lle_pending_upload");
+        if (_p.upload_id) { switchSection("editorArea"); _triggerLandingJob(_p); }
+      } catch (_) {}
+    }
   } catch {
     switchSection("editorArea");
   }
 })();
+
+// ── Auto-trigger job from landing page upload flow ────────────────────────────
+async function _triggerLandingJob(pending) {
+  const { upload_id, style_pack, format } = pending;
+  if (!upload_id) return;
+
+  statusCard?.classList.remove("hidden");
+  statusCard?.scrollIntoView({ behavior: "smooth", block: "center" });
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.querySelector(".btn-label").textContent = "Traitement…";
+    submitBtn.classList.add("loading");
+  }
+  setStatus("queued", "Démarrage du montage IA…", 0);
+
+  const fd = new FormData();
+  fd.set("upload_id",      upload_id);
+  fd.set("format_hint",    format || "short");
+  fd.set("style_pack",     style_pack || "lean_cinema");
+  fd.set("editing_style",  "viral");
+  fd.set("caption_style",  "impact");
+  fd.set("brand_color",    "#FF7751");
+  fd.set("caption_font",   "Poppins Bold");
+  fd.set("output_quality", "1080p");
+
+  const profileId = localStorage.getItem("profile_id") || "";
+  if (profileId) fd.set("profile_id", profileId);
+
+  try {
+    const _cp = JSON.parse(localStorage.getItem("coach_profile") || "{}");
+    const _fontMap = { Poppins: "Poppins Bold", Inter: "Inter Bold", Montserrat: "Montserrat Bold",
+      Bebas: "Bebas Neue", Anton: "Anton", "DM Sans": "DM Sans Bold", Quicksand: "Quicksand Bold" };
+    if (_cp.primaryColor) fd.set("brand_color", _cp.primaryColor);
+    if (_cp.font) fd.set("caption_font", _fontMap[_cp.font] || _cp.font);
+  } catch (_) {}
+
+  try {
+    const editRes = await apiFetch("/api/edit", { method: "POST", body: fd });
+    if (editRes.status === 401) { loginCard?.classList.remove("hidden"); return; }
+    if (!editRes.ok) { fail("Erreur de démarrage du montage. Veuillez réessayer."); return; }
+    const { job_id } = await editRes.json();
+    poll(job_id).catch(e => { console.error("poll crashed:", e); fail("Erreur inattendue."); });
+  } catch (err) {
+    fail(String(err));
+  }
+}
 
 // ── Dashboard stats ───────────────────────────────────────────────────────────
 function updateDashboardStats() {
@@ -1636,7 +1692,8 @@ async function showResult(jobId, result) {
     } catch {}
   }
 
-  _currentJobId = jobId;
+  _currentJobId  = jobId;
+  _currentResult = result;
   await loadPublishConnections();
 
   // Feature 14: auto-load caption editor
@@ -1648,7 +1705,8 @@ async function showResult(jobId, result) {
   addNotification('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--salmon)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>', "Vidéo prête !", "Votre vidéo éditée est disponible au téléchargement.");
 }
 
-let _currentJobId = null;
+let _currentJobId  = null;
+let _currentResult = null;
 let _lastPreview   = null;
 let _selectedPlatforms = new Set();
 
@@ -2547,10 +2605,25 @@ $("descGenBtn")?.addEventListener("click", async () => {
     const format = latest.format || "auto";
     const instructions = document.querySelector('textarea[name="instructions"]')?.value || "";
 
+    const _r     = _currentResult || {};
+    const _pkg   = _r.packaging || {};
+    const _beats = (_r.script_structure || []).slice(0, 10)
+      .map(s => s.reason || s.beat || "").filter(Boolean);
+
     const res = await apiFetch("/api/generate-descriptions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ job_id: _currentJobId, title, format, context: instructions }),
+      body: JSON.stringify({
+        job_id:          _currentJobId,
+        title,
+        format,
+        context:         instructions,
+        packaging_title: _pkg.title || "",
+        end_caption:     _pkg.end_caption || "",
+        thumbnail_word:  _pkg.thumbnail_word || "",
+        titres_ctr:      _r.titres_ctr || [],
+        beat_summary:    _beats,
+      }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
