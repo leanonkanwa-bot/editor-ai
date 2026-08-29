@@ -964,9 +964,14 @@ def _zoom_filter_for_level(zoom_level: int, target_w: int, target_h: int) -> str
 _PUNCH_IN_STRONG_BEATS    = frozenset({"realization", "payoff", "amplify", "principle"})
 _PUNCH_IN_SPEECH_SCALE    = 1.060   # 6% scale bump
 _PUNCH_IN_SPEECH_DUR      = 0.40    # seconds each for IN (≥12 frames for perceived fluidity)
-_PUNCH_IN_SCALE_CAP       = 1.25    # skip punch if baseline already at/above this — prevents
-                                    # ratchet accumulation when pull_out is disabled
+_PUNCH_IN_SCALE_CAP       = 1.25    # hard skip when baseline is at/above this
 _PUNCH_IN_BUDGET_S        = 13.0   # minimum seconds between two punch-ins
+# Proactive ratchet reset: when baseline has crept above this threshold, inject a slow
+# drift-back instead of (and before) the next eligible punch, so the cap is never reached.
+_RATCHET_RESET_THRESHOLD  = 1.18   # trigger before the hard cap (1.25) — ~3 speech punches in
+_RATCHET_RESET_TARGET     = 1.04   # drift destination — near-neutral without snapping to 1.0
+_RATCHET_RESET_DUR        = 8.0    # drift duration (s) — slow enough to be subliminal
+_RATCHET_RESET_BUDGET_S   = 30.0   # minimum seconds between two resets
 _PUNCH_IN_SEGMENT_MIN_DUR = 2.0    # source segment must be this long to qualify
 _PUNCH_IN_ENTRY_OFFSET    = 0.15   # fire this many seconds after segment start
 _PUNCH_IN_CENTER_ZONES    = frozenset({"fullscreen", "video-overlay", "lower-third"})
@@ -1061,9 +1066,55 @@ def _inject_speech_punch_in_zooms(
       3. Entry ends during [t_punch, t_peak]: silently dropped — punch-in covers that window.
     """
     result = list(zoom_entries)
+    last_reset_at = -float("inf")
 
     for t_punch in sorted(punch_times):
         baseline  = _interp_zoom_scale(t_punch, result)
+
+        # Proactive ratchet reset: when baseline has crept above threshold and the cooldown
+        # has elapsed, inject a slow drift-back at this punch time instead of a punch.
+        # This clears scale accumulation before the hard cap is ever hit.
+        if (baseline >= _RATCHET_RESET_THRESHOLD
+                and t_punch - last_reset_at >= _RATCHET_RESET_BUDGET_S):
+            t_reset_end = round(t_punch + _RATCHET_RESET_DUR, 4)
+            processed_r: list[dict] = []
+            for ze in result:
+                zs     = float(ze.get("start", 0))
+                ze_end = float(ze.get("end",   zs))
+                zfrom  = float(ze.get("from",  1.0))
+                zto    = float(ze.get("to",    zfrom))
+                kind   = ze.get("kind", "drift")
+                if kind in ("jump_cut", "punch_in"):
+                    processed_r.append(ze)
+                    continue
+                if zs < t_punch < ze_end:
+                    dur  = ze_end - zs
+                    frac = (t_punch - zs) / dur
+                    scale_at = round(zfrom + (zto - zfrom) * frac, 4)
+                    processed_r.append({**ze, "end": round(t_punch, 4), "to": scale_at})
+                    if ze_end > t_reset_end:
+                        processed_r.append({**ze, "start": t_reset_end,
+                                            "from": _RATCHET_RESET_TARGET, "to": round(zto, 4)})
+                elif t_punch <= zs < t_reset_end and ze_end > t_reset_end:
+                    processed_r.append({**ze, "start": t_reset_end,
+                                        "from": _RATCHET_RESET_TARGET})
+                elif zs >= t_punch and ze_end <= t_reset_end:
+                    pass  # entirely within reset window — drop
+                else:
+                    processed_r.append(ze)
+            processed_r.append({"start": round(t_punch, 4), "end": t_reset_end,
+                                 "from": round(baseline, 4), "to": _RATCHET_RESET_TARGET,
+                                 "kind": "drift"})
+            result = processed_r
+            last_reset_at = t_punch
+            print(
+                f"[PUNCH] t={t_punch:.2f}s ratchet reset — baseline {baseline:.4f}"
+                f" ≥ {_RATCHET_RESET_THRESHOLD} → {_RATCHET_RESET_DUR:.0f}s drift to"
+                f" {_RATCHET_RESET_TARGET}",
+                flush=True,
+            )
+            continue
+
         if baseline >= _PUNCH_IN_SCALE_CAP:
             print(
                 f"[PUNCH] t={t_punch:.2f}s skipped — baseline {baseline:.4f} ≥ cap {_PUNCH_IN_SCALE_CAP}",

@@ -406,8 +406,9 @@ CUT SPEED BY SECTION:
   VISUAL RHYTHM: A visual change MUST occur every 1.5–2 seconds.
   Visual changes: B-roll cut, zoom punch, caption color emphasis.
   Count frames. If no visual event in 1.8s window → add zoom punch.
-  The renderer auto-inserts punches in any gap > 1.8s and every 3s via 15% punch.
-  Your job: ensure zoom_plan covers every 1.8s window.
+  The renderer does NOT auto-fill short gaps. Automatic fallback only kicks in
+  for dead zones > 20 seconds (micro-bumps) — everything under 20s is YOUR
+  responsibility. Cover every window yourself; do not count on any renderer safety net.
   A video with no visual change for 2+ seconds loses 70% of mobile viewers.
 
 SPEED RAMPS — flag moments for the renderer:
