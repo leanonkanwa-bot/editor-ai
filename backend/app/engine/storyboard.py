@@ -136,7 +136,7 @@ _LANDSCAPE_HERO_STYLES: frozenset[str] = frozenset({
     "chapter_marker", "callout",
     "prim_split_compare", "prim_journey_map", "prim_cinematic_reveal",
     "prim_ascension_reveal", "prim_shatter_truth", "prim_split_stage",
-    "prim_confession_frame",
+    "prim_confession_frame", "prim_numbered_rule", "prim_anecdote_frame",
 })
 
 # Styles whose catalogue _family is "full_cover": consume the entire canvas.
@@ -145,7 +145,7 @@ _LANDSCAPE_HERO_STYLES: frozenset[str] = frozenset({
 _FULL_COVER_STYLES: frozenset[str] = frozenset({
     "prim_split_compare", "prim_journey_map", "prim_cinematic_reveal",
     "prim_ascension_reveal", "prim_shatter_truth", "prim_split_stage",
-    "prim_confession_frame",
+    "prim_confession_frame", "prim_numbered_rule", "prim_anecdote_frame",
 })
 
 
@@ -656,7 +656,7 @@ OUTPUT: a JSON array of card objects. Each card:
     "number": "<if a stat/number is featured — for prim_stat_counter use numeric string only, e.g. '46.2' not '46,2 M€'>",
     "prefix": "<prim_stat_counter only — currency/unit BEFORE the number, e.g. '$'. Convention FR: laisser vide, mettre la devise dans suffix>",
     "suffix": "<prim_stat_counter only — unit AFTER the number, e.g. 'M€', 'K', '%'. Convention FR: suffix='€' ou 'M€', prefix vide>",
-    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking"|"hand_written_note"|"speech_bubble_thought"|"calendar_date_highlight"|"percentage_split"|"red_flag_list"|"success_metric_badge"|"client_avatar_persona"|"book_recommendation"|"tool_stack"|"revenue_breakdown"|"age_milestone"|"contrarian_take"|"action_step_cta"|"story_chapter_transition"|"live_reaction_split"|"hidden_cost_reveal"|"social_proof_counter"|"timeline_prediction"|"red_thread_connector"|"silent_beat_pause"|"comment_reply_style"|"before_you_scroll"|"traffic_light_status"|"day_in_life_schedule"|"skill_tree_unlock"|"audience_poll_result"|"broken_promise_tracker"|"ingredient_list"|"resource_allocation"|"fill_in_the_blank"|"streak_counter"|"before_now_later"|"platform_stats"|"cost_comparison"|"decision_matrix"|"habit_tracker"|"income_vs_expense"|"milestone_recap"|"content_calendar"|"client_result_number"|"mistake_lesson"|"tool_comparison"|"weekly_review"|"audience_question"|"prim_stat_counter"|"prim_split_compare"|"prim_journey_map"|"number_hero"|"prim_cinematic_reveal"|"prim_ascension_reveal"|"prim_shatter_truth"|"prim_split_stage"|"prim_confession_frame",
+    "style": "stat"|"key_phrase"|"quote"|"callout"|"comparison"|"list"|"question"|"timeline"|"dialogue"|"trend"|"attributed_quote"|"carousel"|"definition"|"checklist"|"score"|"mindmap"|"instagram-follow"|"tiktok-follow"|"yt-lower-third"|"news_ticker"|"rating"|"map_location"|"progress_bar"|"before_after_image"|"countdown"|"poll_question"|"myth_vs_fact"|"step_number"|"quote_carousel"|"emoji_reaction"|"price_tag"|"warning_soft"|"testimonial"|"versus_battle"|"recap_summary"|"location_journey"|"formula_equation"|"roadmap_milestone"|"pros_cons"|"star_rating_review"|"income_reveal"|"question_answer_pair"|"chapter_marker"|"secret_reveal"|"objection_response"|"data_bar_chart"|"cause_effect"|"number_ranking"|"hand_written_note"|"speech_bubble_thought"|"calendar_date_highlight"|"percentage_split"|"red_flag_list"|"success_metric_badge"|"client_avatar_persona"|"book_recommendation"|"tool_stack"|"revenue_breakdown"|"age_milestone"|"contrarian_take"|"action_step_cta"|"story_chapter_transition"|"live_reaction_split"|"hidden_cost_reveal"|"social_proof_counter"|"timeline_prediction"|"red_thread_connector"|"silent_beat_pause"|"comment_reply_style"|"before_you_scroll"|"traffic_light_status"|"day_in_life_schedule"|"skill_tree_unlock"|"audience_poll_result"|"broken_promise_tracker"|"ingredient_list"|"resource_allocation"|"fill_in_the_blank"|"streak_counter"|"before_now_later"|"platform_stats"|"cost_comparison"|"decision_matrix"|"habit_tracker"|"income_vs_expense"|"milestone_recap"|"content_calendar"|"client_result_number"|"mistake_lesson"|"tool_comparison"|"weekly_review"|"audience_question"|"prim_stat_counter"|"prim_split_compare"|"prim_journey_map"|"number_hero"|"prim_cinematic_reveal"|"prim_ascension_reveal"|"prim_shatter_truth"|"prim_split_stage"|"prim_confession_frame"|"prim_numbered_rule"|"prim_anecdote_frame",
     "left_label": "<comparison / prim_split_compare: left side label>",
     "left_value": "<comparison: left side value (prim_split_compare does not use this)>",
     "right_label": "<comparison / prim_split_compare: right side label>",
@@ -1526,6 +1526,36 @@ RULES:
       "kicker" (optional — quiet eyebrow label, max 30 chars, e.g.
       "CE QUE JE N'AI JAMAIS DIT", "MON POINT BAS", "CE QUE J'AI CACHÉ").
     Zone: fullscreen. Duration: 2.5–4.0s.
+  "prim_numbered_rule" — fullscreen blackout card: giant accent-color number
+    scale-bounces in, rule text fades below on a black background. Use when
+    the speaker explicitly LISTS numbered rules, principles, or laws (e.g.
+    "règle numéro 1", "ma première loi", "the 3rd mistake"). The number MUST
+    be explicitly spoken — do not infer a rule number from context. Each numbered
+    rule in a sequence should get its own prim_numbered_rule card.
+    BUDGET: no hard cap — generate one per numbered rule spoken. Best used in
+      sequences of 2–5 rules where the speaker explicitly counts.
+    DISQUALIFIERS — do NOT use when:
+      — The speaker lists items without explicit numbering → use list or checklist
+      — Only one item exists with no numeric label → use key_phrase or callout
+    Provide "number" (REQUIRED — single digit or number as spoken, e.g. '1', '2', '3'),
+      "title" (REQUIRED — the rule text below the number, max 50 chars, declarative).
+    No other contentHints needed. Zone: fullscreen. Duration: 1.5–2.5s.
+  "prim_anecdote_frame" — fullscreen vignette + film-grain overlay over the
+    speaker's video (no blackout — video shows through). No text. Soft fade in/out.
+    Creates a cinematic memory-frame atmosphere for personal stories or flashback
+    moments. Use when the speaker shifts into storytelling or recollection mode
+    and the visual texture should feel different from the main footage.
+    TRIGGER — use when the speaker explicitly enters a narrative / memory mode:
+      "je me souviens", "à l'époque", "le jour où", "c'était il y a",
+      "une anecdote", "laisse-moi te raconter", "l'histoire c'est que",
+      EN: "I remember", "back then", "the day I", "let me tell you", "the story is"
+    WITHOUT a clear entry into anecdote/memory mode → do not use.
+    DISQUALIFIERS — do NOT use for:
+      — General explanations or teachings without a narrative frame
+      — Emotional confessions (fragility, shame) → use prim_confession_frame instead
+      — Dramatic reveals → use prim_cinematic_reveal or prim_ascension_reveal
+    No contentHints required (pure visual texture — no text overlay).
+    Zone: fullscreen. Duration: 3.0–8.0s (matches the anecdote's spoken length).
   "question_answer_pair" — speaker poses a question AND immediately answers
     it in the same breath (e.g. "Qu'est-ce que c'est ? C'est une méthode
     en 3 étapes"). BOTH question and answer are present in the same segment.
@@ -2700,7 +2730,7 @@ def _inject_rhythm_split_stage(
     graphic_cards: list[dict],
     remapped_words: list[WordTiming],
     trimmed_duration: float,
-    style_pack: str,
+    style_pack: str,  # accepted for future per-pack behaviour — not yet used in body
     subject_side: str | None,
     layout: str,
     transcript_segments: list[dict] | None = None,
@@ -3233,10 +3263,18 @@ def generate_storyboard(
     # has moved to the next topic. Logic: find the speech segment that contains startSec;
     # if endSec extends past that segment's end by more than 0.5s, clamp it there.
     # Never shortens below startSec + 1.5s so the card remains readable.
-    _MIN_CARD_DISPLAY_S = 3.0  # raised from 1.5: floor must exceed DUR-EXT's 2.5s minimum
+    # Per-category floor mirrors DUR-EXT so ENDSEC-CLAMP never undercuts a guarantee
+    # that DUR-EXT already made. Multi-item → 3.5s, animated → 3.0s, others → 3.0s.
+    _ENDSEC_MULTI_ITEM_STYLES = _MULTI_ITEM_STYLES  # reuse the frozenset defined above
+    _ENDSEC_ANIMATED_STYLES   = _ANIMATED_STYLES
     for _gc in graphic_cards:
         _gs = float(_gc.get("startSec", 0))
         _ge = float(_gc.get("endSec", 0))
+        _gc_style = _gc.get("contentHints", {}).get("style", "")
+        if _gc_style in _ENDSEC_MULTI_ITEM_STYLES:
+            _MIN_CARD_DISPLAY_S = 3.5
+        else:
+            _MIN_CARD_DISPLAY_S = 3.0
         _seg_end: float | None = None
         for _ss2, _se2 in _seg_out:
             if _ss2 <= _gs <= _se2:

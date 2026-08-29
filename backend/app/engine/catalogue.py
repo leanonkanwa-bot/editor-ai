@@ -16,7 +16,7 @@ PRIMITIVES: dict[str, dict] = {
         "_family": "card_overlay",
         "_pack": "lean_glass",
         "zone": "upper-right",
-        "duration_range_s": (1.2, 1.8),
+        "duration_range_s": (3.0, 6.0),  # DUR-EXT enforces 3.0s minimum — keep aligned
         "contentHints": {
             "number":  "REQUIRED — numeric string, e.g. '46.2' or '1000'",
             "title":   "REQUIRED — kicker label below the number",
@@ -61,7 +61,7 @@ PRIMITIVES: dict[str, dict] = {
         "_family": "full_cover",
         "_pack": "lean_glass",
         "zone": "fullscreen",
-        "duration_range_s": (2.0, 2.5),
+        "duration_range_s": (3.0, 5.0),  # DUR-EXT enforces 3.0s minimum — keep aligned
         "cover_type": "blackout",
         "contentHints": {
             "left_label":  "REQUIRED — left panel label, e.g. 'AVANT'",
