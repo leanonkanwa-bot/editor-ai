@@ -1,4 +1,4 @@
-/**
+﻿/**
  * LeanRetention i18n — Commit 2: translations filled in.
  * Exposes: window.t(key), window.setLang(lang), window.getLang(), window.initLang()
  */
@@ -15,7 +15,10 @@
       // ── HERO ─────────────────────────────────────────────────────────────────
       hero_title1: "Monteur vidéo. Stratège rétention. Motion designer.",
       hero_glow: "Le tout en un : LeanRetention.",
-      hero_sub: "LeanRetention analyse ton contenu, ajoute des captions synchronisées, des graphics animés et exporte en 9:16 ou 16:9 automatiquement.",
+      hero_sub: "Glisse ta vidéo brute. Reçois en moins de 10 minutes une version montée, capée, visualisée — prête à poster.",
+      demo_context: "La même vidéo. Avant LeanRetention. Après.",
+      demo_before_caption: "Vidéo brute · hésitations · silences non coupés",
+      demo_after_caption: "Hook réécrit · silences coupés · graphics synchronisés",
       hero_cta1: "Éditer ma première vidéo →",
       hero_cta2: "Voir comment ça marche",
       trust_free: "Première vidéo gratuite",
@@ -34,28 +37,34 @@
       how_title: "De la vidéo brute au contenu viral<br>en 3 étapes",
       how_sub: "Aucune compétence en montage requise. L'IA gère tout de A à Z.",
       step1_title: "Upload ta vidéo brute",
-      step1_desc: "Glisse-dépose ton fichier mp4, mov ou webm, jusqu'à 20 Go. Notre upload sécurisé par chunks gère les fichiers lourds sans problème.",
+      step1_desc: "Glisse-dépose jusqu'à 30 Go. L'upload tourne en arrière-plan — continue à travailler, on t'envoie un email quand c'est prêt.",
       step2_title: "L'IA analyse et édite automatiquement",
-      step2_desc: "Transcription, réécriture du hook, suppression des silences, ajout de captions et de graphics IA : tout en quelques minutes, pas des heures.",
+      step2_desc: "L’IA transcrit, réécrit le hook, coupe les silences, ajoute captions et graphics. Tout en 3 à 8 minutes — pendant que tu fais autre chose.",
       step3_title: "Téléchargez ou publiez directement",
-      step3_desc: "Récupère ton MP4 prêt à poster, ou publie en 1 clic sur YouTube, TikTok, Instagram et LinkedIn.",
+      step3_desc: "Récupère ton MP4 prêt à poster. Vertical pour TikTok, horizontal pour YouTube — les deux disponibles sans remonter.",
 
       // ── FEATURES ─────────────────────────────────────────────────────────────
       feat_tag: "Fonctionnalités",
       feat_title: "Tout ce dont un créateur a besoin",
       feat_sub: "Un seul outil. Tout ce que tu aurais demandé à ton monteur.",
-      feat1_desc: "L'IA réécrit les 3 premières secondes de ta vidéo pour maximiser la rétention dès le départ.",
+      feat1_desc: "70% des spectateurs décident dans les 3 premières secondes. L'IA optimise ton hook pour que les bonnes personnes restent — automatiquement.",
       feat2_title: "Suppression des silences",
-      feat2_desc: "Détecte et met en évidence les pauses et hésitations pour que tu gardes le contrôle de ton rythme.",
+      feat2_desc: "Les silences, hésitations et tics de langage disparaissent sans que tu touches la timeline. Ce qui prenait 2h de montage manuel prend maintenant moins d’une minute.",
       feat3_title: "Captions automatiques",
-      feat3_desc: "Sous-titres word-by-word précis en français, anglais, espagnol et plus encore.",
+      feat3_desc: "85% des vidéos mobiles sont regardées sans son. Des captions précises mot par mot, en 50+ langues — pour garder l’attention même en silence.",
       feat4_title: "Graphics IA",
-      feat4_desc: "16 types de cartes graphiques animées : stats, timelines, comparaisons, listes, générées et synchronisées avec ton discours.",
+      feat4_desc: "Chaque argument fort devient une carte visuelle qui force le viewer à rester. Stats, timelines, listes : générées et synchronisées avec ton discours, automatiquement.",
       feat5_title: "Export multi-formats",
-      feat5_desc: "Télécharge ta vidéo prête en vertical 9:16 (TikTok/Reels) et horizontal 16:9 (YouTube), sans ré-éditer.",
+      feat5_desc: "Une seule vidéo traitée, deux formats prêts. 9:16 pour TikTok et Reels, 16:9 pour YouTube — sans remonter, sans recadrer.",
       feat6_title: "6 styles visuels",
-      feat6_desc: "Choisissez parmi 6 identités visuelles, du premium dark au manuscrit authentique, chacune avec ses propres animations et transitions.",
+      feat6_desc: "Ton identité visuelle cohérente sur chaque vidéo, sans brief créatif, sans designer. 6 univers avec leurs propres animations et transitions.",
 
+      feat7_title: "Export 4K",
+      feat7_desc: "YouTube and TikTok favor high-resolution videos in their algorithm. Export in native 4K - let the algorithm do the rest.",
+      pricing_anchor: "A freelance video editor charges between $50 and $200 per hour. LeanRetention costs less than a single session - and edits your video in 8 minutes.",
+      founder_quote: "I built LeanRetention because I was looking for something that didn't exist: a tool that actually understands video retention, not just editing. I still use it every week for my own videos.",
+      founder_name: "KAN - Founder of LeanRetention",
+      founder_role: "Content creator · Retention strategist",
       // ── PRICING ──────────────────────────────────────────────────────────────
       pricing_tag: "Tarifs",
       pricing_title: "Simple. Transparent. Sans surprise.",
@@ -97,7 +106,7 @@
 
       // ── FINAL CTA ────────────────────────────────────────────────────────────
       cta_title: "Le monteur que tu n'as jamais pu te payer.<br>Maintenant tu peux.",
-      cta_sub: "Première vidéo offerte. Aucune carte requise.",
+      cta_sub: "Poste ce soir. Pas dans 3 jours.",
 
       // ── FOOTER ───────────────────────────────────────────────────────────────
       footer_features: "Fonctionnalités",
@@ -211,7 +220,7 @@
       // ── HERO ─────────────────────────────────────────────────────────────────
       hero_title1: "Video editor. Retention strategist. Motion designer.",
       hero_glow: "All in one: LeanRetention.",
-      hero_sub: "LeanRetention analyzes your content, adds synced captions, animated graphics, and exports in 9:16 or 16:9 automatically.",
+      hero_sub: "Drop your raw footage. Get a fully edited, captioned, visualized video - ready to post in under 10 minutes.",
       hero_cta1: "Edit my first video →",
       hero_cta2: "See how it works",
       trust_free: "First video free",
@@ -219,6 +228,9 @@
       trust_time: "Results in 3 minutes",
       demo_before: "Before",
       demo_after: "After",
+      demo_context: "The same video. Before LeanRetention. After.",
+      demo_before_caption: "Raw footage - hesitations - uncut silences",
+      demo_after_caption: "Hook rewritten - silences removed - graphics synced",
 
       // ── EMAIL CAPTURE ─────────────────────────────────────────────────────────
       email_title: "Get your first video edited for free",
@@ -230,28 +242,34 @@
       how_title: "From raw footage to viral content<br>in 3 steps",
       how_sub: "No editing skills required. AI handles everything from start to finish.",
       step1_title: "Upload your raw video",
-      step1_desc: "Drag and drop your mp4, mov, or webm file - up to 20 GB. Our secure chunked upload handles heavy files without a hitch.",
+      step1_desc: "Drop your file - up to 30 GB. The upload runs in the background while you keep working. You get an email the moment your video is ready.",
       step2_title: "AI analyzes and edits automatically",
-      step2_desc: "Transcription, hook rewrite, silence removal, AI captions and graphics - done in minutes, not hours.",
+      step2_desc: "AI transcribes, rewrites the hook, cuts silences, adds captions and graphics. Everything in 3 to 8 minutes - while you do something else.",
       step3_title: "Download or publish directly",
-      step3_desc: "Get your MP4 ready to post, or publish in one click to YouTube, TikTok, Instagram, and LinkedIn.",
+      step3_desc: "Download your MP4 ready to post. Vertical for TikTok, horizontal for YouTube - both available without re-editing.",
 
       // ── FEATURES ─────────────────────────────────────────────────────────────
       feat_tag: "Features",
       feat_title: "Everything a creator needs",
       feat_sub: "One tool. Everything you'd ask your editor to do.",
-      feat1_desc: "AI rewrites the first 3 seconds of your video to maximize retention from the very first frame.",
+      feat1_desc: "70% of viewers decide in the first 3 seconds. AI optimizes your hook so the right people stay - automatically.",
       feat2_title: "Silence removal",
-      feat2_desc: "Highlights pauses and hesitations so you stay in control of your own rhythm.",
+      feat2_desc: "Silences, filler words, and hesitations disappear without touching the timeline. What used to take 2 hours of editing now takes less than a minute.",
       feat3_title: "Auto captions",
-      feat3_desc: "Word-by-word accurate subtitles in French, English, Spanish, and more.",
+      feat3_desc: "85% of mobile videos are watched without sound. Word-by-word accurate captions in 50+ languages - to keep attention even on mute.",
       feat4_title: "AI graphics",
-      feat4_desc: "16 types of animated graphic cards - stats, timelines, comparisons, lists - generated and synced to your speech.",
+      feat4_desc: "Every strong argument becomes a visual card that forces viewers to stay. Stats, timelines, lists - generated and synced to your speech, automatically.",
       feat5_title: "Multi-format export",
-      feat5_desc: "Download your video ready in vertical 9:16 (TikTok/Reels) and horizontal 16:9 (YouTube), without re-editing.",
+      feat5_desc: "One video processed, two formats ready. 9:16 for TikTok and Reels, 16:9 for YouTube - no re-editing, no recropping.",
       feat6_title: "6 visual styles",
-      feat6_desc: "Choose from 6 visual identities, from premium dark to authentic handwritten, each with its own animations and transitions.",
+      feat6_desc: "Your consistent visual identity on every video - no creative brief, no designer. 6 styles with their own animations and transitions.",
 
+      feat7_title: "Export 4K",
+      feat7_desc: "YouTube and TikTok favor high-resolution videos in their algorithm. Export in native 4K - let the algorithm do the rest.",
+      pricing_anchor: "A freelance video editor charges between $50 and $200 per hour. LeanRetention costs less than a single session - and edits your video in 8 minutes.",
+      founder_quote: "I built LeanRetention because I was looking for something that didn't exist: a tool that actually understands video retention, not just editing. I still use it every week for my own videos.",
+      founder_name: "KAN - Founder of LeanRetention",
+      founder_role: "Content creator · Retention strategist",
       // ── PRICING ──────────────────────────────────────────────────────────────
       pricing_tag: "Pricing",
       pricing_title: "Simple. Transparent. No surprises.",
@@ -293,7 +311,7 @@
 
       // ── FINAL CTA ────────────────────────────────────────────────────────────
       cta_title: "The editor you never could afford.<br>Now you can.",
-      cta_sub: "First video free. No card required.",
+      cta_sub: "Post tonight. Not in 3 days.",
 
       // ── FOOTER ───────────────────────────────────────────────────────────────
       footer_features: "Features",
