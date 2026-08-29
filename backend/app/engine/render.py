@@ -1164,6 +1164,26 @@ def _inject_speech_punch_in_zooms(
                            "kind": "punch_in"})
         result = processed
 
+    # Drop LLM pull_out entries within 5s after any punch_in — prevents the LLM from
+    # recreating the yoyo effect that commit 4168520 removed at the renderer level.
+    # Deliberate cinematic pull_outs at section transitions (spaced > 5s from punches) survive.
+    _punch_in_times = [float(e["start"]) for e in result if e.get("kind") == "punch_in"]
+    if _punch_in_times:
+        _PULLOUT_GUARD_S = 5.0
+        filtered: list[dict] = []
+        for ze in result:
+            if ze.get("kind") == "pull_out":
+                t_po = float(ze.get("start", 0))
+                if any(0 <= t_po - tp <= _PULLOUT_GUARD_S for tp in _punch_in_times):
+                    print(
+                        f"[PUNCH] pull_out@{t_po:.2f}s dropped — within {_PULLOUT_GUARD_S:.0f}s of"
+                        f" nearest punch_in (yoyo guard)",
+                        flush=True,
+                    )
+                    continue
+            filtered.append(ze)
+        result = filtered
+
     return sorted(result, key=lambda e: float(e.get("start", 0)))
 
 

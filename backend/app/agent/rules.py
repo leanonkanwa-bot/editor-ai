@@ -410,6 +410,9 @@ CUT SPEED BY SECTION:
   for dead zones > 20 seconds (micro-bumps) — everything under 20s is YOUR
   responsibility. Cover every window yourself; do not count on any renderer safety net.
   A video with no visual change for 2+ seconds loses 70% of mobile viewers.
+  pull_out rule: use pull_out ONLY at major section or interval transitions —
+  never within 5 seconds of a punch_in. The renderer enforces this and will
+  silently drop pull_outs that violate it.
 
 SPEED RAMPS — flag moments for the renderer:
   speed_up moments: mundane connectives, quick examples, transitions
