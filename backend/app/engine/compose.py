@@ -781,6 +781,10 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
     parts.append(f'  gap: 14px; max-width: {max_width_eff}; position: relative;')
     parts.append(f'  box-shadow: {shadow_val};')
     parts.append('}')
+    if compact:
+        parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
+        parts.append('  overflow: hidden;')
+        parts.append('}')
     if p.get("id") == "lean_cinema":
         # Radial-gradient dissolve: panel fades into the video — text emerges from the scene.
         # box-shadow suppressed; a hard shadow rectangle would outline the transparent edges.
@@ -2000,7 +2004,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         _asc_sz = title_size_eff if compact else number_size_eff
         parts.append(f'.card[data-card-id="{card_id}"] .asc-text {{')
         parts.append(f'  font-family:{p["font"]}; font-size:{_asc_sz};')
-        parts.append(f'  font-weight:900; color:{p["text"]}; text-align:center; opacity:0;')
+        parts.append(f'  font-weight:900; color:{p["text"]}; text-align:center; opacity:0; overflow-wrap:break-word;')
         if p["title_glow_intense"]:
             parts.append(f'  text-shadow:{p["title_glow_intense"]};')
         elif p["title_glow"]:
@@ -2019,7 +2023,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         _sct_sz = "28px" if compact else "36px"
         parts.append(f'  font-family:{p["font"]}; font-size:{_sct_sz};')
         parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]}; text-align:center;')
-        parts.append(f'  font-style:italic; opacity:0; letter-spacing:0.02em;')
+        parts.append(f'  font-style:italic; opacity:0; letter-spacing:0.02em; overflow-wrap:break-word;')
         if p["title_glow"]:
             parts.append(f'  text-shadow:{p["title_glow"]};')
         parts.append('}')

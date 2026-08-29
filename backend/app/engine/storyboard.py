@@ -1115,7 +1115,10 @@ RULES:
     active focal emphasis, numbered or not). Provide "step_num" (can be
     a label like "01", "Clé n°1", or "?" if unnamed) + optional
     "step_label". NOT versus_battle (versus_battle requires two named
-    opposing sides; step_number has only ONE focal subject).
+    opposing sides; step_number has only ONE focal subject). NOT when
+    the speaker is announcing a multi-step framework in the abstract
+    (e.g. "il y a 3 étapes", "voici les 4 clés") — use `list` or
+    `timeline` to introduce a sequence of steps.
   "quote_carousel" — speaker delivers 2-4 short quotes or phrases in
     rapid succession that should cycle visually. Distinct from carousel
     (carousel is for varied tips/content); use quote_carousel only for
@@ -2150,16 +2153,15 @@ Design graphic overlay cards for this video — target {target_cards} cards for 
             card["startSec"] = max(0, min(float(card.get("startSec", 0) or 0), trimmed_duration - 1))
             card["endSec"] = max(card["startSec"] + 0.5, min(float(card.get("endSec", 0) or 0), trimmed_duration))
         # Defensive duration cap: contrarian_take is a brief verbal signal, not a
-        # long window. Cap at 2.5s to prevent swallowing adjacent content types
-        # if classification fired on paraphrased planning output rather than
-        # literal speech.
+        # long window. Cap at 4.0s so full-sentence titles have time to be read
+        # without forcing the card off-screen before the viewer registers it.
         for card in cards:
             if card.get("contentHints", {}).get("style") == "contrarian_take":
                 _start = float(card["startSec"])
                 _end = float(card["endSec"])
-                if _end - _start > 2.5:
-                    card["endSec"] = round(_start + 2.5, 2)
-                    print(f"[STORYBOARD] contrarian_take cap: {_start:.2f}-{_end:.2f}s → {_start:.2f}-{card['endSec']}s", flush=True)
+                if _end - _start > 4.0:
+                    card["endSec"] = round(_start + 4.0, 2)
+                    print(f"[STORYBOARD] contrarian_take 4s cap: {_start:.2f}-{_end:.2f}s → {_start:.2f}-{card['endSec']}s", flush=True)
         # Duration extension: lift short cards to per-category minimums.
         # Sorted first so the anti-overlap clamp (next_card.startSec) is accurate.
         _MULTI_ITEM_STYLES = frozenset({
@@ -3161,7 +3163,7 @@ def generate_storyboard(
                 _matched = _w.start
                 _matched_word = _w.text
                 break
-        if _matched is not None and _matched - _start_s > 0.25:
+        if _matched is not None and 0.25 < _matched - _start_s <= 4.0:
             _orig_start = float(_gc["startSec"])
             _gc["startSec"] = round(max(_matched - _ANCHOR_LEAD_S, _start_s), 3)
             if float(_gc.get("endSec", 0)) < _gc["startSec"] + 1.5:
