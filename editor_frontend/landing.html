@@ -532,6 +532,19 @@
             </button>
           </div>
         </div>
+        <div class="lp-format" id="lpFormat" style="display:none">
+          <div class="lp-format-label">Format de sortie</div>
+          <div class="lp-format-btns">
+            <button type="button" class="lp-fmt-btn active" data-fmt="short">
+              <span class="lp-fmt-name">Court · 9:16</span>
+              <span class="lp-fmt-desc">TikTok · Reels · Shorts</span>
+            </button>
+            <button type="button" class="lp-fmt-btn" data-fmt="long">
+              <span class="lp-fmt-name">Long · 16:9</span>
+              <span class="lp-fmt-desc">YouTube · Paysage</span>
+            </button>
+          </div>
+        </div>
         <button type="button" class="btn btn-salmon btn-lg lp-submit" id="lpSubmit" style="display:none" disabled>Éditer ma vidéo →</button>
       </div>
       <div class="hero-trust">
@@ -1403,6 +1416,19 @@
     }
     .lp-pack.active .lp-pack-check { display: flex; }
     /* Submit */
+    .lp-format { margin: .6rem 0 .5rem; }
+    .lp-format-label { font-size: .68rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: .5rem; text-align: left; }
+    .lp-format-btns { display: flex; gap: .5rem; }
+    .lp-fmt-btn {
+      flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: .1rem;
+      padding: .55rem .8rem; border-radius: 10px; border: 1px solid var(--border);
+      background: transparent; cursor: pointer; transition: border-color .15s, background .15s;
+      text-align: left;
+    }
+    .lp-fmt-btn:hover { border-color: rgba(255,119,81,.45); }
+    .lp-fmt-btn.active { border-color: var(--salmon); background: rgba(255,119,81,.06); }
+    .lp-fmt-name { font-size: .82rem; font-weight: 700; color: var(--text); }
+    .lp-fmt-desc { font-size: .7rem; color: var(--muted); }
     .lp-submit { width: 100%; justify-content: center; margin-top: .6rem; }
     .lp-submit:disabled { opacity: .4; cursor: not-allowed; box-shadow: none !important; }
     @media (max-width: 560px) { .lp-packs-grid { grid-template-columns: 1fr; } }
@@ -1453,12 +1479,14 @@
     var _uploadId   = null;
     var _uploadDone = false;
     var _selectedPack   = 'lean_cinema';
+    var _selectedFormat = 'short';
     var _isAuthenticated = false;
 
     var drop      = document.getElementById('lpDrop');
     var fileInp   = document.getElementById('lpFile');
     var uploading = document.getElementById('lpUploading');
     var packsEl   = document.getElementById('lpPacks');
+    var formatEl  = document.getElementById('lpFormat');
     var submitEl  = document.getElementById('lpSubmit');
     var overlay   = document.getElementById('lpAuthOverlay');
 
@@ -1496,13 +1524,22 @@
       });
     });
 
+    // Format selection
+    document.querySelectorAll('.lp-fmt-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.lp-fmt-btn').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        _selectedFormat = btn.dataset.fmt;
+      });
+    });
+
     // Submit → auth modal or /app if already logged in
     submitEl.addEventListener('click', function() {
       sessionStorage.setItem('lle_pending_upload', JSON.stringify({
         upload_id:       _uploadId,
         upload_complete: _uploadDone,
         style_pack:      _selectedPack,
-        format:          'short',
+        format:          _selectedFormat,
       }));
       if (_isAuthenticated) {
         window.location.href = '/app';
@@ -1524,6 +1561,7 @@
       drop.style.display = 'none';
       uploading.style.display = '';
       packsEl.style.display = '';
+      formatEl.style.display = '';
       submitEl.style.display = '';
       submitEl.disabled = true;
       submitEl.textContent = 'Upload en cours…';
@@ -1546,6 +1584,7 @@
         uploading.style.display = 'none';
         submitEl.style.display = 'none';
         packsEl.style.display = 'none';
+        formatEl.style.display = 'none';
       });
     }
 
