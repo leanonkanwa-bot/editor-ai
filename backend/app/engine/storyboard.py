@@ -3265,8 +3265,16 @@ def generate_storyboard(
     # Never shortens below startSec + 1.5s so the card remains readable.
     # Per-category floor mirrors DUR-EXT so ENDSEC-CLAMP never undercuts a guarantee
     # that DUR-EXT already made. Multi-item → 3.5s, animated → 3.0s, others → 3.0s.
-    _ENDSEC_MULTI_ITEM_STYLES = _MULTI_ITEM_STYLES  # reuse the frozenset defined above
-    _ENDSEC_ANIMATED_STYLES   = _ANIMATED_STYLES
+    # (_MULTI_ITEM_STYLES is defined inside _generate_graphic_cards — redeclare locally.)
+    _ENDSEC_MULTI_ITEM_STYLES = frozenset({
+        "list", "timeline", "checklist", "pros_cons", "data_bar_chart",
+        "carousel", "mindmap", "roadmap_milestone", "tool_stack",
+        "revenue_breakdown", "tool_comparison", "decision_matrix",
+        "day_in_life_schedule", "milestone_recap", "content_calendar",
+        "weekly_review", "ingredient_list", "resource_allocation",
+        "platform_stats", "cost_comparison", "broken_promise_tracker",
+        "percentage_split", "habit_tracker",
+    })
     for _gc in graphic_cards:
         _gs = float(_gc.get("startSec", 0))
         _ge = float(_gc.get("endSec", 0))
