@@ -1521,6 +1521,7 @@ $("retryBtn")?.addEventListener("click", async () => {
   if (jdata.status === "done") {
     // Render finished while the user was away.
     localStorage.removeItem("active_job_id");
+    localStorage.setItem("last_completed_job_id", savedJobId);
     banner.innerHTML = `<span>✓ Votre vidéo est prête !</span><button id="resumeBannerBtn" style="${btnStyle}">Voir le résultat</button>`;
     document.body.prepend(banner);
     document.getElementById("resumeBannerBtn")?.addEventListener("click", () => {
