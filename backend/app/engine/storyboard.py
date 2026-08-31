@@ -93,6 +93,41 @@ _FR_STOPWORDS: frozenset[str] = frozenset({
     "quand", "ensemble",
 })
 
+# English stopwords — function words that carry no semantic content in title/trigger matching.
+# English videos need their own list since French stopwords don't cover "the", "to", "you", etc.
+_EN_STOPWORDS: frozenset[str] = frozenset({
+    # pronouns
+    "i", "me", "my", "myself", "we", "our", "ours", "ourselves",
+    "you", "your", "yours", "yourself", "yourselves",
+    "he", "him", "his", "himself", "she", "her", "hers", "herself",
+    "it", "its", "itself", "they", "them", "their", "theirs", "themselves",
+    "what", "which", "who", "whom", "this", "that", "these", "those",
+    # auxiliary / high-frequency verbs
+    "am", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "having", "do", "does", "did", "doing",
+    "will", "would", "could", "should", "may", "might", "shall", "can",
+    # articles / determiners
+    "a", "an", "the",
+    # prepositions
+    "at", "by", "for", "in", "of", "on", "to", "up", "as",
+    "into", "from", "with", "about", "above", "below", "between",
+    "through", "during", "before", "after", "since", "until",
+    # conjunctions
+    "and", "but", "or", "nor", "so", "yet", "both", "either",
+    "neither", "not", "if", "then", "than", "because", "while",
+    "although", "though", "when", "where", "unless",
+    # common adverbs / discourse words
+    "also", "just", "very", "too", "more", "most", "only",
+    "even", "still", "already", "always", "often", "never",
+    "here", "there", "now", "then", "well", "like",
+})
+
+# Language → stopword set. Fallback to English for unrecognised language codes.
+_STOPWORDS_BY_LANG: dict[str, frozenset] = {
+    "fr": _FR_STOPWORDS,
+    "en": _EN_STOPWORDS,
+}
+
 # Maps each trigger style to the contentHints field that holds its key claim.
 # This field is what the speaker must have literally said for the style to be valid.
 _TRIGGER_TEXT_FIELD: dict[str, str] = {
@@ -2359,9 +2394,10 @@ def _tokenize_text(text: str) -> frozenset[str]:
     )
 
 
-def _content_words(text: str) -> frozenset[str]:
-    """Tokenize then remove French stopwords, keeping only substantive content tokens."""
-    return _tokenize_text(text) - _FR_STOPWORDS
+def _content_words(text: str, language: str = "en") -> frozenset[str]:
+    """Tokenize then strip language-specific stopwords, keeping only substantive content tokens."""
+    sw = _STOPWORDS_BY_LANG.get(language[:2].lower(), _EN_STOPWORDS)
+    return _tokenize_text(text) - sw
 
 
 def _card_trigger_text(card: dict) -> str:
@@ -2383,14 +2419,14 @@ def _card_trigger_text(card: dict) -> str:
     return str(val)
 
 
-def _find_trigger_anchor(card: dict, remapped_words: list[WordTiming]) -> float | None:
+def _find_trigger_anchor(card: dict, remapped_words: list[WordTiming], language: str = "en") -> float | None:
     """Return corrected startSec anchored to the first Whisper word that matches a
     trigger content-word, scanning [startSec - PRE, startSec + ANCHOR_SEARCH_FORWARD_S].
 
     Returns None if no matching word is found (caller keeps original startSec).
     Never moves startSec backward beyond the current value.
     """
-    trigger_cw = _content_words(_card_trigger_text(card))
+    trigger_cw = _content_words(_card_trigger_text(card), language)
     if not trigger_cw:
         return None
     start = float(card.get("startSec", 0))
@@ -2401,16 +2437,16 @@ def _find_trigger_anchor(card: dict, remapped_words: list[WordTiming]) -> float 
             continue
         if w.start > hi:
             break
-        if _content_words(w.text) & trigger_cw:
+        if _content_words(w.text, language) & trigger_cw:
             anchored = round(max(w.start - _ANCHOR_LEAD_S, start), 3)
             return anchored
     return None
 
 
-def _grounding_overlap(card: dict, remapped_words: list[WordTiming]) -> float:
+def _grounding_overlap(card: dict, remapped_words: list[WordTiming], language: str = "en") -> float:
     """Return fraction of trigger content-words present in speech near startSec.
 
-    Stopwords (French function words, pronouns, high-frequency verbs) are stripped
+    Stopwords (language-specific function words, pronouns, high-frequency verbs) are stripped
     from both the trigger text and the Whisper window before computing overlap.
     This prevents invented phrases that share only function words with genuine speech
     (e.g. "je vais dire que c'est une mauvaise idée" near "je vais vous montrer ça")
@@ -2419,14 +2455,14 @@ def _grounding_overlap(card: dict, remapped_words: list[WordTiming]) -> float:
     Window: [startSec - _GROUNDING_WINDOW_PRE_S, startSec + _GROUNDING_WINDOW_POST_S].
     Returns 1.0 (always passes) when the card has no extractable trigger text.
     """
-    trigger_tokens = _content_words(_card_trigger_text(card))
+    trigger_tokens = _content_words(_card_trigger_text(card), language)
     if not trigger_tokens:
         return 1.0
     start = float(card.get("startSec", 0))
     spoken: frozenset[str] = frozenset()
     for w in remapped_words:
         if start - _GROUNDING_WINDOW_PRE_S <= w.start <= start + _GROUNDING_WINDOW_POST_S:
-            spoken |= _content_words(w.text)
+            spoken |= _content_words(w.text, language)
     return len(trigger_tokens & spoken) / len(trigger_tokens)
 
 
@@ -3134,7 +3170,7 @@ def generate_storyboard(
         _style = _gc.get("contentHints", {}).get("style", "")
         if _style not in _TRIGGER_STYLES:
             continue
-        _anchor = _find_trigger_anchor(_gc, remapped_words)
+        _anchor = _find_trigger_anchor(_gc, remapped_words, language)
         if _anchor is not None and _anchor > float(_gc.get("startSec", 0)):
             _orig_start = float(_gc["startSec"])
             _gc["startSec"] = _anchor
@@ -3178,7 +3214,7 @@ def generate_storyboard(
                 _used_data_fallback = bool(_title)
         if not _title:
             continue
-        _title_cw = _content_words(_title)
+        _title_cw = _content_words(_title, language)
         if not _title_cw:
             continue
         _start_s = float(_gc.get("startSec", 0))
@@ -3194,7 +3230,7 @@ def generate_storyboard(
                 continue
             if _w.start > _hi:
                 break
-            if _content_words(_w.text) & _title_cw:
+            if _content_words(_w.text, language) & _title_cw:
                 _matched = _w.start
                 _matched_word = _w.text
                 break
@@ -3222,7 +3258,7 @@ def generate_storyboard(
         _style = _gc.get("contentHints", {}).get("style", "")
         if _style not in _TRIGGER_STYLES:
             continue
-        _overlap = _grounding_overlap(_gc, remapped_words)
+        _overlap = _grounding_overlap(_gc, remapped_words, language)
         _pct = int(_overlap * 100)
         if _overlap < _GROUNDING_OVERLAP_THRESHOLD:
             _orig = _style
@@ -3473,7 +3509,7 @@ def generate_storyboard(
         # 1. Trigger-style anchor ─────────────────────────────────────────────
         _gf_style = _gf_card.get("contentHints", {}).get("style", "")
         if _gf_style in _TRIGGER_STYLES:
-            _gf_anchor = _find_trigger_anchor(_gf_card, remapped_words)
+            _gf_anchor = _find_trigger_anchor(_gf_card, remapped_words, language)
             if _gf_anchor is not None and _gf_anchor > float(_gf_card.get("startSec", 0)):
                 _gf_orig = float(_gf_card["startSec"])
                 _gf_card["startSec"] = _gf_anchor
@@ -3488,7 +3524,7 @@ def generate_storyboard(
         # 2. Title-based semantic anchor (non-trigger cards) ──────────────────
         else:
             _gf_title = _gf_card.get("contentHints", {}).get("title", "")
-            _gf_title_cw = _content_words(_gf_title) if _gf_title else frozenset()
+            _gf_title_cw = _content_words(_gf_title, language) if _gf_title else frozenset()
             if _gf_title_cw:
                 _gf_s0 = float(_gf_card.get("startSec", 0))
                 _gf_lo = _gf_s0 - _GROUNDING_WINDOW_PRE_S
@@ -3500,7 +3536,7 @@ def generate_storyboard(
                         continue
                     if _gfw.start > _gf_hi:
                         break
-                    if _content_words(_gfw.text) & _gf_title_cw:
+                    if _content_words(_gfw.text, language) & _gf_title_cw:
                         _gf_matched = _gfw.start
                         _gf_matched_word = _gfw.text
                         break
@@ -3521,7 +3557,7 @@ def generate_storyboard(
         # 3. Grounding guard ───────────────────────────────────────────────────
         _gf_style = _gf_card.get("contentHints", {}).get("style", "")
         if _gf_style in _TRIGGER_STYLES:
-            _gf_overlap = _grounding_overlap(_gf_card, remapped_words)
+            _gf_overlap = _grounding_overlap(_gf_card, remapped_words, language)
             if _gf_overlap < _GROUNDING_OVERLAP_THRESHOLD:
                 _gf_title = _gf_card.get("contentHints", {}).get("title", "")
                 _gf_card["contentHints"]["style"] = "key_phrase" if _gf_title else "callout"
