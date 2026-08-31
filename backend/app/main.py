@@ -246,60 +246,14 @@ def _on_startup() -> None:
     asyncio.create_task(_reengagement_loop())
     asyncio.create_task(_orphan_detector_loop())
 
-    # ── SIGTERM handler — register AFTER uvicorn sets up its own handler ────
-    # We wrap uvicorn's handler: set the shutdown flag (rejects new renders),
-    # drain the in-flight render for up to _SIGTERM_DRAIN_SECS, then forward
-    # to uvicorn so it exits normally.  Renders that outlast the drain window
-    # are recovered on the next boot by the auto-resume logic below.
-    #
-    # Railway note: Railway's default SIGTERM→SIGKILL gap is 0 s.  This drain
-    # window only works because railway.json sets drainingSeconds: 600.
-    #
-    # 570 s = 600 s (Railway hard-kill) − 30 s (clean-exit margin).
-    # The app finishes draining before Railway's SIGKILL can interrupt it.
-    # ⚠️  TEMPORAIRE — REMETTRE À 570 AVANT TOUT TRAFIC UTILISATEUR RÉEL  ⚠️
-    # Valeur de prod : 570 (9m30s — Railway 600s kill minus 30s margin).
-    # Si you change drainingSeconds in railway.json, update this constant too,
-    # keeping the 30 s margin intact.  Renders that outlast even 570 s are
-    # killed by Railway and auto-resumed by Layer C on next boot.
-    _SIGTERM_DRAIN_SECS = 570  # 9.5 min drain window — allows in-flight render to complete
+    # Minimal SIGTERM handler — rejette les nouvelles requêtes, exit immédiat.
+    # Drain retiré (2026-08-31) pour la phase de tests intensifs : pushs instantanés.
+    # ⚠ REMETTRE LE DRAIN AVANT TOUT TRAFIC UTILISATEUR RÉEL : voir memory/project_sigterm-drain.md
     _uvicorn_sigterm = _signal.getsignal(_signal.SIGTERM)
 
     def _sigterm_handler(signum: int, frame: object) -> None:
         _pipeline_shutdown.set()
-
-        # Non-blocking check: does the semaphore show a render is currently held?
-        _sem_free = _RENDER_SEM.acquire(blocking=False)
-        if _sem_free:
-            # Semaphore was free → no render in progress; release and exit fast.
-            _RENDER_SEM.release()
-            print(
-                "[SHUTDOWN] SIGTERM received — 0 renders in flight; "
-                "new requests rejected; exiting immediately",
-                flush=True,
-            )
-        else:
-            # Semaphore is held → 1 render in progress.
-            print(
-                f"[SHUTDOWN] SIGTERM received — 1 render in flight; "
-                f"new requests rejected; draining (max {_SIGTERM_DRAIN_SECS // 60} min)…",
-                flush=True,
-            )
-            try:
-                acquired = _RENDER_SEM.acquire(timeout=_SIGTERM_DRAIN_SECS)
-                if acquired:
-                    _RENDER_SEM.release()
-                    print("[SHUTDOWN] In-flight render completed — draining done", flush=True)
-                else:
-                    print(
-                        f"[SHUTDOWN] Drain timeout after {_SIGTERM_DRAIN_SECS // 60} min — "
-                        "Layer C auto-resume will pick this render up on next boot",
-                        flush=True,
-                    )
-            except Exception as _e:
-                print(f"[SHUTDOWN] Drain error: {_e}", flush=True)
-
-        # Forward to uvicorn's handler so the process exits cleanly.
+        print("[SHUTDOWN] SIGTERM received — new renders rejected; exiting immediately", flush=True)
         if callable(_uvicorn_sigterm) and _uvicorn_sigterm not in (
             _signal.SIG_DFL, _signal.SIG_IGN
         ):
