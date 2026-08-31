@@ -20,7 +20,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./
 ARG RAILWAY_GIT_COMMIT_SHA=""
 RUN if [ -n "$RAILWAY_GIT_COMMIT_SHA" ]; then echo "$RAILWAY_GIT_COMMIT_SHA" > COMMIT_HASH; fi
-RUN cd app/engine && npm ci --omit=dev 2>/dev/null || npm install --omit=dev 2>/dev/null || true
+RUN cd app/engine && (npm ci --omit=dev || npm install --omit=dev) && \
+    test -f node_modules/hyperframes/dist/cli.js || \
+    (echo "ERROR: node_modules/hyperframes/dist/cli.js manquant après npm install — build échoue" && exit 1)
 COPY editor_frontend/ /app/editor_frontend/
 COPY frontend/ /app/frontend/
 EXPOSE 8000
