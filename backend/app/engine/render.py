@@ -1152,10 +1152,10 @@ def _inject_speech_punch_in_zooms(
                 # Entries ending within [t_punch, t_peak] are dropped — punch covers window.
             elif t_punch <= zs < t_peak and ze_end > t_peak:
                 # Case 2: entry starts during punch window but extends past t_peak.
-                # Trim to [t_peak, end] and reset from=scale_in so GSAP / _interp_zoom_scale
-                # see a coherent starting value at the punch peak, not the original pre-punch
-                # baseline.
-                processed.append({**ze, "start": t_peak, "from": scale_in})
+                # Trim to [t_peak, end] and reset from=scale_in.  Cap `to` at scale_in
+                # so a descending drift doesn't immediately pull scale back down (yoyo guard).
+                _c2_to = round(max(float(zto), float(scale_in)), 4)
+                processed.append({**ze, "start": t_peak, "from": scale_in, "to": _c2_to})
             else:
                 processed.append(ze)
 

@@ -404,6 +404,7 @@ def _build_chunk_context(
     total_duration: float,
     narrative_map: dict,
     prev_keep_segments_abs: list[dict],
+    prev_zoom_end_scale: float | None = None,
 ) -> str:
     """Build the narrative context block injected into each chunk's planner prompt.
 
@@ -412,6 +413,7 @@ def _build_chunk_context(
     The block is clearly framed as hints — the LLM can deviate if local content
     warrants it, keeping Pass 2 robust to imperfect Pass 1 output.
     """
+    local_dur = round(chunk_end_abs - chunk_start_abs, 1)
     lines: list[str] = [
         "╔═══ CHUNKED PLANNING CONTEXT ════════════════════════════════════════╗",
         f"  Chunk {chunk_idx + 1} of {n_chunks}.",
@@ -421,6 +423,32 @@ def _build_chunk_context(
         f"        appears as t≈0s in the transcript above. Add {chunk_start_abs:.0f}s to recover",
         f"        absolute source time if needed.",
         "╚══════════════════════════════════════════════════════════════════════╝",
+        "",
+    ]
+
+    # ── Zoom continuity: carry forward the ending scale of the previous chunk ──
+    if chunk_idx > 0:
+        if prev_zoom_end_scale is not None:
+            lines += [
+                f"ZOOM CONTINUITY: the previous chunk's zoom arc ended at scale={prev_zoom_end_scale:.3f}.",
+                f"  Your zoom_plan's FIRST entry MUST have \"from\": {prev_zoom_end_scale:.3f}",
+                "  to prevent a visible scale jump at the chunk boundary.",
+                "",
+            ]
+        else:
+            lines += [
+                "ZOOM CONTINUITY: previous chunk zoom scale unknown — start your first zoom_plan",
+                "  entry with \"from\": 1.000 to be safe.",
+                "",
+            ]
+
+    # ── Zoom density: ensure a continuous drift baseline covers the full window ─
+    lines += [
+        f"ZOOM DENSITY: this chunk spans {local_dur:.0f}s of local time (t=0 to t≈{local_dur:.0f}).",
+        "  You MUST include at least one continuous drift entry that covers most of this window",
+        f"  (e.g. {{\"start\": 0, \"end\": {local_dur:.0f}, \"from\": ..., \"to\": ..., \"kind\": \"drift\"}}).",
+        "  Add punch_in events on top of that baseline drift. Without a baseline drift, every",
+        "  uncovered second becomes a frozen static hold — the video loses all zoom motion.",
         "",
     ]
 
@@ -600,12 +628,51 @@ def _merge_chunk_plans(
     if wc:
         merged["word_categories"] = wc
 
+    # ── Option A: zoom continuity repair — bridge any residual scale jumps ──────
+    # Even when the LLM honours the ZOOM CONTINUITY hint (Option B), rounding or
+    # non-compliance can leave a hard gap between chunk N's last `to` and chunk
+    # N+1's first `from`.  Insert a short bridge drift to close any such gap.
+    _BRIDGE_DUR_S = 0.8
+    _JUMP_THRESH  = 0.005  # ignore sub-0.5% rounding noise
+    _n_bridges    = 0
+    zp_raw = merged.get("zoom_plan")
+    if zp_raw and len(zp_raw) > 1:
+        zp_sorted = sorted(zp_raw, key=lambda e: float(e.get("start", 0)))
+        zp_repaired: list[dict] = []
+        for _i, _entry in enumerate(zp_sorted):
+            if _i == 0:
+                zp_repaired.append(_entry)
+                continue
+            _prev      = zp_repaired[-1]
+            _prev_to   = float(_prev.get("to",    _prev.get("from", 1.0)))
+            _cur_from  = float(_entry.get("from", _entry.get("to",  1.0)))
+            _gap_start = float(_prev.get("end",   _prev.get("start", 0)))
+            _cur_start = float(_entry.get("start", 0))
+            if abs(_cur_from - _prev_to) > _JUMP_THRESH:
+                _bridge_end = min(_gap_start + _BRIDGE_DUR_S, _cur_start)
+                if _bridge_end > _gap_start + 0.05:
+                    zp_repaired.append({
+                        "start": round(_gap_start, 4),
+                        "end":   round(_bridge_end, 4),
+                        "from":  round(_prev_to,   4),
+                        "to":    round(_cur_from,   4),
+                        "kind":  "drift",
+                    })
+                    _n_bridges += 1
+                    print(
+                        f"[ZOOM-BRIDGE] t={_gap_start:.1f}s: scale {_prev_to:.3f}→{_cur_from:.3f}"
+                        f" over {_bridge_end - _gap_start:.2f}s (chunk boundary smoothing)",
+                        flush=True,
+                    )
+            zp_repaired.append(_entry)
+        merged["zoom_plan"] = zp_repaired
+
     n_deduped = total_raw - len(accepted)
     _merge_counts = {f: len(merged.get(f) or []) for f in _TIME_LIST_FIELDS}
     print(
         f"[CHUNK-MERGE] {len(chunk_plans_abs)} chunks,"
         f" {total_raw} raw segs → {len(accepted)} kept ({n_deduped} overlap-deduped)"
-        f" | zoom={_merge_counts['zoom_plan']}"
+        f" | zoom={_merge_counts['zoom_plan']} (+{_n_bridges} bridge drifts)"
         f" cap_moments={_merge_counts['caption_moments']}"
         f" broll={_merge_counts['broll_suggestions']}"
         f" sfx={_merge_counts['sfx_cues']}"
@@ -733,6 +800,17 @@ def _plan_edit_chunked(
             "duration": local_duration,
         }
 
+        # Extract the ending scale of the previous chunk's zoom_plan so the next
+        # chunk's LLM can start its arc at the correct baseline (Option B: source fix).
+        _prev_zoom_end: float | None = None
+        if chunk_plans_abs:
+            _prev_zp = sorted(
+                chunk_plans_abs[-1].get("zoom_plan") or [],
+                key=lambda e: float(e.get("end", e.get("start", 0))),
+            )
+            if _prev_zp:
+                _prev_zoom_end = float(_prev_zp[-1].get("to", 1.0))
+
         ctx = _build_chunk_context(
             chunk_idx=chunk_idx,
             n_chunks=len(chunk_ranges),
@@ -741,6 +819,7 @@ def _plan_edit_chunked(
             total_duration=total_duration,
             narrative_map=narrative_map,
             prev_keep_segments_abs=prev_keep_abs,
+            prev_zoom_end_scale=_prev_zoom_end,
         )
 
         print(
