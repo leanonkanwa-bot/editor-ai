@@ -2258,6 +2258,148 @@ def _declick_segment_boundaries(
     ])
 
 
+def _emit_narrative_timeline(
+    timing_map: Any,
+    remapped_zoom: list[dict],
+    storyboard: dict,
+    work_dir: Path,
+) -> Path:
+    """
+    Write a chronological narrative log of the full video to narrative_timeline.txt.
+    Merges speech (words), cards (content + timing), zoom (moves) into one stream.
+    QA tool: detect card/speech desync and dead zones without watching the video.
+    """
+    import io as _io
+
+    words = timing_map.remapped_words
+    duration = timing_map.output_duration
+    cards = [c for c in storyboard.get("cards", []) if c.get("type") != "caption"]
+
+    # ── Event collection: (time, sort_key, lines) ────────────────────────────
+    # sort_key: 0=dead_zone_warn, 1=card_start, 2=zoom, 3=card_end
+    events: list[tuple[float, int, list[str]]] = []
+
+    def _card_primary(hints: dict) -> str:
+        for fld in ("title", "confession_text", "qa_question", "text", "kicker", "number"):
+            v = hints.get(fld, "")
+            if isinstance(v, list):
+                v = " ".join(str(x) for x in v)
+            if v:
+                return str(v).strip()[:80]
+        return ""
+
+    def _card_secondary(hints: dict) -> str:
+        for fld in ("detail", "subtitle", "qa_answer", "chapter_title"):
+            v = hints.get(fld, "")
+            if isinstance(v, list):
+                v = " ".join(str(x) for x in v)
+            if v:
+                return str(v).strip()[:80]
+        return ""
+
+    for card in cards:
+        cid   = card.get("id", "?")
+        cs    = float(card.get("startSec", 0))
+        ce    = float(card.get("endSec", cs + 3))
+        hints = card.get("contentHints", {})
+        style = hints.get("style", card.get("type", "?"))
+        primary   = _card_primary(hints)
+        secondary = _card_secondary(hints)
+        start_lines = [f"CARTE↑ [{cid}] {style}"]
+        if primary:
+            start_lines.append(f'   "{primary}"')
+        if secondary:
+            start_lines.append(f'   "{secondary}"')
+        events.append((cs, 1, start_lines))
+        events.append((ce, 3, [f"CARTE↓ [{cid}] {style} — {ce - cs:.1f}s"]))
+
+    for ze in remapped_zoom:
+        zs    = float(ze.get("start", 0))
+        ze_   = float(ze.get("end", zs))
+        zkind = ze.get("kind", "drift")
+        zfrom = float(ze.get("from", 1.0))
+        zto   = float(ze.get("to", zfrom))
+        zdur  = ze_ - zs
+        zamp  = zto - zfrom
+        if zkind == "hold":
+            continue
+        if zkind == "breath" and zdur < 0.5:
+            continue
+        arrow   = "↑" if zto > zfrom else ("↓" if zto < zfrom else "→")
+        ratchet = " [ratchet↓]" if zkind == "drift" and zamp < -0.10 else ""
+        events.append((zs, 2, [
+            f"ZOOM {arrow} {zkind}  ×{zfrom:.3f}→×{zto:.3f} ({zdur:.1f}s){ratchet}"
+        ]))
+
+    # ── Dead zone markers (>12s without a card) ───────────────────────────────
+    DEAD_THRESH = 12.0
+    sorted_cards = sorted(cards, key=lambda c: float(c.get("startSec", 0)))
+    prev_end = 0.0
+    for card in sorted_cards:
+        cs = float(card.get("startSec", 0))
+        ce = float(card.get("endSec", cs))
+        if cs - prev_end > DEAD_THRESH:
+            events.append((cs, 0, [
+                f"⚠  DEAD ZONE {cs - prev_end:.1f}s  [t={prev_end:.1f}s → {cs:.1f}s]"
+            ]))
+        prev_end = max(prev_end, ce)
+    if duration - prev_end > DEAD_THRESH:
+        events.append((duration, 0, [
+            f"⚠  DEAD ZONE (fin) {duration - prev_end:.1f}s  [t={prev_end:.1f}s → {duration:.1f}s]"
+        ]))
+
+    events.sort(key=lambda e: (e[0], e[1]))
+
+    # ── Speech context helper ─────────────────────────────────────────────────
+    def _speech_at(t: float, window: float = 3.5) -> str:
+        nearby = [w for w in words if t - 0.5 <= w.start <= t + window]
+        if not nearby:
+            cl = min(words, key=lambda w: abs(w.start - t), default=None)
+            return f'[~"{cl.text}" @{cl.start:.1f}s]' if cl else "[silence]"
+        text = " ".join(w.text for w in nearby)
+        if len(text) > 75:
+            text = text[:72] + "..."
+        return f'💬 "{text}"'
+
+    # ── Write ─────────────────────────────────────────────────────────────────
+    buf = _io.StringIO()
+    n_zoom_real = len([z for z in remapped_zoom if z.get("kind") not in ("hold", "breath")])
+    buf.write("═" * 74 + "\n")
+    buf.write(
+        f"TIMELINE NARRATIF — vidéo {duration / 60:.1f}min"
+        f" — {len(cards)} cartes — {n_zoom_real} zooms (hors breath/hold)\n"
+    )
+    buf.write("═" * 74 + "\n\n")
+
+    last_speech_t = -99.0
+    SPEECH_GAP = 10.0
+
+    for t, sk, lines in events:
+        mm, ss = divmod(int(t), 60)
+        t_label = f"t={mm:02d}:{ss:02d}.{int((t % 1) * 10)}s"
+        buf.write(f"{t_label} │ {lines[0]}\n")
+        for extra in lines[1:]:
+            buf.write(f"           │ {extra}\n")
+        if sk == 1 or (t - last_speech_t >= SPEECH_GAP):
+            buf.write(f"           │ {_speech_at(t)}\n")
+            last_speech_t = t
+        buf.write("\n")
+
+    dead_count = sum(1 for _, sk, _ in events if sk == 0)
+    buf.write("═" * 74 + "\n")
+    buf.write(f"FIN — {dead_count} dead zone(s) >{DEAD_THRESH:.0f}s\n")
+    buf.write("═" * 74 + "\n")
+
+    out_path = work_dir / "narrative_timeline.txt"
+    out_path.write_text(buf.getvalue(), encoding="utf-8")
+    print(
+        f"[NARRATIVE] Timeline écrite : {out_path.name}"
+        f" ({len(events)} événements, {len(cards)} cartes, {dead_count} dead zones)",
+        flush=True,
+    )
+    return out_path
+
+
 def _render_hyperframes(
     src: Path,
     transcript: dict[str, Any],
@@ -2635,6 +2777,11 @@ def _render_hyperframes(
         f" | coverage: {_zl_cov_pct}%",
         flush=True,
     )
+
+    # ── NARRATIVE TIMELINE — QA tool ──────────────────────────────────────────
+    # Merged chronological log: speech context + card content + zoom moves.
+    # Read narrative_timeline.txt in the job work_dir to QA a video without watching it.
+    _emit_narrative_timeline(timing_map, remapped_zoom, storyboard, work_dir)
 
     # Stage 3+4: Compose + Render
     _t_cli = time.perf_counter()

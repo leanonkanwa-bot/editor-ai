@@ -1718,6 +1718,21 @@ def get_edit_report(job_id: str, request: Request):
     )
 
 
+@app.get("/api/jobs/{job_id}/narrative")
+def get_narrative_timeline(job_id: str, request: Request):
+    """Return the narrative timeline QA log for a completed job (plain text)."""
+    job = store.get(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    narrative_path = settings.outputs_dir / f"{job_id}_narrative.txt"
+    if not narrative_path.exists():
+        raise HTTPException(404, "No narrative timeline for this job — run a fresh render to generate it")
+    return Response(
+        content=narrative_path.read_text(encoding="utf-8"),
+        media_type="text/plain; charset=utf-8",
+    )
+
+
 @app.get("/api/upload/preview/{upload_id}")
 def upload_preview(upload_id: str):
     """Extract a representative frame from an uploaded source video."""

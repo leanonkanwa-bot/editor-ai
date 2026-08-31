@@ -2022,6 +2022,13 @@ def run_render_phase(job_id: str, src: Path) -> None:
             if _rp.exists():
                 _edit_report_url = f"/api/jobs/{job_id}/edit-report"
 
+        # Copy narrative timeline to persistent outputs_dir before work_dir cleanup.
+        _narrative_src = work_dir / "narrative_timeline.txt"
+        if _narrative_src.exists():
+            import shutil as _shutil_nt
+            _shutil_nt.copy2(_narrative_src, settings.outputs_dir / f"{job_id}_narrative.txt")
+            print(f"[NARRATIVE] Sauvegardé → {job_id}_narrative.txt", flush=True)
+
         store.update(
             job_id,
             status="done",
@@ -2041,6 +2048,7 @@ def run_render_phase(job_id: str, src: Path) -> None:
                 "hook_overlay": hook_overlay,
                 "brand_applied": bool(brand_kit.get("name")),
                 "edit_report_url": _edit_report_url,
+                "narrative_url": f"/api/jobs/{job_id}/narrative",
             },
         )
         # Video-ready email — fire-and-forget, never blocks render delivery
