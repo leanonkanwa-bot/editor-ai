@@ -3538,7 +3538,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         _acc_ba = p["accent"]
         parts.append(f'    <div class="ba-wrap">')
         parts.append(f'      <div class="ba-side" id="{card_id}-ba-before">')
-        parts.append(f'        <div class="ba-badge">AVANT</div>')
+        parts.append(f'        <div class="ba-badge">{_esc(hints.get("before_badge", "BEFORE"))}</div>')
         parts.append(f'        <div class="ba-text">{_before}</div>')
         parts.append(f'      </div>')
         if p["id"] == "lean_craft":
@@ -3551,7 +3551,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         else:
             parts.append(f'      <div class="ba-div" id="{card_id}-ba-div"></div>')
         parts.append(f'      <div class="ba-side" id="{card_id}-ba-after">')
-        parts.append(f'        <div class="ba-badge">APRÈS</div>')
+        parts.append(f'        <div class="ba-badge">{_esc(hints.get("after_badge", "AFTER"))}</div>')
         parts.append(f'        <div class="ba-text">{_after}</div>')
         parts.append(f'      </div>')
         parts.append(f'    </div>')
@@ -4205,11 +4205,15 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'    </div>')
     elif content_style == "before_now_later":
         _bnl_labels = [
-            _esc(hints.get("before_label", "Avant")),
-            _esc(hints.get("now_label", "Maintenant")),
-            _esc(hints.get("later_label", "Après")),
+            _esc(hints.get("before_label", "Before")),
+            _esc(hints.get("now_label", "Now")),
+            _esc(hints.get("later_label", "After")),
         ]
-        _bnl_tags = ["AVANT", "MAINTENANT", "APRÈS"]
+        _bnl_tags = [
+            _esc(hints.get("bnl_before_badge", "BEFORE")),
+            _esc(hints.get("bnl_now_badge",    "NOW")),
+            _esc(hints.get("bnl_later_badge",  "AFTER")),
+        ]
         parts.append(f'    <div class="bnl-wrap">')
         for _bnl_i, (_bnl_tag, _bnl_lbl) in enumerate(zip(_bnl_tags, _bnl_labels)):
             parts.append(f'      <div class="bnl-slot" id="{card_id}-bnl-{_bnl_i}">')
