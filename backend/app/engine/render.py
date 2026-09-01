@@ -2928,7 +2928,7 @@ def _render_hyperframes(
     try:
         import modal as _modal
         if _os.environ.get("MODAL_TOKEN_ID") and _os.environ.get("MODAL_TOKEN_SECRET"):
-            _MODAL_FN = _modal.Function.lookup("leanlead-hyperframes", "render_hf")
+            _MODAL_FN = _modal.Function.from_name("leanlead-hyperframes", "render_hf")
             _MODAL_ENABLED = True
             print("[HF] Modal GPU render: ENABLED — dispatching to A10G", flush=True)
     except Exception as _modal_err:
