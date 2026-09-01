@@ -681,7 +681,7 @@ def _generate_graphic_cards(
     for _soe in _so_sorted:
         _so_s = float(_soe.get("start", 0))
         if _so_s - _so_prev_end > _SCRIPT_GAP_THRESH:
-            _gw = [w for w in remapped_words if _so_prev_end <= w.start < _so_s]
+            _gw = [w for w in timing_map.remapped_words if _so_prev_end <= w.start < _so_s]
             _gt = " ".join(w.text for w in _gw[:40])
             _script_fill.append({
                 "beat": "story",
@@ -699,7 +699,7 @@ def _generate_graphic_cards(
     # Check tail
     _trimmed_dur_local = trimmed_duration  # already in scope as parameter
     if _trimmed_dur_local - _so_prev_end > _SCRIPT_GAP_THRESH:
-        _gw = [w for w in remapped_words if _so_prev_end <= w.start]
+        _gw = [w for w in timing_map.remapped_words if _so_prev_end <= w.start]
         _gt = " ".join(w.text for w in _gw[:40])
         _script_fill.append({
             "beat": "story",
