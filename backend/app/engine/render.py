@@ -2808,11 +2808,6 @@ def _render_hyperframes(
         gap = gap_end - gap_start
         if gap <= 20.0:
             return
-        has_speech = any(float(w.end) > gap_start and float(w.start) < gap_end
-                         for w in timing_map.remapped_words)
-        # For very long gaps (>45s) with speech: breath layer should cover — skip.
-        if gap > 45.0 and has_speech:
-            return
         n_ideal = max(1, int(gap / 25.0))
         n = min(5, n_ideal)
         if n_ideal > n:

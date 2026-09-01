@@ -671,6 +671,51 @@ def _generate_graphic_cards(
                 "end": round(out_e, 2),
             })
 
+    # Detect and fill coverage gaps in script_out (>30s with no beat entry).
+    # Chunked planning may leave ranges with no script_structure entry — those ranges
+    # are invisible to the storyboard LLM and produce zero cards even if speech exists.
+    _SCRIPT_GAP_THRESH = 30.0
+    _so_sorted = sorted(script_out, key=lambda e: float(e.get("start", 0)))
+    _script_fill: list[dict] = []
+    _so_prev_end = 0.0
+    for _soe in _so_sorted:
+        _so_s = float(_soe.get("start", 0))
+        if _so_s - _so_prev_end > _SCRIPT_GAP_THRESH:
+            _gw = [w for w in remapped_words if _so_prev_end <= w.start < _so_s]
+            _gt = " ".join(w.text for w in _gw[:40])
+            _script_fill.append({
+                "beat": "story",
+                "lines": [_gt[:200]] if _gt else ["[transition]"],
+                "start": round(_so_prev_end, 2),
+                "end": round(_so_s, 2),
+            })
+            print(
+                f"[SCRIPT-FILL] t={_so_prev_end:.1f}→{_so_s:.1f}s ({_so_s - _so_prev_end:.0f}s)"
+                f" — no beat spine, injecting synthetic story beat"
+                f" ({len(_gw)} words: '{_gt[:60]}…')",
+                flush=True,
+            )
+        _so_prev_end = max(_so_prev_end, float(_soe.get("end", 0)))
+    # Check tail
+    _trimmed_dur_local = trimmed_duration  # already in scope as parameter
+    if _trimmed_dur_local - _so_prev_end > _SCRIPT_GAP_THRESH:
+        _gw = [w for w in remapped_words if _so_prev_end <= w.start]
+        _gt = " ".join(w.text for w in _gw[:40])
+        _script_fill.append({
+            "beat": "story",
+            "lines": [_gt[:200]] if _gt else ["[outro]"],
+            "start": round(_so_prev_end, 2),
+            "end": round(_trimmed_dur_local, 2),
+        })
+        print(
+            f"[SCRIPT-FILL] tail t={_so_prev_end:.1f}→{_trimmed_dur_local:.1f}s"
+            f" — no beat spine at end, injecting synthetic story beat",
+            flush=True,
+        )
+    if _script_fill:
+        script_out = sorted(script_out + _script_fill, key=lambda e: float(e.get("start", 0)))
+        print(f"[SCRIPT-FILL] {len(_script_fill)} synthetic beat(s) injected — LLM now sees full timeline", flush=True)
+
     system_prompt = f"""\
 You design graphic overlay cards for edited talking-head videos.
 
