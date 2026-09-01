@@ -1595,6 +1595,115 @@ def run_job(
                     flush=True,
                 )
 
+        # ── GAP-RESCUE mega-segment split ─────────────────────────────────────
+        # Segments extended to > _GSM_MAX_S by GAP-RESCUE cause storyboard cards
+        # to land at startSec (segment start) while the content is spoken 15-40s
+        # later.  TITLE-ANCHOR corrects at most ~14s (10s search + 4s lead), so
+        # segments > 15s guarantee misplaced cards.  Split long segments at the
+        # longest inter-word pauses, keeping each sub-segment <= _GSM_MAX_S.
+        _GSM_MAX_S =  15.0   # split segments longer than this (seconds, compressed)
+        _GSM_MIN_S =   5.0   # minimum sub-segment duration after split
+        _GSM_PAUSE =   0.15  # minimum inter-word silence to use as a split boundary
+
+        def _s2c(ts_src: float) -> float:
+            """Approximate compressed time for source time ts (inverse of _c2s_diag).
+
+            In gaps (no virtual drops) this is exact; inside dropped regions it
+            clamps to the drop's compressed start.
+            """
+            _running = 0.0
+            for _d in _vd_sorted:
+                if ts_src <= _d.start:
+                    break
+                if ts_src < _d.end:
+                    return round(_d.start - _running, 4)
+                _running += _d.end - _d.start
+            return round(ts_src - _running, 4)
+
+        _keep_split: list[dict] = []
+        _gsm_split_count = 0
+        for _seg in _keep_raw:
+            _sc = float(_seg.get("start", 0))
+            _ec = float(_seg.get("end", 0))
+            if _ec - _sc <= _GSM_MAX_S:
+                _keep_split.append(_seg)
+                continue
+
+            # Convert segment bounds to source time
+            _sc_src, _ = _c2s_diag(_sc)
+            _ec_src, _ = _c2s_diag(_ec)
+
+            # Gather words in this segment (source time, sorted)
+            _seg_words_src = sorted(
+                [
+                    w for w in _source_words
+                    if float(w.get("start", 0)) >= _sc_src - 0.01
+                    and float(w.get("end",   0)) <= _ec_src + 0.01
+                ],
+                key=lambda w: float(w["start"]),
+            )
+
+            # Build pause midpoints (compressed time) for inter-word gaps >= _GSM_PAUSE
+            _pauses_c: list[float] = []
+            for _wi in range(len(_seg_words_src) - 1):
+                _w_end_src   = float(_seg_words_src[_wi].get("end", 0))
+                _w_next_src  = float(_seg_words_src[_wi + 1].get("start", 0))
+                if _w_next_src - _w_end_src >= _GSM_PAUSE:
+                    _mid_c = _s2c((_w_end_src + _w_next_src) / 2)
+                    if _sc < _mid_c < _ec:
+                        _pauses_c.append(_mid_c)
+
+            _sorted_pauses = sorted(set(round(p, 3) for p in _pauses_c))
+
+            # Greedy split: while remaining chunk > max, cut at the latest pause
+            # within [cursor+min, cursor+max], or at the first available pause
+            # after cursor+min, or (last resort) at a hard time boundary.
+            _boundaries = [_sc]
+            while _ec - _boundaries[-1] > _GSM_MAX_S:
+                _lo = _boundaries[-1] + _GSM_MIN_S
+                _hi = _boundaries[-1] + _GSM_MAX_S
+                _in_win = [p for p in _sorted_pauses if _lo <= p <= _hi]
+                _after  = [p for p in _sorted_pauses if p > _lo]
+                if _in_win:
+                    _cut = max(_in_win)          # latest pause in window
+                elif _after:
+                    _cut = _after[0]             # nearest pause outside window
+                else:
+                    _cut = _hi                   # no pauses → hard time split
+                # Guard: don't create a final sliver < _GSM_MIN_S
+                _cut = min(round(_cut, 3), _ec - _GSM_MIN_S)
+                # Safety: ensure progress (avoid infinite loop on edge cases)
+                if _cut <= _boundaries[-1] + 0.05:
+                    _cut = round(_boundaries[-1] + _GSM_MIN_S, 3)
+                _boundaries.append(_cut)
+            _boundaries.append(_ec)
+
+            if len(_boundaries) <= 2:
+                _keep_split.append(_seg)
+                continue
+
+            _n_subs = len(_boundaries) - 1
+            _gsm_split_count += 1
+            _sub_durs = [round(_boundaries[_i + 1] - _boundaries[_i], 1) for _i in range(_n_subs)]
+            print(
+                f"[GAP-RESCUE] SPLIT [{_sc:.2f},{_ec:.2f}] ({_ec - _sc:.1f}s)"
+                f" → {_n_subs} sub-segs {_sub_durs}",
+                flush=True,
+            )
+            for _bi in range(_n_subs):
+                _sub = dict(_seg)
+                _sub["start"] = _boundaries[_bi]
+                _sub["end"]   = _boundaries[_bi + 1]
+                _keep_split.append(_sub)
+
+        if _gsm_split_count:
+            print(
+                f"[GAP-RESCUE] SPLIT {_gsm_split_count} mega-segment(s) → sub-segments"
+                f" (threshold {_GSM_MAX_S:.0f}s)",
+                flush=True,
+            )
+        _keep_raw = _keep_split
+
         # ── Step 7: Hook rewrite (Feature 3) ──────────────────────────────
         _t = time.perf_counter()
         store.update(job_id, status="planning", progress=50,
