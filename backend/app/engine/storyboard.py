@@ -2758,7 +2758,7 @@ def _void_tolerance(
     )
 
     if _recent_cards >= 3:
-        _density_mult = 1.5   # TO CALIBRATE: audience recently active — let it breathe
+        _density_mult = 1.0   # HIGH density = rich narrative arc in progress; void after it matters
     elif _recent_cards >= 1:
         _density_mult = 1.0   # neutral
     else:

@@ -3211,6 +3211,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'  font-family:{p["font"]}; font-size:44px;')
             parts.append(f'  font-weight:{p["font_weight"]};')
             parts.append(f'  color:{p["text"]}; line-height:1.3;')
+            parts.append('  display:inline-block; border-radius:5px; padding:0 3px;')
             parts.append('  opacity:0;')
             parts.append('}')
         else:
@@ -7998,22 +7999,43 @@ def _build_timeline_js(
                             f'{start + 0.38 + _si * 0.11:.4f});'
                         )
                 elif _sst_mode_g == "caption":
-                    # Word-by-word sync: each word flips to opacity:1 at its transcript timestamp.
-                    # Panel entry (0.20s) completes before the first word is due — words appear
-                    # on the panel as the speaker says them, like normal captions.
+                    # Karaoke: 3 visual states — ghost (0.16) → current (accent+glow) → spoken (0.70)
                     _sst_cap_words_g = _sst_ch_g.get("caption_words", [])
-                    _sst_panel_ready = start + 0.60  # panel entry takes 0.38s from start+0.20
-                    for _cwi, _cw in enumerate(_sst_cap_words_g):
-                        _cw_t = float(_cw.get("start", 0)) if isinstance(_cw, dict) else _sst_panel_ready
-                        _cw_t = max(_sst_panel_ready, _cw_t)  # safety clamp only
-                        _sst_cw_s = f'.card[data-card-id="{card_id}"] #{card_id}-sst-cw-{_cwi}'
-                        # fromTo instead of tl.set: explicitly declares from-state so GSAP
-                        # correctly reverts to opacity:0 when seeking before this position.
-                        # tl.set zero-duration tweens (immediateRender:true) can fail to
-                        # revert inline style properly in some seek scenarios.
+                    _sst_panel_ready = start + 0.60
+                    _acc_hex = p["accent"].lstrip('#')
+                    _acc_r   = int(_acc_hex[0:2], 16)
+                    _acc_g   = int(_acc_hex[2:4], 16)
+                    _acc_b   = int(_acc_hex[4:6], 16)
+                    _acc_rgb = f'{_acc_r},{_acc_g},{_acc_b}'
+                    _cap_all = f'.card[data-card-id="{card_id}"] .sst-cap-word'
+                    # Cascade all words to ghost opacity once panel is ready
+                    if _sst_cap_words_g:
                         lines.append(
-                            f'  tl.fromTo(\'{_sst_cw_s}\', {{ opacity: 0 }}, '
-                            f'{{ opacity: 1, duration: 0.05 }}, {_cw_t:.4f});'
+                            f'  tl.to(\'{_cap_all}\', '
+                            f'{{ opacity: 0.16, duration: 0.32, ease: "power1.out", stagger: 0.016 }}, '
+                            f'{_sst_panel_ready - 0.12:.4f});'
+                        )
+                    for _cwi, _cw in enumerate(_sst_cap_words_g):
+                        _cw_t   = float(_cw.get("start", 0)) if isinstance(_cw, dict) else _sst_panel_ready
+                        _cw_t   = max(_sst_panel_ready, _cw_t)
+                        _cw_end = float(_cw.get("end",   _cw_t + 0.30)) if isinstance(_cw, dict) else _cw_t + 0.30
+                        _sst_cw_s = f'.card[data-card-id="{card_id}"] #{card_id}-sst-cw-{_cwi}'
+                        # Current word: accent color + glow + scale
+                        lines.append(
+                            f'  tl.to(\'{_sst_cw_s}\', '
+                            f'{{ color: "{p["accent"]}", opacity: 1.0, scale: 1.038, '
+                            f'textShadow: "0 0 13px rgba({_acc_rgb},0.38)", '
+                            f'backgroundColor: "rgba({_acc_rgb},0.12)", '
+                            f'duration: 0.09, ease: "power2.out" }}, '
+                            f'{_cw_t:.4f});'
+                        )
+                        # Spoken word: return to text color, partial opacity
+                        lines.append(
+                            f'  tl.to(\'{_sst_cw_s}\', '
+                            f'{{ color: "{p["text"]}", opacity: 0.70, scale: 1.0, '
+                            f'textShadow: "none", backgroundColor: "transparent", '
+                            f'duration: 0.24, ease: "power1.in" }}, '
+                            f'{_cw_end + 0.05:.4f});'
                         )
                 else:
                     _sst_nn_g = min(len(_sst_nodes_g), 4)
