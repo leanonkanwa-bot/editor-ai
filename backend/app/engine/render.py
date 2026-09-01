@@ -2916,6 +2916,32 @@ def _render_hyperframes(
     import os as _os
     import signal as _signal
     import threading as _threading
+    import io as _io
+    import zipfile as _zf
+
+    # ── Modal GPU render detection ────────────────────────────────────────────
+    # Active when MODAL_TOKEN_ID + MODAL_TOKEN_SECRET are set in Railway env.
+    # Dispatches each HF render job to an A10G container on Modal instead of
+    # running locally.  Segmented renders are dispatched in parallel (×5-8 speedup).
+    _MODAL_ENABLED = False
+    _MODAL_FN = None
+    try:
+        import modal as _modal
+        if _os.environ.get("MODAL_TOKEN_ID") and _os.environ.get("MODAL_TOKEN_SECRET"):
+            _MODAL_FN = _modal.Function.lookup("leanlead-hyperframes", "render_hf")
+            _MODAL_ENABLED = True
+            print("[HF] Modal GPU render: ENABLED — dispatching to A10G", flush=True)
+    except Exception as _modal_err:
+        print(f"[HF] Modal not available ({_modal_err}) — local render", flush=True)
+
+    def _zip_pub(pub_dir: Path) -> bytes:
+        """Zip a public/ directory for transmission to Modal."""
+        buf = _io.BytesIO()
+        with _zf.ZipFile(buf, "w", compression=_zf.ZIP_DEFLATED, compresslevel=1) as zf:
+            for f in sorted(pub_dir.rglob("*")):
+                if f.is_file():
+                    zf.write(f, f.relative_to(pub_dir))
+        return buf.getvalue()
     fps = storyboard["composition"]["fps"]
     _test_fps = _os.environ.get("RENDER_TEST_FPS")
     if _test_fps:
@@ -3251,42 +3277,86 @@ def _render_hyperframes(
             print(f"[TIMING] seg{idx}_compose+cut: {time.perf_counter() - _t0:.1f}s", flush=True)
             return _proj, work_dir / f"seg{idx}_hf.mp4"
 
-        # Pipeline: fire compose+cut for seg N+1 in a background thread while
-        # HF renders seg N.  One worker max keeps memory flat (no extra Chrome).
-        # Future.result() re-raises any prepare exception in the main thread.
-        with _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="seg-prep") as _pool:
-            _cur_proj, _cur_raw = _pool.submit(_prepare_seg, 0).result()
+        if _MODAL_ENABLED:
+            # ── Modal: compose all segments in parallel → dispatch renders in parallel ──
+            # Each segment gets its own A10G container; N segments run simultaneously.
+            print(
+                f"[MODAL] Preparing {_n_segs} segments for parallel GPU dispatch...",
+                flush=True,
+            )
+            _t_prep = time.perf_counter()
+            with _cf.ThreadPoolExecutor(
+                max_workers=min(_n_segs, 3), thread_name_prefix="seg-prep"
+            ) as _pool:
+                _prep_futs = [_pool.submit(_prepare_seg, i) for i in range(_n_segs)]
+                _all_prepared = [f.result() for f in _prep_futs]
+            print(
+                f"[TIMING] modal_compose_all: {time.perf_counter()-_t_prep:.1f}s",
+                flush=True,
+            )
 
-            for _seg_i in range(_n_segs):
-                _seg_start  = _seg_boundaries[_seg_i]
-                _seg_end    = _seg_boundaries[_seg_i + 1]
-                _seg_dur    = _seg_end - _seg_start
-                _seg_frames = int(_seg_dur * fps)
+            _zips = [_zip_pub(proj / "public") for proj, _ in _all_prepared]
+            _total_kb = sum(len(z) for z in _zips) // 1024
+            print(
+                f"[MODAL] Dispatching {_n_segs} segments in parallel "
+                f"({_total_kb}KB total) → A10G...",
+                flush=True,
+            )
+            _t_m = time.perf_counter()
+            with _cf.ThreadPoolExecutor(
+                max_workers=_n_segs, thread_name_prefix="modal-render"
+            ) as _pool:
+                _modal_futs = [_pool.submit(_MODAL_FN.remote, zb) for zb in _zips]
+                _modal_results = [f.result() for f in _modal_futs]
+            print(
+                f"[TIMING] modal_render_all: {time.perf_counter()-_t_m:.1f}s "
+                f"for {_n_segs} segments",
+                flush=True,
+            )
 
-                # Prefetch seg N+1 immediately — overlaps with the HF render below
-                _nxt = (
-                    _pool.submit(_prepare_seg, _seg_i + 1)
-                    if _seg_i + 1 < _n_segs else None
-                )
+            for i, ((_proj, raw), mp4_bytes) in enumerate(
+                zip(_all_prepared, _modal_results)
+            ):
+                raw.write_bytes(mp4_bytes)
+                _seg_raws.append(raw)
+                print(f"[MODAL] Segment {i} written: {raw.name}", flush=True)
 
-                print(
-                    f"[HF-SEG] Stage 4.{_seg_i}: Rendering segment {_seg_i}/{_n_segs - 1} "
-                    f"({_seg_dur:.1f}s, {_seg_frames} frames, {_n_workers} workers) ...",
-                    flush=True,
-                )
-                _hf_render_on(_cur_proj / "public", _cur_raw, _seg_dur)
-                print(f"[HF-SEG] Segment {_seg_i} done: {_cur_raw}", flush=True)
-                _seg_raws.append(_cur_raw)
+        else:
+            # ── Local: pipeline (compose seg N+1 while HF renders seg N) ─────────
+            # One worker max keeps memory flat (no extra Chrome instance).
+            with _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="seg-prep") as _pool:
+                _cur_proj, _cur_raw = _pool.submit(_prepare_seg, 0).result()
 
-                if _nxt is not None:
-                    _t_wait = time.perf_counter()
-                    _cur_proj, _cur_raw = _nxt.result()  # raises if prepare failed
-                    _wait = time.perf_counter() - _t_wait
+                for _seg_i in range(_n_segs):
+                    _seg_start  = _seg_boundaries[_seg_i]
+                    _seg_end    = _seg_boundaries[_seg_i + 1]
+                    _seg_dur    = _seg_end - _seg_start
+                    _seg_frames = int(_seg_dur * fps)
+
+                    # Prefetch seg N+1 immediately — overlaps with the HF render below
+                    _nxt = (
+                        _pool.submit(_prepare_seg, _seg_i + 1)
+                        if _seg_i + 1 < _n_segs else None
+                    )
+
                     print(
-                        f"[HF-SEG] Pipeline: seg{_seg_i + 1} "
-                        f"{'ready (0 wait)' if _wait < 0.5 else f'waited {_wait:.1f}s'}",
+                        f"[HF-SEG] Stage 4.{_seg_i}: Rendering segment {_seg_i}/{_n_segs - 1} "
+                        f"({_seg_dur:.1f}s, {_seg_frames} frames, {_n_workers} workers) ...",
                         flush=True,
                     )
+                    _hf_render_on(_cur_proj / "public", _cur_raw, _seg_dur)
+                    print(f"[HF-SEG] Segment {_seg_i} done: {_cur_raw}", flush=True)
+                    _seg_raws.append(_cur_raw)
+
+                    if _nxt is not None:
+                        _t_wait = time.perf_counter()
+                        _cur_proj, _cur_raw = _nxt.result()  # raises if prepare failed
+                        _wait = time.perf_counter() - _t_wait
+                        print(
+                            f"[HF-SEG] Pipeline: seg{_seg_i + 1} "
+                            f"{'ready (0 wait)' if _wait < 0.5 else f'waited {_wait:.1f}s'}",
+                            flush=True,
+                        )
 
         # FFmpeg lossless concat of all N segments ───────────────────────────
         print(f"[HF-SEG] Concatenating {_n_segs} segments...", flush=True)
@@ -3338,7 +3408,14 @@ def _render_hyperframes(
             subject_position=subject_position,
         )
         print(f"[TIMING] compose: {time.perf_counter()-_t:.1f}s", flush=True)
-        _hf_render_on(project_dir / "public", output_path, timing_map.output_duration)
+        if _MODAL_ENABLED:
+            _t_m = time.perf_counter()
+            _zip_bytes = _zip_pub(project_dir / "public")
+            print(f"[MODAL] Single-run: {len(_zip_bytes) // 1024}KB → A10G...", flush=True)
+            output_path.write_bytes(_MODAL_FN.remote(_zip_bytes))
+            print(f"[TIMING] modal_render: {time.perf_counter()-_t_m:.1f}s", flush=True)
+        else:
+            _hf_render_on(project_dir / "public", output_path, timing_map.output_duration)
 
     print(f"[TIMING] hyperframes_cli: {time.perf_counter()-_t_cli:.1f}s", flush=True)
     print(f"[HF] Done: {output_path}", flush=True)
