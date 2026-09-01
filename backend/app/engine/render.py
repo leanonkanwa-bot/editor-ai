@@ -981,16 +981,29 @@ _PUNCH_IN_DATA_TYPES      = frozenset({"stat", "list", "comparison", "checklist"
 _BREATH_WINDOW_MIN_S   = 2.5    # minimum seconds from previous selected point
 _BREATH_WINDOW_MAX_S   = 4.5    # maximum window to search for next candidate
 _BREATH_GAP_MIN_S      = 0.08   # minimum inter-word silence to qualify
-_BREATH_PHRASE_SCALE   = 1.041  # end-of-sentence: . ! ? — 13.8 px/s on 1080p portrait
-_BREATH_CLAUSE_SCALE   = 1.026  # clause boundary: , ; : — — 10.0 px/s
-_BREATH_MICRO_SCALE    = 1.016  # bare micro-pause — 7.2 px/s
+_BREATH_PHRASE_SCALE   = 1.065  # end-of-sentence: . ! ? — perceptible at neutral baseline
+_BREATH_CLAUSE_SCALE   = 1.045  # clause boundary: , ; : —
+_BREATH_MICRO_SCALE    = 1.020  # bare micro-pause — subliminal
 _BREATH_SCALE_JITTER   = 0.125  # ±12.5% variance on delta — breaks mechanical uniformity
-_BREATH_PHRASE_DUR     = 1.6    # total tween duration (s) for sentence boundary
-_BREATH_CLAUSE_DUR     = 1.4
+_BREATH_PHRASE_DUR     = 2.0    # total tween duration (s) for sentence boundary
+_BREATH_CLAUSE_DUR     = 1.7
 _BREATH_MICRO_DUR      = 1.2
 _BREATH_IN_RATIO       = 0.4    # 40% IN, 60% OUT
 _BREATH_PUNCT_SENTENCE = frozenset(".!?")
 _BREATH_PUNCT_CLAUSE   = frozenset(",;:—")
+_BREATH_MAX_DELTA_ABS  = 0.070  # absolute cap: scale_pk ≤ baseline + this (prevents compound over-zoom)
+_BREATH_PUNCH_COOL_S   = 4.0    # skip breath if a punch-in fired within this many seconds before
+
+# ── Speech-pulse zoom constants ───────────────────────────────────────────────
+_PULSE_SCALE          = 1.048   # 4.8% above baseline — between breath (6.5%) and punch-in (6%)
+_PULSE_IN_DUR         = 0.65    # fast lean-in
+_PULSE_HOLD_DUR       = 1.00    # hold at peak — the "gaze settles" moment
+_PULSE_OUT_DUR        = 1.35    # slow drift back (total 3.0s per pulse)
+_PULSE_BUDGET_MIN_S   = 15.0    # minimum interval between two pulses
+_PULSE_BUDGET_MAX_S   = 35.0    # greedy window upper bound
+_PULSE_CARD_EXCL_S    = 15.0    # suppress if any hero card within ±this seconds
+_PULSE_PUNCH_COOL_S   = 8.0     # suppress if punch-in fired within this many seconds before
+_PULSE_PRE_WORD_GAP_S = 0.25    # minimum pre-word silence to qualify as emphasis candidate
 
 
 def _compute_speech_punch_in_times(
@@ -1187,18 +1200,118 @@ def _inject_speech_punch_in_zooms(
     return sorted(result, key=lambda e: float(e.get("start", 0)))
 
 
+def _inject_speech_pulse_zooms(
+    zoom_entries: list[dict],
+    remapped_words: list,
+    graphic_cards: list[dict],
+    punch_times: list[float],
+) -> list[dict]:
+    """Inject mid-tier speech-pulse zooms in card-free speech zones.
+
+    Each pulse is a 3-step IN→HOLD→OUT shape (0.65s+1.0s+1.35s = 3.0s total).
+    The HOLD at peak makes the movement cinematographically perceptible —
+    unlike breath (immediate return), the camera 'leans in and settles.'
+    Fires at most once per [_PULSE_BUDGET_MIN_S, _PULSE_BUDGET_MAX_S] window,
+    suppressed near hero cards or recent punch-ins.
+    """
+    if not remapped_words:
+        return list(zoom_entries)
+
+    hero_ivs: list[tuple[float, float]] = []
+    for card in graphic_cards:
+        if card.get("type") in _PUNCH_IN_DATA_TYPES:
+            continue
+        zone = card.get("zone", "lower-third")
+        if zone not in _PUNCH_IN_CENTER_ZONES:
+            continue
+        cs = float(card.get("startSec", 0))
+        ce = float(card.get("endSec", cs))
+        hero_ivs.append((cs - _PULSE_CARD_EXCL_S, ce + _PULSE_CARD_EXCL_S))
+
+    cands: list[tuple[float, float]] = []
+    for i in range(1, len(remapped_words)):
+        w_prev = remapped_words[i - 1]
+        w_cur  = remapped_words[i]
+        gap = float(w_cur.start) - float(w_prev.end)
+        if gap < _PULSE_PRE_WORD_GAP_S:
+            continue
+        length_bonus = 1.5 if len((w_cur.text or "").strip()) > 5 else 1.0
+        cands.append((round(float(w_cur.start), 4), gap * length_bonus))
+
+    if not cands:
+        return list(zoom_entries)
+    cands.sort(key=lambda c: c[0])
+
+    selected: list[float] = []
+    last_ts = -_PULSE_BUDGET_MIN_S
+    ci, N = 0, len(cands)
+
+    while ci < N:
+        window_start = last_ts + _PULSE_BUDGET_MIN_S
+        window_end   = last_ts + _PULSE_BUDGET_MAX_S
+        while ci < N and cands[ci][0] < window_start:
+            ci += 1
+        if ci >= N:
+            break
+        if cands[ci][0] > window_end:
+            last_ts = cands[ci][0] - _PULSE_BUDGET_MIN_S
+            continue
+        wi = ci
+        window_cands: list[tuple[float, float]] = []
+        while wi < N and cands[wi][0] <= window_end:
+            window_cands.append(cands[wi])
+            wi += 1
+        eligible = [
+            c for c in window_cands
+            if not any(lo <= c[0] <= hi for lo, hi in hero_ivs)
+            and not any(0 <= c[0] - tp <= _PULSE_PUNCH_COOL_S for tp in punch_times)
+        ]
+        if eligible:
+            best_ts = max(eligible, key=lambda c: c[1])[0]
+            selected.append(best_ts)
+            last_ts = best_ts
+        else:
+            last_ts = window_cands[-1][0]
+        ci = wi
+
+    if not selected:
+        return list(zoom_entries)
+
+    result = list(zoom_entries)
+    _pulse_total = _PULSE_IN_DUR + _PULSE_HOLD_DUR + _PULSE_OUT_DUR
+    for ts in selected:
+        baseline = _interp_zoom_scale(ts, result)
+        scale_pk = round(baseline * _PULSE_SCALE, 4)
+        t_hold   = round(ts + _PULSE_IN_DUR, 4)
+        t_out    = round(t_hold + _PULSE_HOLD_DUR, 4)
+        t_end    = round(ts + _pulse_total, 4)
+        result.append({"start": ts,     "end": t_hold, "from": round(baseline, 4),
+                        "to": scale_pk, "kind": "pulse", "ease": "power2.out"})
+        result.append({"start": t_hold, "end": t_out,  "from": scale_pk,
+                        "to": scale_pk, "kind": "pulse", "ease": "linear"})
+        result.append({"start": t_out,  "end": t_end,  "from": scale_pk,
+                        "to": round(baseline, 4), "kind": "pulse", "ease": "power1.in"})
+
+    result.sort(key=lambda e: float(e.get("start", 0)))
+    print(
+        f"[PULSE] {len(selected)} speech-pulses → {len(selected) * 3} tweens"
+        f" (total zoom entries: {len(result)})",
+        flush=True,
+    )
+    return result
+
+
 def _inject_speech_breath_zooms(
     zoom_entries: list[dict],
     remapped_words: list,
+    punch_times: list[float] | None = None,
 ) -> list[dict]:
-    """Inject subliminal breath zooms (~1 per 3s) aligned to natural speech pauses.
+    """Inject perceptible breath zooms (~1 per 3s) aligned to natural speech pauses.
 
-    Each breath is a slow sine.inOut movement (×1.005–×1.012 ±12.5% organic jitter,
-    1.2–1.6 s total) — perceptible but not consciously visible as a zoom.
+    Each breath is a sine.inOut oscillation (±12.5% jitter, 1.2–2.0s total),
+    capped at _BREATH_MAX_DELTA_ABS above baseline to prevent compound over-zoom.
+    Skipped within _BREATH_PUNCH_COOL_S of a punch-in.
     Applies to all style packs, including lean_paper.
-
-    GSAP's overwrite:"auto" on every tween handles compositing with existing
-    drift entries — no entry splitting is needed at these amplitudes.
     """
     if not remapped_words:
         return list(zoom_entries)
@@ -1249,6 +1362,10 @@ def _inject_speech_breath_zooms(
             window_cands.append(cands[wi])
             wi += 1
         best = max(window_cands, key=lambda c: c[2])
+        if punch_times and any(0 <= best[0] - tp <= _BREATH_PUNCH_COOL_S for tp in punch_times):
+            last_ts = best[0]
+            ci = wi
+            continue
         selected.append((best[0], best[3], best[4]))
         last_ts = best[0]
         ci = wi
@@ -1261,6 +1378,7 @@ def _inject_speech_breath_zooms(
         baseline = _interp_zoom_scale(ts, result)
         _jitter = 1.0 + (scale - 1.0) * random.uniform(1.0 - _BREATH_SCALE_JITTER, 1.0 + _BREATH_SCALE_JITTER)
         scale_pk = round(baseline * _jitter, 6)
+        scale_pk = min(scale_pk, round(baseline + _BREATH_MAX_DELTA_ABS, 6))
         t_in     = round(ts + total_dur * _BREATH_IN_RATIO, 4)
         t_out    = round(ts + total_dur, 4)
         result.append({
@@ -2652,8 +2770,9 @@ def _render_hyperframes(
     # Inject speech-moment punch-ins (realization/payoff/amplify/principle beats).
     # lean_paper skipped — its minimal aesthetic has no punch-ins.
     # Exclusion: hero cards already on screen at the candidate moment.
+    _graphic_cards = [c for c in storyboard.get("cards", []) if c.get("type") != "caption"]
+    _punch_times: list[float] = []
     if style_pack != "lean_paper":
-        _graphic_cards = [c for c in storyboard.get("cards", []) if c.get("type") != "caption"]
         _punch_times = _compute_speech_punch_in_times(
             plan.script_structure or [], timing_map, _graphic_cards
         )
@@ -2664,9 +2783,18 @@ def _render_hyperframes(
                 flush=True,
             )
 
+    # Speech-pulse zooms — visible 4.8% lean-in+hold in card-free speech zones (all packs).
+    # Fires at most 1 per [15s, 35s] window, suppressed near cards and punch-ins.
+    remapped_zoom = _inject_speech_pulse_zooms(
+        remapped_zoom, timing_map.remapped_words, _graphic_cards, _punch_times
+    )
+
     # Inject speech-breath zooms — all packs including lean_paper.
-    # ~1 subliminal movement per 3s, aligned to natural speech pauses.
-    remapped_zoom = _inject_speech_breath_zooms(remapped_zoom, timing_map.remapped_words)
+    # ~1 movement per 3s, aligned to natural speech pauses.
+    # Amplitude raised for perceptibility; capped at +7% to avoid compound over-zoom.
+    remapped_zoom = _inject_speech_breath_zooms(
+        remapped_zoom, timing_map.remapped_words, punch_times=_punch_times
+    )
 
     # Zoom coverage audit + fill: log gaps > 8s; inject micro-bumps for gaps > 20s.
     # Gaps 20-45s with speech: breath layer may have missed the window — inject anyway.
