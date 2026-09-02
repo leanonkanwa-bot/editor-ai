@@ -30,8 +30,15 @@ _image = (
     modal.Image.debian_slim(python_version="3.12")
     .apt_install(
         "curl",
+        "unzip",          # chrome-headless-shell zip extraction
         "ffmpeg",
         "chromium",
+        # GLVND — GL Vendor-Neutral Dispatch.
+        # Modal injects libEGL_nvidia.so at runtime; GLVND routes EGL calls to it
+        # WITHOUT needing /dev/dri (which Modal doesn't expose to containers).
+        "libglvnd0",
+        "libgl1",
+        "libegl1",
         "libnss3",
         "libatk1.0-0",
         "libatk-bridge2.0-0",
@@ -53,18 +60,32 @@ _image = (
         "xvfb",
     )
     .run_commands(
+        # GLVND EGL vendor config for NVIDIA.
+        # Without this JSON, Chrome's EGL falls back to SwiftShader even when
+        # libEGL_nvidia.so is present (Modal injects it at runtime).
+        # With it, EGL dispatches to NVIDIA directly — no /dev/dri needed.
+        "mkdir -p /usr/share/glvnd/egl_vendor.d && "
+        "printf '{\"file_format_version\":\"1.0.0\",\"ICD\":{\"library_path\":\"libEGL_nvidia.so.0\"}}' "
+        "> /usr/share/glvnd/egl_vendor.d/10_nvidia.json",
         # Node.js 22 LTS
         "curl -fsSL https://deb.nodesource.com/setup_22.x | bash -",
         "apt-get install -y nodejs",
-        # HyperFrames (global install, no prefix override, no skip-download)
+        # HyperFrames (global install)
         "npm install -g hyperframes@0.7.5",
-        # chrome-headless-shell — only available for amd64 (Modal A10G is amd64)
-        # Mirrors Railway Dockerfile line 10 and HF Dockerfile.render line 28-33.
-        "npx --yes @puppeteer/browsers install chrome-headless-shell@stable "
-        "--path /root/.cache/puppeteer",
-        # Pre-build core runtime with headless-shell available.
-        # PRODUCER_HEADLESS_SHELL_PATH is required for `browser ensure` to generate
-        # hyperframe.manifest.json — without it the manifest is never written.
+        # chrome-headless-shell — direct curl from Google Storage.
+        # Avoids npx @puppeteer/browsers which fails in Modal build environment.
+        # Pinned to same version as Railway Dockerfile line 10.
+        "CHROME_VERSION=131.0.6778.85 && "
+        "mkdir -p /root/.cache/puppeteer/chrome-headless-shell/${CHROME_VERSION}-linux64 && "
+        "curl -fsSL https://storage.googleapis.com/chrome-for-testing-public/"
+        "${CHROME_VERSION}/linux64/chrome-headless-shell-linux64.zip -o /tmp/chs.zip && "
+        "unzip /tmp/chs.zip -d /root/.cache/puppeteer/chrome-headless-shell/${CHROME_VERSION}-linux64 && "
+        "chmod +x /root/.cache/puppeteer/chrome-headless-shell/${CHROME_VERSION}-linux64/"
+        "chrome-headless-shell-linux64/chrome-headless-shell && "
+        "rm -f /tmp/chs.zip && "
+        "echo 'chrome-headless-shell OK'",
+        # Pre-build core runtime (generates hyperframe.manifest.json).
+        # PRODUCER_HEADLESS_SHELL_PATH must be set for browser ensure to succeed.
         "SHELL_BIN=$(find /root/.cache/puppeteer/chrome-headless-shell "
         "-name 'chrome-headless-shell' -type f | head -1) && "
         "echo \"SHELL_BIN=$SHELL_BIN\" && "
@@ -76,6 +97,8 @@ _image = (
     .env({
         "PUPPETEER_EXECUTABLE_PATH": "/usr/bin/chromium",
         "PRODUCER_BROWSER_GPU_MODE": "hardware",
+        # Tell GLVND where to find the NVIDIA vendor JSON at runtime.
+        "__EGL_VENDOR_LIBRARY_DIRS": "/usr/share/glvnd/egl_vendor.d",
     })
 )
 
@@ -116,11 +139,13 @@ def render_hf(project_zip: bytes) -> bytes:
             _gpu_status = f"nvidia-smi FAILED ({_gpu_r.stderr.strip()[:120]}) — SwiftShader risk"
         print(f"[MODAL-GPU] {_gpu_status}", flush=True)
 
-        # ── DRI device check (EGL needs /dev/dri/renderD*) ────────────────────
+        # ── DRI + GLVND EGL check ──────────────────────────────────────────────
         import glob as _glob
         _dri = _glob.glob("/dev/dri/renderD*")
-        _dri_status = f"DRI: {_dri}" if _dri else "DRI: NONE — EGL will use software"
-        print(f"[MODAL-GPU] {_dri_status}", flush=True)
+        _dri_status = f"DRI: {_dri}" if _dri else "DRI: NONE"
+        _egl_json = Path("/usr/share/glvnd/egl_vendor.d/10_nvidia.json")
+        _egl_status = "GLVND-nvidia: OK" if _egl_json.exists() else "GLVND-nvidia: MISSING — SwiftShader"
+        print(f"[MODAL-GPU] {_dri_status} | {_egl_status}", flush=True)
 
         # ── chrome-headless-shell path (required for BeginFrame capture) ─────────
         _shell_bins = sorted(_glob.glob(
