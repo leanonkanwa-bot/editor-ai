@@ -1880,6 +1880,7 @@ Rules the JSON must obey:
         Never more than 2 consecutive segments with the same beat value.
         Minimum 4 DIFFERENT beats in any video over 20 seconds.
         Never use beat="story" for more than 30% of all segments.
+        (This 30% cap applies to keep_segments ONLY — never to script_structure.)
       EXAMPLE for 9 segments:
         [hook, amplify, context, tension, story, story, realization, principle, payoff]
         NEVER: [story, story, story, story, story, story, story, story, story]
@@ -1891,7 +1892,9 @@ Rules the JSON must obey:
   - Segments with net score ≤ 0 must always be cut — no exceptions.
   - Hook must be the highest-scoring segment in keep_segments.
   - script_structure beats: HOOK · AMPLIFY · CONTEXT · TENSION · STORY · REALIZATION · PRINCIPLE · PAYOFF · EMOTIONAL_END
-  - CRITICAL beat assignment: The FIRST keep_segment MUST have beat="hook". The LAST keep_segment MUST have beat="payoff" or beat="emotional_end". Every segment MUST have a beat field — never omit it or default it to "story".
+      In script_structure, STORY and CONTEXT may repeat freely — no percentage cap.
+      A 15-min coaching video legitimately has STORY × 5, CONTEXT × 3. That is correct.
+  - CRITICAL (keep_segments only): The FIRST keep_segment MUST have beat="hook". The LAST MUST have beat="payoff" or "emotional_end". Every keep_segment MUST have a beat field — never default to "story" for keep_segments.
   - script_structure lines: verbatim transcript words only, never invented.
   - silences: only before PRINCIPLE and PAYOFF, 0.3–0.5s max.
   - titres_ctr: 5 titles, each deliverable from the video content.
