@@ -674,13 +674,23 @@ def _generate_graphic_cards(
     # Detect and fill coverage gaps in script_out (>30s with no beat entry).
     # Chunked planning may leave ranges with no script_structure entry — those ranges
     # are invisible to the storyboard LLM and produce zero cards even if speech exists.
-    _SCRIPT_GAP_THRESH = 30.0
+    # Beat-type-aware gap threshold: hook sections get filled aggressively,
+    # anecdote/filler sections are left to breathe. Default 30s for unknown types.
+    _SCRIPT_GAP_BY_BEAT: dict[str, float] = {
+        "hook": 15.0, "intro": 15.0,
+        "insight": 20.0, "conclusion": 22.0,
+        "story": 30.0, "explanation": 30.0,
+        "example": 42.0, "anecdote": 42.0,
+        "filler": 55.0, "transition": 55.0,
+    }
+    _SCRIPT_GAP_DEFAULT = 30.0
     _so_sorted = sorted(script_out, key=lambda e: float(e.get("start", 0)))
     _script_fill: list[dict] = []
     _so_prev_end = 0.0
     for _soe in _so_sorted:
         _so_s = float(_soe.get("start", 0))
-        if _so_s - _so_prev_end > _SCRIPT_GAP_THRESH:
+        _soe_thresh = _SCRIPT_GAP_BY_BEAT.get(str(_soe.get("beat", "story")).lower(), _SCRIPT_GAP_DEFAULT)
+        if _so_s - _so_prev_end > _soe_thresh:
             _gw = [w for w in timing_map.remapped_words if _so_prev_end <= w.start < _so_s]
             _gt = " ".join(w.text for w in _gw[:40])
             _script_fill.append({
@@ -691,6 +701,7 @@ def _generate_graphic_cards(
             })
             print(
                 f"[SCRIPT-FILL] t={_so_prev_end:.1f}→{_so_s:.1f}s ({_so_s - _so_prev_end:.0f}s)"
+                f" thresh={_soe_thresh:.0f}s beat={_soe.get('beat','?')!r}"
                 f" — no beat spine, injecting synthetic story beat"
                 f" ({len(_gw)} words: '{_gt[:60]}…')",
                 flush=True,
@@ -698,7 +709,7 @@ def _generate_graphic_cards(
         _so_prev_end = max(_so_prev_end, float(_soe.get("end", 0)))
     # Check tail
     _trimmed_dur_local = trimmed_duration  # already in scope as parameter
-    if _trimmed_dur_local - _so_prev_end > _SCRIPT_GAP_THRESH:
+    if _trimmed_dur_local - _so_prev_end > _SCRIPT_GAP_DEFAULT:
         _gw = [w for w in timing_map.remapped_words if _so_prev_end <= w.start]
         _gt = " ".join(w.text for w in _gw[:40])
         _script_fill.append({
@@ -909,6 +920,8 @@ ZONES — where the card sits on screen:
 {f"SUBJECT POSITION: the speaker occupies the {subject_side} side of the frame. Place data-heavy cards (stat, list, comparison) on the OPPOSITE side so they don't obscure the face." if subject_side and subject_side != "center" else ""}
 RULES:
 - CARD COUNT TARGET: {target_cards} cards for a {trimmed_duration:.0f}s video. Treat this as a quota to reach, never as a ceiling to stay under. Under-coverage is its own quality failure: a viewer watching 10+ minutes without visual reinforcement loses engagement. Aim to reach 85–100% of this target. Place a card whenever the speaker teaches, reveals, contrasts, enumerates, or drives home a point worth remembering. If you are at 40% of the target with half the video left and no good reason to stop, look harder for moments you may have missed.
+- SECTION DENSITY: Distribute cards non-uniformly — cluster at narrative peaks, protect storytelling. hook/intro beats: ~5 cards/min. insight/pivot beats: ~3 cards/min. story/explanation beats: ~2 cards/min (zoom handles micro-rhythm). example/anecdote beats: ~1.5 cards/min — let the story breathe. conclusion beats: ~2.5 cards/min. Never spread cards uniformly regardless of beat type.
+- STYLE DIVERSITY: Within any 90-second window, use at least 3 distinct styles. Cycle through key_phrase, pull_quote, concept_definition, contrarian_take, cause_effect — pick whichever fits the speech moment. A run of 90s with only key_phrase cards is a failure mode.
 - DEAD ZONE RULE: Any 12+ second stretch of active speech with no card is a failure mode — even on pure narrative passages with no explicit enumeration, statistic, or comparison. On reflective, elaborative, or storytelling content, use these types: contrarian_take (the speaker challenges what the audience likely assumes), cause_effect (explicit or implied causal chain: "X → Y", "parce que X, donc Y"), quote (powerful first-person statement about the speaker's own experience or perspective), callout (conceptual anchor for the section — what the viewer must grasp to follow what comes next), question (rhetorical question the speaker poses and then answers). "No obvious structural peak" is not a reason to skip — it is a reason to look harder for the underlying insight. Conversational and informal content (streams, podcasts, Q&A, debates) deserves the same card density as structured coaching — apply quote, callout, cause_effect, contrarian_take, question liberally on elaborative passages, even when the speaker lacks formal structure markers like enumeration or statistics.
 - DUAL-CARD BEATS: When a single speech segment contains BOTH (a) a vivid, memorable, or funny formulation that stands on its own as a key_phrase AND (b) one or more distinct numeric facts (stat), generate TWO separate cards with startSec offset by 1-2s: the stat card anchors to when the number is spoken, the key_phrase card anchors to the memorable phrase. Only split when both elements are genuinely strong independently — do not split weak content.
 - Card startSec/endSec must be within [0, {trimmed_duration:.1f}]

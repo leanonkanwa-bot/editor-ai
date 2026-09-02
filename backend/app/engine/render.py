@@ -2910,9 +2910,11 @@ def _render_hyperframes(
     #
     # This is a DETERMINISTIC, zero-LLM guarantee.  It fires unconditionally for
     # any uncovered window regardless of content quality or upstream LLM decisions.
-    _SAFETY_WINDOW_S  = 20.0
+    _SAFETY_WINDOW_S  = 28.0
     _SAFETY_MIN_WORDS = 5
     _SAFETY_SIG_KINDS = frozenset({"drift", "punch_in", "pulse", "pull_out"})
+    _SAFETY_STYLES    = ["key_phrase", "pull_quote", "concept_definition"]
+    _sn_style_hist: list[tuple[float, str]] = []  # rolling 90s: (window_end, style)
 
     _sn_graphic_cards  = [c for c in storyboard.get("cards", []) if c.get("type") != "caption"]
     _sn_zoom_sorted    = sorted(remapped_zoom, key=lambda z: float(z.get("start", 0)))
@@ -2961,6 +2963,15 @@ def _render_hyperframes(
         if _sn_ce - _sn_cs < 2.5:
             _sn_ce = round(_sn_cs + 2.5, 3)
 
+        # 90s style rotation — no repeat within window
+        _sn_style_hist[:] = [(e, s) for e, s in _sn_style_hist if e > _sn_ws - 90]
+        _sn_used = {s for _, s in _sn_style_hist}
+        _sn_style = next(
+            (s for s in _SAFETY_STYLES if s not in _sn_used),
+            _SAFETY_STYLES[_sn_fb_id % len(_SAFETY_STYLES)],
+        )
+        _sn_style_hist.append((_sn_we, _sn_style))
+
         _sn_fb_id += 1
         _sn_card = {
             "id":         f"safety-{_sn_fb_id:02d}",
@@ -2972,7 +2983,7 @@ def _render_hyperframes(
             "zone":       "video-overlay",
             "_safety_fallback": True,
             "contentHints": {
-                "style": "key_phrase",
+                "style": _sn_style,
                 "title": _sn_text,
             },
         }
