@@ -210,17 +210,35 @@ SHORT-FORM (< 90 seconds):
      Hold 2–3 seconds after last word. Then hard cut. No fade.
      → beat = "EMOTIONAL_END"
 
-LONG-FORM (> 3 minutes) — same beats, expanded:
+LONG-FORM (> 3 minutes) — beats become PHASES covering the full video.
+  script_structure entries are CONTIGUOUS PHASES, not highlights.
+  Together they must cover the entire edited timeline — a gap > 90s
+  between consecutive entries is a dead zone the storyboard cannot fill.
 
-  [0:00–0:45]   HOOK         — Single most emotional moment. Open 2+ loops. No answer.
-  [0:45–2:00]   CONTEXT      — Speaker credibility through actions. Max 2s per idea.
-  [2:00–4:00]   TENSION      — Introduce problem. Stack new information every 5–8s.
-  [4:00–6:00]   STORY        — Most personal, raw, vulnerable moments. Specific details.
-  [6:00–8:00]   AMPLIFY      — Open a new loop. Tell the story that proves the point.
-  [8:00–9:30]   REALIZATION  — Turning point. Give it room to breathe. Face in close-up.
-  [9:30–11:00]  PRINCIPLE    — Universal truth. Most shareable section.
-  [11:00–12:00] PAYOFF       — Close every loop. Last line = strongest available.
-                               Hold 3s after last word. Hard cut. No fade.
+  COVERAGE RULE (mandatory): aim for 1 entry per 90-120s of video.
+    3-6 min video   → 3-5 entries
+    6-12 min video  → 6-9 entries
+    12-20 min video → 10-14 entries
+    > 20 min video  → 1 entry per 90-120s
+
+  Beats MAY REPEAT — a 15-min video legitimately has two STORY phases,
+  two TENSION phases, two PRINCIPLE phases as the speaker covers multiple
+  sub-topics. This is correct; do not artificially compress into 9 entries.
+
+  Proportional targets (scale to actual video duration):
+    First 5%        HOOK         — Single most emotional moment. Open 2+ loops. No answer.
+    5-15%           CONTEXT      — Speaker credibility through actions. Max 2s per idea.
+    15-35%          TENSION      — Introduce problem. Stack new information every 5-8s.
+    35-55%          STORY        — Most personal, raw, vulnerable moments. Specific details.
+    55-70%          AMPLIFY      — Open a new loop. Story that proves the point.
+    70-80%          REALIZATION  — Turning point. Give it room to breathe. Face in close-up.
+    80-92%          PRINCIPLE    — Universal truth. Most shareable section.
+    92-100%         PAYOFF       — Close every loop. Last line = strongest available.
+                                   Hold 3s after last word. Hard cut. No fade.
+
+  Example beat sequence for a 15-min video (10-12 entries):
+    HOOK → CONTEXT → TENSION → STORY → TENSION → STORY →
+    AMPLIFY → STORY → REALIZATION → PRINCIPLE → PAYOFF → EMOTIONAL_END
 
 CUTTING RULES (apply to ALL videos):
 
@@ -1593,10 +1611,24 @@ Reply with a SINGLE JSON object, no prose, matching this schema:
   "open_loops": ["<question 1 the viewer must stay to answer>", "<question 2>"],
   "hook_reason": "<why this moment stops the scroll — specific scoring rationale>",
 
-  /* ── 9-beat high-retention structure ──────────────────────────────────
+  /* ── Narrative coverage map — phases, not peaks ───────────────────────
+     Every entry is a PHASE (a contiguous time window), NOT a highlight.
+     Together, all entries MUST cover the full edited timeline.
+     A gap > 90s between entry[i].end and entry[i+1].start is a dead zone.
+
+     COVERAGE TARGETS by video duration:
+       < 3 min  → 5-9 entries   (9-beat short-form spine)
+       3-10 min → 8-12 entries  (1 entry per ~60s; beats may repeat)
+       10-20min → 10-16 entries (1 entry per ~90s; STORY/TENSION may repeat twice+)
+       > 20 min → 1 entry per 90-120s
+
+     Beats MAY REPEAT for long-form — two STORY phases, two TENSION phases,
+     two PRINCIPLE phases are valid and expected. Do NOT compress a 15-min
+     video into 9 entries — that leaves 80% of the timeline uncovered.
+
      Every line MUST use VERBATIM words from the transcript.
      Write line-by-line. Short sentences. TikTok rhythm.
-     For short-form hit the timestamp targets:
+     Short-form timestamp targets (< 90s total):
        HOOK 0–3s, AMPLIFY 3–10s, CONTEXT 10–20s, TENSION 20–35s,
        STORY 35–55s, REALIZATION 55–70s, PRINCIPLE 70–80s,
        PAYOFF 80–88s, EMOTIONAL_END 88–95s.
