@@ -192,7 +192,7 @@ def render_hf(project_zip: bytes) -> bytes:
                     "--fps",             "30",
                     "--quality",         "standard",
                     "--crf",             "18",
-                    "--workers",         "4",
+                    "--workers",         "1",   # single worker — no GPU contention, simpler EGL init
                     "--video-frame-format", "jpg",
                     "--protocol-timeout", "800000",
                     "--tmp-dir",         str(hf_tmp),
@@ -212,10 +212,14 @@ def render_hf(project_zip: bytes) -> bytes:
                 f"stdout: {proc.stdout[-1200:]}\nstderr: {proc.stderr[-400:]}"
             )
 
-        # Print head (Chrome GPU init) + tail (render completion).
+        # Print head (first 50 lines — covers [BrowserManager] gl= line which
+        # tells us which GL backend Chrome actually used: gl-egl (NVIDIA) or
+        # swiftshader (software fallback). Also print stderr for browserGpuMode
+        # auto-detection messages (console.error lines from HyperFrames).
         hf_lines   = (proc.stdout or "").splitlines()
-        hf_head    = "\n".join(hf_lines[:25])
+        hf_head    = "\n".join(hf_lines[:50])
         hf_tail    = "\n".join(hf_lines[-8:])
+        hf_stderr  = (proc.stderr or "").strip()
         render_s   = _time.perf_counter() - _t0
         size_kb    = output_mp4.stat().st_size // 1024
         print(f"[MODAL] Render done — {size_kb}KB in {render_s:.1f}s", flush=True)
@@ -223,6 +227,8 @@ def render_hf(project_zip: bytes) -> bytes:
             print(f"[MODAL-HF-HEAD]\n{hf_head}", flush=True)
         if hf_tail and hf_tail != hf_head:
             print(f"[MODAL-HF-TAIL]\n{hf_tail}", flush=True)
+        if hf_stderr:
+            print(f"[MODAL-HF-STDERR]\n{hf_stderr[-800:]}", flush=True)
 
         return output_mp4.read_bytes()
 
