@@ -405,6 +405,7 @@ def _build_chunk_context(
     narrative_map: dict,
     prev_keep_segments_abs: list[dict],
     prev_zoom_end_scale: float | None = None,
+    prev_chunk_plans: list[dict] | None = None,
 ) -> str:
     """Build the narrative context block injected into each chunk's planner prompt.
 
@@ -526,6 +527,40 @@ def _build_chunk_context(
             beat = seg.get("beat", "")
             lines.append(f"  [{s:.0f}s–{e:.0f}s] beat={beat}")
         lines.append("")
+
+    # ── Cross-chunk context: card anti-redundancy + narrative continuity ──────
+    if chunk_idx > 0 and prev_chunk_plans:
+        _cross: list[str] = []
+
+        # Key phrases already promoted to cards across ALL previous chunks.
+        # Deduplicated and capped at 10 entries to control prompt size (~600 chars).
+        _used_keys: list[str] = []
+        for _cp in prev_chunk_plans:
+            for _kl in (_cp.get("key_lines") or []):
+                if _kl and _kl not in _used_keys:
+                    _used_keys.append(_kl)
+        if _used_keys:
+            _cross += [
+                "CARD REDUNDANCY GUARD — key phrases already used as cards in previous chunks:",
+                "  Do NOT repeat these verbatim or paraphrase closely as a new card:",
+            ]
+            for _kl in _used_keys[:10]:
+                _cross.append(f'    • "{_kl}"')
+
+        # Closing beats of the immediately preceding chunk — narrative continuity
+        # at the chunk boundary so the LLM can continue the thread, not restart it.
+        _last_ss = (prev_chunk_plans[-1].get("script_structure") or [])
+        _tail = _last_ss[-3:] if len(_last_ss) >= 3 else _last_ss
+        if _tail:
+            _cross.append("NARRATIVE CONTINUITY — the previous chunk's closing beats:")
+            for _b in _tail:
+                _bt = _b.get("beat", "story")
+                _bl = (_b.get("lines") or [""])[0][:80]
+                _cross.append(f'  [{_bt}] "{_bl}"')
+            _cross.append("  Continue the narrative thread naturally — don't restate or re-introduce these.")
+
+        if _cross:
+            lines += _cross + [""]
 
     return "\n".join(lines)
 
@@ -820,6 +855,7 @@ def _plan_edit_chunked(
             narrative_map=narrative_map,
             prev_keep_segments_abs=prev_keep_abs,
             prev_zoom_end_scale=_prev_zoom_end,
+            prev_chunk_plans=chunk_plans_abs if chunk_idx > 0 else None,
         )
 
         print(
