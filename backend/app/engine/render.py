@@ -3402,9 +3402,21 @@ def _render_hyperframes(
                 flush=True,
             )
 
-            for i, ((_proj, raw), mp4_bytes) in enumerate(
+            for i, ((_proj, raw), _modal_result) in enumerate(
                 zip(_all_prepared, _modal_results)
             ):
+                # Support both dict (new) and plain bytes (legacy) return shapes.
+                if isinstance(_modal_result, dict):
+                    mp4_bytes = _modal_result["mp4"]
+                    print(
+                        f"[MODAL-GPU] seg-{i}: {_modal_result.get('gpu_status','?')} | "
+                        f"{_modal_result.get('dri_status','?')} | "
+                        f"render={_modal_result.get('render_s','?')}s "
+                        f"size={_modal_result.get('size_kb','?')}KB",
+                        flush=True,
+                    )
+                else:
+                    mp4_bytes = _modal_result
                 raw.write_bytes(mp4_bytes)
                 _seg_raws.append(raw)
                 print(f"[MODAL] Segment {i} written: {raw.name}", flush=True)

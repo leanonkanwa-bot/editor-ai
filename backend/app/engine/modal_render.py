@@ -19,9 +19,13 @@ from pathlib import Path
 import modal
 
 # ── Image ────────────────────────────────────────────────────────────────────
-# Installs Chrome + HyperFrames inside the Modal container.
-# PRODUCER_BROWSER_GPU_MODE=hardware → HF uses --use-gl=angle --use-angle=gl-egl
-# which gives full A10G GPU acceleration for WebGL/GSAP compositing.
+# Mirrors HyperFrames' own Dockerfile.render exactly:
+#   1. apt Chromium (fallback for DTP discovery)
+#   2. chrome-headless-shell (required for BeginFrame deterministic capture)
+#   3. HyperFrames npm install (no PUPPETEER_SKIP_DOWNLOAD — let it resolve deps)
+#   4. `browser ensure` with PRODUCER_HEADLESS_SHELL_PATH set → generates
+#      /usr/lib/core/dist/hyperframe.manifest.json
+#   5. PRODUCER_BROWSER_GPU_MODE=hardware → EGL GPU path on A10G
 _image = (
     modal.Image.debian_slim(python_version="3.12")
     .apt_install(
@@ -36,27 +40,41 @@ _image = (
         "libxkbcommon0",
         "libxcomposite1",
         "libxdamage1",
+        "libxfixes3",
         "libxrandr2",
         "libgbm1",
         "libasound2",
         "libpango-1.0-0",
         "libpangocairo-1.0-0",
-        "fonts-liberation",
-        "libglib2.0-0",
+        "libxshmfence1",
         "libgtk-3-0",
-        "xvfb",          # fallback display for Chrome init
+        "fonts-liberation",
+        "fontconfig",
+        "xvfb",
     )
     .run_commands(
+        # Node.js 22 LTS
         "curl -fsSL https://deb.nodesource.com/setup_22.x | bash -",
         "apt-get install -y nodejs",
-        "PUPPETEER_SKIP_DOWNLOAD=true npm install -g hyperframes@0.7.5 --prefix /usr",
-        # Pre-warm the HF headless shell download inside the image layer
-        "DISPLAY=:99 Xvfb :99 -screen 0 1920x1080x24 & "
-        "PRODUCER_BROWSER_GPU_MODE=hardware hyperframes browser ensure || true",
+        # HyperFrames (global install, no prefix override, no skip-download)
+        "npm install -g hyperframes@0.7.5",
+        # chrome-headless-shell — only available for amd64 (Modal A10G is amd64)
+        # Mirrors Railway Dockerfile line 10 and HF Dockerfile.render line 28-33.
+        "npx --yes @puppeteer/browsers install chrome-headless-shell@stable "
+        "--path /root/.cache/puppeteer",
+        # Pre-build core runtime with headless-shell available.
+        # PRODUCER_HEADLESS_SHELL_PATH is required for `browser ensure` to generate
+        # hyperframe.manifest.json — without it the manifest is never written.
+        "SHELL_BIN=$(find /root/.cache/puppeteer/chrome-headless-shell "
+        "-name 'chrome-headless-shell' -type f | head -1) && "
+        "echo \"SHELL_BIN=$SHELL_BIN\" && "
+        "Xvfb :99 -screen 0 1920x1080x24 & sleep 1 && "
+        "DISPLAY=:99 PRODUCER_HEADLESS_SHELL_PATH=$SHELL_BIN "
+        "hyperframes browser ensure && "
+        "echo '[MODAL-BUILD] browser ensure OK'",
     )
     .env({
         "PUPPETEER_EXECUTABLE_PATH": "/usr/bin/chromium",
-        # Tell HyperFrames to use the host GPU (A10G EGL) instead of SwiftShader
         "PRODUCER_BROWSER_GPU_MODE": "hardware",
     })
 )
@@ -73,6 +91,9 @@ app = modal.App("leanlead-hyperframes", image=_image)
 def render_hf(project_zip: bytes) -> bytes:
     """Unzip public_dir, render with HyperFrames on A10G GPU, return mp4 bytes."""
     import os as _os
+    import time as _time
+
+    _t0 = _time.perf_counter()
 
     with tempfile.TemporaryDirectory() as tmp:
         public_dir = Path(tmp) / "public"
@@ -84,15 +105,39 @@ def render_hf(project_zip: bytes) -> bytes:
         hf_tmp    = Path(tmp) / "hf_tmp"
         hf_tmp.mkdir()
 
-        # Xvfb as a safety-net display (Chrome may still probe DISPLAY on init
-        # even with --headless; actual rendering uses EGL, not X).
+        # ── GPU presence check ─────────────────────────────────────────────────
+        _gpu_r = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"],
+            capture_output=True, text=True, timeout=10,
+        )
+        if _gpu_r.returncode == 0:
+            _gpu_status = f"A10G: {_gpu_r.stdout.strip()}"
+        else:
+            _gpu_status = f"nvidia-smi FAILED ({_gpu_r.stderr.strip()[:120]}) — SwiftShader risk"
+        print(f"[MODAL-GPU] {_gpu_status}", flush=True)
+
+        # ── DRI device check (EGL needs /dev/dri/renderD*) ────────────────────
+        import glob as _glob
+        _dri = _glob.glob("/dev/dri/renderD*")
+        _dri_status = f"DRI: {_dri}" if _dri else "DRI: NONE — EGL will use software"
+        print(f"[MODAL-GPU] {_dri_status}", flush=True)
+
+        # ── chrome-headless-shell path (required for BeginFrame capture) ─────────
+        _shell_bins = sorted(_glob.glob(
+            "/root/.cache/puppeteer/chrome-headless-shell/*/chrome-headless-shell-linux64/chrome-headless-shell"
+        ))
+        if _shell_bins:
+            _os.environ["PRODUCER_HEADLESS_SHELL_PATH"] = _shell_bins[0]
+            print(f"[MODAL-HF] headless-shell: {_shell_bins[0]}", flush=True)
+        else:
+            print("[MODAL-HF] WARNING: chrome-headless-shell not found — beginFrame unavailable", flush=True)
+
+        # ── Xvfb (safety-net display; actual render uses EGL, not X) ──────────
         xvfb = subprocess.Popen(
             ["Xvfb", ":99", "-screen", "0", "1920x1080x24"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
         _os.environ["DISPLAY"] = ":99"
-        # PRODUCER_BROWSER_GPU_MODE=hardware is already set in the image env;
-        # re-assert here so it survives any env mutation.
         _os.environ["PRODUCER_BROWSER_GPU_MODE"] = "hardware"
 
         which = subprocess.run(["which", "hyperframes"], capture_output=True, text=True)
@@ -106,7 +151,7 @@ def render_hf(project_zip: bytes) -> bytes:
                     "--fps",             "30",
                     "--quality",         "standard",
                     "--crf",             "18",
-                    "--workers",         "4",          # 4 Chrome workers on A10G (24 GB VRAM)
+                    "--workers",         "4",
                     "--video-frame-format", "jpg",
                     "--protocol-timeout", "800000",   # 800 s Chrome protocol timeout (ms)
                     "--tmp-dir",         str(hf_tmp),
@@ -114,21 +159,26 @@ def render_hf(project_zip: bytes) -> bytes:
                 ],
                 capture_output=True,
                 text=True,
-                timeout=900,   # 15 min; Modal hard-kills at 20 min
+                timeout=1100,  # 18 min; Modal hard-kills at 20 min (1200s)
             )
         finally:
             xvfb.terminate()
 
         if proc.returncode != 0 or not output_mp4.exists():
+            # Surface HF output (may show SwiftShader/GPU error) in the exception.
             raise RuntimeError(
                 f"HyperFrames render failed (rc={proc.returncode}):\n"
-                f"stdout: {proc.stdout[-600:]}\nstderr: {proc.stderr[-600:]}"
+                f"stdout: {proc.stdout[-800:]}\nstderr: {proc.stderr[-800:]}"
             )
 
-        print(
-            f"[MODAL] Render done — {output_mp4.stat().st_size // 1024}KB",
-            flush=True,
-        )
+        # Surface last HF lines — may confirm EGL/SwiftShader mode used.
+        hf_tail = "\n".join((proc.stdout or "").splitlines()[-8:])
+        render_s = _time.perf_counter() - _t0
+        size_kb  = output_mp4.stat().st_size // 1024
+        print(f"[MODAL] Render done — {size_kb}KB in {render_s:.1f}s", flush=True)
+        if hf_tail:
+            print(f"[MODAL-HF-TAIL]\n{hf_tail}", flush=True)
+
         return output_mp4.read_bytes()
 
 
