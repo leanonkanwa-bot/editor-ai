@@ -140,12 +140,18 @@ def render_hf(project_zip: bytes) -> bytes:
         print(f"[MODAL-GPU] {_gpu_status}", flush=True)
 
         # ── DRI + GLVND EGL check ──────────────────────────────────────────────
-        import glob as _glob
+        import glob as _glob, ctypes as _ct
         _dri = _glob.glob("/dev/dri/renderD*")
         _dri_status = f"DRI: {_dri}" if _dri else "DRI: NONE"
         _egl_json = Path("/usr/share/glvnd/egl_vendor.d/10_nvidia.json")
-        _egl_status = "GLVND-nvidia: OK" if _egl_json.exists() else "GLVND-nvidia: MISSING — SwiftShader"
-        print(f"[MODAL-GPU] {_dri_status} | {_egl_status}", flush=True)
+        _egl_status = "GLVND-nvidia: OK" if _egl_json.exists() else "GLVND-nvidia: MISSING"
+        # Verify the library referenced in the JSON is actually loadable.
+        try:
+            _ct.CDLL("libEGL_nvidia.so.0")
+            _lib_status = "libEGL_nvidia: LOADED"
+        except OSError as _le:
+            _lib_status = f"libEGL_nvidia: NOT FOUND ({str(_le)[:80]})"
+        print(f"[MODAL-GPU] {_dri_status} | {_egl_status} | {_lib_status}", flush=True)
 
         # ── chrome-headless-shell path (required for BeginFrame capture) ─────────
         _shell_bins = sorted(_glob.glob(
@@ -155,18 +161,28 @@ def render_hf(project_zip: bytes) -> bytes:
             _os.environ["PRODUCER_HEADLESS_SHELL_PATH"] = _shell_bins[0]
             print(f"[MODAL-HF] headless-shell: {_shell_bins[0]}", flush=True)
         else:
-            print("[MODAL-HF] WARNING: chrome-headless-shell not found — beginFrame unavailable", flush=True)
+            print("[MODAL-HF] WARNING: chrome-headless-shell not found", flush=True)
 
-        # ── Xvfb (safety-net display; actual render uses EGL, not X) ──────────
+        # ── Xvfb — start but do NOT export DISPLAY before HF ──────────────────
+        # chrome-headless-shell uses EGL surfaceless (no X11 needed).
+        # Setting DISPLAY=:99 makes Chrome pick GLX/X11 path → no DRI → SwiftShader.
+        # Keep Xvfb alive only as Chrome's display probe fallback; pass env without it.
         xvfb = subprocess.Popen(
             ["Xvfb", ":99", "-screen", "0", "1920x1080x24"],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
-        _os.environ["DISPLAY"] = ":99"
-        _os.environ["PRODUCER_BROWSER_GPU_MODE"] = "hardware"
 
         which = subprocess.run(["which", "hyperframes"], capture_output=True, text=True)
         hf_cmd = [which.stdout.strip()] if which.returncode == 0 else ["npx", "hyperframes"]
+
+        # Build env WITHOUT DISPLAY so Chrome uses EGL surfaceless (not GLX).
+        # Add NVIDIA hints that route EGL/GL to the NVIDIA driver.
+        _hf_env = {k: v for k, v in _os.environ.items() if k != "DISPLAY"}
+        _hf_env["PRODUCER_BROWSER_GPU_MODE"] = "hardware"
+        _hf_env["__NV_PRIME_RENDER_OFFLOAD"] = "1"
+        _hf_env["__GLX_VENDOR_LIBRARY_NAME"] = "nvidia"
+        _hf_env["LIBGL_ALWAYS_SOFTWARE"] = "0"
+        print(f"[MODAL-HF] launching without DISPLAY (EGL surfaceless mode)", flush=True)
 
         try:
             proc = subprocess.run(
@@ -178,30 +194,34 @@ def render_hf(project_zip: bytes) -> bytes:
                     "--crf",             "18",
                     "--workers",         "4",
                     "--video-frame-format", "jpg",
-                    "--protocol-timeout", "800000",   # 800 s Chrome protocol timeout (ms)
+                    "--protocol-timeout", "800000",
                     "--tmp-dir",         str(hf_tmp),
-                    "--browser-gpu",                  # activates EGL path on Linux
+                    "--browser-gpu",
                 ],
                 capture_output=True,
                 text=True,
-                timeout=1100,  # 18 min; Modal hard-kills at 20 min (1200s)
+                timeout=1100,
+                env=_hf_env,
             )
         finally:
             xvfb.terminate()
 
         if proc.returncode != 0 or not output_mp4.exists():
-            # Surface HF output (may show SwiftShader/GPU error) in the exception.
             raise RuntimeError(
                 f"HyperFrames render failed (rc={proc.returncode}):\n"
-                f"stdout: {proc.stdout[-800:]}\nstderr: {proc.stderr[-800:]}"
+                f"stdout: {proc.stdout[-1200:]}\nstderr: {proc.stderr[-400:]}"
             )
 
-        # Surface last HF lines — may confirm EGL/SwiftShader mode used.
-        hf_tail = "\n".join((proc.stdout or "").splitlines()[-8:])
-        render_s = _time.perf_counter() - _t0
-        size_kb  = output_mp4.stat().st_size // 1024
+        # Print head (Chrome GPU init) + tail (render completion).
+        hf_lines   = (proc.stdout or "").splitlines()
+        hf_head    = "\n".join(hf_lines[:25])
+        hf_tail    = "\n".join(hf_lines[-8:])
+        render_s   = _time.perf_counter() - _t0
+        size_kb    = output_mp4.stat().st_size // 1024
         print(f"[MODAL] Render done — {size_kb}KB in {render_s:.1f}s", flush=True)
-        if hf_tail:
+        if hf_head:
+            print(f"[MODAL-HF-HEAD]\n{hf_head}", flush=True)
+        if hf_tail and hf_tail != hf_head:
             print(f"[MODAL-HF-TAIL]\n{hf_tail}", flush=True)
 
         return output_mp4.read_bytes()
