@@ -182,6 +182,22 @@ def render_hf(project_zip: bytes) -> bytes:
         _hf_env["__NV_PRIME_RENDER_OFFLOAD"] = "1"
         _hf_env["__GLX_VENDOR_LIBRARY_NAME"] = "nvidia"
         _hf_env["LIBGL_ALWAYS_SOFTWARE"] = "0"
+
+        # Bypass HyperFrames' broken path resolution for hyperframe.manifest.json.
+        # The manifest is a STATIC file shipped with the npm package (dist/).
+        # resolveHyperframeManifestPath() uses import.meta.url → wrong relative path
+        # on some npm global-install layouts → falls back to non-existent
+        # /usr/lib/core/dist/. PRODUCER_HYPERFRAME_MANIFEST_PATH short-circuits
+        # all candidates and points directly to the real file.
+        _manifest_hits = sorted(_glob.glob(
+            "/usr/*/node_modules/hyperframes/dist/hyperframe.manifest.json"
+        ))
+        if _manifest_hits:
+            _hf_env["PRODUCER_HYPERFRAME_MANIFEST_PATH"] = _manifest_hits[0]
+            print(f"[MODAL-HF] manifest: {_manifest_hits[0]}", flush=True)
+        else:
+            print("[MODAL-HF] WARNING: hyperframe.manifest.json not found by glob — render will fail", flush=True)
+
         print(f"[MODAL-HF] launching without DISPLAY (EGL surfaceless mode)", flush=True)
 
         try:
