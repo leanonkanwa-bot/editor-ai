@@ -159,6 +159,16 @@ _DATA_ANCHOR_FIELDS: dict[str, str] = {
     "client_result_number": "result_value",     # e.g. "+340%", "10k abonnés"
     "income_reveal":        "ir_amount",        # primary revenue number
     "prim_stat_counter":    "stat_value",       # animated counter target
+    # Styles whose spoken content lives in a dedicated prose field rather than
+    # 'title'. This dict is consulted ONLY when title is empty, so an entry can
+    # add anchoring where there was none but can never displace a correct one.
+    "prim_shatter_truth":   "truth_text",       # the truth the speaker states
+    "testimonial":          "testimonial_text", # the quote as spoken
+    "question_answer_pair": "qa_question",      # the question as posed aloud
+    "star_rating_review":   "review_text",      # the review quote
+    "dialogue":             "line_a",           # first speaker's line
+    "definition":           "definition",       # the spoken explanation
+    "poll_question":        "poll_question",    # the question text
 }
 
 # Styles that legitimately occupy video-overlay / fullscreen in landscape (full-canvas heroes).
@@ -3268,6 +3278,12 @@ def generate_storyboard(
     # non-trigger cards using contentHints.title as the search text.
     # Only fires when the matched word is > 0.5s later than current startSec so that
     # already-correct placements (card already at or after the title word) are not shifted.
+    # Cards that reach neither anchor path keep the LLM's raw startSec and are
+    # never cross-checked against speech. Counted and reported so the coverage
+    # gap is visible instead of silent — a style missing from both _TRIGGER_STYLES
+    # and _DATA_ANCHOR_FIELDS, with no 'title', can land seconds off its content.
+    _noanchor: list[tuple[str, str, float]] = []
+
     for _gc in graphic_cards:
         _style = _gc.get("contentHints", {}).get("style", "")
         if _style in _TRIGGER_STYLES:
@@ -3288,9 +3304,11 @@ def generate_storyboard(
                 _title = str(_data_val)
                 _used_data_fallback = bool(_title)
         if not _title:
+            _noanchor.append((str(_gc.get("id", "?")), _style, float(_gc.get("startSec", 0))))
             continue
         _title_cw = _content_words(_title, language)
         if not _title_cw:
+            _noanchor.append((str(_gc.get("id", "?")), _style, float(_gc.get("startSec", 0))))
             continue
         _start_s = float(_gc.get("startSec", 0))
         _lo = _start_s - _GROUNDING_WINDOW_PRE_S
@@ -3321,6 +3339,29 @@ def generate_storyboard(
                 f"(keyword '{_matched_word}'@{_matched:.2f}s matched in Whisper)",
                 flush=True,
             )
+
+    if _noanchor:
+        _na_styles: dict[str, int] = {}
+        for _nid, _nstyle, _nstart in _noanchor:
+            _na_styles[_nstyle] = _na_styles.get(_nstyle, 0) + 1
+            print(
+                f"[STORYBOARD] NO-ANCHOR card {_nid} style={_nstyle!r} "
+                f"startSec={_nstart:.2f}s — no title and no data field, "
+                f"kept LLM timing unverified",
+                flush=True,
+            )
+        print(
+            f"[STORYBOARD] NO-ANCHOR {len(_noanchor)}/{len(graphic_cards)} card(s) "
+            f"never checked against speech — "
+            + " ".join(f"{_k}={_v}" for _k, _v in sorted(_na_styles.items())),
+            flush=True,
+        )
+    else:
+        print(
+            f"[STORYBOARD] NO-ANCHOR none — all {len(graphic_cards)} cards "
+            f"anchored or trigger-checked",
+            flush=True,
+        )
 
     # Grounding guard — code-level backstop for trigger-style cards.
     # The LLM prompt contains a verbatim-grounding rule, but it's a soft constraint
