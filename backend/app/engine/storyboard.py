@@ -54,9 +54,17 @@ _ANCHOR_SEARCH_FORWARD_S      = 10.0   # how far ahead to scan for trigger keywo
                                        # at segment start and the anchor word is 7-9s later)
 _DATA_ANCHOR_SEARCH_FORWARD_S = 12.0  # wider window for data cards (number/age/result) whose
                                        # LLM startSec can be 4-9s before the spoken value
-_ANCHOR_LEAD_S           = 0.45       # card appears this many seconds before the trigger word
-                                       # (raised 0.20→0.45 so animation completes before anchor
-                                       # word is spoken: typical entry animation = 0.35s)
+_ANCHOR_LEAD_S           = 0.32       # card REACHES FULL VISIBILITY exactly on the trigger word.
+                                       # Matches ent_dur in compose.py (_build_timeline_js): the
+                                       # host fades in over 0.320s, so startSec is when the card
+                                       # STARTS appearing, not when it is readable. Lead == ent_dur
+                                       # therefore lands the card on the word with no anticipation
+                                       # and no lag. Was 0.45 (0.13s early); 0.0 would put the card
+                                       # 0.32s LATE — past the ~125ms threshold at which the eye
+                                       # reads a visual as trailing the audio.
+                                       # lean_cinema uses ent_dur 0.550, so its cards land ~0.23s
+                                       # late under this single global constant — accepted for now;
+                                       # a per-pack lead would need the pack passed into anchoring.
 
 # French stopwords stripped before grounding overlap computation so that invented phrases
 # sharing only function words with genuine speech (e.g. "je vais dire que…" vs "je vais
