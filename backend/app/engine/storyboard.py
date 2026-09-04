@@ -638,16 +638,22 @@ def _generate_graphic_cards(
         # At 300s (5 min): pace≈11.7 → ~26 cards; at 599s: pace≈16 → ~37.
         base_pace = 10 + 6 * (trimmed_duration - 180) / 420
     else:
-        # Flat 16 from 10 min onward — density must NOT dilute with duration.
-        # The old ramp 16→28 across 600–1800s (then flat 28) dropped a 30-min
-        # video to 2.1 cards/min against 3.8 for a 10-min one: 43% sparser
-        # purely because it was longer, which is what made long videos read as
-        # empty. 16 is not a new value — it is the pace already applied at
-        # 600s, i.e. the density that works, simply held constant.
-        # 3.75 cards/min at every duration: 20 min→75, 30 min→112, 60 min→225.
-        # Total spread stays non-uniform: the SECTION DENSITY prompt rule
-        # clusters this budget on peaks and lets narrative passages breathe.
-        base_pace = 16
+        # Flat 12 from 10 min onward — density must NOT dilute with duration.
+        # The original ramp 16→28 across 600–1800s dropped a 30-min video to
+        # 2.1 cards/min against 3.8 for a 10-min one: 43% sparser purely because
+        # it was longer. Flattening to 16 fixed the dilution; 12 fixes the level.
+        #
+        # 12 reconciles three prompt rules that previously disagreed:
+        #   CARD COUNT TARGET  at pace 16 -> 3.75 cards/min
+        #   SECTION DENSITY    absolute rates, weighted -> ~2.6 cards/min
+        #   DEAD ZONE RULE     no gap > 12s -> >= 5.0 cards/min
+        # The model was told to hit 3.75 while being handed per-section rates
+        # summing to 2.6 and a gap rule implying 5.0, and landed between them —
+        # 48 delivered against 56 targeted on the 15-min test (86%).
+        # pace 12 = 5.0 cards/min, exactly the density DEAD ZONE RULE already
+        # implies, so the three rules now agree instead of pulling apart.
+        # 20 min→100, 30 min→150, 60 min→300.
+        base_pace = 12
 
     density_mult = 1.0
     target_cards = max(3, round(trimmed_duration / (base_pace * density_mult)))
@@ -655,12 +661,26 @@ def _generate_graphic_cards(
     # Density diagnostic: without this, a card count in the logs cannot be read
     # as compliant or short — "48 cards" means 86% of target at 900s and 76% at
     # 1000s. Logging pace/target/rate makes every future density run legible.
+    _cpm = target_cards / max(trimmed_duration / 60, 0.01)
     print(
         f"[STORYBOARD] DENSITY pace={base_pace:.1f} target={target_cards} "
-        f"for {trimmed_duration:.0f}s ({target_cards / max(trimmed_duration / 60, 0.01):.2f} cards/min) "
+        f"for {trimmed_duration:.0f}s ({_cpm:.2f} cards/min) "
         f"fmt={format_hint!r}",
         flush=True,
     )
+
+    # SECTION DENSITY rates, derived from the real budget instead of hardcoded.
+    # The rates used to be absolute (hook 5, insight 3, story 2, anecdote 1.5,
+    # conclusion 2.5 cards/min) — weighted across a realistic beat mix that is
+    # ~2.6 cards/min, so they contradicted the CARD COUNT TARGET by ~30% and the
+    # model split the difference. Ratios below preserve the original shape
+    # (hook densest, anecdote sparsest) but scale with target_cards, so raising
+    # the budget widens the modulation instead of fighting it.
+    _sd_hook       = _cpm * 1.90
+    _sd_insight    = _cpm * 1.14
+    _sd_story      = _cpm * 0.76
+    _sd_anecdote   = _cpm * 0.57
+    _sd_conclusion = _cpm * 0.95
 
     # Build beat summary for the prompt
     beat_summary = []
@@ -952,7 +972,7 @@ ZONES — where the card sits on screen:
 {f"SUBJECT POSITION: the speaker occupies the {subject_side} side of the frame. Place data-heavy cards (stat, list, comparison) on the OPPOSITE side so they don't obscure the face." if subject_side and subject_side != "center" else ""}
 RULES:
 - CARD COUNT TARGET: {target_cards} cards for a {trimmed_duration:.0f}s video. Treat this as a quota to reach, never as a ceiling to stay under. Under-coverage is its own quality failure: a viewer watching 10+ minutes without visual reinforcement loses engagement. Aim to reach 85–100% of this target. Place a card whenever the speaker teaches, reveals, contrasts, enumerates, or drives home a point worth remembering. If you are at 40% of the target with half the video left and no good reason to stop, look harder for moments you may have missed.
-- SECTION DENSITY: Distribute cards non-uniformly — cluster at narrative peaks, protect storytelling. hook/intro beats: ~5 cards/min. insight/pivot beats: ~3 cards/min. story/explanation beats: ~2 cards/min (zoom handles micro-rhythm). example/anecdote beats: ~1.5 cards/min — let the story breathe. conclusion beats: ~2.5 cards/min. Never spread cards uniformly regardless of beat type.
+- SECTION DENSITY: Distribute cards non-uniformly — cluster at narrative peaks, protect storytelling. These rates are scaled to this video's budget of {target_cards} cards ({_cpm:.1f} cards/min average) and together they reach it — they are the shape of the quota, not a reduction of it. hook/intro beats: ~{_sd_hook:.1f} cards/min. insight/pivot beats: ~{_sd_insight:.1f} cards/min. story/explanation beats: ~{_sd_story:.1f} cards/min (zoom handles micro-rhythm). example/anecdote beats: ~{_sd_anecdote:.1f} cards/min — let the story breathe. conclusion beats: ~{_sd_conclusion:.1f} cards/min. Never spread cards uniformly regardless of beat type.
 - STYLE DIVERSITY: Within any 90-second window, use at least 3 distinct styles. Cycle through key_phrase, pull_quote, concept_definition, contrarian_take, cause_effect — pick whichever fits the speech moment. A run of 90s with only key_phrase cards is a failure mode.
 - DEAD ZONE RULE: Any 12+ second stretch of active speech with no card is a failure mode — even on pure narrative passages with no explicit enumeration, statistic, or comparison. On reflective, elaborative, or storytelling content, use these types: contrarian_take (the speaker challenges what the audience likely assumes), cause_effect (explicit or implied causal chain: "X → Y", "parce que X, donc Y"), quote (powerful first-person statement about the speaker's own experience or perspective), callout (conceptual anchor for the section — what the viewer must grasp to follow what comes next), question (rhetorical question the speaker poses and then answers). "No obvious structural peak" is not a reason to skip — it is a reason to look harder for the underlying insight. Conversational and informal content (streams, podcasts, Q&A, debates) deserves the same card density as structured coaching — apply quote, callout, cause_effect, contrarian_take, question liberally on elaborative passages, even when the speaker lacks formal structure markers like enumeration or statistics.
 - DUAL-CARD BEATS: When a single speech segment contains BOTH (a) a vivid, memorable, or funny formulation that stands on its own as a key_phrase AND (b) one or more distinct numeric facts (stat), generate TWO separate cards with startSec offset by 1-2s: the stat card anchors to when the number is spoken, the key_phrase card anchors to the memorable phrase. Only split when both elements are genuinely strong independently — do not split weak content.
@@ -2279,21 +2299,27 @@ Design graphic overlay cards for this video — target {target_cards} cards for 
     # Scale max_tokens with target_cards so long-video responses are never truncated.
     # ~250 tokens/card average: simple cards ~100t, complex (list/comparison) ~400t, mean ~250.
     # 150t/card was too tight — 15-min videos (48 cards × 150 = 7200) truncated JSON at ~2min.
-    # Cap raised 32768→65536 alongside the flat base_pace=16 change: at 3.75
-    # cards/min a 45-min video needs 169 cards (~42k tokens) and a 60-min one
-    # 225 cards (~56k) — both exceeded the old 32768 cap and would have been
-    # truncated mid-JSON, re-creating the bug 17626ab fixed. Sonnet 4.6
-    # supports 64k output, so 65536 covers every duration the pacer produces.
-    _max_tok = max(4096, min(65536, target_cards * 250))
+    # Cap 65536→131072 alongside base_pace=12: at 5.0 cards/min a 45-min video
+    # needs 225 cards (~56k) and a 60-min one 300 (~75k), so 65536 would have
+    # truncated anything past ~52 min, re-creating the bug 17626ab fixed.
+    # The configured model is claude-opus-4-7, which supports 128k output — the
+    # previous comment claimed 64k and named Sonnet 4.6, neither of which is the
+    # model in use.
+    _max_tok = max(4096, min(131072, target_cards * 250))
 
     client = Anthropic()
     try:
-        response = client.messages.create(
+        # Streaming is required at this scale: non-streaming requests hit the
+        # SDK's HTTP timeout well below the model's output ceiling, so a large
+        # max_tokens fails as a timeout rather than a truncation. get_final_message()
+        # returns the same Message object messages.create() would have.
+        with client.messages.stream(
             model=settings.effective_model,
             max_tokens=_max_tok,
             system=system_prompt,
             messages=[{"role": "user", "content": user_msg}],
-        )
+        ) as _stream:
+            response = _stream.get_final_message()
         if response.stop_reason == "max_tokens":
             print(
                 f"[STORYBOARD] WARN: LLM hit max_tokens={_max_tok} "
