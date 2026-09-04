@@ -681,15 +681,42 @@ def _compress_pauses(
 
 
 def _remap_time(t: float, kept_intervals: list[tuple[float, float]]) -> float:
-    """Map a timestamp from the pre-compression timeline to the compressed one."""
-    out = 0.0
+    """Map a timestamp from the pre-compression timeline to the compressed one.
+
+    kept_intervals is in EDIT order, which the planner deliberately makes
+    non-chronological (hook-first reordering — see _dedup_segments). An
+    interval's output offset is the sum of the durations of the intervals
+    that precede it IN THE ARRAY; locating which interval contains `t`
+    requires a containment test and must never assume `s` is ascending.
+    """
+    if not kept_intervals:
+        return 0.0
+
+    offsets: list[float] = []
+    cum = 0.0
     for s, e in kept_intervals:
-        if t <= s:
-            return out
-        if t <= e:
-            return out + (t - s)
-        out += (e - s)
-    return out
+        offsets.append(cum)
+        cum += max(0.0, e - s)
+
+    # 1) t lands inside a kept interval → exact output position.
+    for idx, (s, e) in enumerate(kept_intervals):
+        if s <= t <= e:
+            return offsets[idx] + (t - s)
+
+    # 2) t was cut. Snap to the end of the interval that precedes it in
+    #    SOURCE time (largest end <= t), expressed in output coordinates.
+    best_idx = -1
+    best_end = float("-inf")
+    for idx, (s, e) in enumerate(kept_intervals):
+        if e <= t and e > best_end:
+            best_end = e
+            best_idx = idx
+    if best_idx >= 0:
+        _s_b, _e_b = kept_intervals[best_idx]
+        return offsets[best_idx] + (_e_b - _s_b)
+
+    # 3) t precedes all kept content.
+    return 0.0
 
 
 def _find_word_timestamp(

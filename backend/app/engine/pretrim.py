@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+from bisect import bisect_right as _bisect_right
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -907,6 +908,22 @@ def pretrim(
     # Tuple: (keep_index, s_src, e_snapped, s_padded, e_padded)
     _planned: list[tuple[int, float, float, float, float]] = []
 
+    # Chronological neighbour index. The overlap clamp below must compare this
+    # segment's end against the segment that follows it in SOURCE time, not
+    # against keep[i+1]. The planner deliberately reorders keep_segments
+    # (hook-first — see _dedup_segments docstring), so keep[i+1] is frequently
+    # an EARLIER source position; clamping against it collapsed the segment to
+    # its 0.15s floor and desynchronised every downstream overlay.
+    _sorted_starts = sorted(
+        (_c2s(float(_ks["start"]), _vd_sorted) if use_source_coords else float(_ks["start"]))
+        for _ks in keep
+    )
+
+    def _next_source_start(cur_start: float) -> float | None:
+        """Smallest keep_segment start strictly after cur_start, in source time."""
+        _idx = _bisect_right(_sorted_starts, cur_start)
+        return _sorted_starts[_idx] if _idx < len(_sorted_starts) else None
+
     for i, seg in enumerate(keep):
         s_raw = float(seg["start"])
         e_raw = float(seg["end"])
@@ -919,8 +936,8 @@ def pretrim(
             e_src = _c2s(e_raw, _vd_sorted)
             s = _snap_to_word_boundary(s_src, src_word_timings, edge="start")
             e = _snap_to_word_boundary(e_src, src_word_timings, edge="end")
-            if i + 1 < len(keep):
-                next_s = _c2s(float(keep[i + 1]["start"]), _vd_sorted)
+            next_s = _next_source_start(s_src)
+            if next_s is not None:
                 e = min(e, max(s + 0.15, next_s - 0.05))
             s_padded = max(0.0, s - pad)
             e_padded = min(source_duration, e + pad) if source_duration > 0 else e + pad
@@ -929,8 +946,8 @@ def pretrim(
             s = _snap_to_word_boundary(s_raw, words, edge="start")
             e = _snap_to_word_boundary(e_raw, words, edge="end")
             e = _extend_for_semantic_completeness(e, transcript, src_duration)
-            if i + 1 < len(keep):
-                next_s = float(keep[i + 1]["start"])
+            next_s = _next_source_start(s_raw)
+            if next_s is not None:
                 e = min(e, max(s + 0.15, next_s - 0.05))
             s_padded = max(0.0, s - pad)
             e_padded = min(src_duration, e + pad) if src_duration > 0 else e + pad

@@ -778,12 +778,19 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
     parts.append(f'  border: {p["border"]};')
     parts.append(f'  padding: {panel_padding};')
     parts.append(f'  display: flex; flex-direction: column; align-items: {panel_align};')
-    parts.append(f'  gap: 14px; max-width: {max_width_eff}; position: relative;')
+    parts.append(f'  gap: 14px; max-width: {max_width_eff}; position: relative; flex-shrink: 0;')
     parts.append(f'  box-shadow: {shadow_val};')
     parts.append('}')
     if compact:
+        # overflow:hidden clips absolutely-positioned children (shimmer, grain ::after) at the
+        # panel boundary so they don't bleed outside the rounded corners.
+        # flex-shrink:0 is CRITICAL here: without it, overflow:hidden sets the flex minimum-
+        # content size to 0, allowing flex-shrink to reduce the panel below its natural content
+        # height. That causes bottom content (detail text, last list items) to be silently
+        # clipped — the "text sinks into the card" bug across all 6 packs. flex-shrink:0 keeps
+        # the panel at its natural height regardless of the root's available space.
         parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
-        parts.append('  overflow: hidden;')
+        parts.append('  overflow: hidden; flex-shrink: 0;')
         parts.append('}')
     if p.get("id") == "lean_cinema":
         # Radial-gradient dissolve: panel fades into the video — text emerges from the scene.
@@ -816,13 +823,14 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'.card[data-card-id="{card_id}"] .kicker {{')
         parts.append(f'  font-family: {p["font"]}; font-size: {kicker_size_eff};')
         parts.append(f'  font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase;')
-        parts.append(f'  color: {p["accent"]};')
+        parts.append(f'  color: {p["accent"]}; line-height: 1.2; overflow-wrap: break-word; word-break: break-word;')
         parts.append('}')
     glow_css = f'  text-shadow: {p["title_glow"]};' if p["title_glow"] else ''
     parts.append(f'.card[data-card-id="{card_id}"] .title {{')
     parts.append(f'  font-family: {p["font"]}; font-size: {title_size};')
     parts.append(f'  font-weight: {p["font_weight"]}; line-height: 1.15; text-align: {text_align};')
     parts.append(f'  color: {p["text"]}; max-width: 100%;')
+    parts.append(f'  overflow-wrap: break-word; word-break: break-word;')
     if glow_css:
         parts.append(glow_css)
     parts.append(f'  font-variant-numeric: tabular-nums;')
@@ -842,6 +850,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  font-family: {detail_font}; font-size: {detail_size_eff};')
         parts.append(f'  font-weight: 400; text-align: {text_align};')
         parts.append(f'  color: {p["text_secondary"]}; max-width: 90%;')
+        parts.append(f'  line-height: 1.4; overflow-wrap: break-word; word-break: break-word;')
         parts.append('}')
     parts.append(f'.card[data-card-id="{card_id}"] .accent-line {{')
     parts.append(f'  width: 0; height: 3px; background: {p["accent"]};')
@@ -1050,7 +1059,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  font-family: {p["font"]}; font-size: {detail_size_eff};')
         parts.append(f'  font-weight: 400; color: {p["text_secondary"]};')
         parts.append(f'  margin-top: 12px; text-align: center; max-width: 90%;')
-        parts.append(f'  line-height: 1.5;')
+        parts.append(f'  line-height: 1.5; overflow-wrap: break-word; word-break: break-word;')
         parts.append('}')
     # Checklist: items with checkmarks
     if content_style == "checklist":
@@ -1299,7 +1308,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'.card[data-card-id="{card_id}"] .mvf-myth {{')
         parts.append(f'  font-family:{p["font"]}; font-size:{title_size_eff};')
         parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text_secondary"]};')
-        parts.append('  position:relative; text-align:center;')
+        parts.append('  position:relative; text-align:center; overflow-wrap:break-word; word-break:break-word;')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .mvf-strike {{')
         parts.append(f'  position:absolute; top:50%; left:0; width:0; height:3px;')
@@ -1317,6 +1326,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'.card[data-card-id="{card_id}"] .mvf-fact {{')
         parts.append(f'  font-family:{p["font"]}; font-size:{title_size_eff};')
         parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]}; text-align:center;')
+        parts.append(f'  overflow-wrap:break-word; word-break:break-word;')
         if p["title_glow"]:
             parts.append(f'  text-shadow:{p["title_glow"]};')
         parts.append('}')
@@ -1398,6 +1408,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'.card[data-card-id="{card_id}"] .tm-text {{')
         parts.append(f'  font-family:{p["font"]}; font-size:{title_size_eff};')
         parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]}; text-align:center;')
+        parts.append(f'  overflow-wrap:break-word; word-break:break-word; line-height:1.25;')
         if p["title_glow"]:
             parts.append(f'  text-shadow:{p["title_glow"]};')
         parts.append('}')
@@ -1596,6 +1607,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'.card[data-card-id="{card_id}"] .qap-a {{')
         parts.append(f'  font-family:{p["font"]}; font-size:{title_size_eff};')
         parts.append(f'  font-weight:{p["font_weight"]}; line-height:1.2; color:{p["text"]}; opacity:0;')
+        parts.append(f'  overflow-wrap:break-word; word-break:break-word;')
         if p["title_glow"]:
             parts.append(f'  text-shadow:{p["title_glow"]};')
         parts.append('}')
