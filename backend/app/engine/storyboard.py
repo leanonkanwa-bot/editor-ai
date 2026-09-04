@@ -634,6 +634,16 @@ def _generate_graphic_cards(
     density_mult = 1.0
     target_cards = max(3, round(trimmed_duration / (base_pace * density_mult)))
 
+    # Density diagnostic: without this, a card count in the logs cannot be read
+    # as compliant or short — "48 cards" means 86% of target at 900s and 76% at
+    # 1000s. Logging pace/target/rate makes every future density run legible.
+    print(
+        f"[STORYBOARD] DENSITY pace={base_pace:.1f} target={target_cards} "
+        f"for {trimmed_duration:.0f}s ({target_cards / max(trimmed_duration / 60, 0.01):.2f} cards/min) "
+        f"fmt={format_hint!r}",
+        flush=True,
+    )
+
     # Build beat summary for the prompt
     beat_summary = []
     for seg in keep_segments:
