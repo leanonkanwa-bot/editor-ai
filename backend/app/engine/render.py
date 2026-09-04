@@ -995,10 +995,17 @@ _PUNCH_IN_SCALE_CAP       = 1.25    # hard skip when baseline is at/above this
 _PUNCH_IN_BUDGET_S        = 13.0   # minimum seconds between two punch-ins
 # Proactive ratchet reset: when baseline has crept above this threshold, inject a slow
 # drift-back instead of (and before) the next eligible punch, so the cap is never reached.
-_RATCHET_RESET_THRESHOLD  = 1.18   # trigger before the hard cap (1.25) — ~3 speech punches in
+# Lowered 1.18→1.10 and 30s→15s after the 30-min run: every one of the 14
+# ZOOM-SAFETY injections was an out-move (baselines 1.1224 / 1.1897 / 1.2003),
+# so three of the five shapes never fired. The cause is a dead band — the safety
+# net switches to out-only at _ZOOM_SAFETY_HIGH = 1.12, but the ratchet only
+# pulled back at 1.18, leaving the baseline parked between the two with nothing
+# bringing it down. Resetting from 1.10 keeps the baseline mostly below 1.12, so
+# the net can use its inward shapes again instead of only compensating drift.
+_RATCHET_RESET_THRESHOLD  = 1.10   # trigger well below the hard cap (1.25)
 _RATCHET_RESET_TARGET     = 1.04   # drift destination — near-neutral without snapping to 1.0
 _RATCHET_RESET_DUR        = 8.0    # drift duration (s) — slow enough to be subliminal
-_RATCHET_RESET_BUDGET_S   = 30.0   # minimum seconds between two resets
+_RATCHET_RESET_BUDGET_S   = 15.0   # minimum seconds between two resets
 _PUNCH_IN_SEGMENT_MIN_DUR = 2.0    # source segment must be this long to qualify
 _PUNCH_IN_ENTRY_OFFSET    = 0.15   # fire this many seconds after segment start
 _PUNCH_IN_CENTER_ZONES    = frozenset({"fullscreen", "video-overlay", "lower-third"})

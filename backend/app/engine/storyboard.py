@@ -177,6 +177,17 @@ _DATA_ANCHOR_FIELDS: dict[str, str] = {
     "dialogue":             "line_a",           # first speaker's line
     "definition":           "definition",       # the spoken explanation
     "poll_question":        "poll_question",    # the question text
+    # Added from the 30-min run's NO-ANCHOR tally — these six accounted for all
+    # 10 unverified cards (14% of the storyboard), including the confession card
+    # whose placement looked wrong on screen.
+    "prim_confession_frame":    "confession_text",   # the admission, as spoken
+    "story_chapter_transition": "transition_label",  # the narrative beat line
+    "cause_effect":             "cause_text",        # cause is stated first
+    "speech_bubble_thought":    "thought_text",      # the reflection, as spoken
+    "chapter_marker":           "chapter_title",     # title, not chapter_num —
+                                                     # a numeral never matches speech
+    "prim_split_stage":         "steps",             # mode=steps; mode=diagram
+                                                     # leaves this empty and falls through
 }
 
 # Styles that legitimately occupy video-overlay / fullscreen in landscape (full-canvas heroes).
