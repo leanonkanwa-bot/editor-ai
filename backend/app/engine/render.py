@@ -2823,72 +2823,162 @@ def _render_hyperframes(
         remapped_zoom, timing_map.remapped_words, punch_times=_punch_times
     )
 
-    # Zoom coverage audit + fill: log gaps > 8s; inject micro-bumps for gaps > 20s.
-    # Gaps 20-45s with speech: breath layer may have missed the window — inject anyway.
-    # Gaps > 45s with speech: breath layer is reliable at this scale — skip.
-    _zoom_audit_sorted = sorted(remapped_zoom, key=lambda z: float(z.get("start", 0)))
-    _zg_prev_end = 0.0
-    _zoom_gaps: list[tuple[float, float]] = []
-    _zoom_bumps: list[dict] = []
+    # ── ZOOM-SAFETY-NET — deterministic movement guarantee ────────────────────
+    # Replaces the old _zg_fill, which detected gaps > 8s but only filled those
+    # > 20s: every gap between 8s and 20s was logged and then deliberately left
+    # motionless. It also capped at 5 bumps per gap (one per 25s) and injected a
+    # single shape — 0.25s up, 0.25s back — a self-cancelling round trip.
+    #
+    # This pass walks the output timeline in fixed windows and guarantees that no
+    # window of _ZOOM_SAFETY_WINDOW_S passes without REAL movement. A "hold"
+    # entry (from == to) is a frozen camera and does not count as movement.
+    # Runs BEFORE _fill_zoom_gaps_with_holds so it measures real motion only.
+    #
+    # Movement direction follows the running baseline, so the sequence ebbs and
+    # flows on its own and never creeps toward _PUNCH_IN_SCALE_CAP — this is what
+    # produces the progressive multi-step retreat rather than one long drift.
+    _ZOOM_SAFETY_WINDOW_S  = 15.0   # no window this long may be motionless
+    _ZOOM_SAFETY_MIN_WORDS = 5      # skip genuine silence — content needing no zoom
+    _ZOOM_SAFETY_LOW       = 1.06   # at/below this baseline, prefer inward movement
+    _ZOOM_SAFETY_HIGH      = 1.12   # at/above this baseline, prefer outward movement
+    _ZOOM_SAFETY_HIST_S    = 90.0   # rolling window for no-repeat move selection
 
-    def _zg_fill(gap_start: float, gap_end: float) -> None:
-        gap = gap_end - gap_start
-        if gap <= 20.0:
-            return
-        n_ideal = max(1, int(gap / 25.0))
-        n = min(5, n_ideal)
-        if n_ideal > n:
-            print(
-                f"[ZOOM-GAP-FILL] skipped (cap reached): gap at {gap_start:.1f}s-{gap_end:.1f}s"
-                f" needs {n_ideal} bumps, injecting {n}",
-                flush=True,
-            )
-        step = gap / (n + 1)
-        for _bi in range(n):
-            pos = round(gap_start + step * (_bi + 1), 3)
-            baseline = _interp_zoom_scale(pos, remapped_zoom)
-            _zoom_bumps.extend([
-                {"start": pos, "end": round(pos + 0.25, 3), "from": baseline, "to": round(baseline * 1.03, 6), "kind": "punch_in", "ease": "power2.out"},
-                {"start": round(pos + 0.25, 3), "end": round(pos + 0.50, 3), "from": round(baseline * 1.03, 6), "to": baseline, "kind": "punch_in", "ease": "power2.out"},
-            ])
-            print(
-                f"[ZOOM-GAP-FILL] injected bump @{pos:.1f}s (baseline={baseline:.4f})"
-                f" in gap {gap_start:.1f}→{gap_end:.1f}s ({gap:.1f}s)",
-                flush=True,
-            )
+    # Full-canvas cards ARE the visual event — the camera stays calm under them.
+    # Mirrors _FULL_COVER_STYLES in storyboard.py.
+    _ZS_FULL_COVER = frozenset({
+        "prim_split_compare", "prim_journey_map", "prim_cinematic_reveal",
+        "prim_ascension_reveal", "prim_shatter_truth", "prim_split_stage",
+        "prim_confession_frame", "prim_numbered_rule", "prim_anecdote_frame",
+    })
+    _zs_cover_ivs = [
+        (float(_c.get("startSec", 0)), float(_c.get("endSec", 0)))
+        for _c in _graphic_cards
+        if (_c.get("contentHints", {}) or {}).get("style", "") in _ZS_FULL_COVER
+    ]
 
-    for _ze in _zoom_audit_sorted:
-        _zs = float(_ze.get("start", 0))
-        _ze_e = float(_ze.get("end", _zs))
-        _zg = _zs - _zg_prev_end
-        if _zg > 8.0:
-            _zoom_gaps.append((round(_zg_prev_end, 1), round(_zs, 1)))
-            print(
-                f"[ZOOM-GAP] no zoom {_zg_prev_end:.1f}→{_zs:.1f}s ({_zg:.1f}s)",
-                flush=True,
-            )
-        _zg_fill(_zg_prev_end, _zs)
-        _zg_prev_end = max(_zg_prev_end, _ze_e)
+    def _zs_has_motion(ws: float, we: float) -> bool:
+        """True if any real (non-hold, non-zero-delta) zoom overlaps [ws, we)."""
+        for _e in remapped_zoom:
+            if _e.get("kind") == "hold":
+                continue
+            _f = float(_e.get("from", 1.0))
+            _t = float(_e.get("to", _f))
+            if abs(_t - _f) < 0.0005:
+                continue
+            if float(_e.get("start", 0)) < we and float(_e.get("end", 0)) > ws:
+                return True
+        return False
 
-    _tail_zg = timing_map.output_duration - _zg_prev_end
-    if _tail_zg > 8.0:
-        _zoom_gaps.append((round(_zg_prev_end, 1), round(timing_map.output_duration, 1)))
+    # Movement repertoire — each builder returns a list of zoom entries.
+    def _mv_slow_in(t: float, b: float) -> list[dict]:
+        return [{"start": t, "end": round(t + 6.0, 3), "from": b,
+                 "to": round(b * 1.035, 6), "kind": "drift", "ease": "sine.inOut"}]
+
+    def _mv_fast_in(t: float, b: float) -> list[dict]:
+        return [{"start": t, "end": round(t + 1.2, 3), "from": b,
+                 "to": round(b * 1.045, 6), "kind": "punch_in", "ease": "power2.out"}]
+
+    def _mv_hold_then_in(t: float, b: float) -> list[dict]:
+        _mid = round(t + 2.0, 3)
+        return [
+            {"start": t, "end": _mid, "from": b, "to": b,
+             "kind": "hold", "ease": "none"},
+            {"start": _mid, "end": round(t + 5.0, 3), "from": b,
+             "to": round(b * 1.030, 6), "kind": "drift", "ease": "sine.inOut"},
+        ]
+
+    def _mv_slow_out(t: float, b: float) -> list[dict]:
+        return [{"start": t, "end": round(t + 5.5, 3), "from": b,
+                 "to": round(b * 0.968, 6), "kind": "pull_out", "ease": "sine.inOut"}]
+
+    def _mv_hold_then_out(t: float, b: float) -> list[dict]:
+        _mid = round(t + 1.5, 3)
+        return [
+            {"start": t, "end": _mid, "from": b, "to": b,
+             "kind": "hold", "ease": "none"},
+            {"start": _mid, "end": round(t + 5.0, 3), "from": b,
+             "to": round(b * 0.972, 6), "kind": "pull_out", "ease": "sine.inOut"},
+        ]
+
+    def _mv_punch(t: float, b: float) -> list[dict]:
+        return [{"start": t, "end": round(t + 0.35, 3), "from": b,
+                 "to": round(b * 1.050, 6), "kind": "punch_in", "ease": "power2.out"}]
+
+    _ZS_IN_MOVES  = [("slow_in", _mv_slow_in), ("fast_in", _mv_fast_in),
+                     ("hold_then_in", _mv_hold_then_in), ("punch", _mv_punch)]
+    # Two descent shapes so the retreat has variety too — a single out-move made
+    # every descent identical, and descents are frequent because in-moves average
+    # +3.7% against -3.0% per out.
+    _ZS_OUT_MOVES = [("slow_out", _mv_slow_out), ("hold_then_out", _mv_hold_then_out)]
+    _ZS_ALL_MOVES = _ZS_IN_MOVES + _ZS_OUT_MOVES
+
+    _zs_hist: list[tuple[float, str]] = []
+    _zs_counts: dict[str, int] = {}
+    _zs_n_entries = 0
+    _zs_skip_silence = 0
+    _zs_skip_card = 0
+
+    _zs_t = 0.0
+    while _zs_t < timing_map.output_duration:
+        _zs_ws = _zs_t
+        _zs_we = min(_zs_t + _ZOOM_SAFETY_WINDOW_S, timing_map.output_duration)
+        _zs_t  = _zs_we
+
+        if _zs_has_motion(_zs_ws, _zs_we):
+            continue
+        if sum(1 for _w in timing_map.remapped_words
+               if _zs_ws <= _w.start < _zs_we) < _ZOOM_SAFETY_MIN_WORDS:
+            _zs_skip_silence += 1
+            continue
+        if any(_cs < _zs_we and _ce > _zs_ws for _cs, _ce in _zs_cover_ivs):
+            _zs_skip_card += 1
+            continue
+
+        _zs_pos  = round(_zs_ws + (_zs_we - _zs_ws) * 0.25, 3)
+        _zs_base = _interp_zoom_scale(_zs_pos, remapped_zoom)
+
+        if _zs_base >= _ZOOM_SAFETY_HIGH:
+            _zs_pool = _ZS_OUT_MOVES
+        elif _zs_base <= _ZOOM_SAFETY_LOW:
+            _zs_pool = _ZS_IN_MOVES
+        else:
+            _zs_pool = _ZS_ALL_MOVES
+
+        _zs_recent = {_n for _we, _n in _zs_hist if _zs_ws - _we <= _ZOOM_SAFETY_HIST_S}
+        _zs_fresh  = [_m for _m in _zs_pool if _m[0] not in _zs_recent] or _zs_pool
+        _zs_name, _zs_fn = random.choice(_zs_fresh)
+
+        _zs_entries = _zs_fn(_zs_pos, _zs_base)
+        remapped_zoom.extend(_zs_entries)
+        _zs_n_entries += len(_zs_entries)
+        _zs_hist.append((_zs_we, _zs_name))
+        _zs_counts[_zs_name] = _zs_counts.get(_zs_name, 0) + 1
         print(
-            f"[ZOOM-GAP] no zoom {_zg_prev_end:.1f}→{timing_map.output_duration:.1f}s ({_tail_zg:.1f}s)",
+            f"[ZOOM-SAFETY] {_zs_name} @{_zs_pos:.1f}s baseline={_zs_base:.4f}"
+            f" — motionless window {_zs_ws:.1f}→{_zs_we:.1f}s",
             flush=True,
         )
-    _zg_fill(_zg_prev_end, timing_map.output_duration)
 
-    if not _zoom_gaps:
-        print(
-            f"[ZOOM-GAP] Full zoom coverage — no gaps > 8s across {len(remapped_zoom)} entries",
-            flush=True,
-        )
-
-    if _zoom_bumps:
-        remapped_zoom.extend(_zoom_bumps)
+    if _zs_n_entries:
         remapped_zoom.sort(key=lambda z: float(z.get("start", 0)))
-        print(f"[ZOOM-GAP-FILL] {len(_zoom_bumps)} bump entries injected total", flush=True)
+        print(
+            f"[ZOOM-SAFETY] {_zs_n_entries} entries across "
+            f"{sum(_zs_counts.values())} motionless window(s) — "
+            + " ".join(f"{_k}={_v}" for _k, _v in sorted(_zs_counts.items())),
+            flush=True,
+        )
+    else:
+        print(
+            f"[ZOOM-SAFETY] no motionless window > {_ZOOM_SAFETY_WINDOW_S:.0f}s — "
+            f"organic coverage complete across {len(remapped_zoom)} entries",
+            flush=True,
+        )
+    if _zs_skip_silence or _zs_skip_card:
+        print(
+            f"[ZOOM-SAFETY] skipped {_zs_skip_silence} silent window(s), "
+            f"{_zs_skip_card} full-cover-card window(s)",
+            flush=True,
+        )
 
     # Seal all temporal gaps with zero-delta holds so the FFmpeg if(between())
     # expression never falls back to default_zoom (1.3) between breath tweens.
