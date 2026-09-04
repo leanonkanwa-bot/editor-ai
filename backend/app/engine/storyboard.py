@@ -619,13 +619,17 @@ def _generate_graphic_cards(
         # drop at 180s (179s→18 cards vs 181s→11 cards with flat pace=16).
         # At 300s (5 min): pace≈11.7 → ~26 cards; at 599s: pace≈16 → ~37.
         base_pace = 10 + 6 * (trimmed_duration - 180) / 420
-    elif trimmed_duration < 1800:
-        # Linear interpolation 16→28 across 600–1800s: eliminates the hard
-        # drop at 600s (599s→37 cards vs 601s→21 cards with flat pace=28).
-        # At 660s (11 min): pace≈16.6 → ~40 cards; at 1200s: pace≈22 → ~54.
-        base_pace = 16 + 12 * (trimmed_duration - 600) / 1200
     else:
-        base_pace = 28
+        # Flat 16 from 10 min onward — density must NOT dilute with duration.
+        # The old ramp 16→28 across 600–1800s (then flat 28) dropped a 30-min
+        # video to 2.1 cards/min against 3.8 for a 10-min one: 43% sparser
+        # purely because it was longer, which is what made long videos read as
+        # empty. 16 is not a new value — it is the pace already applied at
+        # 600s, i.e. the density that works, simply held constant.
+        # 3.75 cards/min at every duration: 20 min→75, 30 min→112, 60 min→225.
+        # Total spread stays non-uniform: the SECTION DENSITY prompt rule
+        # clusters this budget on peaks and lets narrative passages breathe.
+        base_pace = 16
 
     density_mult = 1.0
     target_cards = max(3, round(trimmed_duration / (base_pace * density_mult)))
@@ -2247,9 +2251,12 @@ Design graphic overlay cards for this video — target {target_cards} cards for 
     # Scale max_tokens with target_cards so long-video responses are never truncated.
     # ~250 tokens/card average: simple cards ~100t, complex (list/comparison) ~400t, mean ~250.
     # 150t/card was too tight — 15-min videos (48 cards × 150 = 7200) truncated JSON at ~2min.
-    # Cap raised 16384→32768: Sonnet 4.6 supports 64k output. 30-min videos need ~17k
-    # (68 cards × 250); 60-min videos need ~32k (129 cards × 250) — both now fit.
-    _max_tok = max(4096, min(32768, target_cards * 250))
+    # Cap raised 32768→65536 alongside the flat base_pace=16 change: at 3.75
+    # cards/min a 45-min video needs 169 cards (~42k tokens) and a 60-min one
+    # 225 cards (~56k) — both exceeded the old 32768 cap and would have been
+    # truncated mid-JSON, re-creating the bug 17626ab fixed. Sonnet 4.6
+    # supports 64k output, so 65536 covers every duration the pacer produces.
+    _max_tok = max(4096, min(65536, target_cards * 250))
 
     client = Anthropic()
     try:
