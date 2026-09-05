@@ -393,7 +393,11 @@ Reply with ONLY the JSON object, no preamble, no explanation."""
 # ── Chunked planning constants ───────────────────────────────────────────────
 _CHUNK_SIZE_S      = 600.0   # 10-minute core window per chunk
 _CHUNK_OVERLAP_S   = 90.0    # 45s bleed into each adjacent chunk (90s total overlap zone)
-_CHUNK_THRESHOLD_S = 25 * 60  # only chunk videos >= 25 min
+_CHUNK_THRESHOLD_S = 20 * 60  # only chunk videos >= 20 min. Lowered from 25: the
+                              # 20-25 min band ran single-pass and had to emit its whole
+                              # zoom_plan and keep_segments in one response — the regime
+                              # where compliance was measured at 48% (71 cards of 149).
+                              # Matches _SB_CHUNK_THRESHOLD_S in storyboard.py.
 
 
 def _build_chunk_context(

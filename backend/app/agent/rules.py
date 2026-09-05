@@ -476,13 +476,13 @@ window N+1) so the curve is continuous. Anchor is locked to frame
 center; you do not control x/y.
 
 SLOW ZOOM IN  (kind: "drift")
-  Speed: extremely slow, must be subconscious.
-  Rate: +0.5% per second maximum (e.g. 100% → 103% over 6s).
+  Speed: visible and deliberate — the viewer should feel the frame move.
+  Rate: +1.0% per second maximum (e.g. 100% → 107% over 15s).
   Use during: Hook, Consequence, Principle, Closing.
 
 SLOW ZOOM OUT  (kind: "pull_out")
-  Speed: slow and deliberate.
-  Rate: -0.5% per second maximum (e.g. 108% → 102% over 12s).
+  Speed: slow and deliberate, and equally visible.
+  Rate: -1.0% per second maximum (e.g. 118% → 100% over 18s).
   Use during: after peak tension, Story, Realization, Reframe.
 
 PUNCH IN  (kind: "punch_in")
@@ -493,7 +493,8 @@ PUNCH IN  (kind: "punch_in")
   Jump: minimum +15% scale.
   Use on: the single most important word per section, supplied as
   `on_word`.
-  Never twice within 10 seconds.
+  Never twice within 10 seconds — that spacing is the only limit; on
+  long-form do NOT ration them further, one per section is expected.
   Always followed by a slow drift continuing from the new scale.
 
 Reference arc for short-form (60s):
@@ -505,13 +506,33 @@ Reference arc for short-form (60s):
   35.05–45s    122% → 126% slow zoom in
   Final     PUNCH IN to 130% — hold — hard cut
 
-For long-form, the same shapes but with lower amplitude:
-  base 100%, drift to 105–110% max, punch-ins reserved for one per chapter.
+Reference cycle for LONG-FORM — a 90-second pattern, repeated across the
+whole video with varying amplitude. Long-form zoom is as visible as
+short-form: same shapes, same perceptibility, only a slightly tighter
+ceiling. Each window's `to` is the next window's `from`.
+
+   0–15s     100% → 107%   drift in     (+0.47%/s)
+  15–25s     107% → 107%   hold          (let the point land)
+  25–40s     107% → 116%   drift in     (+0.60%/s)
+  40.00s     PUNCH IN 116% → 124%        (on the section's key word)
+  40.05–58s  124% → 112%   drift out    (-0.67%/s)
+  58–72s     112% → 118%   drift in     (+0.43%/s)
+  72–90s     118% → 100%   drift out    (-1.00%/s)
+
+COVERAGE — zoom_plan is a continuous chain, not a list of highlights.
+  Your windows must tile the ENTIRE video end to end. Every second from 0
+  to the final timestamp belongs to exactly one window. A span with no
+  window is a frozen frame on screen, which reads as a technical fault.
+  Cadence: one window per 12–15s of video. A 20-min video needs ~90
+  windows; a 30-min video needs ~140. Emitting 30 windows for 30 minutes
+  is a failure, not a restrained choice.
+  Amplitude range for long-form: 100%–125%.
 
 KEN BURNS for B-roll and static moments:
   B-roll windows (from broll_suggestions) get a slow pan + scale effect
-  automatically via the renderer. You do not need to add zoom_plan entries
-  for b-roll timestamps — the renderer applies a 3–5s linear drift.
+  automatically via the renderer, so those spans are already covered —
+  but keep your chain continuous ACROSS them: the window before a b-roll
+  and the window after it must still share endpoint values.
   Never schedule a punch_in inside a b-roll window.
 
 PUNCH-IN AUDIO TRIGGER:

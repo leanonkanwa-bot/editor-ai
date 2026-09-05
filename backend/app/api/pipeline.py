@@ -1135,7 +1135,8 @@ def run_job(
         # use this map to give each chunk cross-video context.
         _video_duration_s = float(_transcript_for_planning.get("duration", 0))
         _narrative_map: dict = {}
-        _CHUNKED_PLANNING_MIN_S = 25 * 60  # 1500s
+        _CHUNKED_PLANNING_MIN_S = 20 * 60  # must match _CHUNK_THRESHOLD_S in planner.py — both
+                                   # gate chunked planning, so a mismatch silently disables it
         if _video_duration_s >= _CHUNKED_PLANNING_MIN_S:
             print(
                 f"[NARRATIVE-MAP] Pass 1 — video {_video_duration_s/60:.1f}min > 25min threshold,"
