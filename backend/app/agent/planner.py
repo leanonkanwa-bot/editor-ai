@@ -448,12 +448,20 @@ def _build_chunk_context(
             ]
 
     # ── Zoom density: ensure a continuous drift baseline covers the full window ─
+    # This block used to ask for "at least one continuous drift covering most of
+    # this window", with a literal 0-to-end example. Being concrete and
+    # chunk-specific, it beat the general coverage rule in OUTPUT_CONTRACT: real
+    # runs produced ~11 entries per 645s chunk (one baseline drift plus a few
+    # punches) against ~48 asked for. It now states the same tiling the contract
+    # does, in the chunk's own local coordinates.
+    _zd_target = max(2, round(local_dur / 13.5))
     lines += [
         f"ZOOM DENSITY: this chunk spans {local_dur:.0f}s of local time (t=0 to t≈{local_dur:.0f}).",
-        "  You MUST include at least one continuous drift entry that covers most of this window",
-        f"  (e.g. {{\"start\": 0, \"end\": {local_dur:.0f}, \"from\": ..., \"to\": ..., \"kind\": \"drift\"}}).",
-        "  Add punch_in events on top of that baseline drift. Without a baseline drift, every",
-        "  uncovered second becomes a frozen static hold — the video loses all zoom motion.",
+        f"  Tile it with roughly {_zd_target} chained windows — one per 12-15s — not one long",
+        "  drift. A single entry spanning the whole chunk is a failure: it holds one slow move",
+        "  for minutes and reads as a static frame.",
+        f"  Cover t=0 through t≈{local_dur:.0f} end to end, each window's \"from\" equal to the",
+        "  previous window's \"to\", with punch_in events landing on key words along the way.",
         "",
     ]
 
@@ -993,7 +1001,12 @@ def plan_edit(
 
     # Dispatch to chunked planning when a narrative map is provided and video is long.
     # Chunks always call plan_edit without narrative_map → single-pass, no infinite recursion.
-    if narrative_map is not None and duration >= _CHUNK_THRESHOLD_S:
+    # Chunking is decided on duration alone. It used to also require a
+    # narrative_map, so a failed map (analyze_narrative_map swallows every
+    # exception and returns {}) silently sent a 30-min video back through a
+    # single pass — the regime where the planner under-delivers. The map is a
+    # quality input to chunking, never its precondition.
+    if duration >= _CHUNK_THRESHOLD_S:
         return _plan_edit_chunked(
             transcript=transcript,
             narrative_map=narrative_map,
