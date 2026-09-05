@@ -491,6 +491,9 @@ PUNCH IN  (kind: "punch_in")
   [start, end] window. Make `start` and `end` close (≈0.05s) and
   schedule a slow zoom-in continuation right after.
   Jump: minimum +15% scale.
+  `from` MUST be the scale currently on screen — the `to` of the window
+  before it. A punch that opens at a baseline value snaps the image
+  backwards before it jumps, which reads as a stutter, not a punch.
   Use on: the single most important word per section, supplied as
   `on_word`.
   Never twice within 10 seconds — that spacing is the only limit; on
@@ -1767,6 +1770,27 @@ Reply with a SINGLE JSON object, no prose, matching this schema:
          rhetorical emphasis — both occurrences must remain in keep_segments. */
   ],
 
+  /* ── CONTINUITY — the hardest constraint on zoom_plan ─────────────────
+     Sort your windows by start time. For EVERY consecutive pair, the later
+     window's `from` MUST equal the earlier window's `to`, to three decimals.
+     This holds across gaps too: if window N ends at 1.180 and window N+1
+     starts 0.4s later, that next window still begins at 1.180. The renderer
+     freezes the scale during the gap, so a different `from` is not a fresh
+     start — it is an instant jump on screen.
+
+     This is the single most common failure. A plan that ends a window at
+     1.180 and opens the next at 1.050 makes the image snap backwards, then
+     move again. Measured on real output: 5 such snaps in 30 seconds.
+
+     WRONG                             RIGHT
+       0.96- 7.64  1.050 -> 1.100        0.96- 7.64  1.050 -> 1.100
+       8.02- 8.07  1.050 -> 1.150        8.02- 8.07  1.100 -> 1.200
+       8.07-10.06  1.150 -> 1.180        8.07-10.06  1.200 -> 1.230
+
+     A punch_in is NOT exempt: it starts from whatever scale is currently on
+     screen and jumps up from there. Never reset it to a baseline.
+     Before emitting zoom_plan, walk your own list and check every junction.
+  */
   "zoom_plan": [
     { "start": <s>, "end": <s>,
       "from": <decimal scale>, "to": <decimal scale>,
