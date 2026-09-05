@@ -52,6 +52,10 @@ _GROUNDING_WINDOW_POST_S = 3.0        # seconds after  startSec included in the 
 _ANCHOR_SEARCH_FORWARD_S      = 10.0   # how far ahead to scan for trigger keyword position
                                        # (raised 6→10 to catch cases where LLM places startSec
                                        # at segment start and the anchor word is 7-9s later)
+_ANCHOR_SEARCH_BACK_S         = 6.0    # how far BEHIND startSec to scan. Was effectively 0.5s
+                                       # (_GROUNDING_WINDOW_PRE_S), which meant a card placed
+                                       # after its own trigger word could not see that word, so
+                                       # "too late" was never detected, let alone corrected.
 _DATA_ANCHOR_SEARCH_FORWARD_S = 12.0  # wider window for data cards (number/age/result) whose
                                        # LLM startSec can be 4-9s before the spoken value
 _ANCHOR_LEAD_S           = 0.32       # card REACHES FULL VISIBILITY exactly on the trigger word.
@@ -3530,10 +3534,18 @@ def generate_storyboard(
     # gap is visible instead of silent — a style missing from both _TRIGGER_STYLES
     # and _DATA_ANCHOR_FIELDS, with no 'title', can land seconds off its content.
     _noanchor: list[tuple[str, str, float]] = []
+    _anchor_miss: list[tuple[str, str, float]] = []
+    _anchor_moves: list[float] = []
 
-    for _gc in graphic_cards:
+    # Processed in time order, tracking the previous card's end: a card pulled
+    # BACKWARD must never cross into its predecessor, or _clamp_overlaps in
+    # compose.py drops one of the two and a timing fix costs a card.
+    _prev_end = 0.0
+
+    for _gc in sorted(graphic_cards, key=lambda c: float(c.get("startSec", 0))):
         _style = _gc.get("contentHints", {}).get("style", "")
         if _style in _TRIGGER_STYLES:
+            _prev_end = max(_prev_end, float(_gc.get("endSec", 0)))
             continue  # already handled by _find_trigger_anchor above
         _hints = _gc.get("contentHints", {})
         _title = _hints.get("title", "")
@@ -3558,34 +3570,86 @@ def generate_storyboard(
             _noanchor.append((str(_gc.get("id", "?")), _style, float(_gc.get("startSec", 0))))
             continue
         _start_s = float(_gc.get("startSec", 0))
-        _lo = _start_s - _GROUNDING_WINDOW_PRE_S
+        # Search reaches BACKWARD as well as forward. It previously started at
+        # startSec - 0.5, so a card placed after its own trigger word could not
+        # even see that word — late cards were structurally invisible and stayed
+        # late, silently.
+        _lo = _start_s - _ANCHOR_SEARCH_BACK_S
         # Data-field fallback uses a wider search window: the LLM startSec for
         # data cards can be 4-9s before the spoken value (confirmed 8.54s on
         # number_hero in job 45bf7899), which is outside the standard 6s window.
         _hi = _start_s + (_DATA_ANCHOR_SEARCH_FORWARD_S if _used_data_fallback else _ANCHOR_SEARCH_FORWARD_S)
+        # Closest match, not first match: scanning forward from a 6s-back window
+        # would latch onto the earliest occurrence even when a far better one sits
+        # just ahead of the card.
         _matched: float | None = None
         _matched_word: str = ""
+        _best_gap = 1e9
         for _w in remapped_words:
             if _w.start < _lo:
                 continue
             if _w.start > _hi:
                 break
             if _content_words(_w.text, language) & _title_cw:
-                _matched = _w.start
-                _matched_word = _w.text
-                break
-        if _matched is not None and 0.25 < _matched - _start_s <= 4.0:
+                _gap = abs(_w.start - _start_s)
+                if _gap < _best_gap:
+                    _best_gap, _matched, _matched_word = _gap, _w.start, _w.text
+
+        _delta = (_matched - _start_s) if _matched is not None else None
+        if _delta is not None and abs(_delta) > 0.25 and -_ANCHOR_SEARCH_BACK_S <= _delta <= 4.0:
             _orig_start = float(_gc["startSec"])
-            _gc["startSec"] = round(max(_matched - _ANCHOR_LEAD_S, _start_s), 3)
+            # No max(..., _start_s) here — that clamp was what forbade moving a
+            # card earlier, so only "too early" was ever corrected.
+            _new_start = _matched - _ANCHOR_LEAD_S
+            _floor = _prev_end + 0.05
+            _clamped = _new_start < _floor
+            _new_start = max(_new_start, _floor, 0.0)
+            _gc["startSec"] = round(_new_start, 3)
             if float(_gc.get("endSec", 0)) < _gc["startSec"] + 1.5:
                 _gc["endSec"] = round(_gc["startSec"] + 3.0, 3)
             _anchor_tag = "DATA-ANCHOR" if _used_data_fallback else "TITLE-ANCHOR"
+            _dir = "BACK" if _delta < 0 else "FWD"
+            _anchor_moves.append(_gc["startSec"] - _orig_start)
             print(
                 f"[STORYBOARD] {_anchor_tag} card {_gc.get('id','?')} style={_style!r} "
                 f"startSec {_orig_start:.2f}→{_gc['startSec']:.2f}s "
-                f"(keyword '{_matched_word}'@{_matched:.2f}s matched in Whisper)",
+                f"({_gc['startSec'] - _orig_start:+.2f}s {_dir}, "
+                f"keyword '{_matched_word}'@{_matched:.2f}s)"
+                + (f" [clamped by previous card end {_prev_end:.2f}s]" if _clamped else ""),
                 flush=True,
             )
+        elif _matched is None:
+            # Has searchable text but no keyword anywhere in the window. Silent
+            # until now, and indistinguishable from a correctly placed card.
+            _anchor_miss.append((str(_gc.get("id", "?")), _style, _start_s))
+
+        _prev_end = max(_prev_end, float(_gc.get("endSec", _gc.get("startSec", 0))))
+
+    if _anchor_moves:
+        _back = [m for m in _anchor_moves if m < 0]
+        _fwd = [m for m in _anchor_moves if m > 0]
+        print(
+            f"[STORYBOARD] ANCHOR-MOVES {len(_anchor_moves)} card(s) repositioned — "
+            f"{len(_back)} backward (max {min(_back) if _back else 0:.2f}s), "
+            f"{len(_fwd)} forward (max {max(_fwd) if _fwd else 0:.2f}s)",
+            flush=True,
+        )
+    if _anchor_miss:
+        _am_styles: dict[str, int] = {}
+        for _mid, _mstyle, _mstart in _anchor_miss:
+            _am_styles[_mstyle] = _am_styles.get(_mstyle, 0) + 1
+            print(
+                f"[STORYBOARD] ANCHOR-MISS card {_mid} style={_mstyle!r} "
+                f"startSec={_mstart:.2f}s — no keyword matched in "
+                f"[-{_ANCHOR_SEARCH_BACK_S:.0f}s,+{_ANCHOR_SEARCH_FORWARD_S:.0f}s]",
+                flush=True,
+            )
+        print(
+            f"[STORYBOARD] ANCHOR-MISS {len(_anchor_miss)}/{len(graphic_cards)} card(s) "
+            f"had text but no spoken match — "
+            + " ".join(f"{_k}={_v}" for _k, _v in sorted(_am_styles.items())),
+            flush=True,
+        )
 
     if _noanchor:
         _na_styles: dict[str, int] = {}

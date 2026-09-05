@@ -2863,27 +2863,70 @@ def _render_hyperframes(
         if (_c.get("contentHints", {}) or {}).get("style", "") in _ZS_FULL_COVER
     ]
 
-    def _zs_has_motion(ws: float, we: float) -> bool:
-        """True if any real (non-hold, non-zero-delta) zoom overlaps [ws, we)."""
+    # Perceptibility thresholds. The previous predicate returned True as soon as
+    # ANY non-hold entry overlapped the window, which made the net a near no-op on
+    # speech: breath fires every 2.5-4.5s, so every speech window contained an
+    # entry and reported covered — including windows that were a single 1.2s
+    # +2.0% micro-breath (this file calls that amplitude "subliminal") followed by
+    # 13.8s of a frozen frame. The log said "organic coverage complete" while the
+    # camera was visually still, which is exactly what was reported from screen.
+    #
+    # These two numbers are first estimates, not measured values: on a 15s window
+    # a typical breath mix lands around 35% coverage, i.e. right on the boundary,
+    # so the net would flip either way depending on the speaker's punctuation.
+    # _zs_window_motion logs its measurement for EVERY window so one real run on
+    # spoken content gives the distribution needed to set them properly.
+    _ZS_MIN_DELTA    = 0.040   # scale travel below this is not perceived as motion
+    _ZS_MIN_COVERAGE = 0.40    # fraction of the window that must be in motion.
+                           # Set to what the net can actually deliver: its longest
+                           # shape (slow_in, 6.0s) covers exactly 40% of a 15s window,
+                           # so the bar is reachable by one injection. A higher bar
+                           # would leave a window still failing right after being fixed.
+
+    def _zs_window_motion(ws: float, we: float) -> tuple[float, float]:
+        """Return (seconds of perceptible motion in [ws,we), largest delta seen).
+
+        Overlapping moves are unioned, so two tweens covering the same instant
+        count once — the measure is "how long is something visibly moving", not
+        "how many events exist".
+        """
+        spans: list[tuple[float, float]] = []
+        max_delta = 0.0
         for _e in remapped_zoom:
             if _e.get("kind") == "hold":
                 continue
             _f = float(_e.get("from", 1.0))
             _t = float(_e.get("to", _f))
-            if abs(_t - _f) < 0.0005:
+            _d = abs(_t - _f)
+            if _d < _ZS_MIN_DELTA:
                 continue
-            if float(_e.get("start", 0)) < we and float(_e.get("end", 0)) > ws:
-                return True
-        return False
+            _s = float(_e.get("start", 0))
+            _en = float(_e.get("end", _s))
+            if _s < we and _en > ws:
+                spans.append((max(_s, ws), min(_en, we)))
+                max_delta = max(max_delta, _d)
+        if not spans:
+            return 0.0, max_delta
+        spans.sort()
+        covered = 0.0
+        cur_s, cur_e = spans[0]
+        for _s, _en in spans[1:]:
+            if _s > cur_e:
+                covered += cur_e - cur_s
+                cur_s, cur_e = _s, _en
+            else:
+                cur_e = max(cur_e, _en)
+        covered += cur_e - cur_s
+        return covered, max_delta
 
     # Movement repertoire — each builder returns a list of zoom entries.
     def _mv_slow_in(t: float, b: float) -> list[dict]:
         return [{"start": t, "end": round(t + 6.0, 3), "from": b,
-                 "to": round(b * 1.035, 6), "kind": "drift", "ease": "sine.inOut"}]
+                 "to": round(b * 1.050, 6), "kind": "drift", "ease": "sine.inOut"}]
 
     def _mv_fast_in(t: float, b: float) -> list[dict]:
         return [{"start": t, "end": round(t + 1.2, 3), "from": b,
-                 "to": round(b * 1.045, 6), "kind": "punch_in", "ease": "power2.out"}]
+                 "to": round(b * 1.058, 6), "kind": "punch_in", "ease": "power2.out"}]
 
     def _mv_hold_then_in(t: float, b: float) -> list[dict]:
         _mid = round(t + 2.0, 3)
@@ -2891,12 +2934,12 @@ def _render_hyperframes(
             {"start": t, "end": _mid, "from": b, "to": b,
              "kind": "hold", "ease": "none"},
             {"start": _mid, "end": round(t + 5.0, 3), "from": b,
-             "to": round(b * 1.030, 6), "kind": "drift", "ease": "sine.inOut"},
+             "to": round(b * 1.048, 6), "kind": "drift", "ease": "sine.inOut"},
         ]
 
     def _mv_slow_out(t: float, b: float) -> list[dict]:
         return [{"start": t, "end": round(t + 5.5, 3), "from": b,
-                 "to": round(b * 0.968, 6), "kind": "pull_out", "ease": "sine.inOut"}]
+                 "to": round(b * 0.952, 6), "kind": "pull_out", "ease": "sine.inOut"}]
 
     def _mv_hold_then_out(t: float, b: float) -> list[dict]:
         _mid = round(t + 1.5, 3)
@@ -2904,7 +2947,7 @@ def _render_hyperframes(
             {"start": t, "end": _mid, "from": b, "to": b,
              "kind": "hold", "ease": "none"},
             {"start": _mid, "end": round(t + 5.0, 3), "from": b,
-             "to": round(b * 0.972, 6), "kind": "pull_out", "ease": "sine.inOut"},
+             "to": round(b * 0.955, 6), "kind": "pull_out", "ease": "sine.inOut"},
         ]
 
     def _mv_punch(t: float, b: float) -> list[dict]:
@@ -2931,7 +2974,19 @@ def _render_hyperframes(
         _zs_we = min(_zs_t + _ZOOM_SAFETY_WINDOW_S, timing_map.output_duration)
         _zs_t  = _zs_we
 
-        if _zs_has_motion(_zs_ws, _zs_we):
+        _zs_span = max(0.001, _zs_we - _zs_ws)
+        _zs_cov, _zs_maxd = _zs_window_motion(_zs_ws, _zs_we)
+        _zs_frac = _zs_cov / _zs_span
+        _zs_ok = _zs_frac >= _ZS_MIN_COVERAGE
+        # Logged for every window, passing or not — this distribution is what the
+        # thresholds above have to be calibrated against on real spoken content.
+        print(
+            f"[ZOOM-COVERAGE] {_zs_ws:.0f}-{_zs_we:.0f}s "
+            f"motion={_zs_cov:.1f}s/{_zs_span:.1f}s ({100 * _zs_frac:.0f}%) "
+            f"max_delta={_zs_maxd:.3f} -> {'ok' if _zs_ok else 'INJECT'}",
+            flush=True,
+        )
+        if _zs_ok:
             continue
         if sum(1 for _w in timing_map.remapped_words
                if _zs_ws <= _w.start < _zs_we) < _ZOOM_SAFETY_MIN_WORDS:
