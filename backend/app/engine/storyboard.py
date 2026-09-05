@@ -615,6 +615,181 @@ def _compute_prosodic_scores(
     return result
 
 
+# ── Storyboard chunking ───────────────────────────────────────────────────────
+# Compliance with the card quota collapses as the quota grows: a 56-card request
+# returned 48 (86%), a 149-card request returned 71 (48%) — verified not to be
+# truncation (no max_tokens WARN) and not a contradictory prompt rule (every
+# cadence figure in the prompt was audited). The model simply will not emit that
+# many discrete objects in one response. Splitting the video into ~10-min windows
+# puts each request back at ~50 cards, the size where compliance was measured.
+#
+# Unlike the planner's chunking this needs no timestamp remapping: a card is a
+# self-contained object at an absolute time, so merging is concatenation. The
+# window owns cards whose startSec lands in [start, end) — no overlap, nothing to
+# deduplicate. GAP-FILL and the safety net run after the merge on the full
+# timeline, so boundary coverage is already handled by existing machinery.
+_SB_CHUNK_THRESHOLD_S = 20 * 60   # below this, one pass — 15-min runs already hit 86%
+_SB_CHUNK_TARGET_S    = 600.0     # ~10-min windows -> ~50 cards at pace 12
+_SB_CONTEXT_LOOKAROUND_S = 60.0   # read-only bleed so a window sees its neighbours
+
+# style -> per-video budget. Chunks cannot see each other's output, so without
+# this each window would independently believe it may spend the single confession
+# / climax / shatter slot. The post-merge eviction guards still run as a backstop,
+# but they keep the LATEST card by timestamp rather than the best one, so it is
+# far better not to generate the duplicate in the first place.
+_SB_BUDGET_STYLES: dict[str, int] = {
+    "prim_cinematic_reveal": 1,   # shares its slot with prim_ascension_reveal
+    "prim_ascension_reveal": 1,
+    "prim_confession_frame": 1,
+    "prim_shatter_truth": 1,
+    "prim_split_stage": 2,
+}
+
+
+def _sb_build_chunk_context(prior_cards: list[dict], language: str = "en") -> str:
+    """Cross-chunk state for window N+1: used phrases, style mix, spent budgets.
+
+    Built from the first line onward rather than added later — the planner's
+    chunking shipped without it and had to be retrofitted (4730660) after
+    duplicate cards showed up across boundaries.
+    """
+    if not prior_cards:
+        return ""
+    lines: list[str] = ["", "ALREADY PLACED IN EARLIER WINDOWS OF THIS VIDEO:"]
+
+    _titles: list[str] = []
+    for _c in prior_cards:
+        _h = _c.get("contentHints", {}) or {}
+        _t = (_h.get("title") or "").strip()
+        if _t and _t not in _titles:
+            _titles.append(_t)
+    if _titles:
+        lines.append("  Phrases already used as cards — do not repeat or closely paraphrase:")
+        for _t in _titles[-14:]:
+            lines.append(f'    - "{_t[:90]}"')
+
+    _styles: dict[str, int] = {}
+    for _c in prior_cards:
+        _s = (_c.get("contentHints", {}) or {}).get("style", "")
+        if _s:
+            _styles[_s] = _styles.get(_s, 0) + 1
+    if _styles:
+        _top = sorted(_styles.items(), key=lambda kv: -kv[1])[:8]
+        lines.append(
+            "  Style mix so far — favour styles that are under-represented here: "
+            + ", ".join(f"{_k}x{_v}" for _k, _v in _top)
+        )
+
+    _spent: list[str] = []
+    _climax_used = sum(
+        1 for _c in prior_cards
+        if (_c.get("contentHints", {}) or {}).get("style", "")
+        in ("prim_cinematic_reveal", "prim_ascension_reveal")
+    )
+    if _climax_used:
+        _spent.append("the climax slot (prim_cinematic_reveal / prim_ascension_reveal)")
+    for _style, _budget in _SB_BUDGET_STYLES.items():
+        if _style in ("prim_cinematic_reveal", "prim_ascension_reveal"):
+            continue
+        if _styles.get(_style, 0) >= _budget:
+            _spent.append(_style)
+    if _spent:
+        lines.append(
+            "  BUDGETS ALREADY SPENT — these are once-per-video and are used up. "
+            "Do NOT emit any of: " + ", ".join(_spent) + "."
+        )
+
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _generate_graphic_cards_chunked(
+    trimmed_duration: float,
+    script_structure: list[dict],
+    keep_segments: list[dict],
+    **kwargs,
+) -> tuple[list[dict], list[dict]]:
+    """Design cards window by window, then concatenate.
+
+    Falls back to a single pass below _SB_CHUNK_THRESHOLD_S.
+    """
+    if trimmed_duration < _SB_CHUNK_THRESHOLD_S:
+        return _generate_graphic_cards(
+            trimmed_duration, script_structure, keep_segments, **kwargs
+        )
+
+    _n = max(2, round(trimmed_duration / _SB_CHUNK_TARGET_S))
+    _step = trimmed_duration / _n
+    print(
+        f"[STORYBOARD] CHUNKED {_n} window(s) of {_step:.0f}s "
+        f"for {trimmed_duration:.0f}s (threshold {_SB_CHUNK_THRESHOLD_S:.0f}s)",
+        flush=True,
+    )
+
+    def _in_span(items: list[dict], lo: float, hi: float) -> list[dict]:
+        out = []
+        for _it in items:
+            _s = float(_it.get("start", _it.get("startSec", 0)) or 0)
+            _e = float(_it.get("end", _it.get("endSec", _s)) or _s)
+            if _s < hi and _e > lo:
+                out.append(_it)
+        return out
+
+    all_cards: list[dict] = []
+    first_summary: list[dict] = []
+
+    for _i in range(_n):
+        _ws = _i * _step
+        _we = trimmed_duration if _i == _n - 1 else (_i + 1) * _step
+        _ctx_lo = max(0.0, _ws - _SB_CONTEXT_LOOKAROUND_S)
+        _ctx_hi = min(trimmed_duration, _we + _SB_CONTEXT_LOOKAROUND_S)
+
+        _cards, _summary = _generate_graphic_cards(
+            trimmed_duration,
+            _in_span(script_structure, _ctx_lo, _ctx_hi),
+            _in_span(keep_segments, _ctx_lo, _ctx_hi),
+            window=(_ws, _we),
+            prior_context=_sb_build_chunk_context(all_cards, kwargs.get("language", "en")),
+            **kwargs,
+        )
+        if _i == 0:
+            first_summary = _summary
+
+        # Enforce window ownership: a card whose startSec drifted outside the
+        # window belongs to another pass, and keeping it would double-cover.
+        _kept, _dropped = [], 0
+        for _c in _cards:
+            _cs = float(_c.get("startSec", 0))
+            if _ws <= _cs < _we or (_i == _n - 1 and _cs >= _ws):
+                _kept.append(_c)
+            else:
+                _dropped += 1
+
+        # Re-id so ids stay unique and ordered across the whole video.
+        # enumerate, not .index() — dicts compare by value, so identical cards
+        # would resolve to the same index and collide.
+        _base = len(all_cards)
+        for _k, _c in enumerate(_kept):
+            _c["id"] = f"card-{_base + _k + 1:02d}"
+
+        _tgt = max(3, round((_we - _ws) / 12.0))
+        print(
+            f"[STORYBOARD] CHUNK {_i + 1}/{_n} [{_ws:.0f}-{_we:.0f}s] "
+            f"target~{_tgt} generated={len(_kept)} "
+            f"({100.0 * len(_kept) / max(_tgt, 1):.0f}%)"
+            + (f" dropped={_dropped} outside window" if _dropped else ""),
+            flush=True,
+        )
+        all_cards.extend(_kept)
+
+    all_cards.sort(key=lambda c: float(c.get("startSec", 0)))
+    print(
+        f"[STORYBOARD] CHUNKED total {len(all_cards)} cards across {_n} window(s)",
+        flush=True,
+    )
+    return all_cards, first_summary
+
+
 def _generate_graphic_cards(
     trimmed_duration: float,
     script_structure: list[dict],
@@ -627,11 +802,22 @@ def _generate_graphic_cards(
     timing_map: TimingMap,
     language: str = "en",
     subject_side: str | None = None,
+    window: tuple[float, float] | None = None,
+    prior_context: str = "",
 ) -> tuple[list[dict], list[dict]]:
     """Generate graphic overlay cards via Claude API call.
 
     Uses the narrative context (beat spine, key lines, retention notes)
     to design cards that reinforce the emotional arc.
+
+    window: when set, only this [start, end) span of the video is being
+      designed. base_pace still derives from the FULL trimmed_duration (so a
+      30-min video keeps its 30-min pace) while the quota derives from the
+      window, which is what keeps each request at a size the model actually
+      honours. Timestamps stay absolute throughout — nothing is offset to zero,
+      so merging chunks is a list concatenation with no remapping.
+    prior_context: cross-chunk state (phrases already used, style histogram,
+      budget primitives already spent) injected verbatim into the prompt.
     """
     from anthropic import Anthropic
     from app.core.config import settings
@@ -667,16 +853,20 @@ def _generate_graphic_cards(
         base_pace = 12
 
     density_mult = 1.0
-    target_cards = max(3, round(trimmed_duration / (base_pace * density_mult)))
+    # Quota comes from the window being designed, pace from the whole video.
+    _win_start, _win_end = window if window else (0.0, trimmed_duration)
+    _win_dur = max(1.0, _win_end - _win_start)
+    target_cards = max(3, round(_win_dur / (base_pace * density_mult)))
 
     # Density diagnostic: without this, a card count in the logs cannot be read
     # as compliant or short — "48 cards" means 86% of target at 900s and 76% at
     # 1000s. Logging pace/target/rate makes every future density run legible.
-    _cpm = target_cards / max(trimmed_duration / 60, 0.01)
+    _cpm = target_cards / max(_win_dur / 60, 0.01)
     print(
         f"[STORYBOARD] DENSITY pace={base_pace:.1f} target={target_cards} "
-        f"for {trimmed_duration:.0f}s ({_cpm:.2f} cards/min) "
-        f"fmt={format_hint!r}",
+        f"for {_win_dur:.0f}s ({_cpm:.2f} cards/min) "
+        f"fmt={format_hint!r}"
+        + (f" window={_win_start:.0f}-{_win_end:.0f}s of {trimmed_duration:.0f}s" if window else ""),
         flush=True,
     )
 
@@ -2294,8 +2484,20 @@ assign a climax card based on prosodic_peak alone if the linguistic conditions f
         " Any gap longer than 60s with zero cards is a failure mode — see DEAD ZONE RULE above."
     ) if _dead_zones else ""
 
-    user_msg = f"""VIDEO DURATION: {trimmed_duration:.1f}s
+    _window_header = (
+        f"VIDEO DURATION: {trimmed_duration:.1f}s\n"
+        f"YOUR WINDOW: {_win_start:.0f}s to {_win_end:.0f}s ({_win_dur:.0f}s of that video).\n"
+        f"Every startSec you emit MUST fall inside this window. Material shown from\n"
+        f"outside it is context so you understand what precedes and follows — never\n"
+        f"place a card there; another pass covers those spans."
+        if window else
+        f"VIDEO DURATION: {trimmed_duration:.1f}s"
+    )
+    _scope_word = "this window" if window else "this video"
+    _scope_dur = f"{_win_dur:.0f}s"
 
+    user_msg = f"""{_window_header}
+{prior_context}
 BEAT SPINE (the narrative structure):
 {json.dumps(script_out, indent=2)}
 
@@ -2305,7 +2507,7 @@ SEGMENT DETAILS (scores, reasons, retention notes):
 KEY LINES (most memorable moments):
 {json.dumps(key_lines)}{_dead_zone_block}
 
-Design graphic overlay cards for this video — target {target_cards} cards for {trimmed_duration:.0f}s of content. Aim for 85-100% of this target. Under-coverage across a long video is its own quality failure — a viewer watching 10+ minutes without visual reinforcement loses engagement. The target is a quota to approach, not a ceiling to stay under. Place a card whenever the speaker teaches, reveals, contrasts, or drives home a point worth remembering, even on narrative, conversational, or elaborative passages where no explicit structure is present."""
+Design graphic overlay cards for {_scope_word} — target {target_cards} cards for {_scope_dur} of content. Aim for 85-100% of this target. Under-coverage across a long video is its own quality failure — a viewer watching 10+ minutes without visual reinforcement loses engagement. The target is a quota to approach, not a ceiling to stay under. Place a card whenever the speaker teaches, reveals, contrasts, or drives home a point worth remembering, even on narrative, conversational, or elaborative passages where no explicit structure is present."""
 
     # Scale max_tokens with target_cards so long-video responses are never truncated.
     # ~250 tokens/card average: simple cards ~100t, complex (list/comparison) ~400t, mean ~250.
@@ -3249,7 +3451,7 @@ def generate_storyboard(
                 seg["energy_level"] = _ep_entry.get("energy_level", "MEDIUM")
 
     # Generate graphic overlay cards via Claude (also returns beat_summary for RHYTHM-SPLIT)
-    graphic_cards, beat_summary = _generate_graphic_cards(
+    graphic_cards, beat_summary = _generate_graphic_cards_chunked(
         trimmed_duration=trimmed_duration,
         script_structure=script_structure,
         keep_segments=keep_segments,
