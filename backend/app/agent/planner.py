@@ -898,10 +898,18 @@ def _plan_edit_chunked(
             keep_abs = [s for s in chunk_abs.get("keep_segments", []) if isinstance(s, dict)]
             chunk_plans_abs.append(chunk_abs)
             prev_keep_abs.extend(keep_abs)
+            # zoom_plan is logged per chunk because a low merged total is
+            # ambiguous otherwise: it could mean thin generation or a lossy
+            # merge, and the two need opposite fixes. Diagnosing 33 entries on a
+            # 30-min run cost a full round trip for want of this number.
+            _zp_n = len(chunk_abs.get("zoom_plan") or [])
+            _zp_span = max(local_duration, 1.0)
             print(
                 f"[CHUNK-PLAN] chunk {chunk_idx+1}: {len(keep_abs)} segs kept"
                 f" (abs range {min((s['start'] for s in keep_abs), default=0):.0f}s–"
-                f"{max((s['end'] for s in keep_abs), default=0):.0f}s)",
+                f"{max((s['end'] for s in keep_abs), default=0):.0f}s)"
+                f" | zoom_plan={_zp_n} for {_zp_span:.0f}s"
+                f" (1 / {_zp_span / max(_zp_n, 1):.0f}s, target 1 / 12-15s)",
                 flush=True,
             )
         except BaseException as exc:
