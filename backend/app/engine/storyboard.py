@@ -2516,13 +2516,13 @@ Design graphic overlay cards for {_scope_word} — target {target_cards} cards f
     # Scale max_tokens with target_cards so long-video responses are never truncated.
     # ~250 tokens/card average: simple cards ~100t, complex (list/comparison) ~400t, mean ~250.
     # 150t/card was too tight — 15-min videos (48 cards × 150 = 7200) truncated JSON at ~2min.
-    # Cap 65536→131072 alongside base_pace=12: at 5.0 cards/min a 45-min video
+    # Cap 65536→128000 alongside base_pace=12: at 5.0 cards/min a 45-min video
     # needs 225 cards (~56k) and a 60-min one 300 (~75k), so 65536 would have
     # truncated anything past ~52 min, re-creating the bug 17626ab fixed.
     # The configured model is claude-opus-4-7, which supports 128k output — the
     # previous comment claimed 64k and named Sonnet 4.6, neither of which is the
     # model in use.
-    _max_tok = max(4096, min(131072, target_cards * 250))
+    _max_tok = max(4096, min(128000, target_cards * 250))
 
     client = Anthropic()
     try:

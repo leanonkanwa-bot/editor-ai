@@ -1439,12 +1439,21 @@ def plan_edit(
             msg_text = base_text + f"\n\nCRITICAL CORRECTION: {extra_instruction}"
         else:
             msg_text = base_text
-        resp = _client().messages.create(
+        # Streaming + 128k, same treatment the storyboard call needed. The planner
+        # writes Phases 0-3 and 5 as prose BEFORE the JSON, then emits
+        # keep_segments + script_structure + zoom_plan. Once zoom_plan carries a
+        # real coverage quota (~46 windows per 10 min) the 16000-token budget is
+        # exhausted mid-JSON: probed on a 600s transcript and the response
+        # truncated at char 34563, on the first call and again on the retry.
+        # Non-streaming would hit the SDK HTTP timeout well before 128k, so the
+        # cap and the streaming call have to move together.
+        with _client().messages.stream(
             model=settings.effective_model,
-            max_tokens=16000,
+            max_tokens=128000,
             system=sys_prompt,
             messages=[{"role": "user", "content": [{"type": "text", "text": msg_text}]}],
-        )
+        ) as _stream:
+            resp = _stream.get_final_message()
         raw_text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
         print(f"[RAW MODEL RESPONSE LENGTH] {len(raw_text)} chars")
         print(f"[RAW MODEL RESPONSE] {raw_text}")
