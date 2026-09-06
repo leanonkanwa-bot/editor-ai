@@ -3814,9 +3814,14 @@ def render(
         print(f"[FONT] preload_style_fonts failed (non-fatal): {_fe}")
 
     short_form = plan.format == "short"
-    # Long format uses phrase_text cards from the storyboard (compose.py) — skip ASS burn-in.
-    # Short format keeps the existing word-by-word ASS captions.
-    skip_captions = not short_form
+    # Short format burns word-by-word ASS captions. Long format renders selective
+    # caption_moments through _build_long_form_ass — the 7 semantic triggers, not
+    # continuous subtitles. That path was fully built (dispatch, renderer, 4
+    # styles) and disabled by this line, justified by "phrase_text cards from the
+    # storyboard", a mechanism that does not exist in compose.py.
+    # Whether long-form has any moments left is only known after they are remapped
+    # and filtered against cards, so the decision is finalised there.
+    skip_captions = False
     if short_form:
         caption_style = "twolevel"
     fps = 24
@@ -4430,6 +4435,21 @@ def render(
     # system: only cards that occupy the centre or the full canvas block a
     # caption. A side-panel data card and a bottom caption do not share screen
     # space, and excluding those would halve the layer for no visual gain.
+    # Same-content redundancy, which the zone rule cannot see: a `stat` caption
+    # beside a `stat` card in a side panel does not overlap spatially, but it is
+    # the same figure on screen twice at once. Mapped conservatively — only
+    # pairings where the duplication is unambiguous. `hook` and `marker` are left
+    # unmapped: too broad to block safely.
+    _CAPTION_STYLE_TWINS: dict[str, frozenset] = {
+        "stat":      frozenset({"stat", "number_hero", "prim_stat_counter",
+                                "income_reveal", "client_result_number",
+                                "percentage_split", "success_metric_badge"}),
+        "quote":     frozenset({"quote", "attributed_quote", "testimonial",
+                                "quote_carousel"}),
+        "list_item": frozenset({"list", "checklist", "pros_cons", "carousel"}),
+        "concept":   frozenset({"definition", "concept_definition"}),
+        "mantra":    frozenset({"key_phrase", "callout"}),
+    }
     _CAPTION_BLOCKING_ZONES = frozenset({"fullscreen", "video-overlay", "lower-third"})
     _CAPTION_BLOCKING_STYLES = frozenset({
         "prim_split_compare", "prim_journey_map", "prim_cinematic_reveal",
@@ -4449,11 +4469,29 @@ def render(
             for _m in remapped_moments:
                 _ms, _me = float(_m.get("start", 0)), float(_m.get("end", 0))
                 _hit = next(((_a, _b) for _a, _b in _blocking if _a < _me and _b > _ms), None)
+                _twins = _CAPTION_STYLE_TWINS.get(str(_m.get("style", "")), frozenset())
+                _twin = None
+                if not _hit and _twins:
+                    _twin = next(
+                        (_c for _c in _graphic_cards
+                         if (_c.get("contentHints", {}) or {}).get("style", "") in _twins
+                         and float(_c.get("startSec", 0)) < _me
+                         and float(_c.get("endSec", 0)) > _ms),
+                        None,
+                    )
                 if _hit:
                     print(
                         f"[CAPTIONS] dropped moment {_ms:.2f}-{_me:.2f}s "
                         f"style={_m.get('style','?')!r} — card on screen "
                         f"{_hit[0]:.2f}-{_hit[1]:.2f}s",
+                        flush=True,
+                    )
+                elif _twin is not None:
+                    print(
+                        f"[CAPTIONS] dropped moment {_ms:.2f}-{_me:.2f}s "
+                        f"style={_m.get('style','?')!r} — same content already on "
+                        f"card {_twin.get('id','?')} "
+                        f"({(_twin.get('contentHints',{}) or {}).get('style','?')})",
                         flush=True,
                     )
                 else:
@@ -4469,7 +4507,11 @@ def render(
     _use_moments = _long and bool(remapped_moments)
     print(f"[CAPTIONS] short_form={short_form} _long={_long} remapped_moments={len(remapped_moments)} _use_moments={_use_moments} -> mode={'long' if _use_moments else 'short'}")
     if _long and not remapped_moments:
-        print("[CAPTIONS] Long-form has no caption_moments -- falling back to short-form word-by-word")
+        # No moments survived: emit nothing. Falling back to word-by-word here
+        # would put continuous subtitles on a long video, which is the opposite
+        # of what this layer is for.
+        skip_captions = True
+        print("[CAPTIONS] Long-form has no caption_moments left — no captions burned", flush=True)
     if not skip_captions:
         build_ass(
             remapped_words,
