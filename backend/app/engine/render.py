@@ -4418,6 +4418,54 @@ def render(
     # For long-form: prefer selective caption_moments; fall back to word-by-word
     # short-form captions if the planner produced none (better than zero captions).
     _long = not short_form
+    # ── Caption/card mutual exclusion ─────────────────────────────────────────
+    # The two text layers select the same moments: both are told to mark what is
+    # memorable, quotable or numeric, so the model places a `stat` card and a
+    # `stat` caption on the same figure. Measured on one plan driving both
+    # layers: cards occupied 38% of the timeline but took 62% of the captions —
+    # clustering, not chance. One caption landed on prim_cinematic_reveal, the
+    # full-screen climax primitive.
+    #
+    # Zone-aware rather than blanket, matching _PUNCH_IN_CENTER_ZONES in the zoom
+    # system: only cards that occupy the centre or the full canvas block a
+    # caption. A side-panel data card and a bottom caption do not share screen
+    # space, and excluding those would halve the layer for no visual gain.
+    _CAPTION_BLOCKING_ZONES = frozenset({"fullscreen", "video-overlay", "lower-third"})
+    _CAPTION_BLOCKING_STYLES = frozenset({
+        "prim_split_compare", "prim_journey_map", "prim_cinematic_reveal",
+        "prim_ascension_reveal", "prim_shatter_truth", "prim_split_stage",
+        "prim_confession_frame", "prim_numbered_rule", "prim_anecdote_frame",
+    })
+    if remapped_moments:
+        _blocking = [
+            (float(_c.get("startSec", 0)), float(_c.get("endSec", 0)))
+            for _c in _graphic_cards
+            if _c.get("zone", "") in _CAPTION_BLOCKING_ZONES
+            or (_c.get("contentHints", {}) or {}).get("style", "") in _CAPTION_BLOCKING_STYLES
+        ]
+        if _blocking:
+            _before_n = len(remapped_moments)
+            _kept_m = []
+            for _m in remapped_moments:
+                _ms, _me = float(_m.get("start", 0)), float(_m.get("end", 0))
+                _hit = next(((_a, _b) for _a, _b in _blocking if _a < _me and _b > _ms), None)
+                if _hit:
+                    print(
+                        f"[CAPTIONS] dropped moment {_ms:.2f}-{_me:.2f}s "
+                        f"style={_m.get('style','?')!r} — card on screen "
+                        f"{_hit[0]:.2f}-{_hit[1]:.2f}s",
+                        flush=True,
+                    )
+                else:
+                    _kept_m.append(_m)
+            remapped_moments = _kept_m
+            print(
+                f"[CAPTIONS] card exclusion: {_before_n} -> {len(remapped_moments)} moments "
+                f"({_before_n - len(remapped_moments)} dropped, "
+                f"{len(_blocking)} blocking card(s))",
+                flush=True,
+            )
+
     _use_moments = _long and bool(remapped_moments)
     print(f"[CAPTIONS] short_form={short_form} _long={_long} remapped_moments={len(remapped_moments)} _use_moments={_use_moments} -> mode={'long' if _use_moments else 'short'}")
     if _long and not remapped_moments:
