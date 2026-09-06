@@ -96,6 +96,47 @@ _THEMES = {
 }
 
 
+# ── Card chrome labels, by language ──────────────────────────────────────────
+# Structural text baked into card layouts — "Cause"/"Effet", "AVANT"/"APRÈS",
+# badges, tags. It used to be written inline in whichever language the style's
+# author happened to use, which produced French labels on English videos and,
+# on before_after_image, French labels beside English badges on the same card.
+#
+# Whisper detects 50+ languages and a hand-written table cannot cover them, so
+# _chrome() returns "" for anything outside this table and the caller omits the
+# element entirely. An absent label always beats a label in the wrong language,
+# and these are decorative: a cause_effect card still reads without the words.
+_CHROME: dict[str, dict[str, str]] = {
+    "fr": {
+        "cause": "Cause",           "effect": "Effet",
+        "before": "Avant",          "after": "Après",           "now": "Maintenant",
+        "before_badge": "AVANT",    "after_badge": "APRÈS",     "now_badge": "MAINTENANT",
+        "fact": "FAIT",             "myth": "MYTHE",
+        "reality": "La réalité",    "listed_price": "Prix affiché", "real_cost": "Coût réel",
+        "predicted": "Prévu",       "confirmed": "Confirmé",
+        "comment": "Commentaire",   "reply": "Réponse",
+        "lesson": "Leçon",          "direct_flight": "vol direct",
+        "income": "Revenus",        "expense": "Dépenses",
+    },
+    "en": {
+        "cause": "Cause",           "effect": "Effect",
+        "before": "Before",         "after": "After",           "now": "Now",
+        "before_badge": "BEFORE",   "after_badge": "AFTER",     "now_badge": "NOW",
+        "fact": "FACT",             "myth": "MYTH",
+        "reality": "The reality",   "listed_price": "Listed price", "real_cost": "Real cost",
+        "predicted": "Predicted",   "confirmed": "Confirmed",
+        "comment": "Comment",       "reply": "Reply",
+        "lesson": "Lesson",         "direct_flight": "direct flight",
+        "income": "Income",         "expense": "Expenses",
+    },
+}
+
+
+def _chrome(language: str | None, key: str) -> str:
+    """Chrome label for this language, or "" when the language is not covered."""
+    return _CHROME.get((language or "").lower()[:2], {}).get(key, "")
+
+
 def _zone_bounds(zone: str, layout: str) -> dict:
     table = _ZONE_BOUNDS_PORTRAIT if layout == "portrait" else _ZONE_BOUNDS_LANDSCAPE
     return table.get(zone, table["lower-third"])
@@ -132,7 +173,8 @@ _TALL_DATA_PANEL_TYPES = frozenset({
 })
 
 
-def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | None = None) -> str:
+def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | None = None,
+                     language: str | None = None) -> str:
     """Build a card-host div with correct classes, data attributes, and inline bounds."""
     card_id = card["id"]
     start = round(float(card.get("startSec", 0)), 3)
@@ -242,7 +284,8 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
     if is_caption:
         inner = _build_caption_card_html(card, pack=pack, layout=layout)
     else:
-        inner = _build_graphic_card_html(card, pack=pack, compact=compact, layout=layout)
+        inner = _build_graphic_card_html(card, pack=pack, compact=compact, layout=layout,
+                                         language=language)
 
     # Portrait scrim: full-canvas dimming overlay per card, sibling to card-host.
     # Explicit != "caption" check: generative cards omit the type field entirely
@@ -633,7 +676,8 @@ def _split_title_accent(title: str, accent_word: str, card_id: str) -> str:
     )
 
 
-def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool = False, layout: str = "portrait") -> str:
+def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool = False, layout: str = "portrait",
+                             language: str | None = None) -> str:
     """Build inner HTML for a graphic overlay card using the given style pack."""
     card_id = card["id"]
 
@@ -3546,12 +3590,12 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'      <div class="pb-track"><div class="pb-fill" id="{card_id}-pb-fill"></div></div>')
         parts.append(f'    </div>')
     elif content_style == "before_after_image":
-        _before = _esc(hints.get("before_label", "Avant"))
-        _after = _esc(hints.get("after_label", "Après"))
+        _before = _esc(hints.get("before_label") or _chrome(language, "before"))
+        _after = _esc(hints.get("after_label") or _chrome(language, "after"))
         _acc_ba = p["accent"]
         parts.append(f'    <div class="ba-wrap">')
         parts.append(f'      <div class="ba-side" id="{card_id}-ba-before">')
-        parts.append(f'        <div class="ba-badge">{_esc(hints.get("before_badge", "BEFORE"))}</div>')
+        parts.append(f'        <div class="ba-badge">{_esc(hints.get("before_badge") or _chrome(language, "before_badge"))}</div>')
         parts.append(f'        <div class="ba-text">{_before}</div>')
         parts.append(f'      </div>')
         if p["id"] == "lean_craft":
@@ -3564,7 +3608,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         else:
             parts.append(f'      <div class="ba-div" id="{card_id}-ba-div"></div>')
         parts.append(f'      <div class="ba-side" id="{card_id}-ba-after">')
-        parts.append(f'        <div class="ba-badge">{_esc(hints.get("after_badge", "AFTER"))}</div>')
+        parts.append(f'        <div class="ba-badge">{_esc(hints.get("after_badge") or _chrome(language, "after_badge"))}</div>')
         parts.append(f'        <div class="ba-text">{_after}</div>')
         parts.append(f'      </div>')
         parts.append(f'    </div>')
@@ -3600,7 +3644,9 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'        <div class="mvf-strike" id="{card_id}-mvf-strike"></div>')
         parts.append(f'      </div>')
         parts.append(f'      <div class="mvf-fact-wrap" id="{card_id}-mvf-fact-wrap">')
-        parts.append(f'        <div class="mvf-badge">FAIT</div>')
+        _c = _chrome(language, "fact")
+        if _c:
+            parts.append(f'<div class="mvf-badge">{_c}</div>')
         parts.append(f'        <div class="mvf-fact" id="{card_id}-mvf-fact">{_fact}</div>')
         parts.append(f'      </div>')
         parts.append(f'    </div>')
@@ -3860,12 +3906,16 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         )
         parts.append(f'    <div class="ceff-wrap">')
         parts.append(f'      <div class="ceff-box" id="{card_id}-ceff-cause">')
-        parts.append(f'        <div class="ceff-lbl">Cause</div>')
+        _c = _chrome(language, "cause")
+        if _c:
+            parts.append(f'<div class="ceff-lbl">{_c}</div>')
         parts.append(f'        <div class="ceff-text">{_ceff_cause}</div>')
         parts.append(f'      </div>')
         parts.append(f'      {_ceff_arrow_svg}')
         parts.append(f'      <div class="ceff-box" id="{card_id}-ceff-effect">')
-        parts.append(f'        <div class="ceff-lbl">Effet</div>')
+        _c = _chrome(language, "effect")
+        if _c:
+            parts.append(f'<div class="ceff-lbl">{_c}</div>')
         parts.append(f'        <div class="ceff-text">{_ceff_effect}</div>')
         parts.append(f'      </div>')
         parts.append(f'    </div>')
@@ -4041,7 +4091,9 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'      </div>')
         parts.append(f'      <div class="lrs-divider" id="{card_id}-lrs-divider"></div>')
         parts.append(f'      <div class="lrs-side" id="{card_id}-lrs-reality">')
-        parts.append(f'        <div class="lrs-lbl">La réalité</div>')
+        _c = _chrome(language, "reality")
+        if _c:
+            parts.append(f'<div class="lrs-lbl">{_c}</div>')
         parts.append(f'        <div class="lrs-txt">{_lrs_real}</div>')
         parts.append(f'      </div>')
         parts.append(f'    </div>')
@@ -4050,12 +4102,16 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         _hcr_real = _esc(hints.get("real_cost",     hints.get("detail", "")))
         parts.append(f'    <div class="hcr-wrap">')
         parts.append(f'      <div class="hcr-block" id="{card_id}-hcr-sticker">')
-        parts.append(f'        <div class="hcr-lbl">Prix affiché</div>')
+        _c = _chrome(language, "listed_price")
+        if _c:
+            parts.append(f'<div class="hcr-lbl">{_c}</div>')
         parts.append(f'        <div class="hcr-val hcr-stk-val">{_hcr_stk}</div>')
         parts.append(f'      </div>')
         parts.append(f'      <div class="hcr-arrow" id="{card_id}-hcr-arrow">→</div>')
         parts.append(f'      <div class="hcr-block" id="{card_id}-hcr-real">')
-        parts.append(f'        <div class="hcr-lbl">Coût réel</div>')
+        _c = _chrome(language, "real_cost")
+        if _c:
+            parts.append(f'<div class="hcr-lbl">{_c}</div>')
         parts.append(f'        <div class="hcr-val hcr-real-val">{_hcr_real}</div>')
         parts.append(f'      </div>')
         parts.append(f'    </div>')
@@ -4072,12 +4128,16 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         _tp_pred = hints.get("predicted_steps", [])
         parts.append(f'    <div class="tp-wrap">')
         if _tp_conf:
-            parts.append(f'      <div class="tp-sec-lbl">Confirmé</div>')
+            _c = _chrome(language, "confirmed")
+            if _c:
+                parts.append(f'<div class="tp-sec-lbl">{_c}</div>')
             for _tp_i, _tp_s in enumerate(_tp_conf[:4]):
                 parts.append(f'      <div class="tp-conf" id="{card_id}-tp-conf-{_tp_i}">{_esc(str(_tp_s))}</div>')
         parts.append(f'      <div class="tp-div" id="{card_id}-tp-div"></div>')
         if _tp_pred:
-            parts.append(f'      <div class="tp-sec-lbl">Prévu</div>')
+            _c = _chrome(language, "predicted")
+            if _c:
+                parts.append(f'<div class="tp-sec-lbl">{_c}</div>')
             for _tp_j, _tp_p in enumerate(_tp_pred[:4]):
                 parts.append(f'      <div class="tp-pred" id="{card_id}-tp-pred-{_tp_j}">{_esc(str(_tp_p))}</div>')
         parts.append(f'    </div>')
@@ -4099,11 +4159,13 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         _crs_rep = _esc(hints.get("reply_text",   hints.get("detail", "")))
         parts.append(f'    <div class="crs-wrap">')
         parts.append(f'      <div class="crs-comment" id="{card_id}-crs-comment">')
-        parts.append(f'        <div class="crs-meta">💬 Commentaire</div>')
+        _c = _chrome(language, "comment")
+        parts.append(f'<div class="crs-meta">💬{" " + _c if _c else ""}</div>')
         parts.append(f'        <div class="crs-txt">{_crs_com}</div>')
         parts.append(f'      </div>')
         parts.append(f'      <div class="crs-reply" id="{card_id}-crs-reply">')
-        parts.append(f'        <div class="crs-meta">↳ Réponse</div>')
+        _c = _chrome(language, "reply")
+        parts.append(f'<div class="crs-meta">↳{" " + _c if _c else ""}</div>')
         parts.append(f'        <div class="crs-txt crs-rtxt">{_crs_rep}</div>')
         parts.append(f'      </div>')
         parts.append(f'    </div>')
@@ -4218,14 +4280,14 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'    </div>')
     elif content_style == "before_now_later":
         _bnl_labels = [
-            _esc(hints.get("before_label", "Before")),
-            _esc(hints.get("now_label", "Now")),
-            _esc(hints.get("later_label", "After")),
+            _esc(hints.get("before_label") or _chrome(language, "before")),
+            _esc(hints.get("now_label") or _chrome(language, "now")),
+            _esc(hints.get("later_label") or _chrome(language, "after")),
         ]
         _bnl_tags = [
-            _esc(hints.get("bnl_before_badge", "BEFORE")),
-            _esc(hints.get("bnl_now_badge",    "NOW")),
-            _esc(hints.get("bnl_later_badge",  "AFTER")),
+            _esc(hints.get("bnl_before_badge") or _chrome(language, "before_badge")),
+            _esc(hints.get("bnl_now_badge") or _chrome(language, "now_badge")),
+            _esc(hints.get("bnl_later_badge") or _chrome(language, "after_badge")),
         ]
         parts.append(f'    <div class="bnl-wrap">')
         for _bnl_i, (_bnl_tag, _bnl_lbl) in enumerate(zip(_bnl_tags, _bnl_labels)):
@@ -4286,8 +4348,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
     elif content_style == "income_vs_expense":
         _ive_inc_val = _esc(hints.get("income_value", ""))
         _ive_exp_val = _esc(hints.get("expense_value", ""))
-        _ive_inc_lbl = _esc(hints.get("income_label", "Revenus"))
-        _ive_exp_lbl = _esc(hints.get("expense_label", "Dépenses"))
+        _ive_inc_lbl = _esc(hints.get("income_label") or _chrome(language, "income"))
+        _ive_exp_lbl = _esc(hints.get("expense_label") or _chrome(language, "expense"))
         _ive_inc_raw = ''.join(c for c in str(hints.get("income_value", "0")) if c.isdigit() or c == '.')
         _ive_exp_raw = ''.join(c for c in str(hints.get("expense_value", "0")) if c.isdigit() or c == '.')
         try:
@@ -4368,7 +4430,9 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'        <div class="ml-text">{_ml_err}</div>')
         parts.append(f'      </div>')
         parts.append(f'      <div class="ml-block ml-lesson" id="{card_id}-ml-lesson">')
-        parts.append(f'        <div class="ml-tag ml-tag-lsn">Leçon</div>')
+        _c = _chrome(language, "lesson")
+        if _c:
+            parts.append(f'<div class="ml-tag ml-tag-lsn">{_c}</div>')
         parts.append(f'        <div class="ml-text">{_ml_lsn}</div>')
         parts.append(f'      </div>')
         parts.append(f'    </div>')
@@ -4444,13 +4508,15 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'    <div class="spc-divider" id="{card_id}-spc-divider"></div>')
     elif content_style == "prim_journey_map":
         # ── prim_journey_map — hardcoded France→Thailand prototype ──────────
-        _jmt_from = _esc(hints.get("from_city", "Paris"))
-        _jmt_to   = _esc(hints.get("to_city", "Bangkok"))
-        _jmt_fc   = _esc(hints.get("from_country", "France"))
-        _jmt_tc   = _esc(hints.get("to_country", "Thaïlande"))
+        _jmt_from = _esc(hints.get("from_city", ""))
+        _jmt_to   = _esc(hints.get("to_city", ""))
+        _jmt_fc   = _esc(hints.get("from_country", ""))
+        _jmt_tc   = _esc(hints.get("to_country", ""))
         parts.append(f'  <div class="jmt-header" id="{card_id}-jmt-header">')
         parts.append(f'    <div class="jmt-route"><span>{_jmt_from}</span><span class="jmt-arrow">&#x203A;</span><span>{_jmt_to}</span></div>')
-        parts.append(f'    <div class="jmt-sub">vol direct</div>')
+        _c = _chrome(language, "direct_flight")
+        if _c:
+            parts.append(f'<div class="jmt-sub">{_c}</div>')
         parts.append(f'  </div>')
         parts.append(f'  <div class="jmt-sep"></div>')
         parts.append(f'  <div class="jmt-map">')
@@ -8523,6 +8589,7 @@ def compose(
 
     Returns the project directory path (containing public/index.html).
     """
+    _lang = storyboard.get("language") or ""
     comp = storyboard.get("composition", {})
     width = comp.get("width", 1920)
     height = comp.get("height", 1080)
@@ -8898,7 +8965,8 @@ def compose(
             continue
         track = 3 if c.get("type") == "caption" else 2
         try:
-            card_hosts.append(_build_card_host(c, layout, track_index=track, pack=pack))
+            card_hosts.append(_build_card_host(c, layout, track_index=track, pack=pack,
+                                              language=_lang))
             _rendered_cards.append(c)
         except Exception as _card_exc:
             print(

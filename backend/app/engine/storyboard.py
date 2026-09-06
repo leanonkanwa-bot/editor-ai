@@ -2653,6 +2653,28 @@ Design graphic overlay cards for {_scope_word} — target {target_cards} cards f
                     f" (budget=1, kept {_keep_shatter.get('id','?')})",
                     flush=True,
                 )
+        # Data guard: prim_journey_map without real cities renders a route that
+        # was never in the video. compose.py defaults from_city/to_city to
+        # "Paris"/"Bangkok", so a card missing them showed a fabricated trip as
+        # if it were content. Dropped here rather than patched at render time —
+        # by then it already holds a slot another card could have used.
+        _jm_dropped = []
+        for _jc in [c for c in cards
+                    if c.get("contentHints", {}).get("style", "") == "prim_journey_map"]:
+            _jh = _jc.get("contentHints", {}) or {}
+            _missing = [f for f in ("from_city", "to_city")
+                        if not str(_jh.get(f, "")).strip()]
+            if _missing:
+                _jm_dropped.append(_jc)
+                print(
+                    f"[STORYBOARD] DATA-GUARD dropped {_jc.get('id','?')} "
+                    f"style='prim_journey_map' — missing {'+'.join(_missing)}; "
+                    f"would have rendered placeholder cities",
+                    flush=True,
+                )
+        for _jc in _jm_dropped:
+            cards.remove(_jc)
+
         # Budget=2 guard: prim_split_stage — at most 2 per video.
         # Tiebreak: keep the 2 latest by startSec (payoff > hook policy).
         _split_stage_cards = [c for c in cards if c.get("contentHints", {}).get("style", "") == "prim_split_stage"]
@@ -4122,6 +4144,10 @@ def generate_storyboard(
             "endSec": round(trimmed_duration, 3),
         },
         "cards": graphic_cards + caption_cards,
+        # compose.py renders card chrome (labels, badges, tags) and needs the
+        # video's language to pick them. Carried on the storyboard rather than
+        # added to compose()'s signature: the dict already crosses that boundary.
+        "language": language,
     }
 
     return storyboard
