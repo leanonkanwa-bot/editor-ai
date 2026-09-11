@@ -4456,6 +4456,13 @@ def render(
         "prim_ascension_reveal", "prim_shatter_truth", "prim_split_stage",
         "prim_confession_frame", "prim_numbered_rule", "prim_anecdote_frame",
     })
+    # This is the legacy FFmpeg path: it has no HyperFrames storyboard, so there
+    # are no graphic cards to exclude against. _graphic_cards only exists inside
+    # _render_hyperframes(); referencing it here raised NameError on any
+    # long-form render with caption moments under the default engine ("ffmpeg"),
+    # i.e. every local run. Production is unaffected: with
+    # RENDER_ENGINE=hyperframes, render() returns before reaching this block.
+    _graphic_cards: list[dict] = []
     if remapped_moments:
         _blocking = [
             (float(_c.get("startSec", 0)), float(_c.get("endSec", 0)))
