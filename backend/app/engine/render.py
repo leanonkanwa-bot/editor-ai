@@ -3286,6 +3286,62 @@ def _render_hyperframes(
         _n_workers = _n_workers_auto
         _workers_src = "auto"
 
+    # ── Browser pool, sized by the cgroup PID budget ────────────────────────
+    # By default HyperFrames runs every capture worker as a PAGE of a single
+    # browser, so every frame funnels through that browser's one GPU process.
+    # Measured on the bench environment: capture stayed at ~20 fps whatever the
+    # worker count (4 → 16 workers bought 15%), burning 2.9 of the 24 vCPU we
+    # pay for. PRODUCER_ENABLE_BROWSER_POOL gives each worker its own browser,
+    # hence its own GPU process, which is what actually scales. On a
+    # 12 952-frame segment — the size production renders — capture went
+    # 690.6s → 395.7s and the whole render 816.8s → 526.6s at 5 browsers.
+    # Output is identical to the default within the renderer's own run-to-run
+    # noise (SSIM 0.9976, vs 0.9981 measured default-against-default).
+    #
+    # The ceiling is not memory (peak 8.0 GB of 22.4) but Railway's cgroup PID
+    # limit, pids.max=1000, threads included.  Each browser costs ~117 PIDs on
+    # top of a ~140 base, so 8 browsers project to ~1073: the limit is hit,
+    # Chrome can no longer spawn threads and the capture DEADLOCKS — observed
+    # frozen at frame 7050 for 24 minutes with flat memory, then killed by
+    # protocolTimeout.  We therefore derive the worker count from the PID
+    # budget and keep a quarter of it free for uvicorn, ffmpeg and Whisper,
+    # which share this container and are idle in the benchmark but not in
+    # production.
+    _PIDS_PER_BROWSER = 117      # measured: 609 PIDs at 4 browsers, 727 at 5, 836 at 6
+    _PID_BUDGET_SHARE = 0.75     # leave a quarter for the rest of the container
+    _POOL_MIN_WORKERS = 3        # below this the pool is not worth its overhead
+
+    def _cgroup_pids(name: str) -> int | None:
+        try:
+            _v = Path(f"/sys/fs/cgroup/{name}").read_text().strip()
+            return None if _v == "max" else int(_v)
+        except (FileNotFoundError, ValueError):
+            return None
+
+    _pids_max = _cgroup_pids("pids.max")
+    _pids_used = _cgroup_pids("pids.current") or 150
+    if _pids_max:
+        _pool_workers = int((_pids_max * _PID_BUDGET_SHARE - _pids_used) / _PIDS_PER_BROWSER)
+    else:
+        _pool_workers = 0        # unknown limit: stay on the proven single-browser path
+
+    if _pool_workers >= _POOL_MIN_WORKERS:
+        _n_workers_before_pool = _n_workers
+        _n_workers = max(_POOL_MIN_WORKERS, min(_n_workers, _pool_workers))
+        env["PRODUCER_ENABLE_BROWSER_POOL"] = "1"
+        print(
+            f"[HF] browser pool: ON — {_n_workers} browsers"
+            f" (pids {_pids_used}/{_pids_max} used, budget allows {_pool_workers};"
+            f" workers {_n_workers_before_pool}→{_n_workers})",
+            flush=True,
+        )
+    else:
+        print(
+            f"[HF] browser pool: OFF — PID budget too tight"
+            f" (pids.max={_pids_max}, used={_pids_used}, allows {_pool_workers})",
+            flush=True,
+        )
+
     print(
         f"[HF] workers: {_n_workers} ({_workers_src})"
         f" (limit={_mem_limit_gb:.1f}GB used={_mem_used_gb:.1f}GB"
