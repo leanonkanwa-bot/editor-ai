@@ -730,12 +730,36 @@ def _generate_graphic_cards_chunked(
         flush=True,
     )
 
+    # The window bounds above are OUTPUT time (they divide trimmed_duration),
+    # while planner items — script_structure, keep_segments — carry SOURCE
+    # timestamps; they are converted to output time only later, inside
+    # _generate_graphic_cards. Comparing the two directly mis-selects the beats
+    # offered to each window by exactly the amount of removed material, and the
+    # error accumulates: measured on a real plan with 22% dropped, windows 1-3
+    # mis-assigned 3, 6 and 10 of 26 segments, and 6 segments (78s — 18% of the
+    # finished video, everything past 459s of source) were offered to NO window,
+    # so no card could ever be generated there.
+    #
+    # Dormant while CUT_FILLERS is false: _pretrim_passthrough builds an identity
+    # map, so source == output and this reduces to the old behaviour. It arms the
+    # moment cutting is enabled. Reordering alone is enough to trigger it too —
+    # _remap_time's intervals are in EDIT order, which the planner deliberately
+    # makes non-chronological (hook-first).
+    _tm = kwargs.get("timing_map")
+
     def _in_span(items: list[dict], lo: float, hi: float) -> list[dict]:
         out = []
         for _it in items:
-            _s = float(_it.get("start", _it.get("startSec", 0)) or 0)
-            _e = float(_it.get("end", _it.get("endSec", _s)) or _s)
-            if _s < hi and _e > lo:
+            if "startSec" in _it:
+                # Already an output-timeline object (a card); no conversion.
+                _os = float(_it.get("startSec") or 0)
+                _oe = float(_it.get("endSec", _os) or _os)
+            else:
+                _s = float(_it.get("start", 0) or 0)
+                _e = float(_it.get("end", _s) or _s)
+                _os = _tm.source_to_output(_s) if _tm is not None else _s
+                _oe = _tm.source_to_output(_e) if _tm is not None else _e
+            if _os < hi and _oe > lo:
                 out.append(_it)
         return out
 
