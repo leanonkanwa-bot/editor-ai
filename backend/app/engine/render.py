@@ -3342,9 +3342,13 @@ def _render_hyperframes(
             flush=True,
         )
 
+    # _cgroup_mem_used_gb() returns None off-cgroup (any local dev machine), and
+    # formatting None with :.1f raises TypeError — so this log line alone crashed
+    # every local HyperFrames render since be39790.
+    _used_str = f"{_mem_used_gb:.1f}GB" if _mem_used_gb is not None else "unknown"
     print(
         f"[HF] workers: {_n_workers} ({_workers_src})"
-        f" (limit={_mem_limit_gb:.1f}GB used={_mem_used_gb:.1f}GB"
+        f" (limit={_mem_limit_gb:.1f}GB used={_used_str}"
         f" avail={_mem_avail_gb:.1f}GB node={_node_heap_mb // 1024}GB"
         f" chrome_budget={_chrome_budget_gb:.1f}GB→{_mem_workers},"
         f" cpu {_cpu_count}→{_cpu_workers})",
