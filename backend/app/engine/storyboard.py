@@ -553,11 +553,11 @@ _CAPTION_STYLE_TWINS: dict[str, frozenset] = {
     "concept":   frozenset({"definition", "concept_definition"}),
     "mantra":    frozenset({"key_phrase", "callout"}),
 }
-# compose.py fades captions under EVERY graphic card, whatever its zone, so a
-# zone-only rule would still leave captions blinking under side panels. Until that
-# suppression becomes zone-aware, every graphic card blocks. Flip to False only
-# together with that change.
-_CAPTION_ANY_CARD_BLOCKS = True
+# compose.py's suppression is now zone-aware for capm- captions (it hides them
+# only under cards that take their space), so this rule matches it: a side panel
+# no longer blocks a bottom caption. The two must stay in step — compose's
+# _CAP_BLOCKING_ZONES / _CAP_BLOCKING_STYLES are the same sets.
+_CAPTION_ANY_CARD_BLOCKS = False
 # compose's fade takes 0.15-0.20s; keep captions clear of card edges by this much.
 _CAPTION_CARD_MARGIN_S = 0.25
 

@@ -4873,6 +4873,33 @@ def _build_timeline_js(
         (round(float(c.get("startSec", 0)), 3), round(float(c.get("endSec", 0)), 3))
         for c in cards if c.get("type") != "caption"
     ]
+
+    # Long-form caption cards (capm-) are hidden only by cards that actually take
+    # their space: the centre, the full canvas, or the caption band itself. A side
+    # panel and a bottom caption do not share screen space, and blanking the
+    # caption under one costs most of the layer — measured on a real render, the
+    # blanket rule left 4 captions of 11 and 5% of the timeline carrying text.
+    # Short-form captions (cap-) keep the blanket behaviour unchanged.
+    # These sets mirror _CAPTION_BLOCKING_ZONES / _CAPTION_BLOCKING_STYLES in
+    # storyboard.py, which drops or shortens long-form captions under the same
+    # rule before compose ever sees them; this is the rendering-side half.
+    _CAP_BLOCKING_ZONES = frozenset({"fullscreen", "video-overlay", "lower-third"})
+    _CAP_BLOCKING_STYLES = frozenset({
+        "prim_split_compare", "prim_journey_map", "prim_cinematic_reveal",
+        "prim_ascension_reveal", "prim_shatter_truth", "prim_split_stage",
+        "prim_confession_frame", "prim_numbered_rule", "prim_anecdote_frame",
+    })
+
+    def _blocks_long_caption(c: dict) -> bool:
+        return (
+            c.get("zone", "") in _CAP_BLOCKING_ZONES
+            or (c.get("contentHints") or {}).get("style", "") in _CAP_BLOCKING_STYLES
+        )
+
+    _blocking_windows_pre = [
+        (round(float(c.get("startSec", 0)), 3), round(float(c.get("endSec", 0)), 3))
+        for c in cards if c.get("type") != "caption" and _blocks_long_caption(c)
+    ]
     for card in cards:
         card_id = _esc_js(str(card.get("id", "")))
         if not card_id:
@@ -4911,7 +4938,12 @@ def _build_timeline_js(
             # The post-loop suppression tl.to(opacity:0) is a no-op in that case
             # because it reads current opacity=0 and animates 0→0, letting the
             # fromTo(0→1) win. Skipping the fromTo keeps opacity at 0 instead.
-            _cap_in_gfx = any(gs <= start < ge for gs, ge in _graphic_windows_pre)
+            _cap_wins = (
+                _blocking_windows_pre
+                if str(card.get("id", "")).startswith("capm-")
+                else _graphic_windows_pre
+            )
+            _cap_in_gfx = any(gs <= start < ge for gs, ge in _cap_wins)
             if not _cap_in_gfx:
                 lines.append(
                     f'  tl.fromTo(\'{sel}\', '
@@ -8397,12 +8429,20 @@ def _build_timeline_js(
         for cid in [c.get("id", "")]
         if cid  # skip captions with missing/empty id — sel would be invalid
     ]
-    if graphic_windows and caption_ids:
-        lines.append("  // ── Caption suppression during graphic cards ──")
-        cap_sel = ", ".join(
-            f'.card-host[data-card-id="{cid}"]' for cid in caption_ids
-        )
-        for gs, ge in graphic_windows:
+    # Short-form captions: every graphic card hides them (unchanged).
+    # Long-form captions: only the cards that occupy their space do.
+    _short_cap_ids = [cid for cid in caption_ids if not cid.startswith("capm-")]
+    _long_cap_ids = [cid for cid in caption_ids if cid.startswith("capm-")]
+    _blocking_windows = [
+        (round(float(c.get("startSec", 0)), 3), round(float(c.get("endSec", 0)), 3))
+        for c in cards if c.get("type") != "caption" and _blocks_long_caption(c)
+    ]
+
+    def _emit_suppression(ids: list, windows: list) -> None:
+        if not ids or not windows:
+            return
+        cap_sel = ", ".join(f'.card-host[data-card-id="{cid}"]' for cid in ids)
+        for gs, ge in windows:
             lines.append(
                 f'  tl.to(\'{cap_sel}\', '
                 f'{{ opacity: 0, duration: 0.15, ease: "power2.in" }}, '
@@ -8412,6 +8452,19 @@ def _build_timeline_js(
                 f'  tl.to(\'{cap_sel}\', '
                 f'{{ opacity: 1, duration: 0.20, ease: "power2.out" }}, '
                 f'{ge:.4f});'
+            )
+
+    if graphic_windows and caption_ids:
+        lines.append("  // ── Caption suppression during graphic cards ──")
+        _emit_suppression(_short_cap_ids, graphic_windows)
+        _emit_suppression(_long_cap_ids, _blocking_windows)
+        if _long_cap_ids:
+            print(
+                f"[COMPOSE] caption suppression: {len(_short_cap_ids)} short-form"
+                f" caption(s) under all {len(graphic_windows)} card(s),"
+                f" {len(_long_cap_ids)} long-form caption(s) under"
+                f" {len(_blocking_windows)} space-taking card(s) only",
+                flush=True,
             )
         lines.append("")
 
