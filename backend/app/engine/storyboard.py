@@ -517,6 +517,270 @@ def _segment_captions(
 
 # ── Prosodic emphasis helpers ──────────────────────────────────────────────────
 
+# Caption moments are 2-5s windows the planner marks on seven semantic triggers
+# (hook, concept, list item, stat, mantra, marker, question) — roughly one per
+# 8-12s, as opposed to the word-by-word captions short-form uses.
+_CAPM_MIN_DUR_S  = 1.2    # shorter than this cannot be read
+_CAPM_MAX_DUR_S  = 6.0    # the contract asks for 2-5s; cap the outliers
+_CAPM_GONE_DUR_S = 0.15   # output span this small means the speech was cut away
+
+
+# ── Long-form caption exclusion against graphic cards ─────────────────────────
+# Both text layers pick the same moments — the memorable, the quotable, the
+# numeric — so a caption and a card land on the same beat. compose.py then fades
+# every caption out while any graphic card is on screen and back in afterwards:
+# measured end to end on a real run, 8 of 13 captions were cut mid-display and
+# visible caption text fell from 28% to 16%. Resolving the conflict here, before
+# compose, removes the flicker without touching compose or the short-form track.
+#
+# The two rules designed for this (first written into the legacy FFmpeg path,
+# which never runs in production):
+#   - zone: cards that occupy the centre, the full canvas or the caption band
+#     block a caption outright;
+#   - redundancy: a caption beside a card of the same content type is the same
+#     thing on screen twice, even when they do not overlap spatially.
+_CAPTION_BLOCKING_ZONES = frozenset({"fullscreen", "video-overlay", "lower-third"})
+_CAPTION_BLOCKING_STYLES = frozenset({
+    "prim_split_compare", "prim_journey_map", "prim_cinematic_reveal",
+    "prim_ascension_reveal", "prim_shatter_truth", "prim_split_stage",
+    "prim_confession_frame", "prim_numbered_rule", "prim_anecdote_frame",
+})
+_CAPTION_STYLE_TWINS: dict[str, frozenset] = {
+    "stat":      frozenset({"stat", "number_hero", "prim_stat_counter", "income_reveal",
+                            "client_result_number", "percentage_split", "success_metric_badge"}),
+    "quote":     frozenset({"quote", "attributed_quote", "testimonial", "quote_carousel"}),
+    "list_item": frozenset({"list", "checklist", "pros_cons", "carousel"}),
+    "concept":   frozenset({"definition", "concept_definition"}),
+    "mantra":    frozenset({"key_phrase", "callout"}),
+}
+# compose.py fades captions under EVERY graphic card, whatever its zone, so a
+# zone-only rule would still leave captions blinking under side panels. Until that
+# suppression becomes zone-aware, every graphic card blocks. Flip to False only
+# together with that change.
+_CAPTION_ANY_CARD_BLOCKS = True
+# compose's fade takes 0.15-0.20s; keep captions clear of card edges by this much.
+_CAPTION_CARD_MARGIN_S = 0.25
+
+
+def _exclude_captions_against_cards(
+    caption_cards: list[dict],
+    graphic_cards: list[dict],
+    any_card_blocks: bool = _CAPTION_ANY_CARD_BLOCKS,
+) -> list[dict]:
+    """Resolve long-form caption/card collisions before compose.
+
+    A caption partly covered by a blocking card is SHORTENED to its longest free
+    stretch when that stretch is still readable, rather than dropped. Measured on a
+    real run (13 captions, 15 cards): dropping removed the flicker but halved the
+    visible caption text (16% -> 8%); shortening also removes it and keeps 13%, 9
+    captions of 13. Only captions fully covered, left unreadably short, or
+    duplicating a card's content are dropped.
+    """
+    if not caption_cards or not graphic_cards:
+        return caption_cards
+    _m = _CAPTION_CARD_MARGIN_S
+    kept: list[dict] = []
+    n_covered = n_short = n_twin = n_trimmed = 0
+    for _cap in caption_cards:
+        _cs, _ce = float(_cap["startSec"]), float(_cap["endSec"])
+        _overlapping = [
+            _g for _g in graphic_cards
+            if float(_g.get("startSec", 0)) - _m < _ce
+            and float(_g.get("endSec", 0)) + _m > _cs
+        ]
+        if not _overlapping:
+            kept.append(_cap)
+            continue
+
+        # Redundancy first: the same content already on screen is dropped outright,
+        # whatever the zone — shortening would still show it twice.
+        _twins = _CAPTION_STYLE_TWINS.get(str(_cap.get("capStyle", "")), frozenset())
+        _twin = next((
+            _g for _g in _overlapping
+            if (_g.get("contentHints") or {}).get("style", "") in _twins
+        ), None) if _twins else None
+        if _twin is not None:
+            n_twin += 1
+            print(
+                f"[CAPTIONS LONG] dropped {_cap['id']} {_cs:.2f}-{_ce:.2f}s"
+                f" style={_cap.get('capStyle', '?')!r} — same content already on card"
+                f" {_twin.get('id', '?')} ({(_twin.get('contentHints') or {}).get('style', '?')})",
+                flush=True,
+            )
+            continue
+
+        _blocking = sorted(
+            (float(_g.get("startSec", 0)) - _m, float(_g.get("endSec", 0)) + _m)
+            for _g in _overlapping
+            if any_card_blocks
+            or _g.get("zone", "") in _CAPTION_BLOCKING_ZONES
+            or (_g.get("contentHints") or {}).get("style", "") in _CAPTION_BLOCKING_STYLES
+        )
+        if not _blocking:
+            kept.append(_cap)
+            continue
+
+        # Longest stretch of [_cs, _ce] outside every blocking window.
+        _free: list[tuple[float, float]] = []
+        _cursor = _cs
+        for _bs, _be in _blocking:
+            if _bs > _cursor:
+                _free.append((_cursor, min(_bs, _ce)))
+            _cursor = max(_cursor, _be)
+        if _cursor < _ce:
+            _free.append((_cursor, _ce))
+        _free = [(_a, _b) for _a, _b in _free if _b > _a]
+        if not _free:
+            n_covered += 1
+            print(f"[CAPTIONS LONG] dropped {_cap['id']} {_cs:.2f}-{_ce:.2f}s — fully covered by cards", flush=True)
+            continue
+        _fs, _fe = max(_free, key=lambda _w: _w[1] - _w[0])
+        if _fe - _fs < _CAPM_MIN_DUR_S:
+            n_short += 1
+            print(
+                f"[CAPTIONS LONG] dropped {_cap['id']} {_cs:.2f}-{_ce:.2f}s — free stretch"
+                f" {_fe - _fs:.2f}s < {_CAPM_MIN_DUR_S}s readable minimum",
+                flush=True,
+            )
+            continue
+
+        _words = _cap.get("words") or []
+        _span = (_fe - _fs) / max(1, len(_words))
+        _shortened = {
+            **_cap,
+            "startSec": round(_fs, 3),
+            "endSec": round(_fe, 3),
+            "words": [
+                {**_w, "start": round(_fs + _k * _span, 4), "end": round(_fs + (_k + 1) * _span, 4)}
+                for _k, _w in enumerate(_words)
+            ],
+        }
+        n_trimmed += 1
+        print(
+            f"[CAPTIONS LONG] shortened {_cap['id']} {_cs:.2f}-{_ce:.2f}s -> {_fs:.2f}-{_fe:.2f}s"
+            f" to clear card(s) on screen",
+            flush=True,
+        )
+        kept.append(_shortened)
+
+    print(
+        f"[CAPTIONS LONG] card exclusion: {len(caption_cards)} -> {len(kept)}"
+        f" ({n_trimmed} shortened; dropped: {n_twin} redundant, {n_covered} fully covered,"
+        f" {n_short} too short; any_card_blocks={any_card_blocks})",
+        flush=True,
+    )
+    return kept
+
+
+def _moment_caption_cards(
+    caption_moments: list[dict],
+    timing_map: TimingMap,
+    trimmed_duration: float,
+    emphasis_words: list[str],
+) -> list[dict]:
+    """Turn the planner's caption_moments into caption cards, in OUTPUT time.
+
+    The moments carry SOURCE timestamps. Measured on a real cutting run: 12 of 12
+    fell inside a keep_segment window, and 7 of 12 started past the end of the
+    finished video — impossible for output-time values. Every other planner time
+    list in this path is converted the same way; the prompt's claim that these are
+    "in output timeline" is simply wrong, and is corrected separately.
+
+    A moment whose speech was cut away collapses to a zero-length output span
+    (both ends snap to the same cut boundary). Those are dropped rather than
+    stretched: the words are no longer in the video, so the caption would sit over
+    speech it does not belong to.
+    """
+    if not caption_moments:
+        return []
+
+    _emph = {w.lower().strip(".,!?;:'\"") for w in (emphasis_words or []) if w}
+    cards: list[dict] = []
+    n_invalid = n_gone = n_stretched = n_capped = 0
+
+    for _m in caption_moments:
+        if not isinstance(_m, dict):
+            n_invalid += 1
+            continue
+        _text = str(_m.get("text", "")).strip()
+        try:
+            _src_s = float(_m.get("start", 0))
+            _src_e = float(_m.get("end", _src_s))
+        except (TypeError, ValueError):
+            n_invalid += 1
+            continue
+        if not _text or _src_e <= _src_s:
+            n_invalid += 1
+            continue
+
+        _out_s = timing_map.source_to_output(_src_s)
+        _out_e = timing_map.source_to_output(_src_e)
+        if _out_e - _out_s < _CAPM_GONE_DUR_S:
+            n_gone += 1
+            continue
+        if _out_e - _out_s < _CAPM_MIN_DUR_S:
+            _out_e = _out_s + _CAPM_MIN_DUR_S
+            n_stretched += 1
+        if _out_e - _out_s > _CAPM_MAX_DUR_S:
+            _out_e = _out_s + _CAPM_MAX_DUR_S
+            n_capped += 1
+        _out_s = max(0.0, _out_s)
+        _out_e = min(trimmed_duration, _out_e)
+        if _out_e - _out_s < _CAPM_GONE_DUR_S:
+            n_gone += 1
+            continue
+
+        # Per-word spans, distributed evenly across the window. compose.py renders
+        # caption words as static spans (no karaoke sweep on this track), so these
+        # timings are for consumers that expect the short-form card shape.
+        _tokens = [t for t in _text.split() if t]
+        _moment_emph = {
+            str(w).lower().strip(".,!?;:'\"")
+            for w in (_m.get("emphasis_words") or [])
+            if str(w).strip()
+        }
+        _span = (_out_e - _out_s) / max(1, len(_tokens))
+        _words: list[dict] = []
+        for _i, _tok in enumerate(_tokens):
+            _bare = _tok.lower().strip(".,!?;:'\"")
+            _words.append({
+                "text": _tok,
+                "start": round(_out_s + _i * _span, 4),
+                "end": round(_out_s + (_i + 1) * _span, 4),
+                "emphasis": _bare in _moment_emph or _bare in _emph,
+                "category": "",
+                "seg_start": _i == 0,
+            })
+
+        cards.append({
+            "id": f"capm-{len(cards) + 1:03d}",
+            "type": "caption",
+            "startSec": round(_out_s, 3),
+            "endSec": round(_out_e, 3),
+            "zone": "lower-third",
+            # The semantic trigger, kept for the per-style treatment in compose.
+            "capStyle": str(_m.get("style", "") or ""),
+            "words": _words,
+        })
+
+    cards.sort(key=lambda c: float(c["startSec"]))
+    _cov = sum(float(c["endSec"]) - float(c["startSec"]) for c in cards)
+    print(
+        f"[CAPTIONS LONG] {len(caption_moments)} moment(s) -> {len(cards)} card(s)"
+        f" | dropped: {n_gone} cut away, {n_invalid} invalid"
+        f" | {n_stretched} stretched to {_CAPM_MIN_DUR_S}s, {n_capped} capped at {_CAPM_MAX_DUR_S}s"
+        f" | text on screen {_cov:.1f}s of {trimmed_duration:.1f}s"
+        f" ({100 * _cov / max(trimmed_duration, 0.1):.0f}%)",
+        flush=True,
+    )
+    if cards:
+        _styles: dict[str, int] = {}
+        for _c in cards:
+            _styles[_c["capStyle"] or "?"] = _styles.get(_c["capStyle"] or "?", 0) + 1
+        print(f"[CAPTIONS LONG] styles: {_styles}", flush=True)
+    return cards
+
+
 def _prost_median(values: list[float]) -> float:
     if not values:
         return 0.0
@@ -3443,6 +3707,7 @@ def generate_storyboard(
     editing_style: str,
     format_hint: str,
     timing_map: TimingMap,
+    caption_moments: list[dict] | None = None,
     language: str = "en",
     style_pack: str = "lean_glass",
     subject_side: str | None = None,
@@ -3894,9 +4159,17 @@ def generate_storyboard(
     #      on-screen text since _beat.get("beat") was used as the "title" param.
     # Re-enable and redesign when a real speaker-ID data source is available.
 
-    # Generate caption cards mechanically (long format: no captions)
+    # Long format: selective caption cards from the planner's semantic moments.
+    # Their collisions with graphic cards are resolved at the very end of this
+    # function, once the graphic list is final. Short format keeps the word-by-word
+    # track, which on a 30-minute video would be continuous subtitles.
     if format_hint == "long":
-        caption_cards = []
+        caption_cards = _moment_caption_cards(
+            caption_moments or [],
+            timing_map,
+            trimmed_duration,
+            caption_emphasis_words,
+        )
     else:
         caption_cards = _segment_captions(
             remapped_words=remapped_words,
@@ -4152,6 +4425,13 @@ def generate_storyboard(
                         f"[FULL-COVER] Overlap remains after exclusion pass: "
                         f"{_c['id']} [{_c['startSec']}, {_c['endSec']}] overlaps [{_ws}, {_we}]"
                     )
+
+    # Long-form caption/card collisions, resolved on the FINAL graphic list. The
+    # list is still changing above this point: GAP-FILL and RHYTHM-SPLIT add
+    # cards, the FULL-COVER pass removes some. Run earlier, the exclusion missed a
+    # gap-fill card that then blanked a caption entirely on a real render.
+    if format_hint == "long":
+        caption_cards = _exclude_captions_against_cards(caption_cards, graphic_cards)
 
     storyboard = {
         "composition": {

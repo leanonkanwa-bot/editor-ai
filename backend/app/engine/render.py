@@ -2779,6 +2779,10 @@ def _render_hyperframes(
         keep_segments=_keep_segs,
         key_lines=plan.key_lines or [],
         caption_emphasis_words=plan.caption_emphasis_words or [],
+        # Long-form captions: the planner's semantic moments become caption cards
+        # on compose.py's existing caption track. They carry SOURCE timestamps and
+        # are converted inside the storyboard.
+        caption_moments=plan.caption_moments or [],
         word_categories=plan.word_categories or {},
         brand_color=brand_color,
         content_type=content_type,
