@@ -3377,7 +3377,10 @@ def _render_hyperframes(
     # Use the LOCAL hyperframes CLI binary (not npx/global) so the
     # manifest.json sibling resolution works correctly.
     _hf_cli = Path(__file__).resolve().parent / "node_modules" / ".bin" / "hyperframes"
-    if not _hf_cli.exists():
+    # On Windows npm still writes the extensionless .bin/hyperframes, but it is a
+    # POSIX shell shim: executing it raises WinError 193 ("not a valid Win32
+    # application"). Go straight to the JS entry point through node there.
+    if _os.name == "nt" or not _hf_cli.exists():
         _hf_cli = Path(__file__).resolve().parent / "node_modules" / "hyperframes" / "dist" / "cli.js"
     _hf_cmd = ["node", str(_hf_cli)] if _hf_cli.suffix == ".js" else [str(_hf_cli)]
     print(f"[HF] CLI path: {_hf_cli} (exists={_hf_cli.exists()})")
