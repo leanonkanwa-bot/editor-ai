@@ -1170,6 +1170,9 @@ form.addEventListener("submit", async (e) => {
   statusCard?.classList.remove("hidden");
   statusCard?.scrollIntoView({ behavior: "smooth", block: "center" });
   document.getElementById("quotaUpgradeBtn")?.remove();
+  // A new video supersedes the previous result: from now on the page must never
+  // offer the old video as "your last video" if this one fails.
+  _forgetPastJobs();
   setStatus("queued", "Démarrage de l'upload…", 0);
   submitBtn.disabled = true;
   submitBtn.querySelector(".btn-label").textContent = "Traitement…";
@@ -1483,13 +1486,13 @@ async function poll(jobId) {
       const job = await res.json();
       _lastStatus = job.status;
       setStatus(job.status, job.message || "", job.progress || 0);
-      if (job.status === "done") return showResult(jobId, job.result);
+      if (job.status === "done") return showResult(jobId, job.result, { completedAt: job.completed_at });
       if (job.status === "ready_for_review") {
         setStatus("rendering", "Lancement du rendu…", 70);
         try { await apiFetch(`/api/jobs/${jobId}/approve`, { method: "POST" }); } catch (_) {}
         continue;
       }
-      if (job.status === "error") return fail(job.message || "Une erreur est survenue — réessayez.", jobId);
+      if (job.status === "error") return fail(_jobErrorText(job.message), jobId);
     } catch (pollErr) {
       console.warn("poll iteration error:", pollErr);
     }
@@ -1533,20 +1536,68 @@ function showQuotaExceeded(usage) {
   }
 }
 
+// Server messages for failed jobs, as the client should read them.
+const _JOB_ERROR_TEXTS = {
+  "Phase 1 (analysis) failed.": "L'analyse de votre vidéo a échoué.",
+  "Phase 2 (render) failed.": "Le rendu de votre vidéo a échoué.",
+};
+function _jobErrorText(message) {
+  const m = (message || "").trim();
+  if (_JOB_ERROR_TEXTS[m]) return _JOB_ERROR_TEXTS[m];
+  // Already written for the client (French): keep it. Raw technical text: hide it.
+  if (/[éèêàùçÉ]|Relancer|re-upload/i.test(m)) return m;
+  return "Votre vidéo n'a pas pu être créée.";
+}
+
+function _fmtWhen(unixSeconds) {
+  const d = new Date(Number(unixSeconds) * 1000);
+  if (!unixSeconds || isNaN(d)) return "";
+  const p = (n) => String(n).padStart(2, "0");
+  return `le ${p(d.getDate())}/${p(d.getMonth() + 1)} à ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+// The job the page may offer on return: the latest attempt only. A new job wipes
+// both, a failure wipes the older success, a success wipes the older failure.
+function _forgetPastJobs() {
+  localStorage.removeItem("last_completed_job_id");
+  localStorage.removeItem("last_failed_job");
+  $("retryBlock")?.classList.add("hidden");
+  document.getElementById("resumeBanner")?.remove();
+}
+
+function _rememberFailedJob(jobId, message, createdAt) {
+  localStorage.removeItem("last_completed_job_id");
+  try {
+    localStorage.setItem("last_failed_job", JSON.stringify({
+      id: jobId, message, at: createdAt || Date.now() / 1000,
+    }));
+  } catch {}
+}
+
 function fail(msg, jobId) {
   localStorage.removeItem("active_job_id");
   if (submitBtn) { submitBtn.disabled = false; submitBtn.querySelector(".btn-label").textContent = "Éditer ma vidéo"; submitBtn.classList.remove("loading"); }
-  setStatus("error", msg, 100);
+  // A job the server still knows can be re-run from the file it kept: offer it for
+  // every failure (the server answers "re-upload" if the file is gone).
+  const canRetry = !!jobId;
+  const shown = canRetry && !/Relancer/.test(msg || "")
+    ? `${msg} Votre fichier est conservé — cliquez sur « Relancer ma vidéo ».`
+    : msg;
+  setStatus("error", shown, 100);
+  if (jobId) _rememberFailedJob(jobId, msg);
   const retryBlock = $("retryBlock");
   if (retryBlock) {
-    const canRetry = !!(jobId && msg?.includes("redémarré"));
     retryBlock.classList.toggle("hidden", !canRetry);
     if (canRetry) _retryJobId = jobId;
   }
 }
 
-$("retryBtn")?.addEventListener("click", async () => {
-  if (!_retryJobId) return;
+$("retryBtn")?.addEventListener("click", () => startRetry(_retryJobId));
+
+async function startRetry(jobIdToRetry) {
+  if (!jobIdToRetry) return;
+  _retryJobId = jobIdToRetry;
+  localStorage.removeItem("last_failed_job");
   $("retryBlock")?.classList.add("hidden");
   statusCard?.classList.remove("hidden");
   setStatus("queued", "Nouvelle tentative avec le fichier existant…", 5);
@@ -1557,18 +1608,23 @@ $("retryBtn")?.addEventListener("click", async () => {
     const { job_id } = await res.json();
     poll(job_id).catch(e => { console.error("poll crashed:", e); fail("Erreur inattendue pendant le suivi du job."); });
   } catch (err) { fail(`Erreur retry: ${err.message}`); }
-});
+}
 
 // ── Job-resume on page reload ─────────────────────────────────────────────────
 // Two recovery paths:
 // 1. active_job_id — set at poll() start, cleared by showResult()/fail().
 //    Covers refresh during an active render or while the tab was inactive.
-// 2. last_completed_job_id — set by showResult(), never auto-cleared.
+// 2. last_completed_job_id — set by showResult(), cleared when a new job starts or fails.
 //    Covers the post-result refresh case: user saw the result, refreshed,
 //    active_job_id was already gone but the video is still downloadable.
+// 3. last_failed_job — set by fail(); on return it shows a red banner, never an older video.
 (async function _resumeActiveJob() {
   const savedJobId = localStorage.getItem("active_job_id");
   if (!savedJobId) {
+    // The latest attempt failed: say so, never fall back to an older video.
+    let lastFailed = null;
+    try { lastFailed = JSON.parse(localStorage.getItem("last_failed_job") || "null"); } catch {}
+    if (lastFailed?.id) { _showFailedBanner(lastFailed); return; }
     // No active render — check if the user refreshed after seeing a completed result.
     const lastJobId = localStorage.getItem("last_completed_job_id");
     if (!lastJobId) return;
@@ -1593,13 +1649,14 @@ $("retryBtn")?.addEventListener("click", async () => {
       "background:#0a2318;border-bottom:1px solid rgba(34,197,94,.22)",
       "color:rgba(34,197,94,.9)",
     ].join(";");
-    _b.innerHTML = `<span>Votre dernière vidéo est toujours disponible</span><div style="display:flex;gap:.5rem"><button id="resumeBannerBtn" style="${_btnStyle}">Voir le résultat</button><button id="resumeBannerClose" style="${_btnStyle}">✕</button></div>`;
+    const _when = _fmtWhen(ld.completed_at);
+    _b.innerHTML = `<span>Votre dernière vidéo${_when ? ` (créée ${_when})` : ""} est toujours disponible</span><div style="display:flex;gap:.5rem"><button id="resumeBannerBtn" style="${_btnStyle}">Voir le résultat</button><button id="resumeBannerClose" style="${_btnStyle}">✕</button></div>`;
     document.body.prepend(_b);
     document.getElementById("resumeBannerBtn")?.addEventListener("click", () => {
       _b.remove();
       localStorage.removeItem("last_completed_job_id");
       switchSection("editorArea");
-      showResult(lastJobId, ld.result);
+      showResult(lastJobId, ld.result, { completedAt: ld.completed_at, reopened: true });
     });
     document.getElementById("resumeBannerClose")?.addEventListener("click", () => {
       _b.remove();
@@ -1613,7 +1670,14 @@ $("retryBtn")?.addEventListener("click", async () => {
     if (!jr.ok) { localStorage.removeItem("active_job_id"); return; }
     jdata = await jr.json();
   } catch { localStorage.removeItem("active_job_id"); return; }
-  if (jdata.status === "error") { localStorage.removeItem("active_job_id"); return; }
+  if (jdata.status === "error") {
+    // Failed while the page was closed: tell the client instead of forgetting it.
+    localStorage.removeItem("active_job_id");
+    const failed = { id: savedJobId, message: _jobErrorText(jdata.message), at: jdata.created_at };
+    _rememberFailedJob(failed.id, failed.message, failed.at);
+    _showFailedBanner(failed);
+    return;
+  }
 
   // Build a compact banner anchored at the top of the viewport.
   const banner = document.createElement("div");
@@ -1641,7 +1705,7 @@ $("retryBtn")?.addEventListener("click", async () => {
     document.getElementById("resumeBannerBtn")?.addEventListener("click", () => {
       banner.remove();
       switchSection("editorArea");
-      showResult(savedJobId, jdata.result);
+      showResult(savedJobId, jdata.result, { completedAt: jdata.completed_at });
     });
   } else {
     // Still rendering — resume polling silently; show a live-updating banner.
@@ -1689,9 +1753,58 @@ function spawnConfetti() {
   }
 }
 
-async function showResult(jobId, result) {
+function _showFailedBanner(failed) {
+  document.getElementById("resumeBanner")?.remove();
+  const btn = [
+    "background:rgba(255,92,122,.15);border:1px solid rgba(255,92,122,.45)",
+    "color:#ff8fa3;border-radius:6px;padding:.2rem .65rem",
+    "font-size:.72rem;font-weight:600;cursor:pointer;font-family:var(--font)",
+  ].join(";");
+  const b = document.createElement("div");
+  b.id = "resumeBanner";
+  b.setAttribute("role", "alert");
+  b.style.cssText = [
+    "position:fixed;top:0;left:0;right:0;z-index:9999",
+    "display:flex;align-items:center;justify-content:space-between;gap:.75rem",
+    "padding:.45rem 1rem;font-size:.8rem;font-family:var(--font)",
+    "background:#2a0d14;border-bottom:1px solid rgba(255,92,122,.35);color:#ff8fa3",
+  ].join(";");
+  const when = _fmtWhen(failed.at);
+  const span = document.createElement("span");
+  span.textContent = `Votre vidéo lancée ${when || "récemment"} n'a pas pu être créée. ${failed.message || ""}`.trim();
+  const actions = document.createElement("div");
+  actions.style.cssText = "display:flex;gap:.5rem;flex-shrink:0";
+  actions.innerHTML = `<button id="failedBannerRetry" style="${btn}">Relancer ma vidéo</button><button id="failedBannerClose" style="${btn}">✕</button>`;
+  b.append(span, actions);
+  document.body.prepend(b);
+  document.getElementById("failedBannerRetry")?.addEventListener("click", () => {
+    b.remove();
+    switchSection("editorArea");
+    resultCard?.classList.add("hidden");
+    statusCard?.classList.remove("hidden");
+    statusCard?.scrollIntoView({ behavior: "smooth", block: "center" });
+    startRetry(failed.id);
+  });
+  document.getElementById("failedBannerClose")?.addEventListener("click", () => {
+    b.remove();
+    localStorage.removeItem("last_failed_job");
+  });
+}
+
+async function showResult(jobId, result, opts = {}) {
+  // reopened: an older result shown again (banner) — not a new video. It gets its
+  // date, and none of the "your video is ready" effects.
+  const _fresh = !opts.reopened;
   localStorage.removeItem("active_job_id");
+  localStorage.removeItem("last_failed_job");
   localStorage.setItem("last_completed_job_id", jobId);
+  const _meta = $("resultMeta");
+  if (_meta) {
+    const _when = _fmtWhen(opts.completedAt);
+    _meta.textContent = _when
+      ? `Vidéo créée ${_when}${_fresh ? "" : " — résultat précédent"}`
+      : (_fresh ? "Vidéo créée à l'instant" : "Résultat précédent");
+  }
   document.getElementById("resumeBanner")?.remove();
   if (submitBtn) { submitBtn.disabled = false; submitBtn.querySelector(".btn-label").textContent = "Éditer ma vidéo"; submitBtn.classList.remove("loading"); }
   previewCard?.classList.add("hidden");
@@ -1699,10 +1812,10 @@ async function showResult(jobId, result) {
   resultCard?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   // Confetti!
-  setTimeout(spawnConfetti, 300);
+  if (_fresh) setTimeout(spawnConfetti, 300);
 
   // Browser notification (BUILD 8)
-  setTimeout(() => {
+  if (_fresh) setTimeout(() => {
     try {
       if (
         "Notification" in window &&
@@ -1763,7 +1876,7 @@ async function showResult(jobId, result) {
 
   // ── Save to localStorage with retention_score ────────────────────────────
   let _isFirstRender = false;
-  try {
+  if (_fresh) try {
     const videos = JSON.parse(localStorage.getItem("edited_videos") || "[]");
     _isFirstRender = videos.length === 0;
     const selectedFormat = document.querySelector('input[name="format_hint"]:checked')?.value || "auto";
@@ -1817,7 +1930,7 @@ async function showResult(jobId, result) {
   // Features 17 & 20
   generateChapters(result, jobId);
   recordPerfPrediction(jobId, result);
-  addNotification('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--salmon)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>', "Vidéo prête !", "Votre vidéo éditée est disponible au téléchargement.");
+  if (_fresh) addNotification('<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--salmon)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>', "Vidéo prête !", "Votre vidéo éditée est disponible au téléchargement.");
 }
 
 let _currentJobId  = null;

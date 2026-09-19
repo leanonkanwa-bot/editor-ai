@@ -937,11 +937,15 @@
             </div>
             <p class="status-msg" id="statusMsg"></p>
             <div class="bar"><div id="barFill"></div></div>
+            <div id="retryBlock" class="hidden" style="margin-top:.8rem">
+              <button type="button" id="retryBtn" style="padding:.5rem 1.1rem;border-radius:8px;border:none;background:#FF7751;color:#fff;font-family:var(--font);font-size:.85rem;font-weight:600;cursor:pointer">Relancer ma vidéo</button>
+            </div>
           </div>
 
           <!-- ── PREVIEW (ready_for_review) ──────────────────────── -->
           <!-- ── RESULT ──────────────────────────────────────────── -->
           <div class="card hidden" id="resultCard" style="margin-top:1rem">
+            <p id="resultMeta" style="margin:0 0 .6rem;font-size:.8rem;opacity:.75"></p>
             <video id="player" controls playsinline></video>
 
             <a id="downloadLink" href="#" download class="btn-download-fmt fmt-primary" style="display:flex;align-items:center;justify-content:center;margin-bottom:1rem">
