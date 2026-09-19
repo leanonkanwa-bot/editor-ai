@@ -48,6 +48,50 @@ from app.engine.template_engine import apply_template, get_template
 from app.engine.transcribe import AudioMissingError, transcribe, unload_model
 from app.engine.tracking import track_subject
 
+# Appended to the planner instructions for the single retry after an unreadable
+# JSON answer, so the second attempt is told what went wrong.
+_PLAN_JSON_RETRY_NOTE = (
+    "\n\nIMPORTANT — FORMAT: the previous answer to this request could not be parsed"
+    " as JSON. The JSON block must be strictly valid: double quotes around every key"
+    " and every string, any double quote inside a string escaped, no trailing comma,"
+    " no comment, and the whole object closed."
+)
+
+
+def _is_unreadable_plan_json(err: BaseException) -> bool:
+    """True when plan_edit failed because the model's JSON could not be read.
+
+    _extract_json raises json.JSONDecodeError (a ValueError) when parsing and
+    repair both fail, and a plain ValueError when no JSON is found at all.
+    """
+    import json as _json
+    return isinstance(err, _json.JSONDecodeError) or str(err).startswith("Agent did not return JSON")
+
+
+def _plan_with_retry(job_id: str, transcript: dict, instructions: str, **plan_kwargs):
+    """plan_edit, retried once if the model's answer is not readable as JSON.
+
+    One unreadable JSON answer used to fail the whole job before any render:
+    2 of 38 jobs since 29/08, the latest a client re-render. Only parse failures
+    are retried, once; any other error, or a second unreadable answer, still fails.
+    """
+    try:
+        return plan_edit(transcript, instructions, **plan_kwargs)
+    except ValueError as err:
+        if not _is_unreadable_plan_json(err):
+            raise
+        print(
+            f"[PLAN-RETRY] planner answer not readable as JSON"
+            f" ({type(err).__name__}: {' '.join(str(err).split())[:160]})"
+            f" — one more attempt with an explicit valid-JSON instruction",
+            flush=True,
+        )
+    store.update(job_id, message="Analyse : nouvel essai en cours…")
+    plan = plan_edit(transcript, instructions + _PLAN_JSON_RETRY_NOTE, **plan_kwargs)
+    print("[PLAN-RETRY] second attempt parsed OK", flush=True)
+    return plan
+
+
 # Purge work_dirs older than 2 days at module load (i.e. server startup).
 def _purge_old_work_dirs() -> None:
     _work_root = settings.work_dir
@@ -1171,9 +1215,7 @@ def run_job(
                 flush=True,
             )
 
-        plan = plan_edit(
-            _transcript_for_planning,
-            enriched_instructions,
+        _plan_kwargs = dict(
             format_hint=format_hint,
             brand_color=brand_color,
             caption_color=caption_color,
@@ -1184,6 +1226,7 @@ def run_job(
             editing_style=editing_style,
             narrative_map=_narrative_map if _narrative_map else None,
         )
+        plan = _plan_with_retry(job_id, _transcript_for_planning, enriched_instructions, **_plan_kwargs)
         print(f"[TIMING] planning: {time.perf_counter()-_t:.1f}s", flush=True)
 
         # ── Step 6.5: LLM editorial layer ────────────────────────────────────
