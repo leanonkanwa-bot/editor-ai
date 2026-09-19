@@ -734,6 +734,16 @@ def _moment_caption_cards(
         # caption words as static spans (no karaoke sweep on this track), so these
         # timings are for consumers that expect the short-form card shape.
         _tokens = [t for t in _text.split() if t]
+        # The planner writes most moments in lower case -- 26 of 28 on a real
+        # 7-minute job -- and a caption on screen reads as a sentence, so it
+        # starts with a capital. Only the first letter of the first word changes
+        # (after any leading quote or apostrophe); the rest of the text and every
+        # timing stay exactly as they are.
+        if _tokens:
+            _t0 = _tokens[0]
+            _k = next((_i for _i, _ch in enumerate(_t0) if _ch.isalpha()), None)
+            if _k is not None and _t0[_k].islower():
+                _tokens[0] = _t0[:_k] + _t0[_k].upper() + _t0[_k + 1:]
         _moment_emph = {
             str(w).lower().strip(".,!?;:'\"")
             for w in (_m.get("emphasis_words") or [])
