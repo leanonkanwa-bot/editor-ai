@@ -21,6 +21,7 @@ from __future__ import annotations
 import random
 import shlex
 import subprocess
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -54,19 +55,70 @@ AUDIO_HANDLE_S = 0.08   # 80ms audio handle kept before/after each cut edge
 
 
 
-def _kill_orphan_chrome() -> None:
-    """Kill any lingering Chrome/Chromium processes to prevent memory accumulation."""
-    import os as _os
-    try:
-        result = subprocess.run(
-            ["pkill", "-9", "-f", "chrome.*headless"],
-            capture_output=True, timeout=5,
+# Session ids of the HyperFrames CLI runs currently in flight, across renders.
+# Each run is started with start_new_session=True, so its pid is also the session
+# id inherited by every Chrome process it spawns, even after reparenting.
+_ACTIVE_HF_SESSIONS: set[int] = set()
+_ACTIVE_HF_LOCK = threading.Lock()
+
+
+def _kill_orphan_chrome(session_id: int | None = None) -> None:
+    """Kill Chrome left behind by a failed HyperFrames run.
+
+    With one render in flight the broad `pkill -f chrome.*headless` sweep is
+    safe and also catches strays that left their session, so it is kept. With
+    renders running concurrently it would kill the OTHER render's browsers and
+    abort a healthy video, so only the processes of the given session are killed.
+    """
+    with _ACTIVE_HF_LOCK:
+        _others = _ACTIVE_HF_SESSIONS - ({session_id} if session_id else set())
+    if not _others:
+        try:
+            result = subprocess.run(
+                ["pkill", "-9", "-f", "chrome.*headless"],
+                capture_output=True, timeout=5,
+            )
+            if result.returncode == 0:
+                print("[CLEANUP] Killed orphan Chrome processes")
+        except Exception:
+            pass
+        return
+    if session_id is None:
+        print(
+            f"[CLEANUP] skipped broad Chrome sweep: {len(_others)} other render(s)"
+            " in flight and no session to scope to",
+            flush=True,
         )
-        killed = result.returncode == 0
-        if killed:
-            print("[CLEANUP] Killed orphan Chrome processes")
-    except Exception:
-        pass
+        return
+    import os as _os
+    import signal as _sig
+    _killed = 0
+    try:
+        _procs = list(Path("/proc").iterdir())
+    except OSError:
+        return
+    for _d in _procs:
+        if not _d.name.isdigit():
+            continue
+        try:
+            _stat = (_d / "stat").read_text()
+            # comm sits in parentheses and may contain spaces; fields after ')'
+            # are: state ppid pgrp session ...
+            _comm = _stat[_stat.index("(") + 1:_stat.rindex(")")]
+            _sid = int(_stat[_stat.rindex(")") + 2:].split()[3])
+        except (OSError, ValueError, IndexError):
+            continue
+        if _sid == session_id and "chrom" in _comm:
+            try:
+                _os.kill(int(_d.name), _sig.SIGKILL)
+                _killed += 1
+            except OSError:
+                pass
+    print(
+        f"[CLEANUP] Killed {_killed} Chrome process(es) of session {session_id};"
+        f" {len(_others)} other render(s) left untouched",
+        flush=True,
+    )
 
 
 def _run(cmd: list[str]) -> None:
@@ -3322,10 +3374,22 @@ def _render_hyperframes(
         except (FileNotFoundError, ValueError):
             return None
 
+    # Up to settings.max_concurrent_renders renders share the container. Each
+    # gets an equal, FIXED share of the PID budget, computed from pids.max and
+    # that setting only -- never from the live pids.current. Two renders
+    # starting in the same second would both read the same low live count, both
+    # take 6 browsers, and together overshoot 1000 PIDs: the exact deadlock
+    # measured at 8 browsers. A fixed share cannot race. _PID_APP_BASE covers
+    # uvicorn, Xvfb, Python and a light phase-1 job (idle measured at 11-20).
+    _PID_APP_BASE = 40
+    _concurrent_renders = max(1, int(getattr(settings, "max_concurrent_renders", 1)))
     _pids_max = _cgroup_pids("pids.max")
-    _pids_used = _cgroup_pids("pids.current") or 150
+    _pids_used = _cgroup_pids("pids.current") or 150   # logged only, never sized on
     if _pids_max:
-        _pool_workers = int((_pids_max * _PID_BUDGET_SHARE - _pids_used) / _PIDS_PER_BROWSER)
+        _pool_workers = int(
+            (_pids_max * _PID_BUDGET_SHARE - _PID_APP_BASE)
+            / (_concurrent_renders * _PIDS_PER_BROWSER)
+        )
     else:
         _pool_workers = 0        # unknown limit: stay on the proven single-browser path
 
@@ -3335,7 +3399,8 @@ def _render_hyperframes(
         env["PRODUCER_ENABLE_BROWSER_POOL"] = "1"
         print(
             f"[HF] browser pool: ON — {_n_workers} browsers"
-            f" (pids {_pids_used}/{_pids_max} used, budget allows {_pool_workers};"
+            f" (fixed share for up to {_concurrent_renders} concurrent render(s);"
+            f" pids {_pids_used}/{_pids_max} now, share allows {_pool_workers};"
             f" workers {_n_workers_before_pool}→{_n_workers})",
             flush=True,
         )
@@ -3419,6 +3484,8 @@ def _render_hyperframes(
             text=True, env=_seg_env,
             start_new_session=True,
         )
+        with _ACTIVE_HF_LOCK:
+            _ACTIVE_HF_SESSIONS.add(_proc.pid)
 
         _log: list[str] = []
 
@@ -3441,14 +3508,21 @@ def _render_hyperframes(
             except Exception:
                 _proc.kill()
             _proc.wait(timeout=10)
-            _kill_orphan_chrome()
+            _kill_orphan_chrome(_proc.pid)
+            with _ACTIVE_HF_LOCK:
+                _ACTIVE_HF_SESSIONS.discard(_proc.pid)
             raise RuntimeError("HyperFrames CLI render timed out")
 
         if _proc.returncode != 0 or not out_path.exists():
             _tail = "\n".join(_log[-30:])
             print(f"[HF] Render failed (rc={_proc.returncode}):\n{_tail}", flush=True)
-            _kill_orphan_chrome()
+            _kill_orphan_chrome(_proc.pid)
+            with _ACTIVE_HF_LOCK:
+                _ACTIVE_HF_SESSIONS.discard(_proc.pid)
             raise RuntimeError("HyperFrames CLI render failed")
+
+        with _ACTIVE_HF_LOCK:
+            _ACTIVE_HF_SESSIONS.discard(_proc.pid)
 
     # ── Segmentation check ──────────────────────────────────────────────────
     # SwiftShader accumulates a per-frame memory leak inside each Chrome worker.

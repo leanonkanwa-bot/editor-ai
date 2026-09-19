@@ -15,9 +15,15 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as _FutureTimeoutError
 from pathlib import Path
 
-# One heavy render at a time — prevents N concurrent Chrome worker pools from
-# exhausting cgroup RAM.  Phase-1 (transcription) is light enough to overlap.
-_RENDER_SEM = threading.Semaphore(1)
+# Bounded concurrent renders. The limit is no longer memory (two renders peak
+# near 16 GB of 22) but Railway's cgroup pids.max of 1000: a render costs about
+# 117 PIDs per browser, and past 1000 Chrome cannot spawn threads and capture
+# deadlocks. render.py therefore gives each render a FIXED share of that budget
+# computed from this same setting, so the semaphore count and the per-render
+# browser quota can never disagree. Phase-1 (transcription) still overlaps freely.
+from app.core.config import settings as _render_settings
+_MAX_CONCURRENT_RENDERS = max(1, int(_render_settings.max_concurrent_renders))
+_RENDER_SEM = threading.Semaphore(_MAX_CONCURRENT_RENDERS)
 _TRANSCRIPTION_TIMEOUT_S = 1200  # 20 min — Whisper hang guard; sets status=error + is_retry=True
 
 # Set by the SIGTERM handler in main.py.  When set:
@@ -1943,10 +1949,10 @@ def run_render_phase(job_id: str, src: Path) -> None:
             return
         print(
             f"[PIPELINE] job {job_id}: render semaphore busy — queuing"
-            " (another render is in progress)",
+            f" ({_MAX_CONCURRENT_RENDERS} render(s) already in progress)",
             flush=True,
         )
-        store.update(job_id, message="En file d'attente (rendu précédent en cours)…")
+        store.update(job_id, message="En file d'attente (rendus précédents en cours)…")
         # Poll with a short timeout so we can abort on shutdown rather than
         # blocking indefinitely behind a render that may outlast a SIGTERM.
         while not _RENDER_SEM.acquire(timeout=5):

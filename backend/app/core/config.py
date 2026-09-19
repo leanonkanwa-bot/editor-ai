@@ -74,6 +74,13 @@ class Settings(BaseSettings):
     # Individual cut types are further gated by CUT_REPETITIONS, CUT_PAUSES, etc.
     cut_fillers: bool = False
 
+    # How many renders may run at once. pipeline.py sizes its render semaphore
+    # from it, and render.py splits the container's PID budget by it, so the two
+    # always agree. The binding limit is Railway's cgroup pids.max (1000), not
+    # CPU or memory: at 2, each render gets 3 browsers and two renders together
+    # peak around 720 PIDs.
+    max_concurrent_renders: int = 2
+
     # MediaPipe BlazeFace 2fps subject tracking.
     # When true, replaces single-frame Claude Vision with multi-frame face detection.
     # Toggle via SUBJECT_TRACKING=true in Railway env vars (default: false).
