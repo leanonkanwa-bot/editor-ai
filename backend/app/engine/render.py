@@ -22,6 +22,7 @@ import random
 import shlex
 import subprocess
 import threading
+import uuid as _uuid_mod
 import time
 from pathlib import Path
 from typing import Any
@@ -55,23 +56,29 @@ AUDIO_HANDLE_S = 0.08   # 80ms audio handle kept before/after each cut edge
 
 
 
-# Session ids of the HyperFrames CLI runs currently in flight, across renders.
-# Each run is started with start_new_session=True, so its pid is also the session
-# id inherited by every Chrome process it spawns, even after reparenting.
-_ACTIVE_HF_SESSIONS: set[int] = set()
+# Tags of the HyperFrames CLI runs currently in flight, across renders. Each run
+# gets a unique EDITOR_HF_RUN_TAG in its environment. Puppeteer launches every
+# browser detached, in a session of its own (measured on bench: browser sid ==
+# browser pid, never the CLI's), so neither the CLI's process group nor its
+# session reaches Chrome. The browser processes do inherit the CLI environment,
+# and their zygote/renderer/GPU children stay in the browser's session even after
+# the CLI dies and they are reparented.
+_ACTIVE_HF_TAGS: set[str] = set()
 _ACTIVE_HF_LOCK = threading.Lock()
+_HF_TAG_VAR = b"EDITOR_HF_RUN_TAG="
 
 
-def _kill_orphan_chrome(session_id: int | None = None) -> None:
+def _kill_orphan_chrome(run_tag: str | None = None) -> None:
     """Kill Chrome left behind by a failed HyperFrames run.
 
     With one render in flight the broad `pkill -f chrome.*headless` sweep is
-    safe and also catches strays that left their session, so it is kept. With
-    renders running concurrently it would kill the OTHER render's browsers and
-    abort a healthy video, so only the processes of the given session are killed.
+    safe and also catches strays, so it is kept. With renders running
+    concurrently it would kill the OTHER render's browsers and abort a healthy
+    video, so only the browsers carrying this run's tag, and every process in
+    their sessions, are killed.
     """
     with _ACTIVE_HF_LOCK:
-        _others = _ACTIVE_HF_SESSIONS - ({session_id} if session_id else set())
+        _others = _ACTIVE_HF_TAGS - ({run_tag} if run_tag else set())
     if not _others:
         try:
             result = subprocess.run(
@@ -83,21 +90,22 @@ def _kill_orphan_chrome(session_id: int | None = None) -> None:
         except Exception:
             pass
         return
-    if session_id is None:
+    if run_tag is None:
         print(
             f"[CLEANUP] skipped broad Chrome sweep: {len(_others)} other render(s)"
-            " in flight and no session to scope to",
+            " in flight and no run to scope to",
             flush=True,
         )
         return
     import os as _os
     import signal as _sig
-    _killed = 0
+    _needle = _HF_TAG_VAR + run_tag.encode()
+    _procs: list[tuple[int, int, str, bool]] = []   # pid, sid, comm, tagged
     try:
-        _procs = list(Path("/proc").iterdir())
+        _entries = list(Path("/proc").iterdir())
     except OSError:
         return
-    for _d in _procs:
+    for _d in _entries:
         if not _d.name.isdigit():
             continue
         try:
@@ -106,17 +114,24 @@ def _kill_orphan_chrome(session_id: int | None = None) -> None:
             # are: state ppid pgrp session ...
             _comm = _stat[_stat.index("(") + 1:_stat.rindex(")")]
             _sid = int(_stat[_stat.rindex(")") + 2:].split()[3])
+            _tagged = _needle in (_d / "environ").read_bytes().split(b"\0")
         except (OSError, ValueError, IndexError):
             continue
-        if _sid == session_id and "chrom" in _comm:
+        _procs.append((int(_d.name), _sid, _comm, _tagged))
+    # Sessions led by a tagged browser hold that browser's whole process tree.
+    _sessions = {_sid for _pid, _sid, _comm, _tagged in _procs
+                 if _tagged and "chrom" in _comm and _sid == _pid}
+    _killed = 0
+    for _pid, _sid, _comm, _tagged in _procs:
+        if "chrom" in _comm and (_tagged or _sid in _sessions):
             try:
-                _os.kill(int(_d.name), _sig.SIGKILL)
+                _os.kill(_pid, _sig.SIGKILL)
                 _killed += 1
             except OSError:
                 pass
     print(
-        f"[CLEANUP] Killed {_killed} Chrome process(es) of session {session_id};"
-        f" {len(_others)} other render(s) left untouched",
+        f"[CLEANUP] Killed {_killed} Chrome process(es) in {len(_sessions)} browser"
+        f" session(s) of run {run_tag}; {len(_others)} other render(s) left untouched",
         flush=True,
     )
 
@@ -3458,8 +3473,12 @@ def _render_hyperframes(
         # ensures HF CLI exits within another 5 min after Chrome dies), so the
         # only scenario that reaches here is a genuine HF hang → we kill it.
         _seg_timeout = max(1800, int(seg_dur * 8))
+        # Marks this run's browsers so a failure can clean them up without
+        # touching a render running alongside (see _kill_orphan_chrome).
+        _hf_run_tag = _uuid_mod.uuid4().hex[:12]
         _seg_proto_ms = max(300_000, int(seg_dur * 1500))
-        _seg_env = {**env, "PRODUCER_PUPPETEER_PROTOCOL_TIMEOUT_MS": str(_seg_proto_ms)}
+        _seg_env = {**env, "PRODUCER_PUPPETEER_PROTOCOL_TIMEOUT_MS": str(_seg_proto_ms),
+                    "EDITOR_HF_RUN_TAG": _hf_run_tag}
         print(f"[HF] protocolTimeout: {_seg_proto_ms}ms ({_seg_proto_ms/1000:.0f}s) for {seg_dur:.1f}s", flush=True)
         _hf_tmp = pub_dir.parent / "hf_tmp"
         _hf_tmp.mkdir(parents=True, exist_ok=True)
@@ -3485,7 +3504,7 @@ def _render_hyperframes(
             start_new_session=True,
         )
         with _ACTIVE_HF_LOCK:
-            _ACTIVE_HF_SESSIONS.add(_proc.pid)
+            _ACTIVE_HF_TAGS.add(_hf_run_tag)
 
         _log: list[str] = []
 
@@ -3508,21 +3527,21 @@ def _render_hyperframes(
             except Exception:
                 _proc.kill()
             _proc.wait(timeout=10)
-            _kill_orphan_chrome(_proc.pid)
+            _kill_orphan_chrome(_hf_run_tag)
             with _ACTIVE_HF_LOCK:
-                _ACTIVE_HF_SESSIONS.discard(_proc.pid)
+                _ACTIVE_HF_TAGS.discard(_hf_run_tag)
             raise RuntimeError("HyperFrames CLI render timed out")
 
         if _proc.returncode != 0 or not out_path.exists():
             _tail = "\n".join(_log[-30:])
             print(f"[HF] Render failed (rc={_proc.returncode}):\n{_tail}", flush=True)
-            _kill_orphan_chrome(_proc.pid)
+            _kill_orphan_chrome(_hf_run_tag)
             with _ACTIVE_HF_LOCK:
-                _ACTIVE_HF_SESSIONS.discard(_proc.pid)
+                _ACTIVE_HF_TAGS.discard(_hf_run_tag)
             raise RuntimeError("HyperFrames CLI render failed")
 
         with _ACTIVE_HF_LOCK:
-            _ACTIVE_HF_SESSIONS.discard(_proc.pid)
+            _ACTIVE_HF_TAGS.discard(_hf_run_tag)
 
     # ── Segmentation check ──────────────────────────────────────────────────
     # SwiftShader accumulates a per-frame memory leak inside each Chrome worker.
