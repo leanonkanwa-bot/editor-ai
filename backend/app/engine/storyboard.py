@@ -561,6 +561,14 @@ _CAPTION_STYLE_TWINS: dict[str, frozenset] = {
 _CAPTION_ANY_CARD_BLOCKS = False
 # compose's fade takes 0.15-0.20s; keep captions clear of card edges by this much.
 _CAPTION_CARD_MARGIN_S = 0.25
+# Text redundancy, whatever the styles and even one after the other. The style
+# rule above missed every real case: on a lean_paper render, 3 of the 12 captions
+# shown repeated a card's exact text ("Zéro excuse" stat vs emoji_reaction card,
+# at the same time; "tu peux tout accomplir" 5.5 s before the same key_phrase).
+# A caption is dropped when a card on screen within this window already carries
+# this share of its content words; the card, the designed element, stays.
+_CAPTION_TEXT_TWIN_WINDOW_S = 10.0
+_CAPTION_TEXT_TWIN_MIN_SHARE = 0.6
 
 
 def _exclude_captions_against_cards(
@@ -582,8 +590,36 @@ def _exclude_captions_against_cards(
     _m = _CAPTION_CARD_MARGIN_S
     kept: list[dict] = []
     n_covered = n_short = n_twin = n_trimmed = 0
+    _card_toks = [
+        (_g, {_t for _l in _card_text_lines(_g) for _t in _card_content_tokens(_l)})
+        for _g in graphic_cards
+    ]
+    n_text_twin = 0
     for _cap in caption_cards:
         _cs, _ce = float(_cap["startSec"]), float(_cap["endSec"])
+
+        # Same words already on a card, now or within a few seconds: drop.
+        _cap_toks = set(_card_content_tokens(" ".join(
+            str(_w.get("text", "")) for _w in (_cap.get("words") or [])
+        )))
+        _w = _CAPTION_TEXT_TWIN_WINDOW_S
+        _text_twin = next((
+            _g for _g, _gt in _card_toks
+            if _cap_toks
+            and float(_g.get("startSec", 0)) - _w < _ce
+            and float(_g.get("endSec", 0)) + _w > _cs
+            and len(_cap_toks & _gt) / len(_cap_toks) >= _CAPTION_TEXT_TWIN_MIN_SHARE
+        ), None)
+        if _text_twin is not None:
+            n_text_twin += 1
+            print(
+                f"[CAPTIONS LONG] dropped {_cap['id']} {_cs:.2f}-{_ce:.2f}s — its words are on card"
+                f" {_text_twin.get('id', '?')} ({(_text_twin.get('contentHints') or {}).get('style', '?')},"
+                f" {float(_text_twin.get('startSec', 0)):.2f}-{float(_text_twin.get('endSec', 0)):.2f}s)",
+                flush=True,
+            )
+            continue
+
         _overlapping = [
             _g for _g in graphic_cards
             if float(_g.get("startSec", 0)) - _m < _ce
@@ -666,7 +702,8 @@ def _exclude_captions_against_cards(
 
     print(
         f"[CAPTIONS LONG] card exclusion: {len(caption_cards)} -> {len(kept)}"
-        f" ({n_trimmed} shortened; dropped: {n_twin} redundant, {n_covered} fully covered,"
+        f" ({n_trimmed} shortened; dropped: {n_text_twin} same text as a card, {n_twin} same style,"
+        f" {n_covered} fully covered,"
         f" {n_short} too short; any_card_blocks={any_card_blocks})",
         flush=True,
     )
