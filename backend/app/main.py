@@ -1005,6 +1005,25 @@ async def submit_edit(
     if not settings.anthropic_api_key:
         raise HTTPException(500, "ANTHROPIC_API_KEY not set in backend/.env")
 
+    # The job's owner is the signed-in profile, never the profile_id form field.
+    # Trusting the form let anyone send no owner (quota counted 0 jobs: unlimited
+    # free videos) or another profile's id (their plan, brand kit and quota).
+    # The form field is kept in the signature only so existing clients still
+    # post without a 422; its value is ignored.
+    _claimed_profile_id = profile_id
+    profile_id = _verify_session(request.cookies.get(SESSION_COOKIE)) or ""
+    if not profile_id:
+        raise HTTPException(401, {
+            "error": "not_authenticated",
+            "message": "Connectez-vous pour éditer une vidéo.",
+        })
+    if _claimed_profile_id and _claimed_profile_id != profile_id:
+        print(
+            f"[EDIT] profile_id form field {_claimed_profile_id!r} ignored —"
+            f" the session belongs to {profile_id!r}",
+            flush=True,
+        )
+
     # Load coach profile + enforce the plan's video quota BEFORE touching the
     # upload or creating a job — avoids spending Whisper/Claude costs on a
     # video that will never be delivered, and avoids accepting an upload

@@ -207,7 +207,7 @@ async function _triggerLandingJob(pending) {
 
   try {
     const editRes = await apiFetch("/api/edit", { method: "POST", body: fd });
-    if (editRes.status === 401) { loginCard?.classList.remove("hidden"); return; }
+    if (editRes.status === 401) return _needLogin();
     if (!editRes.ok) { fail("Erreur de démarrage du montage. Veuillez réessayer."); return; }
     const { job_id } = await editRes.json();
     poll(job_id).catch(e => { console.error("poll crashed:", e); fail("Erreur inattendue."); });
@@ -1383,7 +1383,7 @@ async function chunkedUpload(file) {
   if (_spVal) fd.set("style_pack", _spVal.value);
 
   const editRes = await apiFetch("/api/edit", { method: "POST", body: fd });
-  if (editRes.status === 401) { loginCard?.classList.remove("hidden"); appCard?.classList.add("hidden"); statusCard?.classList.add("hidden"); submitBtn.disabled = false; submitBtn.querySelector(".btn-label").textContent = "Éditer ma vidéo"; submitBtn.classList.remove("loading"); return; }
+  if (editRes.status === 401) return _needLogin();
   if (editRes.status === 403) {
     const body = await editRes.json().catch(() => ({}));
     if (body?.detail?.error === "quota_exceeded") return showQuotaExceeded(body.detail);
@@ -1410,7 +1410,7 @@ function directUpload(file) {
   });
 
   xhr.addEventListener("load", () => {
-    if (xhr.status === 401) { loginCard?.classList.remove("hidden"); appCard?.classList.add("hidden"); statusCard?.classList.add("hidden"); submitBtn.disabled = false; submitBtn.querySelector(".btn-label").textContent = "Éditer ma vidéo"; submitBtn.classList.remove("loading"); return; }
+    if (xhr.status === 401) return _needLogin();
     if (xhr.status === 403) {
       try {
         const body = JSON.parse(xhr.responseText);
@@ -1589,6 +1589,21 @@ function fail(msg, jobId) {
   if (retryBlock) {
     retryBlock.classList.toggle("hidden", !canRetry);
     if (canRetry) _retryJobId = jobId;
+  }
+}
+
+// /api/edit answers 401 when the browser has no valid sign-in session. The old
+// handler showed a loginCard that does not exist in the page, so nothing appeared.
+function _needLogin() {
+  fail("Votre session a expiré — reconnectez-vous avec Google pour lancer votre vidéo.");
+  document.getElementById("reloginBtn")?.remove();
+  if (statusMsg) {
+    const btn = document.createElement("a");
+    btn.id = "reloginBtn";
+    btn.href = "/api/auth/google/login";
+    btn.textContent = "Se reconnecter avec Google";
+    btn.style.cssText = "display:inline-block;margin-top:.6rem;padding:.45rem 1rem;border-radius:8px;background:#FF7751;color:#fff;font-family:var(--font);font-size:.8rem;font-weight:600;text-decoration:none";
+    statusMsg.after(btn);
   }
 }
 
