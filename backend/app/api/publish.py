@@ -18,6 +18,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
+from app.core.session import require_owner
 from app.api.jobs import store
 from app.core.config import settings
 from app.engine.publisher import (
@@ -78,6 +79,7 @@ async def publish_video(
     request: Request,
 ) -> JSONResponse:
     """Publish a finished job to one or more platforms."""
+    require_owner(request, job_id)
     body = await request.json()
     platforms  = body.get("platforms", [])
     privacy    = body.get("privacy", "public")
@@ -133,6 +135,7 @@ async def publish_video(
 @router.post("/api/publish/metadata/{job_id}")
 async def get_metadata(job_id: str, request: Request) -> JSONResponse:
     """Generate platform-specific metadata for a finished job without publishing."""
+    require_owner(request, job_id)
     body = await request.json()
     platforms = body.get("platforms", ["youtube"])
 

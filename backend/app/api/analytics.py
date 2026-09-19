@@ -11,9 +11,10 @@ Endpoints:
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import Request, APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 
+from app.core.session import require_owner
 from app.api.jobs import store
 from app.engine.analytics_engine import (
     AnalyticsEngine,
@@ -84,7 +85,8 @@ def list_videos() -> JSONResponse:
 
 
 @router.get("/api/analytics/videos/{job_id}")
-def get_video_analytics(job_id: str) -> JSONResponse:
+def get_video_analytics(job_id: str, request: Request) -> JSONResponse:
+    require_owner(request, job_id)
     data = engine.load_analytics(job_id)
     if not data:
         raise HTTPException(404, "No analytics found for this job")

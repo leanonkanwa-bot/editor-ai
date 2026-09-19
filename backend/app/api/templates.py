@@ -13,9 +13,10 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import Request, APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
+from app.core.session import require_owner
 from app.core.config import settings
 from app.engine.template_engine import (
     TemplateAnalyzer,
@@ -96,8 +97,9 @@ def remove_template(template_id: str) -> JSONResponse:
 
 
 @router.post("/api/templates/{template_id}/apply/{job_id}")
-def apply_to_job(template_id: str, job_id: str) -> JSONResponse:
+def apply_to_job(template_id: str, job_id: str, request: Request) -> JSONResponse:
     """Apply template overrides to an existing job's stored params."""
+    require_owner(request, job_id)
     t = get_template(template_id)
     if not t:
         raise HTTPException(404, "Template not found")

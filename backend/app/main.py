@@ -306,37 +306,20 @@ def _auth_required() -> bool:
 # ── Google OAuth identity (separate from the site-wide access_password
 # gate above -- this answers "which profile is this", not "is this visitor
 # allowed in the beta") ────────────────────────────────────────────────────
-SESSION_COOKIE = "lle_session"
+# Session helpers live in app.core.session so routers can check ownership too.
+from app.core.session import (  # noqa: E402
+    SESSION_COOKIE, _sign_session, _verify_session, require_api_owner, require_owner,
+)
 OAUTH_STATE_COOKIE = "lle_oauth_state"
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_USERINFO_URL = "https://openidconnect.googleapis.com/v1/userinfo"
 
 
-def _session_secret() -> str:
-    if settings.session_secret:
-        return settings.session_secret
-    # Derive a stable key from access_password so sessions survive restarts
-    # without requiring a new Railway env var. access_password is already a
-    # server-only secret; this just namespaces it for a different purpose.
-    base = settings.access_password or "lle-default-dev-secret"
-    return hashlib.sha256(f"{base}:session-signing".encode()).hexdigest()
 
 
-def _sign_session(profile_id: str) -> str:
-    sig = hmac.new(_session_secret().encode(), profile_id.encode(), hashlib.sha256).hexdigest()
-    return f"{profile_id}.{sig}"
 
 
-def _verify_session(token: str | None) -> str | None:
-    """Returns the profile_id if the signed session cookie is valid, else None."""
-    if not token or "." not in token:
-        return None
-    profile_id, _, sig = token.rpartition(".")
-    expected = hmac.new(_session_secret().encode(), profile_id.encode(), hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(sig, expected):
-        return None
-    return profile_id
 
 
 def _normalize_email(email: str) -> str:
@@ -1170,6 +1153,7 @@ async def submit_edit(
 
 @app.get("/api/jobs/{job_id}")
 def get_job(job_id: str, request: Request) -> dict:
+    require_owner(request, job_id)
     job = store.get(job_id)
     if not job:
         raise HTTPException(404, "Job not found")
@@ -1181,7 +1165,8 @@ TRASH_RETENTION_HOURS = 7 * 24
 
 
 @app.post("/api/jobs/{job_id}/trash")
-def trash_job(job_id: str) -> dict:
+def trash_job(job_id: str, request: Request) -> dict:
+    require_owner(request, job_id)
     job = store.get(job_id)
     if not job:
         raise HTTPException(404, "Job not found")
@@ -1190,7 +1175,8 @@ def trash_job(job_id: str) -> dict:
 
 
 @app.post("/api/jobs/{job_id}/restore")
-def restore_job(job_id: str) -> dict:
+def restore_job(job_id: str, request: Request) -> dict:
+    require_owner(request, job_id)
     job = store.get(job_id)
     if not job:
         raise HTTPException(404, "Job not found")
@@ -1267,6 +1253,7 @@ async def retry_job(
 @app.get("/api/jobs/{job_id}/plan")
 def get_plan(job_id: str, request: Request) -> dict:
     """Return the edit plan preview for a job that is in ready_for_review status."""
+    require_owner(request, job_id)
     job = store.get(job_id)
     if not job:
         raise HTTPException(404, "Job not found")
@@ -1282,6 +1269,7 @@ async def approve_job(
     request: Request,
 ) -> JSONResponse:
     """Approve an edit plan and trigger the render phase (Phase 2)."""
+    require_owner(request, job_id)
     # Refuse render approvals during a SIGTERM drain for the same reason as /api/edit.
     if _pipeline_shutdown.is_set():
         raise HTTPException(
@@ -1669,6 +1657,12 @@ def download(
     request: Request,
     fmt: str = Query("vertical"),
 ):
+    # /api/v1/download authenticates by API key, the site by session; either way
+    # only the job's owner gets the file.
+    if request.url.path.startswith("/api/v1/"):
+        require_api_owner(_api_key_profile(request.headers.get("x-api-key", "")), job_id)
+    else:
+        require_owner(request, job_id)
     out = settings.outputs_dir / f"{job_id}.mp4"
     if not out.exists():
         raise HTTPException(404, "Output not ready")
@@ -1698,6 +1692,7 @@ def download(
 @app.get("/api/jobs/{job_id}/edit-report")
 def get_edit_report(job_id: str, request: Request):
     """Download the editorial PDF report for a job (generated in REPORT_ONLY mode)."""
+    require_owner(request, job_id)
     job = store.get(job_id)
     if not job:
         raise HTTPException(404, "Job not found")
@@ -1714,6 +1709,7 @@ def get_edit_report(job_id: str, request: Request):
 @app.get("/api/jobs/{job_id}/narrative")
 def get_narrative_timeline(job_id: str, request: Request):
     """Return the narrative timeline QA log for a completed job (plain text)."""
+    require_owner(request, job_id)
     job = store.get(job_id)
     if not job:
         raise HTTPException(404, "Job not found")
@@ -1751,6 +1747,7 @@ def upload_preview(upload_id: str):
 @app.get("/api/thumbnail/{job_id}")
 def thumbnail(job_id: str, request: Request):
     """Extract first frame as 1080×1080 square thumbnail."""
+    require_owner(request, job_id)
     out = settings.outputs_dir / f"{job_id}.mp4"
     if not out.exists():
         raise HTTPException(404, "Output not ready")
@@ -2001,6 +1998,7 @@ def _ass_ts_to_sec(ts: str) -> float:
 @app.get("/api/jobs/{job_id}/captions")
 def get_job_captions(job_id: str, request: Request) -> dict:
     """Return parsed captions for a completed job."""
+    require_owner(request, job_id)
     ass_path = settings.work_dir / job_id / "captions.ass"
     if not ass_path.exists():
         return {"captions": []}
@@ -2019,6 +2017,7 @@ async def edit_captions(
     Payload: {"captions": [{"start":"0:00:00.50","end":"0:00:01.20","text":"New text"}, ...]}
     The ASS header is preserved; only Dialogue lines are replaced.
     """
+    require_owner(request, job_id)
     captions = payload.get("captions") or []
     if not captions:
         raise HTTPException(400, "captions required")
@@ -2265,7 +2264,8 @@ def _save_perf(data: dict) -> None:
 
 
 @app.post("/api/performance/{job_id}")
-def save_performance(job_id: str, payload: dict = Body(...)) -> dict:
+def save_performance(job_id: str, request: Request, payload: dict = Body(...)) -> dict:
+    require_owner(request, job_id)
     data = _load_perf()
     data[job_id] = payload
     _save_perf(data)
@@ -2273,7 +2273,8 @@ def save_performance(job_id: str, payload: dict = Body(...)) -> dict:
 
 
 @app.get("/api/performance/{job_id}")
-def get_performance(job_id: str) -> dict:
+def get_performance(job_id: str, request: Request) -> dict:
+    require_owner(request, job_id)
     data = _load_perf()
     return data.get(job_id, {})
 
@@ -2338,6 +2339,16 @@ def _save_api_keys(data: dict) -> None:
     _API_KEYS_FILE.write_text(json.dumps(data, indent=2))
 
 
+def _api_key_profile(key: str) -> str | None:
+    """The profile an API key belongs to, or None."""
+    if not key:
+        return None
+    for profile_id, v in _load_api_keys().items():
+        if v.get("key") and hmac.compare_digest(str(v.get("key")), key):
+            return profile_id
+    return None
+
+
 def _validate_api_key(key: str) -> bool:
     if not key:
         return False
@@ -2392,6 +2403,7 @@ async def v1_edit(
 
 @app.get("/api/v1/jobs/{job_id}")
 def v1_get_job(job_id: str, request: Request) -> dict:
+    require_api_owner(_api_key_profile(request.headers.get("x-api-key", "")), job_id)
     api_key = request.headers.get("x-api-key", "")
     if not _validate_api_key(api_key):
         raise HTTPException(401, "Invalid or missing X-API-Key")
