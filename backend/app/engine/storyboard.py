@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import unicodedata
 from typing import Any
 
 from app.engine.captions import WordTiming
@@ -672,11 +673,134 @@ def _exclude_captions_against_cards(
     return kept
 
 
+# Word anchoring of caption moments. The planner places moments from segment-level
+# timestamps, so measured on three renders of the same 7-minute video they sat
+# -5.9 s to +6.8 s from the words they quote, 10-12 captions per run off by more
+# than 2 s; a 7-item list spoken in 12 s was spread over 16.5 s and drifted to
+# +6.8 s. Replayed on those runs, anchoring raised the share of a caption's words
+# spoken while it is on screen from 53-82 % to 88-97 %, and made none worse.
+_CAPM_ANCHOR_WINDOW_S = 8.0     # search this far either side of the planned start
+_CAPM_ANCHOR_MIN_SCORE = 0.6    # share of the caption's content words found together
+_CAPM_ANCHOR_GAP_S = 0.05       # anchored captions never overlap each other
+_CAPM_ANCHOR_STOP = frozenset(
+    "le la les l un une de du des d et a à en que qu qui ce c est tu t je j il on"
+    " pas ne n se s sa son ta ton the an of and to is it in".split()
+)
+
+
+def _capm_tokens(text: str) -> list[str]:
+    """Lower-case, accent-folded word tokens."""
+    _t = unicodedata.normalize("NFD", text.lower())
+    _t = "".join(_c for _c in _t if unicodedata.category(_c) != "Mn")
+    return re.findall(r"[a-z0-9]+", _t)
+
+
+def _anchor_caption_moments(
+    caption_moments: list[dict],
+    transcript_words: list[dict],
+) -> list[dict]:
+    """Move each caption moment onto the words it quotes, in SOURCE time.
+
+    The caption's content words (leading "1." numbering and short function words
+    removed) are looked for among the transcript words starting within
+    _CAPM_ANCHOR_WINDOW_S of the planned start. A stretch of transcript as long as
+    the caption, plus 3 words of slack, scores the share of those words it holds;
+    the best stretch (ties: closest to the planned start) must reach
+    _CAPM_ANCHOR_MIN_SCORE, and the moment then starts on its first matched word
+    and keeps its planned duration. A moment with no such stretch keeps its planned
+    timing. Consecutive moments are then trimmed so they never overlap.
+    Returns new dicts; the input is not modified.
+    """
+    _words: list[tuple[str, float]] = []
+    for _w in transcript_words or []:
+        try:
+            _ws = float(_w.get("start"))
+        except (TypeError, ValueError):
+            continue
+        for _tok in _capm_tokens(str(_w.get("word") or _w.get("text") or "")):
+            _words.append((_tok, _ws))
+    if not _words or not caption_moments:
+        return [dict(_m) for _m in caption_moments or [] if isinstance(_m, dict)]
+
+    _out: list[dict] = []
+    n_moved = n_kept = 0
+    _shifts: list[float] = []
+    for _m in caption_moments:
+        if not isinstance(_m, dict):
+            continue
+        _m2 = dict(_m)
+        _out.append(_m2)
+        try:
+            _s = float(_m.get("start", 0))
+            _e = float(_m.get("end", _s))
+        except (TypeError, ValueError):
+            continue
+        _all = _capm_tokens(re.sub(r"^\s*\d+\s*[.)]\s*", "", str(_m.get("text", ""))))
+        _q = [_t for _t in _all if _t not in _CAPM_ANCHOR_STOP] or _all
+        if not _q or _e <= _s:
+            continue
+        _qs = set(_q)
+        _best: tuple[tuple[float, float], float] | None = None
+        for _i, (_tok, _ws) in enumerate(_words):
+            if _tok not in _qs or abs(_ws - _s) > _CAPM_ANCHOR_WINDOW_S:
+                continue
+            _win = {_x for _x, _ in _words[_i:_i + len(_q) + 3]}
+            _key = (round(len(_qs & _win) / len(_qs), 3), -abs(_ws - _s))
+            if _best is None or _key > _best[0]:
+                _best = (_key, _ws)
+        if _best is None or _best[0][0] < _CAPM_ANCHOR_MIN_SCORE:
+            n_kept += 1
+            continue
+        _new_s = _best[1]
+        _m2["start"] = round(_new_s, 3)
+        _m2["end"] = round(_new_s + (_e - _s), 3)
+        _shifts.append(_new_s - _s)
+        n_moved += 1
+
+    def _start(_m: dict) -> float:
+        try:
+            return float(_m.get("start", 0))
+        except (TypeError, ValueError):
+            return 0.0
+
+    _out.sort(key=_start)
+    n_trimmed = 0
+    for _a, _b in zip(_out, _out[1:]):
+        try:
+            _a_s, _a_e = float(_a["start"]), float(_a["end"])
+            _b_s, _b_e = float(_b["start"]), float(_b["end"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if _a_e <= _b_s - _CAPM_ANCHOR_GAP_S:
+            continue
+        # Cutting the first caption below the readable minimum would only see it
+        # stretched back over the next one downstream; start the next one a little
+        # later instead, while its words are still being spoken, when it can spare it.
+        if _b_s - _CAPM_ANCHOR_GAP_S - _a_s < _CAPM_MIN_DUR_S:
+            _later = _a_s + _CAPM_MIN_DUR_S + _CAPM_ANCHOR_GAP_S
+            if _b_e - _later >= _CAPM_MIN_DUR_S:
+                _b["start"] = round(_later, 3)
+                _b_s = _later
+        _a["end"] = round(max(_a_s, _b_s - _CAPM_ANCHOR_GAP_S), 3)
+        n_trimmed += 1
+
+    _big = sum(1 for _d in _shifts if abs(_d) > 2.0)
+    print(
+        f"[CAPTIONS LONG] word anchoring: {n_moved} moved onto their words"
+        f" ({_big} by more than 2 s, max {max((abs(_d) for _d in _shifts), default=0):.1f} s),"
+        f" {n_kept} kept (words not found within {_CAPM_ANCHOR_WINDOW_S:.0f} s),"
+        f" {n_trimmed} trimmed to avoid overlap",
+        flush=True,
+    )
+    return _out
+
+
 def _moment_caption_cards(
     caption_moments: list[dict],
     timing_map: TimingMap,
     trimmed_duration: float,
     emphasis_words: list[str],
+    transcript_words: list[dict] | None = None,
 ) -> list[dict]:
     """Turn the planner's caption_moments into caption cards, in OUTPUT time.
 
@@ -693,6 +817,8 @@ def _moment_caption_cards(
     """
     if not caption_moments:
         return []
+    if transcript_words:
+        caption_moments = _anchor_caption_moments(caption_moments, transcript_words)
 
     _emph = {w.lower().strip(".,!?;:'\"") for w in (emphasis_words or []) if w}
     cards: list[dict] = []
@@ -4179,6 +4305,7 @@ def generate_storyboard(
             timing_map,
             trimmed_duration,
             caption_emphasis_words,
+            transcript_words=_transcript_words_flat,
         )
     else:
         caption_cards = _segment_captions(
