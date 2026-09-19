@@ -101,7 +101,16 @@ async def _purge_trash_loop() -> None:
     deploys are frequent, but isn't a reliable 7-day SLA for trash if the
     container stays up for weeks without restarting.
     """
+    from app.api.upload import purge_orphan_chunk_dirs
     while True:
+        # Chunk directories of uploads abandoned mid-way were never removed
+        # (8 of them, 4.1 GB, when first measured); purge those idle > 48 h.
+        try:
+            _n_chunk_dirs = await asyncio.to_thread(purge_orphan_chunk_dirs)
+            if _n_chunk_dirs:
+                print(f"[UPLOAD] purged {_n_chunk_dirs} abandoned chunk dir(s)", flush=True)
+        except Exception as _purge_exc:
+            print(f"[UPLOAD] chunk purge failed: {_purge_exc}", flush=True)
         await asyncio.sleep(12 * 3600)
         _purge_trash()
 

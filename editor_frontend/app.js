@@ -1181,8 +1181,10 @@ form.addEventListener("submit", async (e) => {
   if (file.size > 100 * 1024 * 1024) {
     chunkedUpload(file).catch((err) => {
       const msg = String(err);
-      fail(msg.includes("Failed to fetch")
-        ? "Impossible de joindre le serveur. Vérifiez que le backend tourne, rechargez et réessayez."
+      const network = msg.includes("Failed to fetch") || msg.includes("NetworkError")
+        || /Chunk \d+ failed/.test(msg);
+      fail(network
+        ? "La connexion a été interrompue. Relancez l'envoi du même fichier : il reprendra là où il s'est arrêté."
         : msg);
     });
   } else {
@@ -1190,43 +1192,155 @@ form.addEventListener("submit", async (e) => {
   }
 });
 
-async function chunkedUpload(file) {
+// ── Resumable chunked upload ─────────────────────────────────────────────────
+// A chunk used to get 3 attempts spread over ~3 s, and any failure restarted the
+// whole upload from zero: three uploads died that way during the test weeks.
+// Each chunk now rides out ~2 min of outage (waiting for the browser to report
+// the network back), and an interrupted upload resumes from what the server
+// already holds — including after a page reload, when the same file is picked
+// again. The server only assembles once every chunk is present and whole.
+const UPLOAD_RESUME_KEY = "lle_upload_resume_v1";
+const UPLOAD_RESUME_MAX_AGE_MS = 47 * 3600 * 1000;   // the server purges after 48 h
+const CHUNK_BACKOFF_MS = [1000, 2000, 4000, 8000, 15000, 30000, 30000, 30000];
+const CHUNK_RETRYABLE = [408, 425, 429, 499, 500, 502, 503, 504];
+
+function _uploadFingerprint(file) {
+  return `${file.name}|${file.size}|${file.lastModified}|${CHUNK_SIZE}`;
+}
+function _readResumeStore() {
+  try { return JSON.parse(localStorage.getItem(UPLOAD_RESUME_KEY) || "{}") || {}; }
+  catch (_) { return {}; }
+}
+function _writeResumeStore(all) {
+  try { localStorage.setItem(UPLOAD_RESUME_KEY, JSON.stringify(all)); } catch (_) {}
+}
+function _loadUploadResume(file) {
+  const all = _readResumeStore();
+  const hit = all[_uploadFingerprint(file)];
+  if (!hit || Date.now() - (hit.savedAt || 0) > UPLOAD_RESUME_MAX_AGE_MS) return null;
+  return hit;
+}
+function _saveUploadResume(file, upload_id) {
+  const all = _readResumeStore();
+  for (const k of Object.keys(all)) {
+    if (Date.now() - (all[k].savedAt || 0) > UPLOAD_RESUME_MAX_AGE_MS) delete all[k];
+  }
+  all[_uploadFingerprint(file)] = { upload_id, savedAt: Date.now() };
+  _writeResumeStore(all);
+}
+function _clearUploadResume(file) {
+  const all = _readResumeStore();
+  delete all[_uploadFingerprint(file)];
+  _writeResumeStore(all);
+}
+
+function _waitUntilOnline(maxMs) {
+  if (typeof navigator === "undefined" || navigator.onLine !== false) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => { clearTimeout(t); window.removeEventListener("online", done); resolve(); };
+    const t = setTimeout(done, maxMs);
+    window.addEventListener("online", done);
+  });
+}
+
+async function _putChunkWithRetry(upload_id, i, chunk, onRetry) {
+  let lastErr;
+  for (let attempt = 0; attempt <= CHUNK_BACKOFF_MS.length; attempt++) {
+    if (attempt > 0) {
+      const delay = CHUNK_BACKOFF_MS[attempt - 1];
+      if (onRetry) onRetry(attempt, delay);
+      await new Promise((r) => setTimeout(r, delay));
+      await _waitUntilOnline(60000);
+    }
+    let res;
+    try {
+      res = await apiFetch(`/api/upload/chunk/${upload_id}/${i}`, { method: "PUT", body: chunk });
+    } catch (fetchErr) {
+      lastErr = fetchErr;
+      continue;
+    }
+    if (res.ok) return;
+    lastErr = new Error(`Chunk ${i} failed: ${res.status}`);
+    if (!CHUNK_RETRYABLE.includes(res.status)) throw lastErr;
+  }
+  throw lastErr;
+}
+
+// Uploads `file` in chunks and has the server assemble it. Returns upload_id.
+// onStatus(message, percent) reports progress in the 0-26 band of the bar.
+async function uploadFileChunks(file, onStatus) {
   const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
   const totalMb = (file.size / (1024 * 1024)).toFixed(0);
+  const expectedSize = (i) =>
+    i < totalChunks - 1 ? CHUNK_SIZE : file.size - CHUNK_SIZE * (totalChunks - 1);
 
-  const initRes = await apiFetch("/api/upload/init", { method: "POST" });
-  if (!initRes.ok) throw new Error(`Upload init failed: ${initRes.status}`);
-  const { upload_id } = await initRes.json();
-
-  for (let i = 0; i < totalChunks; i++) {
-    const chunk = file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-    const sentMb = Math.min((i * CHUNK_SIZE) / (1024 * 1024), file.size / (1024 * 1024)).toFixed(0);
-    const uiPct = Math.round(((i + 1) / totalChunks) * 25);
-    setStatus("queued", `Upload ${sentMb} / ${totalMb} Mo (chunk ${i + 1}/${totalChunks})…`, uiPct);
-    // Retry up to 3 times with exponential backoff for transient network errors (499, 502, 503, 504).
-    let lastErr;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      if (attempt > 0) await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
-      let res;
-      try {
-        res = await apiFetch(`/api/upload/chunk/${upload_id}/${i}`, { method: "PUT", body: chunk });
-      } catch (fetchErr) {
-        lastErr = fetchErr; continue;
+  // Resume an earlier attempt at this exact file if the server still holds it.
+  let upload_id = null;
+  let have = {};
+  const prev = _loadUploadResume(file);
+  if (prev && prev.upload_id) {
+    try {
+      const st = await apiFetch(`/api/upload/status/${prev.upload_id}`);
+      if (st.ok) {
+        const js = await st.json();
+        if (js.exists) { upload_id = prev.upload_id; have = js.chunks || {}; }
       }
-      if (res.ok) { lastErr = null; break; }
-      const retryable = [499, 502, 503, 504].includes(res.status);
-      lastErr = new Error(`Chunk ${i} failed: ${res.status}`);
-      if (!retryable) throw lastErr;
-    }
-    if (lastErr) throw lastErr;
+    } catch (_) { /* status unreachable: start a fresh upload */ }
+  }
+  if (!upload_id) {
+    const initRes = await apiFetch("/api/upload/init", { method: "POST" });
+    if (!initRes.ok) throw new Error(`Upload init failed: ${initRes.status}`);
+    upload_id = (await initRes.json()).upload_id;
+    have = {};
+  }
+  _saveUploadResume(file, upload_id);
+
+  const isWhole = (i) => Number(have[String(i)]) === expectedSize(i);
+  const resumed = Array.from({ length: totalChunks }, (_, i) => i).filter(isWhole).length;
+  if (resumed > 0) {
+    onStatus(`Reprise de l'upload : ${resumed}/${totalChunks} morceaux déjà reçus…`,
+             Math.round((resumed / totalChunks) * 25));
   }
 
-  setStatus("queued", "Assemblage du fichier sur le serveur…", 26);
-  const asmRes = await apiFetch(`/api/upload/assemble/${upload_id}`, {
+  const sendChunk = async (i) => {
+    const chunk = file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+    const uiPct = Math.round(((i + 1) / totalChunks) * 25);
+    await _putChunkWithRetry(upload_id, i, chunk, (attempt, delay) =>
+      onStatus(`Connexion instable — nouvel essai du morceau ${i + 1}/${totalChunks}`
+               + ` dans ${Math.round(delay / 1000)} s…`, uiPct));
+  };
+
+  for (let i = 0; i < totalChunks; i++) {
+    if (isWhole(i)) continue;           // already on the server, intact
+    const sentMb = Math.min((i * CHUNK_SIZE) / (1024 * 1024), file.size / (1024 * 1024)).toFixed(0);
+    onStatus(`Upload ${sentMb} / ${totalMb} Mo (morceau ${i + 1}/${totalChunks})…`,
+             Math.round(((i + 1) / totalChunks) * 25));
+    await sendChunk(i);
+  }
+
+  onStatus("Assemblage du fichier sur le serveur…", 26);
+  const assemble = () => apiFetch(`/api/upload/assemble/${upload_id}`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ filename: file.name }),
+    body: JSON.stringify({ filename: file.name, total_chunks: totalChunks, total_size: file.size }),
   });
+  let asmRes = await assemble();
+  if (asmRes.status === 409) {
+    // The server lacks some chunks (lost or truncated): send exactly those again.
+    let detail = {};
+    try { detail = (await asmRes.json()).detail || {}; } catch (_) {}
+    const missing = Array.isArray(detail.missing) ? detail.missing : [];
+    if (missing.length) {
+      for (const i of missing) await sendChunk(Number(i));
+      asmRes = await assemble();
+    }
+  }
   if (!asmRes.ok) throw new Error(`Assembly failed: ${asmRes.status}`);
+  _clearUploadResume(file);
+  return upload_id;
+}
+
+async function chunkedUpload(file) {
+  const upload_id = await uploadFileChunks(file, (msg, pct) => setStatus("queued", msg, pct));
 
   // Server-side thumbnail (reliable for all formats including MOV/MKV)
   try {
