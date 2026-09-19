@@ -172,6 +172,19 @@ _TALL_DATA_PANEL_TYPES = frozenset({
     "milestone_recap", "content_calendar", "tool_comparison", "weekly_review",
 })
 
+# A plain list is a standard data card up to 4 items. From 5 items it no longer fits
+# the 280-300 px standard zones: a 7-item list needs ~440 px in compact mode, so it
+# was centred and clipped top and bottom (title and last item lost on a real render,
+# in every pack). Such lists take the tall zones and tall-card layout instead.
+_LIST_TALL_MIN_ITEMS = 5
+
+
+def _is_tall_panel(style: str, hints: dict | None) -> bool:
+    """True for data cards that need the tall zones and tall compact layout."""
+    if style in _TALL_DATA_PANEL_TYPES:
+        return True
+    return style == "list" and len((hints or {}).get("items") or []) >= _LIST_TALL_MIN_ITEMS
+
 
 def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | None = None,
                      language: str | None = None) -> str:
@@ -228,7 +241,7 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
     # Panel v-padding: 56px. Root v-padding: 64px. Title/kicker row: 40px.
     if not is_caption:
         _dyn_style = card.get("contentHints", {}).get("style", "")
-        if _dyn_style in _TALL_DATA_PANEL_TYPES:
+        if _is_tall_panel(_dyn_style, card.get("contentHints", {})):
             _dyn_hints = card.get("contentHints", {})
             _items_key = {
                 "day_in_life_schedule": "schedule_items",
@@ -356,19 +369,26 @@ _LEAN_PAPER = {
     "text_secondary": "rgba(0,0,0,0.45)",
     "accent": "#4F6BFF",
     "font": '"Inter", ui-sans-serif, system-ui, sans-serif',
-    "font_weight": "600",
+    # 600 was the lightest title of the six packs; with no effect anywhere else the
+    # pack read as empty rather than clean (KAN, 2026-09-19).
+    "font_weight": "700",
     "title_size": "64px",
     "number_size": "96px",
     "kicker_size": "22px",
     "detail_size": "26px",
-    "border": "1px solid rgba(0,0,0,0.16)",
+    # White cards melted into light scenes (beige wall, white t-shirt, whiteboard):
+    # a crisper edge, a tighter shadow that lifts the sheet off the video, a thin
+    # accent margin down the left edge and a faint paper grain give them an outline
+    # without leaving the paper look.
+    "border": "1px solid rgba(0,0,0,0.22)",
     "radius": "12px",
-    "shadow": "0 0 60px rgba(79,107,255,0.10), 0 2px 8px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.12), 0 20px 60px rgba(0,0,0,0.07)",
-    "shadow_inset": "",
+    "shadow": "0 0 40px rgba(79,107,255,0.08), 0 1px 3px rgba(0,0,0,0.12), 0 6px 16px rgba(0,0,0,0.16), 0 14px 36px rgba(0,0,0,0.10)",
+    "shadow_inset": "inset 5px 0 0 #4F6BFF",
     "panel_filter": "",
     "title_glow": "",
     "title_glow_intense": "",
-    "has_grain": False,
+    "has_grain": True,
+    "grain_type": "paper_fine",
     "shimmer_color": "rgba(79,107,255,0.10)",
     "accent_line_glow": "0 0 8px rgba(79,107,255,0.3)",
     "accent_line_glow_bright": "0 0 14px rgba(79,107,255,0.45)",
@@ -544,6 +564,12 @@ _PAPER_GRAIN_SVG = (
     "numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E"
     "%3Crect width='100%25' height='100%25' filter='url(%23pg)' opacity='0.06'/%3E%3C/svg%3E"
 )
+_PAPER_FINE_GRAIN_SVG = (
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E"
+    "%3Cfilter id='pf'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' "
+    "numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E"
+    "%3Crect width='100%25' height='100%25' filter='url(%23pf)' opacity='0.03'/%3E%3C/svg%3E"
+)
 _FILM_GRAIN_SVG = (
     "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E"
     "%3Cfilter id='fg'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' "
@@ -561,7 +587,13 @@ def _accent_bg_css(p: dict) -> str:
     pid = p["id"]
     acc = p["accent"]
     if pid == "lean_paper":
-        return ""
+        # Highlighter stroke over the lower part of the word, as on a printed page.
+        return (
+            f"  background-image: linear-gradient({acc}38, {acc}38);\n"
+            f"  background-repeat: no-repeat; background-position: 0 88%;\n"
+            f"  background-size: 0% 46%; padding: 0 4px; margin: 0 -4px; border-radius: 3px;\n"
+            f"  -webkit-box-decoration-break: clone; box-decoration-break: clone;\n"
+        )
     if pid == "lean_cinema":
         return ""  # uses letter-spacing expand instead
     if pid == "lean_vibe":
@@ -594,7 +626,13 @@ def _accent_treatment(p: dict, sel: str, t: float) -> list[str]:
     pid = p["id"]
     out: list[str] = []
     if pid == "lean_paper":
-        pass  # CSS color only, no animation needed
+        # Highlighter drawn left to right under the word.
+        out.append(
+            f"  tl.fromTo('{sel}', "
+            f"{{ backgroundSize: '0% 46%' }}, "
+            f"{{ backgroundSize: '100% 46%', duration: 0.35, ease: 'power2.out' }}, "
+            f"{t:.4f});"
+        )
     elif pid == "lean_glass":
         out.append(
             f"  tl.fromTo('{sel}', "
@@ -698,9 +736,9 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         def _s(px_str: str, f: float) -> str:
             return f"{int(float(px_str.replace('px', '')) * f)}px"
         if layout == "portrait":
-            _title_scale    = 0.55 if content_style in _TALL_DATA_PANEL_TYPES else 0.80
+            _title_scale    = 0.55 if _is_tall_panel(content_style, hints) else 0.80
         else:
-            _title_scale    = 0.52 if content_style in _TALL_DATA_PANEL_TYPES else 0.75
+            _title_scale    = 0.52 if _is_tall_panel(content_style, hints) else 0.75
         title_size_eff  = _s(p["title_size"],  _title_scale)
         number_size_eff = _s(p["number_size"], 0.67)
         detail_size_eff = "25px" if layout == "portrait" else "23px"
@@ -812,7 +850,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'.card-host[data-card-id="{card_id}"] {{ border-radius: {p["radius"]}; }}')
     parts.append(f'.card[data-card-id="{card_id}"] .root {{')
     parts.append('  width: 100%; height: 100%; display: flex; flex-direction: column;')
-    _root_justify = "flex-start" if (compact and content_style in _TALL_DATA_PANEL_TYPES) else "center"
+    _root_justify = "flex-start" if (compact and _is_tall_panel(content_style, hints)) else "center"
     parts.append(f'  justify-content: {_root_justify}; align-items: center;')
     parts.append(f'  padding: {root_padding}; gap: 16px;')
     parts.append('}')
@@ -856,7 +894,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('}')
     if p["has_grain"]:
         gt = p.get("grain_type", "")
-        tex_svg = {"confetti": _CONFETTI_SVG, "grid": _GRID_SVG, "paper": _PAPER_GRAIN_SVG, "film": _FILM_GRAIN_SVG}.get(gt, _GRAIN_SVG)
+        tex_svg = {"confetti": _CONFETTI_SVG, "grid": _GRID_SVG, "paper": _PAPER_GRAIN_SVG,
+                   "paper_fine": _PAPER_FINE_GRAIN_SVG, "film": _FILM_GRAIN_SVG}.get(gt, _GRAIN_SVG)
         parts.append(f'.card[data-card-id="{card_id}"] .card-panel::after {{')
         parts.append(f'  content: ""; position: absolute; inset: 0;')
         parts.append(f'  border-radius: {p["radius"]};')
@@ -5036,11 +5075,12 @@ def _build_timeline_js(
                         f'{_p_t:.4f});'
                     )
                 elif is_paper:
-                    # Minimal: barely perceptible scale (clean aesthetic)
+                    # A sheet laid down on the desk: comes down slightly tilted and
+                    # settles flat (lean_craft rises with a scale, lean_vibe bounces).
                     lines.append(
                         f'  tl.fromTo(\'{panel_sel}\', '
-                        f'{{ scale: 1.01, y: 6 }}, '
-                        f'{{ scale: 1, y: 0, duration: 0.300, ease: _eIn }}, '
+                        f'{{ y: -14, rotation: -1.5 }}, '
+                        f'{{ y: 0, rotation: 0, duration: 0.400, ease: "power3.out" }}, '
                         f'{_p_t:.4f});'
                     )
                 else:
@@ -8850,7 +8890,7 @@ def compose(
         if style in _DATA_PANEL_TYPES:
             _pos = data_card_idx % 5
             _pos_name = _POS_NAMES[_pos]
-            is_tall = style in _TALL_DATA_PANEL_TYPES
+            is_tall = _is_tall_panel(style, card.get("contentHints", {}))
 
             if layout == "portrait":
                 if is_tall:
