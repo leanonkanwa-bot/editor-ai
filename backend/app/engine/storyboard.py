@@ -795,6 +795,143 @@ def _anchor_caption_moments(
     return _out
 
 
+# Word anchoring of graphic cards. The card passes above anchor on ONE keyword, so a
+# common word ("Dieu") catches the wrong sentence: measured on three renders of a
+# 7-minute video, cards quoting the speech had only 60-67 % of their words spoken
+# while on screen, 5-9 per render sat 2-11 s off. Replayed on those renders, this
+# pass raised it to 80-87 %, left no card worse and created no overlap.
+_CARD_ANCHOR_WINDOW_S = 12.0
+_CARD_ANCHOR_MIN_SCORE = 0.6
+_CARD_ANCHOR_LEAD_S = 0.2        # same lead as the trigger ANCHOR pass
+_CARD_ANCHOR_MIN_KEEP_S = 2.0    # a card shortened to make room keeps at least this
+_CARD_ANCHOR_GAP_S = 0.1
+_CARD_ANCHOR_STOP = _CAPM_ANCHOR_STOP | frozenset(
+    "nous vous ils elle au aux sur pour par dans avec".split()
+)
+_CARD_TEXT_PRIMARY = ("title", "confession_text", "qa_question", "text", "kicker", "number")
+_CARD_TEXT_SECONDARY = ("detail", "subtitle", "qa_answer", "chapter_title")
+
+
+def _card_text_lines(card: dict) -> list[str]:
+    """The card's main and secondary text, read the way the narrative log reads it."""
+    _hints = card.get("contentHints", {}) or {}
+    _lines: list[str] = []
+    for _fields in (_CARD_TEXT_PRIMARY, _CARD_TEXT_SECONDARY):
+        for _f in _fields:
+            _v = _hints.get(_f, "")
+            if isinstance(_v, list):
+                _v = " ".join(str(_x) for _x in _v)
+            if _v:
+                _lines.append(str(_v).strip())
+                break
+    return _lines
+
+
+def _card_content_tokens(text: str) -> list[str]:
+    _all = _capm_tokens(re.sub(r"^\s*\d+\s*[.)]\s*", "", text))
+    return [_t for _t in _all if _t not in _CARD_ANCHOR_STOP and len(_t) > 1] or _all
+
+
+def _anchor_cards_on_words(
+    graphic_cards: list[dict],
+    remapped_words: list[WordTiming],
+    trimmed_duration: float,
+) -> None:
+    """Move each graphic card onto the words it quotes, in OUTPUT time, in place.
+
+    Each text line of a card (title, then detail/subtitle) is looked for among the
+    words starting within _CARD_ANCHOR_WINDOW_S of the card's start: a stretch as
+    long as the line plus 3 words must hold >= _CARD_ANCHOR_MIN_SCORE of its content
+    words (a single-word line is ignored when the card has another line). The best
+    line wins, ties going to the closest occurrence; the card then starts
+    _CARD_ANCHOR_LEAD_S before its first matched word and keeps its duration. Cards
+    whose words are not spoken nearby (summaries, labels) are left alone.
+
+    A moved card never overlaps another card: the earlier card of a colliding pair
+    is shortened only if it keeps _CARD_ANCHOR_MIN_KEEP_S and loses none of its own
+    spoken words; otherwise the move is undone.
+    """
+    _words: list[tuple[str, float, float]] = []
+    for _w in remapped_words or []:
+        for _tok in _capm_tokens(str(_w.text)):
+            _words.append((_tok, float(_w.start), float(_w.end)))
+    if not _words or not graphic_cards:
+        return
+
+    def _coverage(_toks: set[str], _s: float, _e: float) -> float:
+        _said = {_t for _t, _ws, _we in _words if _we > _s - 0.3 and _ws < _e + 0.3}
+        return len(_toks & _said) / max(1, len(_toks))
+
+    _plan: list[dict] = []
+    for _c in graphic_cards:
+        try:
+            _s0, _e0 = float(_c["startSec"]), float(_c["endSec"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        _lines = _card_text_lines(_c)
+        _toks = {_t for _l in _lines for _t in _card_content_tokens(_l)}
+        _entry = {"card": _c, "s0": _s0, "e0": _e0, "s": _s0, "e": _e0, "toks": _toks, "moved": False}
+        _plan.append(_entry)
+        _best: tuple[tuple[float, float], float] | None = None
+        for _line in _lines:
+            _q = _card_content_tokens(_line)
+            if not _q or (len(_q) < 2 and len(_lines) > 1):
+                continue
+            _qs = set(_q)
+            for _i, (_tok, _ws, _) in enumerate(_words):
+                if _tok not in _qs or abs(_ws - _s0) > _CARD_ANCHOR_WINDOW_S:
+                    continue
+                _win = {_x for _x, _, _ in _words[_i:_i + len(_q) + 3]}
+                _key = (round(len(_qs & _win) / len(_qs), 3), -abs(_ws - _s0))
+                if _key[0] >= _CARD_ANCHOR_MIN_SCORE and (_best is None or _key > _best[0]):
+                    _best = (_key, _ws)
+        if _best is None:
+            continue
+        _new_s = max(0.0, _best[1] - _CARD_ANCHOR_LEAD_S)
+        _new_e = min(trimmed_duration, _new_s + (_e0 - _s0))
+        if abs(_new_s - _s0) < 0.3 or _new_e - _new_s < _CARD_ANCHOR_MIN_KEEP_S:
+            continue
+        _entry.update(s=_new_s, e=_new_e, moved=True)
+
+    n_trim = n_undo = 0
+    for _m in sorted((_p for _p in _plan if _p["moved"]), key=lambda _p: abs(_p["s"] - _p["s0"])):
+        for _o in _plan:
+            if _o is _m or not (_o["s"] < _m["e"] - 0.05 and _m["s"] < _o["e"] - 0.05):
+                continue
+            _first, _second = (_o, _m) if _o["s"] <= _m["s"] else (_m, _o)
+            _cut = _second["s"] - _CARD_ANCHOR_GAP_S
+            if (_cut - _first["s"] >= _CARD_ANCHOR_MIN_KEEP_S
+                    and _coverage(_first["toks"], _first["s"], _cut)
+                    >= _coverage(_first["toks"], _first["s"], _first["e"]) - 1e-9):
+                _first["e"] = _cut
+                n_trim += 1
+            else:
+                _m.update(s=_m["s0"], e=_m["e0"], moved=False)
+                n_undo += 1
+                break
+
+    n_moved = 0
+    for _p in _plan:
+        if abs(_p["s"] - _p["s0"]) < 1e-6 and abs(_p["e"] - _p["e0"]) < 1e-6:
+            continue
+        _p["card"]["startSec"] = round(_p["s"], 3)
+        _p["card"]["endSec"] = round(_p["e"], 3)
+        if _p["moved"]:
+            n_moved += 1
+            print(
+                f"[CARD-WORDS] {_p['card'].get('id', '?')} {_p['s0']:.2f}→{_p['s']:.2f}s"
+                f" ({_p['s'] - _p['s0']:+.1f}s) words on screen"
+                f" {_coverage(_p['toks'], _p['s0'], _p['e0']):.0%}→{_coverage(_p['toks'], _p['s'], _p['e']):.0%}",
+                flush=True,
+            )
+    graphic_cards.sort(key=lambda _c: float(_c.get("startSec", 0)))
+    print(
+        f"[CARD-WORDS] {n_moved} card(s) moved onto their words, {n_trim} shortened to make room,"
+        f" {n_undo} move(s) undone to avoid an overlap",
+        flush=True,
+    )
+
+
 def _moment_caption_cards(
     caption_moments: list[dict],
     timing_map: TimingMap,
@@ -4562,6 +4699,12 @@ def generate_storyboard(
                         f"[FULL-COVER] Overlap remains after exclusion pass: "
                         f"{_c['id']} [{_c['startSec']}, {_c['endSec']}] overlaps [{_ws}, {_we}]"
                     )
+
+    # Word anchoring runs on the final graphic list, after every pass that adds,
+    # drops or moves cards, so its no-overlap guarantee holds for what is rendered.
+    # Long format only: that is where it was measured and replayed.
+    if format_hint == "long":
+        _anchor_cards_on_words(graphic_cards, remapped_words, trimmed_duration)
 
     # Long-form caption/card collisions, resolved on the FINAL graphic list. The
     # list is still changing above this point: GAP-FILL and RHYTHM-SPLIT add
