@@ -1214,9 +1214,20 @@ async def retry_job(
     request: Request,
 ) -> JSONResponse:
     """Re-run a failed job using the source video that is still on disk.
-    Returns a NEW job_id — the frontend polls that one."""
+    Returns a NEW job_id — the frontend polls that one.
+
+    Only the job's owner may re-run it: the caller is identified by the signed
+    session cookie, never by a client-supplied id. A retry is free (is_retry
+    skips the quota) and re-runs the owner's video, so without this check anyone
+    holding a job id could spend compute on someone else's video. A job of
+    another profile, or with no recorded owner, answers exactly like a missing
+    job, so the route does not reveal which job ids exist.
+    """
+    caller = _verify_session(request.cookies.get(SESSION_COOKIE))
+    if not caller:
+        raise HTTPException(401, "Not authenticated")
     original = store.get(job_id)
-    if not original:
+    if not original or not original.profile_id or original.profile_id != caller:
         raise HTTPException(404, "Original job not found")
     if not original.source_path:
         raise HTTPException(400, "No source file stored for this job — please re-upload")

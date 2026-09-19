@@ -1604,7 +1604,16 @@ async function startRetry(jobIdToRetry) {
   if (submitBtn) { submitBtn.disabled = true; submitBtn.querySelector(".btn-label").textContent = "Traitement…"; submitBtn.classList.add("loading"); }
   try {
     const res = await apiFetch(`/api/retry/${_retryJobId}`, { method: "POST" });
-    if (!res.ok) { const txt = await res.text(); return fail(txt.includes("no longer on disk") ? "Vidéo source supprimée — re-uploadez." : `Erreur retry: ${res.status}`); }
+    if (!res.ok) {
+      const txt = await res.text();
+      // No jobId passed to fail(): none of these can be retried from the page.
+      return fail(
+        txt.includes("no longer on disk") ? "Vidéo source supprimée — re-uploadez-la."
+        : res.status === 401 ? "Votre session a expiré — reconnectez-vous puis relancez votre vidéo."
+        : res.status === 404 ? "Cette vidéo ne peut pas être relancée — re-uploadez-la."
+        : `La relance a échoué (${res.status}) — réessayez dans un instant.`
+      );
+    }
     const { job_id } = await res.json();
     poll(job_id).catch(e => { console.error("poll crashed:", e); fail("Erreur inattendue pendant le suivi du job."); });
   } catch (err) { fail(`Erreur retry: ${err.message}`); }
