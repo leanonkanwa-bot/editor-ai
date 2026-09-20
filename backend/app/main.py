@@ -39,7 +39,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.jobs import store
 from app.api.pipeline import run_job, run_render_phase, _shutdown_event as _pipeline_shutdown, _RENDER_SEM
-from app.api.upload import assembled_path, router as upload_router
+from app.api.upload import assembled_path, router as upload_router, upload_owner
 from app.core.config import settings
 from app.core.plans import DEFAULT_PLAN, effective_plan_info
 
@@ -1060,7 +1060,10 @@ async def submit_edit(
     job = store.create()
 
     if upload_id:
-        # Chunked-upload path: file was already assembled by /api/upload/assemble
+        # Chunked-upload path: file was already assembled by /api/upload/assemble.
+        # It must be this profile's upload, not any id the client knows.
+        if upload_owner(upload_id) != profile_id:
+            raise HTTPException(400, "No assembled file found for this upload — re-upload the video.")
         dest = assembled_path(upload_id)
         if dest is None:
             raise HTTPException(400, f"No assembled file found for upload_id={upload_id!r}. "
@@ -1748,8 +1751,10 @@ def get_narrative_timeline(job_id: str, request: Request):
 
 
 @app.get("/api/upload/preview/{upload_id}")
-def upload_preview(upload_id: str):
-    """Extract a representative frame from an uploaded source video."""
+def upload_preview(upload_id: str, request: Request):
+    """Extract a representative frame from the caller's own uploaded video."""
+    if upload_owner(upload_id) != _verify_session(request.cookies.get(SESSION_COOKIE)):
+        raise HTTPException(404, "No assembled file found")
     dest = assembled_path(upload_id)
     if dest is None:
         raise HTTPException(404, "No assembled file found")
@@ -2409,28 +2414,20 @@ def get_api_key(profile_id: str, request: Request) -> dict:
 
 # ── Feature 23 — Versioned API endpoints ─────────────────────────────────────
 @app.post("/api/v1/edit")
-async def v1_edit(
-    request: Request,
-    background: BackgroundTasks,
-) -> JSONResponse:
-    """Public API endpoint for programmatic video editing."""
+async def v1_edit(request: Request) -> JSONResponse:
+    """Not implemented: this endpoint never ran a pipeline.
+
+    It used to create a job that stayed "queued" for ever — a row in the job
+    store, owned by nobody, that no worker would ever pick up. Clients now get
+    a clear answer instead of a job id that leads nowhere.
+    """
     api_key = request.headers.get("x-api-key", "")
     if not _validate_api_key(api_key):
         raise HTTPException(401, "Invalid or missing X-API-Key")
-    # Increment usage counter
-    try:
-        data = _load_api_keys()
-        for v in data.values():
-            if v.get("key") == api_key:
-                v["usage"] = v.get("usage", 0) + 1
-        _save_api_keys(data)
-    except Exception:
-        pass
-    body = await request.json()
-    job_id = secrets.token_hex(8)
-    store.create(job_id)
-    store.update(job_id, status="queued", message="API job queued")
-    return JSONResponse({"job_id": job_id, "status": "queued"}, status_code=202)
+    raise HTTPException(501, {
+        "error": "not_implemented",
+        "message": "Programmatic editing is not available yet — use the web app.",
+    })
 
 
 @app.get("/api/v1/jobs/{job_id}")

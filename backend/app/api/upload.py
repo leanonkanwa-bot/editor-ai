@@ -24,14 +24,59 @@ from fastapi.responses import JSONResponse
 from starlette.requests import ClientDisconnect
 
 from app.core.config import settings
+from app.core.session import caller_profile
 
 router = APIRouter()
 
 _CHUNK_SUBDIR = "chunks"
 
 
+# An upload id becomes a directory and a file name: keep it to the shape we mint.
+_UPLOAD_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+_OWNER_FILE = "owner"
+
+
+def _valid_id(upload_id: str) -> str:
+    if not _UPLOAD_ID_RE.match(upload_id or ""):
+        raise HTTPException(404, "Upload session not found.")
+    return upload_id
+
+
 def _chunk_dir(upload_id: str) -> Path:
-    return settings.uploads_dir / f"_chunks_{upload_id}"
+    return settings.uploads_dir / f"_chunks_{_valid_id(upload_id)}"
+
+
+def _owner_marker(upload_id: str) -> Path:
+    """Owner of an assembled upload — the chunk directory is gone by then."""
+    return settings.uploads_dir / f"{_valid_id(upload_id)}.owner"
+
+
+def upload_owner(upload_id: str) -> str | None:
+    """The profile that started this upload, from the chunk dir or the marker."""
+    try:
+        d = _chunk_dir(upload_id)
+        if (d / _OWNER_FILE).exists():
+            return (d / _OWNER_FILE).read_text(encoding="utf-8").strip() or None
+        m = _owner_marker(upload_id)
+        if m.exists():
+            return m.read_text(encoding="utf-8").strip() or None
+    except (OSError, HTTPException):
+        return None
+    return None
+
+
+def require_upload_owner(request, upload_id: str) -> str:
+    """The caller, if they signed in and started this upload.
+
+    Uploads used to need no session at all: anyone could fill the volume, and
+    anyone knowing an id could read, extend or assemble someone else's file.
+    """
+    caller = caller_profile(request)
+    if not caller:
+        raise HTTPException(401, "Not authenticated")
+    if upload_owner(upload_id) != caller:
+        raise HTTPException(404, "Upload session not found.")
+    return caller
 
 
 _CHUNK_NAME = re.compile(r"^chunk_(\d{8})$")
@@ -86,10 +131,15 @@ def assembled_path(upload_id: str, suffix: str = ".mp4") -> Path | None:
 
 @router.post("/api/upload/init")
 async def upload_init(request: Request) -> JSONResponse:
-    """Create a new chunked upload session. Returns upload_id."""
+    """Create a new chunked upload session for the signed-in user."""
+    caller = caller_profile(request)
+    if not caller:
+        raise HTTPException(401, "Not authenticated")
     import uuid
     upload_id = uuid.uuid4().hex
-    _chunk_dir(upload_id).mkdir(parents=True, exist_ok=True)
+    d = _chunk_dir(upload_id)
+    d.mkdir(parents=True, exist_ok=True)
+    (d / _OWNER_FILE).write_text(caller, encoding="utf-8")
     return JSONResponse({"upload_id": upload_id})
 
 
@@ -103,6 +153,7 @@ async def upload_chunk(
     request: Request,
 ) -> JSONResponse:
     """Store one raw-bytes chunk. Streams directly to disk — no full-body buffer."""
+    require_upload_owner(request, upload_id)
     d = _chunk_dir(upload_id)
     if not d.exists():
         raise HTTPException(404, "Upload session not found. Call /api/upload/init first.")
@@ -134,12 +185,17 @@ async def upload_chunk(
 
 
 @router.get("/api/upload/status/{upload_id}")
-async def upload_status(upload_id: str) -> JSONResponse:
+async def upload_status(upload_id: str, request: Request) -> JSONResponse:
     """Which chunks the server already holds, so an interrupted upload resumes.
 
     Returns {"exists": false} when the session is unknown (never created,
     already assembled, or purged) — the client then starts a new upload.
     """
+    # Someone else's upload answers like an unknown one: the client starts afresh.
+    if not caller_profile(request):
+        raise HTTPException(401, "Not authenticated")
+    if upload_owner(upload_id) != caller_profile(request):
+        return JSONResponse({"upload_id": upload_id, "exists": False, "chunks": {}})
     d = _chunk_dir(upload_id)
     if not d.exists():
         return JSONResponse({"upload_id": upload_id, "exists": False, "chunks": {}})
@@ -160,6 +216,7 @@ async def upload_assemble(
     Concatenate all stored chunks into the final file.
     Body JSON: { "filename": "myvideo.mp4" }
     """
+    require_upload_owner(request, upload_id)
     d = _chunk_dir(upload_id)
     if not d.exists():
         raise HTTPException(404, "Upload session not found.")
@@ -201,6 +258,9 @@ async def upload_assemble(
             with chunk.open("rb") as cf:
                 shutil.copyfileobj(cf, out, 4 * 1024 * 1024)
 
+    # The chunk directory carried the owner; keep it beside the assembled file so
+    # /api/edit and the preview can still check who this upload belongs to.
+    _owner_marker(upload_id).write_text(caller_profile(request) or "", encoding="utf-8")
     shutil.rmtree(d, ignore_errors=True)
 
     size = final_path.stat().st_size
