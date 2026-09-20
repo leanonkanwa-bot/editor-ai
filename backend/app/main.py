@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import shutil
 import subprocess
@@ -1341,6 +1342,25 @@ def waitlist_count() -> dict:
 
 
 _PROFILES_DIR = settings._data_root / "profiles"
+
+# A profile id becomes a file name, so it must never contain a path. Before this,
+# POST /api/profile with profile_id="../jobs" wrote /data/jobs.json — every
+# client's job list — from a single unauthenticated request.
+_PROFILE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+# Only the server sets these: billing comes from Stripe webhooks, is_founder from
+# a file edit, identity from Google. A client that sends them is ignored.
+_SERVER_OWNED_PROFILE_FIELDS = frozenset({
+    "is_founder", "plan", "billing_status", "cancel_at",
+    "stripe_customer_id", "stripe_subscription_id", "email", "profile_id",
+})
+
+
+def _profile_path(profile_id: str) -> Path:
+    """Path of a profile file, or 404 for anything that is not a plain id."""
+    if not _PROFILE_ID_RE.match(profile_id or ""):
+        raise HTTPException(404, "Profile not found")
+    return _PROFILES_DIR / f"{profile_id}.json"
 _REPORTS_DIR  = settings._data_root / "reports"
 
 
@@ -1442,28 +1462,31 @@ async def _reengagement_loop() -> None:
 
 
 @app.post("/api/profile")
-async def save_profile(payload: dict = Body(...)) -> dict:
-    """Persist a coach profile to disk. Returns a stable profile_id."""
-    _PROFILES_DIR.mkdir(parents=True, exist_ok=True)
-    profile_id = payload.get("profile_id") or secrets.token_urlsafe(12)
-    profile_path = _PROFILES_DIR / f"{profile_id}.json"
+async def save_profile(request: Request, payload: dict = Body(...)) -> dict:
+    """Persist the signed-in user's own profile. Returns their profile_id.
 
-    # is_founder is a privileged, server-only flag (unlimited quota + 4K
-    # access) -- never settable through this public endpoint. Strip any
-    # client-supplied value and preserve whatever is already on disk.
-    safe_payload = {k: v for k, v in payload.items() if k != "is_founder"}
-    existing_is_founder = False
+    The route used to write whatever profile_id the body named, with no session:
+    anyone could grant themselves a paid plan ("plan": "agency"), overwrite
+    another user's profile, or escape the profiles directory through the id.
+    The profile written is now always the caller's, server-owned fields are kept
+    from disk, and the id is a plain token.
+    """
+    profile_id = _verify_session(request.cookies.get(SESSION_COOKIE)) or ""
+    if not profile_id:
+        raise HTTPException(401, "Not authenticated")
+    _PROFILES_DIR.mkdir(parents=True, exist_ok=True)
+    profile_path = _profile_path(profile_id)
+
+    existing: dict = {}
     if profile_path.exists():
         try:
-            existing_is_founder = bool(
-                json.loads(profile_path.read_text(encoding="utf-8")).get("is_founder")
-            )
+            existing = json.loads(profile_path.read_text(encoding="utf-8"))
         except Exception:
-            pass
+            existing = {}
 
-    data = {**safe_payload, "profile_id": profile_id}
-    if existing_is_founder:
-        data["is_founder"] = True
+    safe_payload = {k: v for k, v in payload.items() if k not in _SERVER_OWNED_PROFILE_FIELDS}
+    # existing first: the server-owned fields on disk survive the client's edit
+    data = {**existing, **safe_payload, "profile_id": profile_id}
 
     profile_path.write_text(
         json.dumps(data, ensure_ascii=False, indent=2),
@@ -1473,9 +1496,11 @@ async def save_profile(payload: dict = Body(...)) -> dict:
 
 
 @app.get("/api/profile/{profile_id}")
-async def get_profile(profile_id: str) -> dict:
-    """Fetch a previously saved coach profile."""
-    profile_path = _PROFILES_DIR / f"{profile_id}.json"
+async def get_profile(profile_id: str, request: Request) -> dict:
+    """Fetch the signed-in user's own profile (it carries their name and email)."""
+    if _verify_session(request.cookies.get(SESSION_COOKIE)) != profile_id:
+        raise HTTPException(404, "Profile not found")
+    profile_path = _profile_path(profile_id)
     if not profile_path.exists():
         raise HTTPException(404, "Profile not found")
     try:
@@ -2357,11 +2382,15 @@ def _validate_api_key(key: str) -> bool:
 
 
 @app.post("/api/api-keys")
-def create_api_key(payload: dict = Body(...)) -> dict:
-    profile_id = payload.get("profile_id", "")
+def create_api_key(request: Request, payload: dict = Body(...)) -> dict:
+    """Create the signed-in user's API key. The body's profile_id is ignored:
+    the route used to write a key for any profile, unauthenticated."""
+    profile_id = _verify_session(request.cookies.get(SESSION_COOKIE)) or ""
+    if not profile_id:
+        raise HTTPException(401, "Not authenticated")
     key = payload.get("key", "")
-    if not profile_id or not key:
-        raise HTTPException(400, "profile_id and key required")
+    if not key:
+        raise HTTPException(400, "key required")
     data = _load_api_keys()
     data[profile_id] = {"key": key, "created": datetime.utcnow().isoformat(), "usage": 0}
     _save_api_keys(data)
@@ -2369,7 +2398,10 @@ def create_api_key(payload: dict = Body(...)) -> dict:
 
 
 @app.get("/api/api-keys/{profile_id}")
-def get_api_key(profile_id: str) -> dict:
+def get_api_key(profile_id: str, request: Request) -> dict:
+    """The signed-in user's own key — it authenticates their API calls."""
+    if _verify_session(request.cookies.get(SESSION_COOKIE)) != profile_id:
+        raise HTTPException(404, "Not found")
     data = _load_api_keys()
     entry = data.get(profile_id)
     return {"key": entry["key"] if entry else None, "usage": entry.get("usage", 0) if entry else 0}

@@ -721,12 +721,22 @@ $("saveProfileBtn")?.addEventListener("click", async () => {
       body: JSON.stringify({ ...p, profile_id: existingId || undefined }),
     });
     if (res.ok) {
+      // The server writes the signed-in profile and returns its id, whatever the
+      // body asked for: adopt it so the page always points at the right profile.
       const { profile_id } = await res.json();
       if (profile_id) localStorage.setItem("profile_id", profile_id);
     }
 
     const msg = $("profileSaveMsg");
-    if (msg) { msg.style.display = "block"; setTimeout(() => { msg.style.display = "none"; }, 2500); }
+    if (msg) {
+      msg.textContent = res.ok
+        ? "Profil enregistré."
+        : (res.status === 401
+            ? "Connectez-vous avec Google pour enregistrer votre profil."
+            : "Le profil n'a pas pu être enregistré — réessayez.");
+      msg.style.display = "block";
+      setTimeout(() => { msg.style.display = "none"; }, res.ok ? 2500 : 5000);
+    }
   } catch (e) {
     console.warn("save profile error", e);
   }

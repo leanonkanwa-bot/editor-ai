@@ -22,6 +22,7 @@ import logging
 import stripe
 from fastapi import APIRouter, Body, HTTPException, Request
 
+from app.core.session import caller_profile
 from app.api.jobs import store as job_store
 from app.core.config import settings
 from app.core.plans import DEFAULT_PLAN, effective_plan_info, has_4k_access
@@ -40,7 +41,10 @@ _TIER_PRICE_IDS = {
 
 
 @router.get("/usage/{profile_id}")
-def get_usage(profile_id: str) -> dict:
+def get_usage(profile_id: str, request: Request) -> dict:
+    """Usage of the signed-in user's own profile."""
+    if caller_profile(request) != profile_id:
+        raise HTTPException(404, "Profile not found")
     profile: dict = {}
     profile_path = _PROFILES_DIR / f"{profile_id}.json"
     if profile_path.exists():
