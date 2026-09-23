@@ -634,11 +634,19 @@ def _accent_treatment(p: dict, sel: str, t: float) -> list[str]:
             f"{t:.4f});"
         )
     elif pid == "lean_glass":
+        # Focus pull: the word arrives soft and wide, then snaps sharp — glass being
+        # focused through. The underline still draws itself under it.
+        out.append(
+            f"  tl.fromTo('{sel}', "
+            f"{{ filter: 'blur(7px)', letterSpacing: '0.07em' }}, "
+            f"{{ filter: 'blur(0px)', letterSpacing: '0em', duration: 0.45, ease: 'power3.out' }}, "
+            f"{t - 0.10:.4f});"
+        )
         out.append(
             f"  tl.fromTo('{sel}', "
             f"{{ backgroundSize: '0% 3px' }}, "
             f"{{ backgroundSize: '100% 3px', duration: 0.30, ease: 'power2.out' }}, "
-            f"{t:.4f});"
+            f"{t + 0.15:.4f});"
         )
         if p.get("title_glow"):
             out.append(
@@ -885,6 +893,24 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('    transparent 100%);')
         parts.append('  box-shadow: none;')
         parts.append('}')
+    if p.get("id") == "lean_glass":
+        # The pack is called glass but only the number card was ever frosted: every
+        # other card was a near-opaque tint, and the scene behind stayed sharp.
+        # The render engine does honour backdrop-filter (probed on a real render).
+        parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
+        parts.append('  backdrop-filter: blur(22px) saturate(180%);')
+        parts.append('  -webkit-backdrop-filter: blur(22px) saturate(180%);')
+        parts.append('  background: rgba(10,10,20,0.68);')
+        parts.append(f'  border: 1px solid {p["accent"]}26;')
+        parts.append('  border-top: 1px solid rgba(255,255,255,0.09);')
+        parts.append('  box-sizing: border-box;')
+        parts.append('}')
+        # A frosted panel sits on brighter ground than an opaque one: keep the text
+        # readable with a soft dark halo rather than by darkening the whole panel.
+        parts.append(f'.card[data-card-id="{card_id}"] .title,'
+                     f' .card[data-card-id="{card_id}"] .detail {{')
+        parts.append('  text-shadow: 0 1px 10px rgba(0,0,0,0.55);')
+        parts.append('}')
     if compact and p.get("id") == "lean_glass":
         # Compact zone (landscape-tl, 660px wide): panel right edge at ~639px leaves only 21px
         # before the card boundary. The default 60px blur spills 39px past → clips in a straight
@@ -939,6 +965,21 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
     parts.append(f'  width: 0; height: 3px; background: {p["accent"]};')
     parts.append(f'  border-radius: 999px; box-shadow: {p["accent_line_glow"]};')
     parts.append('}')
+    if p.get("id") == "lean_glass":
+        # A pane of glass catches light on its edge: one pass around the outline at
+        # entry. The shimmer below crosses the surface; this draws the border.
+        parts.append(f'.card[data-card-id="{card_id}"] .edge-light {{')
+        parts.append(f'  position: absolute; inset: 0; border-radius: {p["radius"]};')
+        parts.append('  pointer-events: none; z-index: 3; padding: 2px; opacity: 0;')
+        parts.append('  background: conic-gradient(from calc(var(--edge-angle, 0) * 1deg),')
+        parts.append('    transparent 0deg, transparent 250deg,')
+        parts.append(f'    {p["accent"]}00 260deg, {p["accent"]} 315deg,')
+        parts.append('    rgba(255,255,255,0.95) 345deg, rgba(255,255,255,0) 360deg);')
+        parts.append('  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);')
+        parts.append('  -webkit-mask-composite: xor;')
+        parts.append('  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);')
+        parts.append('  mask-composite: exclude;')
+        parts.append('}')
     parts.append(f'.card[data-card-id="{card_id}"] .card-panel .shimmer-mask {{')
     parts.append(f'  position: absolute; top: 0; left: 0; width: 100%; height: 100%;')
     parts.append(f'  pointer-events: none; border-radius: {p["radius"]};')
@@ -4511,7 +4552,12 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         _psc_pfx = _esc(hints.get("prefix", ""))
         _psc_num = _esc(hints.get("number", "0"))
         _psc_sfx = _esc(hints.get("suffix", ""))
-        _psc_kck = _esc(hints.get("title", hints.get("kicker", "")))
+        # The label under the number: its own detail, else the title. Falling back to
+        # the kicker printed the same words twice on the card.
+        _psc_kck_raw = hints.get("detail") or hints.get("title") or ""
+        if str(_psc_kck_raw).strip().lower() == str(kicker).strip().lower():
+            _psc_kck_raw = ""
+        _psc_kck = _esc(_psc_kck_raw)
         parts.append(f'    <div class="psc-row">')
         if _psc_pfx:
             parts.append(f'      <span class="psc-side" id="{card_id}-psc-prefix">{_psc_pfx}</span>')
@@ -4732,6 +4778,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'    <div class="detail" id="{card_id}-detail">{_esc(detail)}</div>')
     parts.append(f'    <div class="accent-line" id="{card_id}-line"></div>')
     parts.append(f'    <div class="shimmer-mask" id="{card_id}-shimmer"></div>')
+    if p.get("id") == "lean_glass":
+        parts.append(f'    <div class="edge-light" id="{card_id}-edge"></div>')
     parts.append('  </div>')
     parts.append('</div>')
     parts.append('</div>')
@@ -7759,7 +7807,9 @@ def _build_timeline_js(
                 if _psc_sfx_raw:
                     lines.append(f'  tl.fromTo(\'{_psc_sfx_sel}\', {{ opacity: 0, y: -6 }}, {{ opacity: 1, y: 0, duration: 0.280, ease: _eIn }}, {t_in:.4f});')
                 if _psc_val is not None:
-                    _psc_dec = 1 if '.' in str(_psc_val) else 0
+                    # Decimals follow what the planner wrote ("7" vs "7.5"), not the
+                    # parsed float: str(7.0) contains a dot and printed "7.0".
+                    _psc_dec = 1 if "." in str(_psc_raw) else 0
                     # Number span shows ONLY the number — suffix is in the separate .psc-side span
                     _psc_fmt = (
                         'o.v.toFixed(1)'
@@ -8407,6 +8457,15 @@ def _build_timeline_js(
                     f'duration: {breath_period:.2f}, ease: "sine.inOut", '
                     f'repeat: {pulse_repeats}, yoyo: true }}, '
                     f'{t_in + 0.70:.4f});'
+                )
+            # Edge light: one pass around the outline, just after the panel lands.
+            if p.get("id") == "lean_glass" and content_style not in ("timeline",):
+                _edge_sel = f'.card[data-card-id="{card_id}"] #{card_id}-edge'
+                lines.append(
+                    f'  tl.fromTo(\'{_edge_sel}\', '
+                    f'{{ "--edge-angle": 0, opacity: 0.9 }}, '
+                    f'{{ "--edge-angle": 360, opacity: 0, duration: 0.85, ease: "none" }}, '
+                    f'{start + 0.25:.4f});'
                 )
             # Shimmer sweep — only for cards that have a shimmer-mask in DOM
             # (timeline cards return early in _build_graphic_card_html, no shimmer-mask)
