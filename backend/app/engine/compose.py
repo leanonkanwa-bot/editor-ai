@@ -258,6 +258,8 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
             _n_items = len(_dyn_hints.get(_items_key, _dyn_hints.get("items", [])))
             _n_items = max(1, min(_n_items, 12))
             _dyn_h = _n_items * 45 + 160
+            if _dyn_style == "list" and _dyn_hints.get("title"):
+                _dyn_h += 46  # the title row, now that it is rendered
             _dyn_h = max(160, min(_dyn_h, 700))
             bounds = {**bounds, "height": _dyn_h}
             print(
@@ -752,6 +754,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         detail_size_eff = "25px" if layout == "portrait" else "23px"
         kicker_size_eff = "20px" if layout == "portrait" else "18px"
         list_item_size  = "21px"
+        _list_title_size = "30px"
         chk_item_size   = "20px"
         panel_padding   = "28px 32px"
         root_padding    = "32px"
@@ -775,6 +778,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         detail_size_eff = p["detail_size"]
         kicker_size_eff = p["kicker_size"]
         list_item_size  = "28px"
+        _list_title_size = "40px"
         chk_item_size   = "26px"
         panel_padding   = "44px 52px"
         root_padding    = "48px"
@@ -1148,6 +1152,11 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('}')
     # List: item rows
     if content_style == "list":
+        # The title heads the rows, so it sits between the kicker and an item —
+        # the full hero size would push the items out of the panel.
+        parts.append(f'.card[data-card-id="{card_id}"] .list-title {{')
+        parts.append(f'  font-size: {_list_title_size}; line-height: 1.2; margin-bottom: 2px;')
+        parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .list-items {{')
         parts.append(f'  display: flex; flex-direction: column; gap: 12px; width: 100%;')
         parts.append('}')
@@ -3488,6 +3497,11 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'    </div>')
     elif content_style == "list":
         items = hints.get("items", [])
+        if title:
+            parts.append(
+                f'    <div class="title list-title" id="{card_id}-title">'
+                f'{_split_title_accent(display_text, accent_word_hint, card_id)}</div>'
+            )
         parts.append(f'    <div class="list-items">')
         for i, item in enumerate(items[:8]):
             parts.append(f'      <div class="list-item" id="{card_id}-item-{i}">')
