@@ -178,6 +178,19 @@ _TALL_DATA_PANEL_TYPES = frozenset({
 # in every pack). Such lists take the tall zones and tall-card layout instead.
 _LIST_TALL_MIN_ITEMS = 5
 
+# lean_craft's torn edge. The right side is a hand-irregular deckle; the SVG is
+# stretched over the panel (preserveAspectRatio=none), so the tear follows any
+# panel size. Kept as one line: it is a CSS url() value.
+_CRAFT_TORN_MASK = (
+    "data:image/svg+xml;utf8,"
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'"
+    " preserveAspectRatio='none'><path fill='%23000' d='M0 0 H98.1"
+    " L99.0 2.6 L97.6 5.1 L98.7 11.4 L97.2 14.0 L99.1 21.7 L97.9 24.3"
+    " L98.4 29.0 L96.9 34.8 L98.9 38.1 L97.5 40.2 L98.2 47.6 L96.8 51.0"
+    " L99.0 55.3 L97.7 62.9 L98.6 66.1 L97.1 68.4 L98.8 75.7 L97.4 79.0"
+    " L98.3 84.2 L96.9 87.1 L99.1 92.8 L97.8 95.2 L98.5 100 H0 Z'/></svg>"
+)
+
 
 def _is_tall_panel(style: str, hints: dict | None) -> bool:
     """True for data cards that need the tall zones and tall compact layout."""
@@ -402,9 +415,12 @@ _LEAN_PAPER = {
 
 _LEAN_VIBE = {
     "id": "lean_vibe",
-    "bg": "linear-gradient(135deg, #FF6B9D, #FFA94D)",
-    "text": "#FFFFFF",
-    "text_secondary": "rgba(255,255,255,0.75)",
+    # Flat vivid ground + dark ink: the gradient panel put white text at 1.9-2.7:1
+    # (measured), and the 135° pink-to-orange is the generic AI-poster look. Ink on
+    # this pink is 6.8:1 and the pack keeps its colour.
+    "bg": "#FF6B9D",
+    "text": "#2B0A18",
+    "text_secondary": "rgba(43,10,24,0.62)",
     "accent": "#FFE66D",
     "font": '"Poppins", ui-sans-serif, system-ui, sans-serif',
     "font_weight": "800",
@@ -412,18 +428,20 @@ _LEAN_VIBE = {
     "number_size": "96px",
     "kicker_size": "22px",
     "detail_size": "26px",
-    "border": "3px solid rgba(255,255,255,0.18)",
+    "border": "3px solid rgba(43,10,24,0.16)",
     "radius": "24px",
-    "shadow": "0 8px 32px rgba(255,107,157,0.3), 0 4px 16px rgba(0,0,0,0.15)",
+    # Hard offset block shadow — screen-print registration, not a soft glow.
+    "shadow": "7px 7px 0 rgba(43,10,24,0.20), 0 4px 18px rgba(0,0,0,0.18)",
     "shadow_inset": "",
     "panel_filter": "",
-    "title_glow": "0 0 24px rgba(255,230,109,0.3)",
-    "title_glow_intense": "0 0 40px rgba(255,230,109,0.5)",
+    # No glow: ink on a bright flat ground reads by contrast, not by light.
+    "title_glow": "",
+    "title_glow_intense": "",
     "has_grain": True,
     "grain_type": "confetti",
-    "shimmer_color": "rgba(255,230,109,0.18)",
-    "accent_line_glow": "0 0 10px rgba(255,230,109,0.4)",
-    "accent_line_glow_bright": "0 0 18px rgba(255,230,109,0.6)",
+    "shimmer_color": "rgba(43,10,24,0.10)",
+    "accent_line_glow": "",
+    "accent_line_glow_bright": "",
     "backdrop_dim": "brightness(0.35) saturate(1.3)",
     "backdrop_restore": "brightness(1) saturate(1)",
     # Climax primitives: deep warm dark with orange-to-yellow sol vif from bottom (Direction C — warm)
@@ -442,7 +460,9 @@ _LEAN_LEDGER = {
     "number_size": "88px",
     "kicker_size": "18px",
     "detail_size": "22px",
-    "border": "1px solid rgba(0,200,150,0.2)",
+    # Steel carries the structure so the mint can mean "this is the point".
+    "neutral": "#5A6B84",
+    "border": "1px solid rgba(90,107,132,0.38)",
     "radius": "4px",
     "shadow": "0 2px 12px rgba(0,0,0,0.3)",
     "shadow_inset": "",
@@ -451,9 +471,9 @@ _LEAN_LEDGER = {
     "title_glow_intense": "",
     "has_grain": True,
     "grain_type": "grid",
-    "shimmer_color": "rgba(0,200,150,0.08)",
-    "accent_line_glow": "0 0 8px rgba(0,200,150,0.2)",
-    "accent_line_glow_bright": "0 0 12px rgba(0,200,150,0.3)",
+    "shimmer_color": "rgba(90,107,132,0.10)",
+    "accent_line_glow": "",
+    "accent_line_glow_bright": "",
     "backdrop_dim": "brightness(0.2)",
     "backdrop_restore": "brightness(1)",
     # Climax primitives: dark forest with green radial bloom at upper-centre (Direction B — cold)
@@ -465,7 +485,9 @@ _LEAN_CRAFT = {
     "bg": "#E8D9C5",
     "text": "#3D2B1F",
     "text_secondary": "rgba(61,43,31,0.55)",
-    "accent": "#D97757",
+    # Darker terracotta: the old #D97757 measured 2.25:1 on this cream (and 3.1:1
+    # under the white bullet numbers). This reads 4.6:1 and 6.4:1.
+    "accent": "#9C4526",
     "font": '"Montserrat", "Helvetica Neue", Arial, sans-serif',
     "font_detail": '"Inter", ui-sans-serif, system-ui, sans-serif',
     "font_weight": "700",
@@ -473,18 +495,20 @@ _LEAN_CRAFT = {
     "number_size": "90px",
     "kicker_size": "20px",
     "detail_size": "22px",
-    "border": "1.5px solid rgba(217,119,87,0.25)",
+    "border": "1.5px solid rgba(156,69,38,0.22)",
     "radius": "12px 8px 10px 14px",
-    "shadow": "0 0 60px rgba(217,119,87,0.20), 0 3px 16px rgba(61,43,31,0.28), 0 8px 32px rgba(61,43,31,0.12)",
+    # Shadow is drawn with drop-shadow in the panel CSS so it follows the torn
+    # edge; a box-shadow would outline the rectangle the mask just cut away.
+    "shadow": "none",
     "shadow_inset": "",
     "panel_filter": "",
     "title_glow": "",
     "title_glow_intense": "",
     "has_grain": True,
     "grain_type": "paper",
-    "shimmer_color": "rgba(217,119,87,0.10)",
-    "accent_line_glow": "0 0 6px rgba(217,119,87,0.25)",
-    "accent_line_glow_bright": "0 0 10px rgba(217,119,87,0.35)",
+    "shimmer_color": "rgba(156,69,38,0.10)",
+    "accent_line_glow": "0 0 6px rgba(156,69,38,0.22)",
+    "accent_line_glow_bright": "0 0 10px rgba(156,69,38,0.32)",
     "backdrop_dim": "brightness(0.3) sepia(0.2)",
     "backdrop_restore": "brightness(1) sepia(0)",
     # Climax primitives: deep warm dark with terracotta sol vif from bottom (Direction C — warm)
@@ -554,6 +578,35 @@ _CONFETTI_SVG = (
     "%3Ccircle cx='160' cy='30' r='1.5' fill='%23fff' opacity='0.07'/%3E"
     "%3C/svg%3E"
 )
+_CONFETTI_BURST_SVG = (
+    "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E"
+    "%3Crect x='47' y='25' width='11' height='3' rx='1' fill='%23FF3D7F' opacity='0.81' transform='rotate(93 52 26)'/%3E"
+    "%3Crect x='13' y='150' width='7' height='4' rx='1' fill='%23FFE66D' opacity='0.56' transform='rotate(23 16 152)'/%3E"
+    "%3Crect x='60' y='173' width='12' height='3' rx='1' fill='%23FFB347' opacity='0.6' transform='rotate(147 66 174)'/%3E"
+    "%3Ccircle cx='56' cy='252' r='4' fill='%23FFE66D' opacity='0.57'/%3E"
+    "%3Crect x='59' y='344' width='13' height='4' rx='1' fill='%23FFB347' opacity='0.6' transform='rotate(26 65 346)'/%3E"
+    "%3Crect x='110' y='53' width='7' height='4' rx='1' fill='%23FFE66D' opacity='0.77' transform='rotate(127 113 55)'/%3E"
+    "%3Ccircle cx='154' cy='140' r='4' fill='%23fff' opacity='0.74'/%3E"
+    "%3Crect x='124' y='197' width='11' height='5' rx='1' fill='%23FFE66D' opacity='0.83' transform='rotate(134 129 199)'/%3E"
+    "%3Ccircle cx='149' cy='289' r='2' fill='%23FF3D7F' opacity='0.67'/%3E"
+    "%3Crect x='151' y='379' width='10' height='6' rx='1' fill='%23FFE66D' opacity='0.85' transform='rotate(10 156 382)'/%3E"
+    "%3Ccircle cx='175' cy='46' r='5' fill='%23fff' opacity='0.83'/%3E"
+    "%3Ccircle cx='174' cy='97' r='2' fill='%23fff' opacity='0.74'/%3E"
+    "%3Ccircle cx='205' cy='223' r='4' fill='%23fff' opacity='0.84'/%3E"
+    "%3Crect x='168' y='305' width='7' height='4' rx='1' fill='%23fff' opacity='0.62' transform='rotate(73 171 307)'/%3E"
+    "%3Ccircle cx='182' cy='357' r='2' fill='%23FF3D7F' opacity='0.71'/%3E"
+    "%3Ccircle cx='267' cy='63' r='5' fill='%23FF3D7F' opacity='0.77'/%3E"
+    "%3Crect x='281' y='139' width='8' height='4' rx='1' fill='%23fff' opacity='0.82' transform='rotate(21 285 141)'/%3E"
+    "%3Crect x='268' y='185' width='13' height='4' rx='1' fill='%23FFE66D' opacity='0.81' transform='rotate(67 274 187)'/%3E"
+    "%3Crect x='282' y='246' width='11' height='5' rx='1' fill='%23FFE66D' opacity='0.72' transform='rotate(32 287 248)'/%3E"
+    "%3Ccircle cx='311' cy='332' r='5' fill='%23FF3D7F' opacity='0.91'/%3E"
+    "%3Ccircle cx='376' cy='57' r='2' fill='%23FF3D7F' opacity='0.59'/%3E"
+    "%3Crect x='350' y='94' width='11' height='3' rx='1' fill='%23FFE66D' opacity='0.73' transform='rotate(26 355 95)'/%3E"
+    "%3Crect x='326' y='185' width='7' height='3' rx='1' fill='%23FFB347' opacity='0.59' transform='rotate(53 329 186)'/%3E"
+    "%3Ccircle cx='374' cy='265' r='5' fill='%23fff' opacity='0.93'/%3E"
+    "%3Crect x='341' y='340' width='10' height='5' rx='1' fill='%23FF3D7F' opacity='0.95' transform='rotate(21 346 342)'/%3E"
+    "%3C/svg%3E"
+)
 _GRID_SVG = (
     "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E"
     "%3Cline x1='0' y1='40' x2='40' y2='40' stroke='rgba(0,200,150,0.06)' stroke-width='1'/%3E"
@@ -599,10 +652,13 @@ def _accent_bg_css(p: dict) -> str:
     if pid == "lean_cinema":
         return ""  # uses letter-spacing expand instead
     if pid == "lean_vibe":
+        # A sticker slapped on the poster: solid yellow, ink text, tilted, with a
+        # hard offset shadow. It is placed here and animated in _accent_treatment.
         return (
-            f"  background-image: linear-gradient({acc}55, {acc}55);\n"
-            f"  background-repeat: no-repeat; background-position: 0 0;\n"
-            f"  background-size: 0% 100%; padding: 0 3px; border-radius: 4px;\n"
+            f"  display: inline-block; background: {acc}; color: #2B0A18;\n"
+            f"  padding: 0 12px; border-radius: 6px; margin: 0 2px;\n"
+            f"  box-shadow: 5px 5px 0 rgba(43,10,24,0.22);\n"
+            f"  transform: rotate(-2.5deg); transform-origin: 50% 60%;\n"
         )
     if pid == "lean_ledger":
         return (
@@ -610,12 +666,20 @@ def _accent_bg_css(p: dict) -> str:
             f"  background-repeat: no-repeat; background-position: 0 0;\n"
             f"  background-size: 0% 100%;\n"
         )
-    # lean_glass: 3px underline sweep; lean_craft: 4px brush stroke
-    h = "4px" if pid == "lean_craft" else "3px"
+    if pid == "lean_craft":
+        # Ink laid on absorbent paper: the density varies along the stroke instead
+        # of being a flat bar. It soaks downward once drawn (see _accent_treatment).
+        return (
+            f"  background-image: repeating-linear-gradient(90deg,\n"
+            f"    {acc} 0 9px, {acc}CC 9px 15px, {acc} 15px 26px, {acc}D9 26px 34px);\n"
+            f"  background-repeat: no-repeat; background-position: 0 100%;\n"
+            f"  background-size: 0% 4px;\n"
+        )
+    # lean_glass: 3px underline sweep
     return (
         f"  background-image: linear-gradient({acc}, {acc});\n"
         f"  background-repeat: no-repeat; background-position: 0 100%;\n"
-        f"  background-size: 0% {h};\n"
+        f"  background-size: 0% 3px;\n"
     )
 
 
@@ -657,21 +721,21 @@ def _accent_treatment(p: dict, sel: str, t: float) -> list[str]:
                 f"{t + 0.10:.4f});"
             )
     elif pid == "lean_vibe":
+        # The sticker lands: arrives small and over-rotated, overshoots, settles on
+        # its resting tilt. rotation is animated from the CSS -2.5deg resting angle.
+        # The word stays painted the whole time: hiding it left a hole in the middle
+        # of the line and the tail of the sentence went unpainted with it.
         out.append(
             f"  tl.fromTo('{sel}', "
-            f"{{ backgroundSize: '0% 100%' }}, "
-            f"{{ backgroundSize: '100% 100%', duration: 0.22, ease: 'power2.out' }}, "
+            f"{{ scale: 0.86, rotation: 7 }}, "
+            f"{{ scale: 1.10, rotation: -4.5, duration: 0.26, "
+            f"ease: 'back.out(2.2)' }}, "
             f"{t:.4f});"
         )
         out.append(
             f"  tl.to('{sel}', "
-            f"{{ scale: 1.10, duration: 0.12, ease: 'power2.in' }}, "
-            f"{t + 0.08:.4f});"
-        )
-        out.append(
-            f"  tl.to('{sel}', "
-            f"{{ scale: 1, duration: 0.14, ease: 'power2.out' }}, "
-            f"{t + 0.20:.4f});"
+            f"{{ scale: 1, rotation: -2.5, duration: 0.18, ease: 'power2.out' }}, "
+            f"{t + 0.26:.4f});"
         )
     elif pid == "lean_ledger":
         # Two-phase: full-height scan (0.08s) collapses to 3px underline (0.15s)
@@ -692,6 +756,13 @@ def _accent_treatment(p: dict, sel: str, t: float) -> list[str]:
             f"{{ backgroundSize: '0% 4px' }}, "
             f"{{ backgroundSize: '100% 4px', duration: 0.45, ease: 'elastic.out(1,0.4)' }}, "
             f"{t:.4f});"
+        )
+        # …then the ink soaks into the paper: the stroke swells and softens.
+        out.append(
+            f"  tl.to('{sel}', "
+            f"{{ backgroundSize: '100% 8px', opacity: 0.92, duration: 0.55, "
+            f"ease: 'power1.out' }}, "
+            f"{t + 0.45:.4f});"
         )
     elif pid == "lean_cinema":
         # Letter-spacing expands wide then collapses back to normal
@@ -936,7 +1007,10 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'.card[data-card-id="{card_id}"] .kicker {{')
         parts.append(f'  font-family: {p["font"]}; font-size: {kicker_size_eff};')
         parts.append(f'  font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase;')
-        parts.append(f'  color: {p["accent"]}; line-height: 1.2; overflow-wrap: break-word; word-break: break-word;')
+        # lean_vibe: the accent yellow on the pink ground is 2.1:1 — the kicker is
+        # ink here, and the yellow is kept for the sticker.
+        _kick_col = "rgba(43,10,24,0.78)" if p["id"] == "lean_vibe" else p["accent"]
+        parts.append(f'  color: {_kick_col}; line-height: 1.2; overflow-wrap: break-word; word-break: break-word;')
         parts.append('}')
     glow_css = f'  text-shadow: {p["title_glow"]};' if p["title_glow"] else ''
     parts.append(f'.card[data-card-id="{card_id}"] .title {{')
@@ -954,6 +1028,10 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         _abg = _accent_bg_css(p)
         parts.append(f'.card[data-card-id="{card_id}"] .accent-word {{')
         parts.append(f'  color: {p["accent"]};')
+        if p.get("id") == "lean_cinema":
+            # Small caps give the word weight in the frame; the letter-spacing
+            # collapse alone read as nothing at all on a short card.
+            parts.append('  font-variant-caps: all-small-caps; letter-spacing: 0.04em;')
         if _abg:
             parts.append(_abg.rstrip())
         parts.append('}')
@@ -966,9 +1044,54 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  line-height: 1.4; overflow-wrap: break-word; word-break: break-word;')
         parts.append('}')
     parts.append(f'.card[data-card-id="{card_id}"] .accent-line {{')
-    parts.append(f'  width: 0; height: 3px; background: {p["accent"]};')
+    _acc_line_col = (
+        "rgba(43,10,24,0.55)" if p["id"] == "lean_vibe"
+        else p.get("neutral") if p["id"] == "lean_ledger"
+        else p["accent"]
+    )
+    parts.append(f'  width: 0; height: 3px; background: {_acc_line_col};')
     parts.append(f'  border-radius: 999px; box-shadow: {p["accent_line_glow"]};')
     parts.append('}')
+    if p.get("id") == "lean_ledger":
+        # Print head: the title is wiped in from the left and a block cursor sits
+        # at the end of the line until the line is finished.
+        parts.append(f'.card[data-card-id="{card_id}"] .led-cursor {{')
+        parts.append(f'  display: inline-block; width: 0.5em; height: 0.92em;')
+        parts.append(f'  background: {p["accent"]}; margin-left: 0.12em;')
+        parts.append('  vertical-align: -0.06em; opacity: 0;')
+        parts.append('}')
+    if p.get("id") == "lean_craft":
+        # A torn sheet: the mask cuts a deckled right edge (the SVG is stretched to
+        # the panel, so the tear scales with it). drop-shadow is used instead of
+        # box-shadow because it follows the cut silhouette rather than the box.
+        parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
+        parts.append(f'  -webkit-mask-image: url("{_CRAFT_TORN_MASK}");')
+        parts.append(f'  mask-image: url("{_CRAFT_TORN_MASK}");')
+        parts.append('  -webkit-mask-size: 100% 100%; mask-size: 100% 100%;')
+        parts.append('  -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;')
+        parts.append('  filter: drop-shadow(4px 4px 0 rgba(61,43,31,0.18))')
+        parts.append('          drop-shadow(0 6px 18px rgba(61,43,31,0.22));')
+        parts.append('  border-right: none;')
+        # Keep the text off the tear: the deckle eats up to ~3% of the panel width,
+        # and on a wide card the last word was sitting on the cut.
+        parts.append('  padding-right: calc(' + panel_padding.split()[-1] + ' + 26px);')
+        parts.append('}')
+    if p.get("id") == "lean_cinema":
+        # Letterbox: two thin gold-to-transparent bars that close in on the card.
+        # scaleX is animated from 0, so they draw from the centre outwards.
+        parts.append(f'.card[data-card-id="{card_id}"] .cine-bar {{')
+        parts.append('  position: absolute; left: 0; right: 0; height: 2px;')
+        parts.append('  pointer-events: none; z-index: 4; transform: scaleX(0);')
+        parts.append(f'  background: linear-gradient(90deg, transparent 0%, {p["accent"]}CC 18%,')
+        parts.append(f'    {p["accent"]} 50%, {p["accent"]}CC 82%, transparent 100%);')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .cine-bar-top {{ top: 0; }}')
+        parts.append(f'.card[data-card-id="{card_id}"] .cine-bar-bottom {{ bottom: 0; }}')
+        # N3: the rule above the kicker, drawn on entry like a title card.
+        parts.append(f'.card[data-card-id="{card_id}"] .cine-rule {{')
+        parts.append(f'  height: 1px; background: {p["accent"]}; width: 0;')
+        parts.append('  align-self: center; margin-bottom: 2px; opacity: 0.85;')
+        parts.append('}')
     if p.get("id") == "lean_glass":
         # A pane of glass catches light on its edge: one pass around the outline at
         # entry. The shimmer below crosses the surface; this draws the border.
@@ -993,7 +1116,11 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
     parts.append(f'    {p["shimmer_color"]} var(--shimmer-pos, -20%),')
     parts.append(f'    transparent calc(var(--shimmer-pos, -20%) + 10%),')
     parts.append(f'    transparent 100%);')
-    parts.append(f'  mix-blend-mode: overlay; z-index: 2;')
+    # overlay blending lightens what is under the band. On a bright ground with dark
+    # ink (lean_vibe) that erased the words the band crossed — the sweep there is a
+    # soft shade instead, which is what a sheen does on paper anyway.
+    _shim_blend = "multiply" if p["id"] == "lean_vibe" else "overlay"
+    parts.append(f'  mix-blend-mode: {_shim_blend}; z-index: 2;')
     parts.append('}')
     content_style = hints.get("style", "")
     # Comparison: two-column layout with text containment
@@ -1171,6 +1298,26 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  display: flex; align-items: center; justify-content: center;')
         parts.append(f'  font-size: 14px; font-weight: 800; flex-shrink: 0;')
         parts.append('}')
+        if p.get("id") == "lean_ledger":
+            # Register rows: an indexed column in steel, figures aligned, a hairline
+            # under each entry. The mint stays out of it — it marks the accent only.
+            parts.append(f'.card[data-card-id="{card_id}"] .list-item {{')
+            parts.append(f'  border-bottom: 1px solid rgba(90,107,132,0.30);')
+            parts.append('  padding-bottom: 7px; width: 100%;')
+            parts.append('  font-variant-numeric: tabular-nums;')
+            parts.append('}')
+            parts.append(f'.card[data-card-id="{card_id}"] .list-item:last-child {{')
+            parts.append('  border-bottom: none;')
+            parts.append('}')
+            parts.append(f'.card[data-card-id="{card_id}"] .list-bullet {{')
+            parts.append('  width: 26px; height: 22px; border-radius: 2px;')
+            # The index reads at 13px on navy, so it takes a lighter steel than the
+            # rule around it (#5A6B84 as text was 3.3:1 and vanished).
+            parts.append('  background: transparent; color: #9FB0C6;')
+            parts.append(f'  border: 1px solid rgba(90,107,132,0.55);')
+            parts.append('  font-size: 14px; font-weight: 600;')
+            parts.append('  font-variant-numeric: tabular-nums;')
+            parts.append('}')
     # Carousel: cycling slides
     if content_style == "carousel":
         parts.append(f'.card[data-card-id="{card_id}"] .carousel-slide {{')
@@ -2782,8 +2929,10 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         if compact and layout == "landscape":
             _psc_num_sz  = "54px"
             _psc_side_sz = "24px"
-        # Glassmorphism panel: genuine blur on dark packs (lean_glass, lean_ledger, lean_cinema)
-        if p.get("id") in ("lean_glass", "lean_ledger", "lean_cinema", "lean_vibe"):
+        # Glassmorphism panel: genuine blur on dark packs (lean_glass, lean_ledger,
+        # lean_cinema). lean_vibe is no longer a dark pack — a frosted near-black
+        # panel under its ink text left the number invisible.
+        if p.get("id") in ("lean_glass", "lean_ledger", "lean_cinema"):
             parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
             parts.append('  backdrop-filter:blur(22px) saturate(180%);')
             parts.append('  -webkit-backdrop-filter:blur(22px) saturate(180%);')
@@ -2803,7 +2952,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .psc-side {{')
         parts.append(f'  font-family:{p["font"]}; font-size:{_psc_side_sz};')
-        parts.append(f'  font-weight:700; color:{p["accent"]}; opacity:0;')
+        _psc_side_col = "rgba(43,10,24,0.78)" if p["id"] == "lean_vibe" else p["accent"]
+        parts.append(f'  font-weight:700; color:{_psc_side_col}; opacity:0;')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .psc-kicker {{')
         parts.append(f'  font-family:{p["font"]}; font-size:{kicker_size_eff};')
@@ -2990,7 +3140,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('  justify-content:center; position:relative; width:100%; flex:1; gap:0;')
         parts.append('}')
         # Spotlight: radial-gradient circle absolutely centered behind content
-        _nh_is_glow = p["id"] in ("lean_glass", "lean_vibe")
+        _nh_is_glow = p["id"] == "lean_glass"
         _nh_spot_alpha = "24" if _nh_is_glow else "10"
         _nh_is_compact_ls = compact and layout == "landscape"
         _nh_spot_dim = "180px" if _nh_is_compact_ls else "460px"
@@ -3138,7 +3288,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('  perspective:1400px;')
         parts.append('}')
         # L0 — Halo: radial gradient glow, no filter:blur (SwiftShader constraint)
-        _par_halo_alpha = "26" if p["id"] in ("lean_glass", "lean_vibe") else "1A"
+        _par_halo_alpha = "26" if p["id"] == "lean_glass" else "1A"
         parts.append(f'.card[data-card-id="{card_id}"] .par-halo {{')
         parts.append('  position:absolute; width:640px; height:640px; border-radius:50%;')
         parts.append('  top:50%; left:50%; transform:translate(-50%,-50%);')
@@ -3477,6 +3627,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
 
     parts.append('<div class="root">')
     parts.append('  <div class="card-panel">')
+    if p.get("id") == "lean_cinema" and kicker:
+        parts.append(f'    <div class="cine-rule" id="{card_id}-cine-rule"></div>')
     if kicker:
         parts.append(f'    <div class="kicker" id="{card_id}-kicker">{_esc(kicker)}</div>')
     if content_style == "comparison":
@@ -4790,10 +4942,15 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'    <div class="title" id="{card_id}-title">{_split_title_accent(display_text, accent_word_hint, card_id)}</div>')
         if detail:
             parts.append(f'    <div class="detail" id="{card_id}-detail">{_esc(detail)}</div>')
+    if p.get("id") == "lean_ledger" and title and content_style not in ("list",):
+        parts.append(f'    <span class="led-cursor" id="{card_id}-led-cursor"></span>')
     parts.append(f'    <div class="accent-line" id="{card_id}-line"></div>')
     parts.append(f'    <div class="shimmer-mask" id="{card_id}-shimmer"></div>')
     if p.get("id") == "lean_glass":
         parts.append(f'    <div class="edge-light" id="{card_id}-edge"></div>')
+    if p.get("id") == "lean_cinema":
+        parts.append(f'    <div class="cine-bar cine-bar-top" id="{card_id}-bar-top"></div>')
+        parts.append(f'    <div class="cine-bar cine-bar-bottom" id="{card_id}-bar-bot"></div>')
     parts.append('  </div>')
     parts.append('</div>')
     parts.append('</div>')
@@ -8472,6 +8629,43 @@ def _build_timeline_js(
                     f'repeat: {pulse_repeats}, yoyo: true }}, '
                     f'{t_in + 0.70:.4f});'
                 )
+            # Print head: the title wipes in, the cursor blinks at the end of it
+            # and stops once the line is printed.
+            if p.get("id") == "lean_ledger" and content_style not in ("timeline", "list"):
+                lines.append(
+                    f'  tl.fromTo(\'{title_sel}\', '
+                    f'{{ clipPath: "inset(0 100% 0 0)" }}, '
+                    f'{{ clipPath: "inset(0 0% 0 0)", duration: 0.55, ease: "steps(14)" }}, '
+                    f'{t_in:.4f});'
+                )
+                _led_cur = f'.card[data-card-id="{card_id}"] #{card_id}-led-cursor'
+                lines.append(
+                    f'  tl.fromTo(\'{_led_cur}\', '
+                    f'{{ opacity: 1 }}, '
+                    f'{{ opacity: 0.15, duration: 0.18, ease: "steps(1)", '
+                    f'repeat: 3, yoyo: true }}, '
+                    f'{t_in:.4f});'
+                )
+                lines.append(
+                    f'  tl.to(\'{_led_cur}\', '
+                    f'{{ opacity: 0, duration: 0.10, ease: "none" }}, '
+                    f'{t_in + 0.80:.4f});'
+                )
+            # Letterbox bars close in on the card, then the title rule draws.
+            if p.get("id") == "lean_cinema" and content_style not in ("timeline",):
+                for _cb in ("bar-top", "bar-bot"):
+                    lines.append(
+                        f'  tl.fromTo(\'.card[data-card-id="{card_id}"] #{card_id}-{_cb}\', '
+                        f'{{ scaleX: 0, opacity: 0 }}, '
+                        f'{{ scaleX: 1, opacity: 1, duration: 0.70, ease: "power3.out" }}, '
+                        f'{start + 0.10:.4f});'
+                    )
+                lines.append(
+                    f'  tl.fromTo(\'.card[data-card-id="{card_id}"] #{card_id}-cine-rule\', '
+                    f'{{ width: 0 }}, '
+                    f'{{ width: 64, duration: 0.55, ease: "power2.out" }}, '
+                    f'{start + 0.30:.4f});'
+                )
             # Edge light: one pass around the outline, just after the panel lands.
             if p.get("id") == "lean_glass" and content_style not in ("timeline",):
                 _edge_sel = f'.card[data-card-id="{card_id}"] #{card_id}-edge'
@@ -8616,6 +8810,19 @@ def _build_timeline_js(
                 ]
 
             elif pack_id == "lean_vibe":
+                # Confetti burst: the grain layer flares on the beat change and
+                # settles back to its resting near-zero.
+                lines += [
+                    f"  tl.fromTo('#grain-overlay',"
+                    f"{{opacity:0.02,backgroundPositionY:'-90px'}},"
+                    f"{{opacity:0.45,backgroundPositionY:'-10px',"
+                    f"duration:0.20,ease:'power2.out'}},"
+                    f"{_t0:.4f});",
+                    f"  tl.to('#grain-overlay',"
+                    f"{{opacity:0.02,backgroundPositionY:'120px',"
+                    f"duration:0.95,ease:'power1.in'}},"
+                    f"{round(_t0+0.20,4):.4f});",
+                ]
                 # whip-pan: fast x-translate on video + motion blur hack
                 lines += [
                     f"  tl.to('#video-wrap',"
@@ -8626,7 +8833,27 @@ def _build_timeline_js(
                     f"{round(_t0+0.08,4):.4f});",
                 ]
 
-            elif pack_id in ("lean_craft", "lean_cinema"):
+            elif pack_id == "lean_cinema":
+                # Film cut: two frames of hard black, then the frame opens from the
+                # centre. The warm light leak now belongs to lean_craft alone.
+                lines += [
+                    f"  tl.fromTo('#broll-transition-overlay',"
+                    f"{{opacity:0,background:'#000000',"
+                    f"clipPath:'inset(0% 0 0% 0)'}},"
+                    f"{{opacity:1,duration:0.06,ease:'none'}},"
+                    f"{_t0:.4f});",
+                    f"  tl.to('#broll-transition-overlay',"
+                    f"{{clipPath:'inset(50% 0 50% 0)',duration:0.34,ease:'power3.out'}},"
+                    f"{round(_t0+0.08,4):.4f});",
+                    f"  tl.to('#broll-transition-overlay',"
+                    f"{{opacity:0,duration:0.06,ease:'none'}},"
+                    f"{round(_t0+0.42,4):.4f});",
+                    f"  tl.set('#broll-transition-overlay',"
+                    f"{{clipPath:'inset(0% 0 0% 0)'}},"
+                    f"{round(_t0+0.50,4):.4f});",
+                ]
+
+            elif pack_id == "lean_craft":
                 # light-leak: warm amber overlay pulses
                 lines += [
                     f"  tl.fromTo('#broll-transition-overlay',"
@@ -8721,15 +8948,30 @@ def _esc_js(s: str) -> str:
 
 def _grain_opacity(pack: dict) -> str:
     pid = pack.get("id", "lean_glass")
+    # lean_vibe sits near zero at rest: its confetti is an event (see the burst in
+    # the scene-transition section), not a permanent film over the frame.
     return {"lean_cinema": "0.18", "lean_craft": "0.14", "lean_glass": "0.08",
-            "lean_vibe": "0.06", "lean_ledger": "0.07", "lean_paper": "0.0"}.get(pid, "0.07")
+            "lean_vibe": "0.02", "lean_ledger": "0.07", "lean_paper": "0.0"}.get(pid, "0.07")
+
+
+def _grain_uri_for_style_attr(uri: str) -> str:
+    """Percent-encode the quotes so the data URI survives inside a style attribute.
+
+    The SVGs write their attributes with single quotes. Inside
+    style="...background-image:url('data:...<svg xmlns='...'')..." the first inner
+    quote closes the url() string, the declaration is dropped and the layer computes
+    to `none` — which is why the full-frame grain has never actually painted.
+    """
+    return uri.replace("'", "%27")
 
 
 def _grain_svg(pack: dict) -> str:
     """Return the grain SVG data-URI already defined for this pack's grain_type."""
     grain_type = pack.get("grain_type", "")
     return {
-        "confetti": _CONFETTI_SVG,
+        # lean_vibe is the only confetti pack, and its confetti is an event: the
+        # dense pattern only shows during the burst (resting opacity 0.02).
+        "confetti": _CONFETTI_BURST_SVG,
         "grid": _GRID_SVG,
         "paper": _PAPER_GRAIN_SVG,
         "film": _FILM_GRAIN_SVG,
@@ -9216,7 +9458,7 @@ def compose(
     </div>
     <div id="backdrop-dim" style="position:absolute;inset:0;background:rgba(0,0,0,0.45);z-index:5;opacity:0;pointer-events:none;"></div>
     <div id="broll-transition-overlay" style="position:absolute;inset:0;z-index:18;pointer-events:none;opacity:0;"></div>
-    <div id="grain-overlay" style="position:absolute;inset:0;z-index:7;pointer-events:none;opacity:{_grain_opacity(pack)};background-image:url('{_grain_svg(pack)}');background-repeat:repeat;mix-blend-mode:overlay;"></div>
+    <div id="grain-overlay" style="position:absolute;inset:0;z-index:7;pointer-events:none;opacity:{_grain_opacity(pack)};background-image:url('{_grain_svg(pack) if pack.get('id') != 'lean_vibe' else _grain_uri_for_style_attr(_grain_svg(pack))}');background-repeat:repeat;mix-blend-mode:{'normal' if pack.get('id') == 'lean_vibe' else 'overlay'};"></div>
 
     <audio id="bg-audio" src="input-video.mp4"
            data-start="0" data-duration="{duration:.3f}"
