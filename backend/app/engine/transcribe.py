@@ -96,6 +96,30 @@ def _run_ffmpeg(args: list[str], timeout: int = 300) -> None:
                    stderr=subprocess.PIPE)
 
 
+# Below this mean level the track carries nothing Whisper can use. Real speech
+# recorded badly still lands around -40 dB; a cancelled downmix reads -90 dB.
+_SILENT_MEAN_DB = -55.0
+
+
+def _mean_volume_db(path: Path) -> float | None:
+    """Mean volume of an audio file in dBFS, or None if it cannot be measured."""
+    try:
+        res = subprocess.run(
+            [FFMPEG_PATH, "-hide_banner", "-nostats", "-i", str(path),
+             "-af", "volumedetect", "-f", "null", "-"],
+            capture_output=True, text=True, timeout=120,
+        )
+    except Exception:
+        return None
+    for line in (res.stderr or "").splitlines():
+        if "mean_volume:" in line:
+            try:
+                return float(line.split("mean_volume:")[1].strip().split()[0])
+            except (ValueError, IndexError):
+                return None
+    return None
+
+
 def _extract_audio_wav(video_path: Path, wav_path: Path) -> None:
     """Pre-extract audio to 16kHz mono WAV for faster-whisper.
 
@@ -120,6 +144,7 @@ def _extract_audio_wav(video_path: Path, wav_path: Path) -> None:
     for cmd in variants:
         try:
             _run_ffmpeg(cmd)
+            _rescue_silent_downmix(video_path, wav_path)
             return
         except subprocess.CalledProcessError as exc:
             last_err = exc
@@ -370,6 +395,52 @@ def _transcribe_groq(wav_path: Path) -> "Transcript | None":
                 pass
 
 
+def _rescue_silent_downmix(video_path: Path, wav_path: Path) -> None:
+    """Re-extract from one channel when summing the channels cancelled the sound.
+
+    `-ac 1` sums the input channels. A stereo pair in opposing phase — which is
+    what several phone "spatial audio" captures produce once remuxed — sums to
+    silence, so a file that plays normally reaches Whisper as a flat line. Taking
+    a single channel cannot cancel, so it recovers the voice.
+    """
+    db = _mean_volume_db(wav_path)
+    if db is None or db > _SILENT_MEAN_DB:
+        return
+
+    print(f"[AUDIO] mono downmix is silent ({db:.1f} dB) — trying single channels",
+          flush=True)
+    best: tuple[float, Path] | None = None
+    for ch in (0, 1):
+        cand = wav_path.with_suffix(f".ch{ch}.wav")
+        try:
+            _run_ffmpeg([FFMPEG_PATH, "-y", "-loglevel", "error", "-i", str(video_path),
+                         "-vn", "-af", f"pan=mono|c0=c{ch}", "-ar", "16000", str(cand)])
+        except Exception:
+            cand.unlink(missing_ok=True)
+            continue
+        cand_db = _mean_volume_db(cand)
+        if cand_db is None:
+            cand.unlink(missing_ok=True)
+            continue
+        print(f"[AUDIO]   channel {ch}: {cand_db:.1f} dB", flush=True)
+        if best is None or cand_db > best[0]:
+            if best is not None:
+                best[1].unlink(missing_ok=True)
+            best = (cand_db, cand)
+        else:
+            cand.unlink(missing_ok=True)
+
+    if best is None or best[0] <= _SILENT_MEAN_DB:
+        if best is not None:
+            best[1].unlink(missing_ok=True)
+        print("[AUDIO] no channel carries sound — keeping the downmix", flush=True)
+        return
+
+    best[1].replace(wav_path)
+    print(f"[AUDIO] recovered the voice from a single channel ({best[0]:.1f} dB)",
+          flush=True)
+
+
 def _has_audio_stream(video_path: Path) -> bool:
     """Return True iff the video contains at least one audio stream."""
     try:
@@ -386,6 +457,36 @@ def _has_audio_stream(video_path: Path) -> bool:
         return bool(result.stdout.strip())
     except Exception:
         return True  # fail-open: let _extract_audio_wav surface the real error
+
+
+# One word per five seconds is far below any real speech; below this, over audio
+# we can hear, the fast path has misheard rather than the speaker having gone quiet.
+_MIN_WORDS_PER_SECOND = 0.2
+
+
+def _transcript_is_plausible(tr: "Transcript", wav_path: Path) -> bool:
+    """False when the audio is audible but the transcript is all but empty.
+
+    Nothing questioned the fast path's answer: one word for nineteen seconds of
+    speech was accepted and the planner, given one word, correctly produced a
+    video with nothing on it. A quiet clip is allowed to have few words; an
+    audible one is not.
+    """
+    words = sum(len(getattr(seg, "words", []) or []) for seg in tr.segments)
+    duration = float(getattr(tr, "duration", 0) or 0)
+    if duration < 5.0 or words >= max(3, duration * _MIN_WORDS_PER_SECOND):
+        return True
+
+    db = _mean_volume_db(wav_path)
+    if db is not None and db <= _SILENT_MEAN_DB:
+        print(f"[TRANSCRIBE] {words} word(s) over {duration:.0f}s, but the audio is"
+              f" silent ({db:.1f} dB) — accepting", flush=True)
+        return True
+
+    print(f"[TRANSCRIBE] only {words} word(s) over {duration:.0f}s of audible audio"
+          f" ({'unknown' if db is None else f'{db:.1f}'} dB) — retrying with the"
+          f" local model", flush=True)
+    return False
 
 
 def transcribe(video_path: Path) -> Transcript:
@@ -409,7 +510,7 @@ def transcribe(video_path: Path) -> Transcript:
         # Falls back to local faster-whisper on any error (key missing, network
         # failure, model error, file size exceeded even after compression).
         _groq_result = _transcribe_groq(wav_path)
-        if _groq_result is not None:
+        if _groq_result is not None and _transcript_is_plausible(_groq_result, wav_path):
             return _groq_result
 
         # ── Local faster-whisper (fallback) ────────────────────────────────
