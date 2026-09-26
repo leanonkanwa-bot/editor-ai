@@ -1970,27 +1970,32 @@ def quality_check(plan, result: dict) -> list[str]:
     return issues
 
 
-def _client_warnings(plan, result: dict) -> list[str]:
+def _client_warnings(plan, result: dict, spoken_words: int | None = None) -> list[str]:
     """What the client should be told about a thin result, in their own words.
 
     A video is never withheld over these — they sit above it, in the interface,
     so nobody mistakes an empty edit for a finished one the way it happened on
     job a851522443d64e58a3fc92703e4470e7 (one word heard, no cards, delivered
     without a word of explanation).
+
+    spoken_words is the transcript's word count. When it is unknown we say
+    nothing about it: the first version of this counted words in keep_segments,
+    which carry no text, so a perfectly good 71-word video was told we had heard
+    nothing at all. A warning invented out of missing data is worse than none.
     """
     out: list[str] = []
     segs = plan.keep_segments or []
-    spoken = sum(len(str(s.get("text", "")).split()) for s in segs)
+    spoken = spoken_words
     duration = float(result.get("duration", 0.0))
 
-    if duration >= 5 and spoken <= max(3, duration * 0.2):
+    if spoken is not None and duration >= 5 and spoken <= max(3, duration * 0.2):
         _heard = "qu'un seul mot" if spoken == 1 else f"que {spoken} mots"
         out.append(
             f"Nous n'avons entendu {_heard} sur {duration:.0f} secondes, donc très peu"
             " de texte a pu être ajouté. Vérifiez que la voix est bien audible dans le"
             " fichier envoyé."
         )
-    elif len(segs) < 3:
+    elif segs and len(segs) < 3:
         out.append(
             "Cette vidéo contient peu de passages exploitables : le montage peut"
             " paraître court ou incomplet."
@@ -2196,7 +2201,10 @@ def run_render_phase(job_id: str, src: Path) -> None:
         _issues = quality_check(plan, result)
         for _issue in _issues:
             _qlog.warning("quality_check: %s", _issue)
-        _warnings = _client_warnings(plan, result)
+        _warnings = _client_warnings(
+            plan, result,
+            spoken_words=len(source_words) if "source_words" in plan_data else None,
+        )
         for _w in _warnings:
             print(f"[QUALITY] client warning: {_w}", flush=True)
 
