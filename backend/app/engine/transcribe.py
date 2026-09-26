@@ -99,6 +99,9 @@ def _run_ffmpeg(args: list[str], timeout: int = 300) -> None:
 # Below this mean level the track carries nothing Whisper can use. Real speech
 # recorded badly still lands around -40 dB; a cancelled downmix reads -90 dB.
 _SILENT_MEAN_DB = -55.0
+# Below this, after the single-channel rescue, the track carries nothing anyone
+# could transcribe. A badly recorded but usable voice still sits well above it.
+_NO_AUDIBLE_SOUND_DB = -65.0
 
 
 def _mean_volume_db(path: Path) -> float | None:
@@ -504,6 +507,18 @@ def transcribe(video_path: Path) -> Transcript:
     wav_path = settings.work_dir / f"{video_path.stem}_audio.wav"
     try:
         _extract_audio_wav(video_path, wav_path)
+
+        # The only refusal in the whole chain: a track with no audible sound.
+        # Caught here, before a single second of render time is spent, and said
+        # plainly — a silent file cannot produce captions or cards, and the
+        # client needs to know that rather than receive an empty video.
+        _db = _mean_volume_db(wav_path)
+        if _db is not None and _db <= _NO_AUDIBLE_SOUND_DB:
+            raise AudioMissingError(
+                "La piste audio de cette vidéo est silencieuse : aucun son "
+                "exploitable n'a été détecté. Vérifiez que le micro était actif "
+                "et que la voix s'entend dans le fichier, puis relancez."
+            )
 
         # ── Groq Whisper (fast path) ───────────────────────────────────────
         # Activate by setting GROQ_API_KEY in Railway Variables.

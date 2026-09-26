@@ -1839,14 +1839,23 @@ async function showResult(jobId, result, opts = {}) {
       ? `Vidéo créée ${_when}${_fresh ? "" : " — résultat précédent"}`
       : (_fresh ? "Vidéo créée à l'instant" : "Résultat précédent");
   }
+  // A thin result is never withheld — it is delivered with what was thin about it
+  // said above the player, so an empty edit cannot pass for a finished one.
+  const _warnings = (result && Array.isArray(result.warnings)) ? result.warnings : [];
+  const _warnBox = $("resultWarning");
+  const _warnText = $("resultWarningText");
+  if (_warnBox && _warnText) {
+    _warnText.textContent = _warnings.join(" ");
+    _warnBox.classList.toggle("hidden", _warnings.length === 0);
+  }
   document.getElementById("resumeBanner")?.remove();
   if (submitBtn) { submitBtn.disabled = false; submitBtn.querySelector(".btn-label").textContent = "Éditer ma vidéo"; submitBtn.classList.remove("loading"); }
   previewCard?.classList.add("hidden");
   resultCard?.classList.remove("hidden");
   resultCard?.scrollIntoView({ behavior: "smooth", block: "start" });
 
-  // Confetti!
-  if (_fresh) setTimeout(spawnConfetti, 300);
+  // Confetti — not for a result we just warned about.
+  if (_fresh && !_warnings.length) setTimeout(spawnConfetti, 300);
 
   // Browser notification (BUILD 8)
   if (_fresh) setTimeout(() => {
@@ -1856,8 +1865,8 @@ async function showResult(jobId, result, opts = {}) {
         Notification.permission === "granted" &&
         localStorage.getItem("notif_enabled") !== "false"
       ) {
-        new Notification("✅ Votre vidéo est prête !", {
-          body: "Votre vidéo éditée est disponible — cliquez pour la télécharger.",
+        new Notification(_warnings.length ? "⚠ Votre vidéo est prête, avec une réserve" : "✅ Votre vidéo est prête !", {
+          body: _warnings.length ? _warnings[0] : "Votre vidéo éditée est disponible — cliquez pour la télécharger.",
           icon: "/static/favicon.ico",
           tag: "video-ready",
         });

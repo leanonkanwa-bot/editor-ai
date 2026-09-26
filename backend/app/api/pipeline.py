@@ -1938,10 +1938,12 @@ def run_job(
 
 
 def quality_check(plan, result: dict) -> list[str]:
-    """Post-render quality gate — returns a list of warning/error strings.
+    """Post-render quality gate — returns a list of warning strings for the log.
 
-    Called automatically after every render. Issues are logged at WARNING
-    level and surfaced in Railway logs so they are easy to spot.
+    Called automatically after every render. Issues are logged at WARNING level
+    and surfaced in Railway logs so they are easy to spot. Nothing here stops a
+    delivery: a clip with audible sound always comes back as a video, and the
+    client reads what was thin about it (see _client_warnings).
     """
     issues: list[str] = []
     edited_duration = float(result.get("duration", 0.0))
@@ -1966,6 +1968,44 @@ def quality_check(plan, result: dict) -> list[str]:
         issues.append(f"ERROR: Output duration {edited_duration:.1f}s is suspiciously short")
 
     return issues
+
+
+def _client_warnings(plan, result: dict) -> list[str]:
+    """What the client should be told about a thin result, in their own words.
+
+    A video is never withheld over these — they sit above it, in the interface,
+    so nobody mistakes an empty edit for a finished one the way it happened on
+    job a851522443d64e58a3fc92703e4470e7 (one word heard, no cards, delivered
+    without a word of explanation).
+    """
+    out: list[str] = []
+    segs = plan.keep_segments or []
+    spoken = sum(len(str(s.get("text", "")).split()) for s in segs)
+    duration = float(result.get("duration", 0.0))
+
+    if duration >= 5 and spoken <= max(3, duration * 0.2):
+        _heard = "qu'un seul mot" if spoken == 1 else f"que {spoken} mots"
+        out.append(
+            f"Nous n'avons entendu {_heard} sur {duration:.0f} secondes, donc très peu"
+            " de texte a pu être ajouté. Vérifiez que la voix est bien audible dans le"
+            " fichier envoyé."
+        )
+    elif len(segs) < 3:
+        out.append(
+            "Cette vidéo contient peu de passages exploitables : le montage peut"
+            " paraître court ou incomplet."
+        )
+
+    if duration and duration < 5:
+        out.append(
+            f"La vidéo finale ne dure que {duration:.1f} secondes — c'est très court"
+            " pour une publication."
+        )
+    if duration > 90 and getattr(plan, "format", "") == "short":
+        out.append(
+            f"Le format court vise 90 secondes ; celle-ci en fait {duration:.0f}."
+        )
+    return out
 
 
 def run_render_phase(job_id: str, src: Path) -> None:
@@ -2156,6 +2196,9 @@ def run_render_phase(job_id: str, src: Path) -> None:
         _issues = quality_check(plan, result)
         for _issue in _issues:
             _qlog.warning("quality_check: %s", _issue)
+        _warnings = _client_warnings(plan, result)
+        for _w in _warnings:
+            print(f"[QUALITY] client warning: {_w}", flush=True)
 
         # ── Brand: apply intro/outro bumpers (Feature 2) ──────────────────
         _t = time.perf_counter()
@@ -2208,6 +2251,7 @@ def run_render_phase(job_id: str, src: Path) -> None:
                 "brand_applied": bool(brand_kit.get("name")),
                 "edit_report_url": _edit_report_url,
                 "narrative_url": f"/api/jobs/{job_id}/narrative",
+                "warnings": _warnings,
             },
         )
         # Video-ready email — fire-and-forget, never blocks render delivery
