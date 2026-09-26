@@ -869,15 +869,23 @@ def _card_content_tokens(text: str) -> list[str]:
     return [_t for _t in _all if _t not in _CARD_ANCHOR_STOP and len(_t) > 1] or _all
 
 
+# A card may travel this far to reach its words. 12s suits a long video, where
+# cards sit minutes apart; in a 30-60s short it would let a card cross a third of
+# the video and arrive out of narrative order, so short format searches closer to
+# where the planner put it. Measured: with 12s a card moved 8.0s on a 55s fixture.
+_CARD_ANCHOR_WINDOW_SHORT_S = 5.0
+
+
 def _anchor_cards_on_words(
     graphic_cards: list[dict],
     remapped_words: list[WordTiming],
     trimmed_duration: float,
+    window_s: float = _CARD_ANCHOR_WINDOW_S,
 ) -> None:
     """Move each graphic card onto the words it quotes, in OUTPUT time, in place.
 
     Each text line of a card (title, then detail/subtitle) is looked for among the
-    words starting within _CARD_ANCHOR_WINDOW_S of the card's start: a stretch as
+    words starting within window_s of the card's start: a stretch as
     long as the line plus 3 words must hold >= _CARD_ANCHOR_MIN_SCORE of its content
     words (a single-word line is ignored when the card has another line). The best
     line wins, ties going to the closest occurrence; the card then starts
@@ -916,7 +924,7 @@ def _anchor_cards_on_words(
                 continue
             _qs = set(_q)
             for _i, (_tok, _ws, _) in enumerate(_words):
-                if _tok not in _qs or abs(_ws - _s0) > _CARD_ANCHOR_WINDOW_S:
+                if _tok not in _qs or abs(_ws - _s0) > window_s:
                     continue
                 _win = {_x for _x, _, _ in _words[_i:_i + len(_q) + 3]}
                 _key = (round(len(_qs & _win) / len(_qs), 3), -abs(_ws - _s0))
@@ -4739,9 +4747,15 @@ def generate_storyboard(
 
     # Word anchoring runs on the final graphic list, after every pass that adds,
     # drops or moves cards, so its no-overlap guarantee holds for what is rendered.
-    # Long format only: that is where it was measured and replayed.
-    if format_hint == "long":
-        _anchor_cards_on_words(graphic_cards, remapped_words, trimmed_duration)
+    # Both formats: it was measured on long first, and short was left on the older
+    # TITLE-ANCHOR, which moves a card onto a SINGLE word shared with its title.
+    # On job 43126f47 that displaced five of six cards, one by 2.90s, because
+    # "devenir", "arbre" and "fruit" each occur several times in 30 seconds.
+    _anchor_cards_on_words(
+        graphic_cards, remapped_words, trimmed_duration,
+        window_s=(_CARD_ANCHOR_WINDOW_SHORT_S if format_hint == "short"
+                  else _CARD_ANCHOR_WINDOW_S),
+    )
 
     # Long-form caption/card collisions, resolved on the FINAL graphic list. The
     # list is still changing above this point: GAP-FILL and RHYTHM-SPLIT add

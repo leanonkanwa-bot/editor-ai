@@ -1155,13 +1155,31 @@ async def submit_edit(
     return JSONResponse({"job_id": job.id, "status": job.status})
 
 
+# Warnings are stored in the job record at render time, so the ones a broken
+# build wrote stay on those videos for good. Between cdde104 and 12fae70 the
+# word count was read from keep_segments, which carry no text, so every delivery
+# in that window was told we had heard "0 mots". That sentence could only ever
+# come from the bug — it is dropped on the way out rather than left on KAN's
+# finished videos.
+_GHOST_WARNING = "que 0 mots"
+
+
+def _strip_ghost_warnings(payload: dict) -> dict:
+    result = payload.get("result")
+    if isinstance(result, dict) and isinstance(result.get("warnings"), list):
+        kept = [w for w in result["warnings"] if _GHOST_WARNING not in str(w)]
+        if len(kept) != len(result["warnings"]):
+            result["warnings"] = kept
+    return payload
+
+
 @app.get("/api/jobs/{job_id}")
 def get_job(job_id: str, request: Request) -> dict:
     require_owner(request, job_id)
     job = store.get(job_id)
     if not job:
         raise HTTPException(404, "Job not found")
-    return job.to_dict()
+    return _strip_ghost_warnings(job.to_dict())
 
 
 # ── Trash (soft-delete with 7-day auto-purge) ─────────────────────────────────
