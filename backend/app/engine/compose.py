@@ -192,6 +192,76 @@ _CRAFT_TORN_MASK = (
 )
 
 
+def _srgb_luminance(color: str) -> float:
+    """Relative luminance of a #rgb/#rrggbb colour, 0 (black) to 1 (white)."""
+    h = color.strip().lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    if len(h) < 6:
+        return 0.0
+    try:
+        chans = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    except ValueError:
+        return 0.0
+    chans = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in chans]
+    return 0.2126 * chans[0] + 0.7152 * chans[1] + 0.0722 * chans[2]
+
+
+def _writes_dark(p: dict) -> bool:
+    """True for a pack whose own text is dark, i.e. drawn for a light panel.
+
+    Replaces the hardcoded ("lean_craft", "lean_paper") lists: lean_vibe became
+    a dark-ink pack and every one of those lists silently excluded it, printing
+    its ink on the near-black climax ground.
+    """
+    return _srgb_luminance(p.get("text", "#FFFFFF")) < 0.35
+
+
+def _text_on_dark(p: dict) -> str:
+    """The pack's text colour, or a light one when its own would vanish."""
+    return "rgba(255,255,255,0.92)" if _writes_dark(p) else p["text"]
+
+
+def _secondary_on_dark(p: dict) -> str:
+    """Same rule for the secondary/detail tone.
+
+    0.62 was measured at 2.75-2.85:1 on the climax ground for the packs whose own
+    secondary is already a faint white, so both branches are lifted to a tone that
+    reads: this is a kicker, not a watermark.
+    """
+    if _writes_dark(p):
+        return "rgba(255,255,255,0.78)"
+    return p["text_secondary"] if _srgb_luminance(p.get("text", "#fff")) > 0.5 \
+        else "rgba(255,255,255,0.78)"
+
+
+def _accent_on_dark(p: dict) -> str:
+    """The pack's accent, or a light stand-in when the accent is too dark to read.
+
+    lean_craft's terracotta and lean_paper's blue are chosen against a light
+    panel; on the climax ground they measured 1.85:1 and 2.15:1.
+    """
+    return p["accent"] if _srgb_luminance(p["accent"]) >= 0.20 else "rgba(255,255,255,0.85)"
+
+
+def _contrast(a: str, b: str) -> float:
+    """WCAG contrast ratio between two solid colours."""
+    la, lb = _srgb_luminance(a), _srgb_luminance(b)
+    hi, lo = max(la, lb), min(la, lb)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _text_on(bg: str, p: dict) -> str:
+    """A readable text colour for a known background colour.
+
+    Used where the ground is the accent (prim_split_compare's right half). Both
+    candidates are measured against the ground and the better one wins — a fixed
+    luminance cut-off put white on lean_cinema's gold at 2.19:1.
+    """
+    ink = p["text"] if _writes_dark(p) else "#14100E"
+    return ink if _contrast(ink, bg) >= _contrast("#FFFFFF", bg) else "rgba(255,255,255,0.94)"
+
+
 def _is_tall_panel(style: str, hints: dict | None) -> bool:
     """True for data cards that need the tall zones and tall compact layout."""
     if style in _TALL_DATA_PANEL_TYPES:
@@ -4111,8 +4181,10 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .psc-kicker {{')
         parts.append(f'  font-family:{p["font"]}; font-size:{kicker_size_eff};')
-        parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text_secondary"]};')
-        parts.append('  text-align:center; opacity:0; margin-top:6px;')
+        # The pack's secondary tone is a 55% wash; under the number, on the pack's
+        # own panel, it measured 2.93:1. The label is content, so it gets the text.
+        parts.append(f'  font-weight:{p["font_weight"]}; color:{p["text"]}; opacity:0.85;')
+        parts.append('  text-align:center; margin-top:6px;')
         parts.append('}')
     if content_style == "prim_numbered_rule":
         parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
@@ -4131,11 +4203,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('}')
         # Rule text: always on a near-black bg_full background.
         # Light packs (craft, paper) have dark p["text"] → use white override.
-        _pnr_rule_color = (
-            "rgba(255,255,255,0.88)"
-            if p.get("id") in ("lean_craft", "lean_paper")
-            else p["text"]
-        )
+        _pnr_rule_color = _text_on_dark(p)
         parts.append(f'.card[data-card-id="{card_id}"] .pnr-rule {{')
         parts.append(f'  font-family:{p["font"]}; font-size:38px;')
         parts.append(f'  font-weight:{p["font_weight"]}; color:{_pnr_rule_color};')
@@ -4199,10 +4267,13 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  position:absolute; top:44px;')
         parts.append(f'  font-family:{p["font"]}; font-size:13px;')
         parts.append(f'  font-weight:700; letter-spacing:0.20em; text-transform:uppercase;')
-        parts.append(f'  color:{p["text"]}; opacity:0;')
+        parts.append(f'  color:{_text_on_dark(p)}; opacity:0;')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .spc-left .spc-tag {{ left:44px; }}')
-        parts.append(f'.card[data-card-id="{card_id}"] .spc-right .spc-tag {{ right:44px; }}')
+        parts.append(
+            f'.card[data-card-id="{card_id}"] .spc-right .spc-tag {{'
+            f' right:44px; color:{_text_on(p["accent"], p)}; }}'
+        )
         # Accent bar under tag
         parts.append(f'.card[data-card-id="{card_id}"] .spc-tag::before {{')
         parts.append(f'  content:""; display:block; width:22px; height:2px;')
@@ -4211,12 +4282,23 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         # Main label: large bottom-anchored text
         parts.append(f'.card[data-card-id="{card_id}"] .spc-label {{')
         parts.append(f'  font-family:{p["font"]}; font-size:60px;')
-        parts.append(f'  font-weight:900; color:{p["text"]}; line-height:1.05;')
+        # The two halves are different grounds: near-black on the left, the accent
+        # on the right. Each label takes the colour that reads on its own side —
+        # p["text"] printed lean_craft's dark brown on both.
+        parts.append(f'  font-weight:900; color:{_text_on_dark(p)}; line-height:1.05;')
         parts.append('  text-transform:uppercase; letter-spacing:0.04em;')
         parts.append('  text-shadow:0 3px 20px rgba(0,0,0,0.6);')
         parts.append('  opacity:0; text-align:left;')
         parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .spc-right .spc-label {{ text-align:right; }}')
+        _spc_right_ink = _text_on(p["accent"], p)
+        parts.append(
+            f'.card[data-card-id="{card_id}"] .spc-right .spc-label {{'
+            f' text-align:right; color:{_spc_right_ink}; }}'
+        )
+        parts.append(
+            f'.card[data-card-id="{card_id}"] .spc-right .spc-side-label {{'
+            f' color:{_spc_right_ink}; }}'
+        )
         # Divider: glowing 3px vertical bar at center
         parts.append(f'.card[data-card-id="{card_id}"] .spc-divider {{')
         parts.append('  position:absolute; left:50%; top:0; bottom:0; width:3px;')
@@ -4232,7 +4314,9 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'  font-weight:700; letter-spacing:0.20em; text-transform:uppercase;')
             parts.append(f'  padding:5px 16px; border-radius:999px;')
             parts.append(f'  background:{p["accent"]}30; border:1px solid {p["accent"]}60;')
-            parts.append(f'  color:{p["accent"]}; white-space:nowrap; opacity:0; z-index:10;')
+            # The pill sits on the near-black half: lean_craft's terracotta on its
+            # own 19%-alpha tint measured 2.62:1.
+            parts.append(f'  color:{_accent_on_dark(p)}; white-space:nowrap; opacity:0; z-index:10;')
             parts.append('}')
     elif content_style == "prim_journey_map":
         # ── prim_journey_map — flight-tracker overlay (prototype) ──────────
@@ -4249,13 +4333,15 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .jmt-route {{')
         parts.append(f'  font-family:{p["font"]}; font-size:20px; font-weight:800;')
-        parts.append(f'  color:{p["text"]}; letter-spacing:.03em;')
+        parts.append(f'  color:{_text_on_dark(p)}; letter-spacing:.03em;')
         parts.append('  display:flex; align-items:center; gap:9px;')
         parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .jmt-arrow {{ color:{p["accent"]}; font-size:16px; }}')
+        parts.append(f'.card[data-card-id="{card_id}"] .jmt-arrow {{ color:{_accent_on_dark(p)}; font-size:16px; }}')
         parts.append(f'.card[data-card-id="{card_id}"] .jmt-sub {{')
         parts.append(f'  font-family:{p["font"]}; font-size:9px; font-weight:500;')
-        parts.append('  color:rgba(255,255,255,0.38); letter-spacing:.08em; text-transform:uppercase;')
+        # 38% white on the map measured 2.0-2.7:1 on every pack — a label nobody
+        # could read is not a discreet label, it is a missing one.
+        parts.append('  color:rgba(255,255,255,0.72); letter-spacing:.08em; text-transform:uppercase;')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .jmt-sep {{')
         parts.append(f'  height:1px; background:{p["accent"]}18; margin:0 12px; flex-shrink:0;')
@@ -4277,7 +4363,10 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  font-family:{p["font"]}; font-size:8px; font-weight:500;')
         parts.append('  color:rgba(255,255,255,0.35); text-transform:uppercase; letter-spacing:.05em;')
         parts.append('}')
-        parts.append(f'.card[data-card-id="{card_id}"] .kicker {{ text-shadow:0 1px 10px rgba(0,0,0,0.9); }}')
+        parts.append(
+            f'.card[data-card-id="{card_id}"] .kicker {{'
+            f' color:{_accent_on_dark(p)}; text-shadow:0 1px 10px rgba(0,0,0,0.9); }}'
+        )
         parts.append(f'.card[data-card-id="{card_id}"] .accent-line {{ display:none; }}')
         parts.append(f'.card[data-card-id="{card_id}"] .shimmer-mask {{ display:none; }}')
     # ── number_hero CSS ──────────────────────────────────────────────────────
@@ -4348,16 +4437,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
     # ── prim_cinematic_reveal CSS ────────────────────────────────────────────
     if content_style == "prim_cinematic_reveal":
         # Light-pack text override: bg_full is a dark gradient; craft/paper pack text is dark.
-        _pcr_text = (
-            "rgba(255,255,255,0.92)"
-            if p["id"] in ("lean_craft", "lean_paper")
-            else p["text"]
-        )
-        _pcr_secondary = (
-            "rgba(255,255,255,0.55)"
-            if p["id"] in ("lean_craft", "lean_paper")
-            else p["text_secondary"]
-        )
+        _pcr_text = _text_on_dark(p)
+        _pcr_secondary = _secondary_on_dark(p)
         parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
         parts.append('  width:100%; height:100%; max-width:none; padding:0;')
         parts.append('  display:flex; align-items:center; justify-content:center;')
@@ -4383,7 +4464,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'.card[data-card-id="{card_id}"] .pcr-kicker {{')
         parts.append(f'  font-family:{p["font"]}; font-size:18px;')
         parts.append('  font-weight:600; letter-spacing:0.18em; text-transform:uppercase;')
-        parts.append(f'  color:{_pcr_secondary}; text-align:center; opacity:0;')
+        parts.append(f'  color:{_text_on_dark(p)}; text-align:center; opacity:0;')
         parts.append('  position:relative; z-index:1; margin-bottom:18px;')
         parts.append('}')
         # Main title: scale+rotateY approach via GSAP (expo.out)
@@ -4415,16 +4496,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
     # ── prim_ascension_reveal CSS ─────────────────────────────────────────────
     if content_style == "prim_ascension_reveal":
         # Light-pack text override: bg_full is a dark gradient; craft/paper pack text is dark.
-        _par_text = (
-            "rgba(255,255,255,0.92)"
-            if p["id"] in ("lean_craft", "lean_paper")
-            else p["text"]
-        )
-        _par_secondary = (
-            "rgba(255,255,255,0.55)"
-            if p["id"] in ("lean_craft", "lean_paper")
-            else p["text_secondary"]
-        )
+        _par_text = _text_on_dark(p)
+        _par_secondary = _secondary_on_dark(p)
         parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
         parts.append('  width:100%; height:100%; max-width:none; padding:0;')
         parts.append('  display:flex; align-items:center; justify-content:center;')
@@ -4487,17 +4560,13 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'.card[data-card-id="{card_id}"] .par-kicker {{')
         parts.append(f'  font-family:{p.get("font_detail", p["font"])}; font-size:{p["kicker_size"]};')
         parts.append('  font-weight:600; letter-spacing:0.12em; text-transform:uppercase;')
-        parts.append(f'  color:{_par_secondary}; text-align:center; opacity:0;')
+        parts.append(f'  color:{_text_on_dark(p)}; text-align:center; opacity:0;')
         parts.append('  position:relative; z-index:2; margin-top:20px;')
         parts.append('}')
     # ── prim_shatter_truth CSS ───────────────────────────────────────────────
     if content_style == "prim_shatter_truth":
         # Light-pack override: bg_full is a dark gradient; craft/paper text is dark.
-        _pst_text = (
-            "rgba(255,255,255,0.95)"
-            if p["id"] in ("lean_craft", "lean_paper")
-            else p["text"]
-        )
+        _pst_text = _text_on_dark(p)
         # Card-panel: full-cover black canvas, relative for absolute children
         parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
         parts.append('  width:100%; height:100%; max-width:none; padding:0;')
@@ -4588,13 +4657,14 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'.card[data-card-id="{card_id}"] .root {{ padding:0; gap:0; justify-content:flex-start; align-items:stretch; }}')
         _sst_side = hints.get("side", "right")    # "left"=video left / "right"=video right
         _sst_mode = hints.get("mode", "steps")    # "steps" or "diagram"
-        _sst_is_light = p["id"] in ("lean_paper", "lean_craft")
+        _sst_is_light = _writes_dark(p)
         # Fully opaque panel — #video-stage stays at scale:1/x:0 (no SwiftShader
         # re-rasterization of the video texture). Panel covers its half completely.
+        # A pack that writes in dark ink needs its own light ground here; the
+        # climax gradient is near-black, and lean_vibe's ink measured 1.13:1 on it.
         _sst_panel_bg = (
-            "#FAFAF8" if p["id"] == "lean_paper" else
-            "#E8D9C5" if p["id"] == "lean_craft" else
-            p.get("bg_full", "linear-gradient(160deg, #12121C, #06060E)")
+            p["bg"] if _writes_dark(p)
+            else p.get("bg_full", "linear-gradient(160deg, #12121C, #06060E)")
         )
         # panel sits on the side OPPOSITE the video
         _sst_panel_edge = "right:0" if _sst_side == "left" else "left:0"
@@ -4627,11 +4697,13 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  display:flex; flex-direction:column; gap:12px;')
         parts.append(f'  font-family:{p["font"]}; font-size:18px;')
         parts.append(f'  font-weight:700; letter-spacing:0.18em; text-transform:uppercase;')
-        parts.append(f'  color:{p["accent"]}; margin-bottom:36px; opacity:0;')
+        parts.append(f'  color:{_text_on(_sst_panel_bg, p) if _sst_is_light else p["accent"]};'
+                     f' margin-bottom:36px; opacity:0;')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .sst-kicker::before {{')
         parts.append(f'  content:""; display:block; width:28px; height:3px;')
-        parts.append(f'  background:{p["accent"]}; border-radius:2px; flex-shrink:0;')
+        parts.append(f'  background:{p["accent"]}; border-radius:2px; flex-shrink:0;'
+                     f' opacity:{"0.95" if not _sst_is_light else "1"};')
         parts.append('}')
 
         if _sst_mode == "steps":
@@ -4642,7 +4714,8 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append('}')
             parts.append(f'.card[data-card-id="{card_id}"] .sst-num {{')
             parts.append(f'  font-family:{p["font"]}; font-size:36px;')
-            parts.append(f'  font-weight:{p["font_weight"]}; color:{p["accent"]};')
+            parts.append(f'  font-weight:{p["font_weight"]};'
+                         f' color:{_text_on(_sst_panel_bg, p) if _sst_is_light else p["accent"]};')
             parts.append('  line-height:1.1; min-width:46px; flex-shrink:0;')
             parts.append('}')
             parts.append(f'.card[data-card-id="{card_id}"] .sst-label {{')
@@ -4683,11 +4756,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
     # ── prim_confession_frame CSS ─────────────────────────────────────────────
     if content_style == "prim_confession_frame":
         # Light-pack text override: bg_full is always dark; craft/paper native text is dark.
-        _pcf_text_color = (
-            "rgba(255,255,255,0.92)"
-            if p["id"] in ("lean_craft", "lean_paper")
-            else p["text"]
-        )
+        _pcf_text_color = _text_on_dark(p)
         # Card-panel: transparent — the video source (speaker) shows through underneath.
         # pcf-desat and pcf-vignette apply their moody treatment ON the live video.
         # overflow:hidden clips absolute children to the panel's border-radius.
