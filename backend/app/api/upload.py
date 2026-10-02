@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import re
 import shutil
+import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -159,10 +160,16 @@ async def upload_chunk(
         raise HTTPException(404, "Upload session not found. Call /api/upload/init first.")
 
     chunk_path = d / f"chunk_{chunk_index:08d}"
-    # Write to .part and rename once complete: a connection or a process that
-    # dies mid-chunk can then never leave a truncated file that looks finished
-    # and gets concatenated into the video.
-    part_path = d / f"chunk_{chunk_index:08d}.part"
+    # Write to a staging file and rename once complete: a connection or a process
+    # that dies mid-chunk can then never leave a truncated file that looks
+    # finished and gets concatenated into the video.
+    #
+    # The staging name carries a token of its own. Naming it after the chunk index
+    # alone meant two deliveries of the same chunk — which a dropped connection
+    # produces routinely — shared one file: the second truncated what the first
+    # was writing, the first renamed the half-written result into place, and the
+    # second crashed on a staging file that was no longer there.
+    part_path = d / f"chunk_{chunk_index:08d}.{uuid.uuid4().hex[:12]}.part"
     received = 0
     try:
         with part_path.open("wb") as fh:
@@ -179,6 +186,8 @@ async def upload_chunk(
         # can retry this specific chunk without restarting the whole upload.
         part_path.unlink(missing_ok=True)
         return JSONResponse({"error": "client_disconnect", "chunk_index": chunk_index}, status_code=499)
+    # os.replace is atomic: the chunk either is the previous complete copy or
+    # this one, never a mix. Two deliveries of the same chunk both land whole.
     part_path.replace(chunk_path)
 
     return JSONResponse({"chunk_index": chunk_index, "received": received})
