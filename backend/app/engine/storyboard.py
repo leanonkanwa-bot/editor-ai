@@ -1593,7 +1593,14 @@ def _generate_graphic_cards(
     system_prompt = f"""\
 You design graphic overlay cards for edited talking-head videos.
 
-OUTPUT: a JSON array of card objects. Each card:
+OUTPUT: a JSON array of card objects.
+
+Every example value below is written in French, because that is the language this
+schema was drafted in. They illustrate the SHAPE of a field, never the language of
+your answer: write every string you emit in {language}, including the fields whose
+example you are copying the form of.
+
+Each card:
 {{
   "id": "card-01",
   "beat": "<from the beat spine below>",
@@ -3006,8 +3013,13 @@ RULES:
 - Place cards at NARRATIVELY IMPORTANT moments — not evenly spaced
 
 LANGUAGE: {language}
-- ALL card text (kicker, title, detail, items, steps, line_a/line_b,
-  attribution) MUST be in {language} — match the speaker's language exactly.
+- EVERY string you emit MUST be in {language} — match the speaker's language
+  exactly. Not only kicker, title, detail, items, steps, line_a/line_b and
+  attribution: every label, badge, context line, status, unit and caption of
+  every style, with no exception. The field examples in the schema above are in
+  French and they do NOT license a French answer.
+- This rule outranks any example. A French video prompted with English examples
+  answers in French, and an English video answers in English.
 - PUNCTUATION: Never use the em-dash character (—) in any card text. Use a comma, colon, or period instead.
 
 BRAND: accent color {brand_color}, content type: {content_type}, style: {editing_style}
