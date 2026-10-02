@@ -117,6 +117,9 @@ _CHROME: dict[str, dict[str, str]] = {
         "comment": "Commentaire",   "reply": "Réponse",
         "lesson": "Leçon",          "direct_flight": "vol direct",
         "income": "Revenus",        "expense": "Dépenses",
+        "pro": "Pour",              "con": "Contre",
+        "objection": "Objection",   "response": "Réponse",
+        "expected": "Ce qu'on pensait", "mistake": "Erreur",
     },
     "en": {
         "cause": "Cause",           "effect": "Effect",
@@ -128,6 +131,9 @@ _CHROME: dict[str, dict[str, str]] = {
         "comment": "Comment",       "reply": "Reply",
         "lesson": "Lesson",         "direct_flight": "direct flight",
         "income": "Income",         "expense": "Expenses",
+        "pro": "Pros",              "con": "Cons",
+        "objection": "Objection",   "response": "Response",
+        "expected": "What we thought", "mistake": "Mistake",
     },
 }
 
@@ -135,6 +141,16 @@ _CHROME: dict[str, dict[str, str]] = {
 def _chrome(language: str | None, key: str) -> str:
     """Chrome label for this language, or "" when the language is not covered."""
     return _CHROME.get((language or "").lower()[:2], {}).get(key, "")
+
+
+def _chrome_glyph(language: str | None, key: str, glyph: str) -> str:
+    """A glyph plus its label, or the glyph alone when the language is not covered.
+
+    A tick and a cross already say "for" and "against"; printing the French word
+    beside them on an English video is worse than printing nothing.
+    """
+    label = _chrome(language, key)
+    return f"{glyph} {_esc(label)}" if label else glyph
 
 
 def _zone_bounds(zone: str, layout: str) -> dict:
@@ -5255,13 +5271,15 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         _pc_cons = hints.get("cons", [])
         parts.append(f'    <div class="pc-wrap">')
         parts.append(f'      <div class="pc-col">')
-        parts.append(f'        <div class="pc-hdr pc-hdr-pro">&#x2713; Pour</div>')
+        parts.append(f'        <div class="pc-hdr pc-hdr-pro">'
+                     f'{_chrome_glyph(language, "pro", "&#x2713;")}</div>')
         for _pc_i, _pc_it in enumerate(_pc_pros[:4]):
             parts.append(f'        <div class="pc-item" id="{card_id}-pc-pro-{_pc_i}">{_esc(str(_pc_it))}</div>')
         parts.append(f'      </div>')
         parts.append(f'      <div class="pc-div" id="{card_id}-pc-div"></div>')
         parts.append(f'      <div class="pc-col">')
-        parts.append(f'        <div class="pc-hdr pc-hdr-con">&#x2717; Contre</div>')
+        parts.append(f'        <div class="pc-hdr pc-hdr-con">'
+                     f'{_chrome_glyph(language, "con", "&#x2717;")}</div>')
         for _pc_i, _pc_it in enumerate(_pc_cons[:4]):
             parts.append(f'        <div class="pc-item" id="{card_id}-pc-con-{_pc_i}">{_esc(str(_pc_it))}</div>')
         parts.append(f'      </div>')
@@ -5325,10 +5343,12 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         _or_obj = _esc(hints.get("objection_text", ""))
         _or_resp = _esc(hints.get("response_text", ""))
         parts.append(f'    <div class="or-wrap">')
-        parts.append(f'      <div class="or-obj-hdr" id="{card_id}-or-obj-hdr">&#x2715; Objection</div>')
+        parts.append(f'      <div class="or-obj-hdr" id="{card_id}-or-obj-hdr">'
+                     f'{_chrome_glyph(language, "objection", "&#x2715;")}</div>')
         parts.append(f'      <div class="or-obj" id="{card_id}-or-obj">{_or_obj}</div>')
         parts.append(f'      <div class="or-div" id="{card_id}-or-div"></div>')
-        parts.append(f'      <div class="or-resp-hdr" id="{card_id}-or-resp-hdr">&#x2713; R&#xe9;ponse</div>')
+        parts.append(f'      <div class="or-resp-hdr" id="{card_id}-or-resp-hdr">'
+                     f'{_chrome_glyph(language, "response", "&#x2713;")}</div>')
         parts.append(f'      <div class="or-resp" id="{card_id}-or-resp">{_or_resp}</div>')
         parts.append(f'    </div>')
     elif content_style in ("data_bar_chart", "data_chart"):
@@ -5555,7 +5575,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         _lrs_real = _esc(hints.get("reality_text",  hints.get("detail", "")))
         parts.append(f'    <div class="lrs-wrap">')
         parts.append(f'      <div class="lrs-side" id="{card_id}-lrs-expected">')
-        parts.append(f'        <div class="lrs-lbl">Ce qu\'on pensait</div>')
+        parts.append(f'        <div class="lrs-lbl">{_esc(_chrome(language, "expected"))}</div>')
         parts.append(f'        <div class="lrs-txt">{_lrs_exp}</div>')
         parts.append(f'      </div>')
         parts.append(f'      <div class="lrs-divider" id="{card_id}-lrs-divider"></div>')
@@ -5895,7 +5915,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         _ml_lsn = _esc(hints.get("lesson_text", ""))
         parts.append(f'    <div class="ml-wrap">')
         parts.append(f'      <div class="ml-block ml-mistake" id="{card_id}-ml-mistake">')
-        parts.append(f'        <div class="ml-tag ml-tag-err">Erreur</div>')
+        parts.append(f'        <div class="ml-tag ml-tag-err">{_esc(_chrome(language, "mistake"))}</div>')
         parts.append(f'        <div class="ml-text">{_ml_err}</div>')
         parts.append(f'      </div>')
         parts.append(f'      <div class="ml-block ml-lesson" id="{card_id}-ml-lesson">')
@@ -5972,11 +5992,13 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         if kicker:
             parts.append(f'    <div class="spc-kicker" id="{card_id}-spc-kicker">{_esc(kicker)}</div>')
         parts.append(f'    <div class="spc-half spc-left" id="{card_id}-spc-left">')
-        parts.append(f'      <div class="spc-tag" id="{card_id}-spc-tag-l">avant</div>')
+        parts.append(f'      <div class="spc-tag" id="{card_id}-spc-tag-l">'
+                     f'{_esc(_chrome(language, "before"))}</div>')
         parts.append(f'      <div class="spc-label" id="{card_id}-spc-label-l">{_spc_l}</div>')
         parts.append(f'    </div>')
         parts.append(f'    <div class="spc-half spc-right" id="{card_id}-spc-right">')
-        parts.append(f'      <div class="spc-tag" id="{card_id}-spc-tag-r">après</div>')
+        parts.append(f'      <div class="spc-tag" id="{card_id}-spc-tag-r">'
+                     f'{_esc(_chrome(language, "after"))}</div>')
         parts.append(f'      <div class="spc-label" id="{card_id}-spc-label-r">{_spc_r}</div>')
         parts.append(f'    </div>')
         parts.append(f'    <div class="spc-divider" id="{card_id}-spc-divider"></div>')
