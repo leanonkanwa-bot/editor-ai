@@ -73,9 +73,14 @@ _ZONE_BOUNDS_PORTRAIT = {
     "upper-left-data":      {"left": 30,  "top": 80,   "width": 540,  "height": 500},   # tall multi-item, left side
     "upper-right-data-tall": {"left": 540, "top": 80,  "width": 500,  "height": 500},   # tall multi-item, right side
     # 5-position rotation — center zones (face zone, 34–50% height). Backdrop-dim applied.
-    "portrait-center-left":  {"left": 20,  "top": 660, "width": 600, "height": 420},
-    "portrait-center-right": {"left": 480, "top": 660, "width": 580, "height": 420},
-    "portrait-center-full":  {"left": 40,  "top": 640, "width": 1000, "height": 360},
+    # 420px was already too short for lean_ledger, whose monospace wraps more: a
+    # quote panel measured 473px against a 420px host and was cut at the bottom
+    # before any of this work. 520 ends at 1180 of 1920, still clear of the frame.
+    "portrait-center-left":  {"left": 20,  "top": 660, "width": 600, "height": 520},
+    "portrait-center-right": {"left": 480, "top": 660, "width": 580, "height": 520},
+    # 360px fitted the old 20-25px type; at 32px the content of a three-item list
+    # grows past it and clips. Ends at 1100 of 1920, still clear of the frame.
+    "portrait-center-full":  {"left": 40,  "top": 640, "width": 1000, "height": 460},
     # Legacy bottom zones (kept for backward compat, not used in the rotation sequence).
     "portrait-bottom-left":  {"left": 30,  "top": 1070, "width": 500, "height": 250},
     "portrait-bottom-right": {"left": 540, "top": 1070, "width": 500, "height": 250},
@@ -208,6 +213,30 @@ _CRAFT_TORN_MASK = (
 )
 
 
+def _secondary_portrait(p: dict) -> str:
+    """The pack's secondary tone, strengthened for a phone screen.
+
+    Measured on rendered portrait frames: the secondary layer — details, labels,
+    the line under a number — sits between 1.8:1 and 2.9:1 against its own panel
+    on five of the six packs, because the packs set it between 50% and 62% alpha.
+    That is a de-emphasis calibrated for a desktop frame, and on a phone it stops
+    being discreet and becomes unreadable.
+
+    The alpha is lifted to 82%: still visibly below the title, which carries full
+    strength and twice the size, so the hierarchy holds.
+    """
+    import re as _re_local  # noqa: PLC0415 — the module has no top-level re
+
+    tone = str(p.get("text_secondary", ""))
+    m = _re_local.match(r"rgba?\(([^)]*)\)", tone.strip())
+    if not m:
+        return tone
+    parts = [x.strip() for x in m.group(1).split(",")]
+    if len(parts) < 3:
+        return tone
+    return f"rgba({parts[0]},{parts[1]},{parts[2]},0.82)"
+
+
 def _srgb_luminance(color: str) -> float:
     """Relative luminance of a #rgb/#rrggbb colour, 0 (black) to 1 (white)."""
     h = color.strip().lstrip("#")
@@ -278,6 +307,21 @@ def _text_on(bg: str, p: dict) -> str:
     return ink if _contrast(ink, bg) >= _contrast("#FFFFFF", bg) else "rgba(255,255,255,0.94)"
 
 
+def _accent_as_text(p: dict) -> str:
+    """The accent when it reads as text on the pack's own panel, else the ink.
+
+    Measured against each pack's panel ground: #4F6BFF on paper 4.12:1, #9C4526 on
+    craft 4.60:1, #4cc9f0 on glass 10.24:1, #00C896 on ledger 8.38:1, #C9A86A on
+    cinema 8.60:1 — and lean_vibe's #FFE66D on its pink panel 2.14:1. On that pack
+    the accent is a fill, not a text colour: its emphasis device is the yellow
+    sticker, so accent-coloured LABELS take the ink and the sticker keeps the yellow.
+    """
+    ground = p.get("bg", "#000")
+    if _contrast(p["accent"], ground) >= 3.0:
+        return p["accent"]
+    return _text_on(ground, p)
+
+
 def _is_tall_panel(style: str, hints: dict | None) -> bool:
     """True for data cards that need the tall zones and tall compact layout."""
     if style in _TALL_DATA_PANEL_TYPES:
@@ -336,7 +380,8 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
 
     # Dynamic zone height for tall multi-item data cards in portrait.
     # Avoids fixed 500px that is either too short (8+ items) or wastes space.
-    # Per-item estimate: 28px compact font × 1.4 line-height ≈ 39px + 6px gap = 45px/row.
+    # Per-item estimate, portrait: 32px × 1.4 line-height ≈ 45px + 13px gap = 58px/row.
+    # Landscape keeps its 21px type and its 45px rows.
     # Panel v-padding: 56px. Root v-padding: 64px. Title/kicker row: 40px.
     if not is_caption:
         _dyn_style = card.get("contentHints", {}).get("style", "")
@@ -356,16 +401,37 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
             }.get(_dyn_style, "items")
             _n_items = len(_dyn_hints.get(_items_key, _dyn_hints.get("items", [])))
             _n_items = max(1, min(_n_items, 12))
-            _dyn_h = _n_items * 45 + 160
+            _dyn_h = _n_items * (58 if layout == "portrait" else 45) + 160
             if _dyn_style == "list" and _dyn_hints.get("title"):
-                _dyn_h += 46  # the title row, now that it is rendered
-            _dyn_h = max(160, min(_dyn_h, 700))
+                # the title row, now that it is rendered — 44px of type in portrait
+                _dyn_h += 62 if layout == "portrait" else 46
+            _dyn_h = max(160, min(_dyn_h, 860 if layout == "portrait" else 700))
             bounds = {**bounds, "height": _dyn_h}
             print(
                 f"[COMPOSE] tall-dyn-height {card.get('id', '?')} ({_dyn_style})"
                 f" n={_n_items} -> {_dyn_h}px",
                 flush=True,
             )
+        # Styles that stack rows but are not "tall data panels" kept the fixed zone
+        # height, which was enough at 21px and is not at 32px: a three-item list
+        # measured 271px of content in a 273px panel, with 87px of slack in the
+        # host. Their height now follows the row count too.
+        _ROW_STYLES = frozenset({"list", "checklist", "timeline", "pros_cons",
+                                 "tool_stack", "red_flag_list", "recap_summary"})
+        if layout == "portrait" and _dyn_style in _ROW_STYLES \
+                and not _is_tall_panel(_dyn_style, card.get("contentHints", {})):
+            _rh = card.get("contentHints", {})
+            _rows = max(len(_rh.get("items") or []),
+                        len(_rh.get("pros") or []) + len(_rh.get("cons") or []), 1)
+            _rows = min(_rows, 8)
+            _row_h = _rows * 58 + 150 + (62 if _rh.get("title") else 0)
+            if _row_h > bounds["height"]:
+                bounds = {**bounds, "height": min(_row_h, 860)}
+                print(
+                    f"[COMPOSE] row-height {card.get('id', '?')} ({_dyn_style})"
+                    f" rows={_rows} -> {bounds['height']}px",
+                    flush=True,
+                )
         # Dual-text hero types: portrait-center zones (height 360-420px) overflow
         # when two full-size text blocks together exceed the container height.
         # Dynamic height prevents symmetric clipping at both top and bottom.
@@ -2062,11 +2128,22 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             _title_scale    = 0.52 if _is_tall_panel(content_style, hints) else 0.75
         title_size_eff  = _s(p["title_size"],  _title_scale)
         number_size_eff = _s(p["number_size"], 0.67)
-        detail_size_eff = "25px" if layout == "portrait" else "23px"
-        kicker_size_eff = "20px" if layout == "portrait" else "18px"
-        list_item_size  = "21px"
-        _list_title_size = "30px"
-        chk_item_size   = "20px"
+        # Portrait is read on a phone: a 1080-wide frame on a 390pt screen is
+        # scaled by 0.361, so the landscape compact sizes land between 7 and 11pt
+        # (measured). These are sized against the caption track — 62px, shipped
+        # and readable — while keeping the hierarchy hero > title > item > label.
+        if layout == "portrait":
+            detail_size_eff  = "32px"
+            kicker_size_eff  = "28px"
+            list_item_size   = "32px"
+            _list_title_size = "44px"
+            chk_item_size    = "30px"
+        else:
+            detail_size_eff  = "23px"
+            kicker_size_eff  = "18px"
+            list_item_size   = "21px"
+            _list_title_size = "30px"
+            chk_item_size    = "20px"
         panel_padding   = "28px 32px"
         root_padding    = "32px"
         text_align      = "left"
@@ -2139,6 +2216,24 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
                 title_size_eff = "38px"
             elif _tc > 20:
                 title_size_eff = "48px"
+
+    # Portrait floor, applied whatever the compact flag. A style whose zone rotation
+    # lands on portrait-center-full is NOT in _SIDE_PANEL_ZONES, so it takes the
+    # non-compact scale — the pack's own kicker (18-22px) and detail (22-26px),
+    # i.e. 6.5 to 9.4pt on a phone. cause_effect is one of those, and it is the card
+    # KAN photographed. The floor catches both paths with one rule.
+    if layout == "portrait":
+        def _floor(px_str: str, low: int) -> str:
+            try:
+                return f"{max(int(float(str(px_str).replace('px', '').strip())), low)}px"
+            except ValueError:
+                return px_str
+        p = {**p, "text_secondary": _secondary_portrait(p)}
+        kicker_size_eff = _floor(kicker_size_eff, 28)
+        detail_size_eff = _floor(detail_size_eff, 32)
+        list_item_size  = _floor(list_item_size, 32)
+        chk_item_size   = _floor(chk_item_size, 30)
+        _list_title_size = _floor(_list_title_size, 44)
 
     display_text = number if number else title
     title_size   = number_size_eff if number else title_size_eff
@@ -3050,7 +3145,7 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('  font-weight:900; text-transform:uppercase; letter-spacing:0.08em;')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .pc-hdr-pro {{')
-        parts.append(f'  color:{p["accent"]};')
+        parts.append(f'  color:{_accent_as_text(p) if layout == "portrait" else p["accent"]};')
         if p["title_glow"]:
             parts.append(f'  text-shadow:{p["title_glow"]};')
         parts.append('}')
@@ -3233,6 +3328,10 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  font-family:{p["font"]}; font-size:{kicker_size_eff};')
         parts.append(f'  font-weight:700; letter-spacing:0.1em; text-transform:uppercase;')
         parts.append(f'  color:{p["accent"]};')
+        if layout == "portrait":
+            # lean_vibe's yellow on its pink panel is 2.14:1 as text. Portrait only,
+            # so the landscape output of every pack stays byte-identical.
+            parts.append(f'  color:{_accent_as_text(p)};')
         parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .ceff-text {{')
         parts.append(f'  font-family:{p["font"]}; font-size:{detail_size_eff};')
