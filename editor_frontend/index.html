@@ -129,7 +129,11 @@
         padding: 1.5rem;
         margin-bottom: 1rem;
       }
-      .card.hidden { display: none; }
+      /* `hidden` must hide whatever carries it. Scoped to .card, it silently did
+         nothing on the two elements that are not cards — #retryBlock and
+         #resultWarning — so both were permanently visible: the warning banner
+         showed on every single video, with an empty body. */
+      .hidden { display: none !important; }
       .card-surface {
         background: var(--surface);
         border: 1px solid var(--border);
