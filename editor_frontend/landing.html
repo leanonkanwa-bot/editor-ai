@@ -511,6 +511,14 @@
           </div>
           <div class="lp-progress-track"><div class="lp-progress-fill" id="lpProgressFill"></div></div>
           <div class="lp-progress-text" id="lpProgressText">Upload en cours…</div>
+          <div id="lpAuthInline" style="display:none;margin:.9rem 0">
+            <button type="button" class="btn-google" id="lpAuthInlineBtn" style="width:100%;justify-content:center;min-height:48px">
+              Continuer avec Google
+            </button>
+            <p style="margin:.5rem 0 0;font-size:.78rem;opacity:.7">
+              Votre vidéo reste sur cet écran : l'envoi démarre tout seul une fois connecté.
+            </p>
+          </div>
         </div>
         <div class="lp-packs" id="lpPacks" style="display:none">
           <div class="lp-packs-label">Style visuel</div>
@@ -1509,11 +1517,28 @@
     drop.addEventListener('drop', function(e) {
       e.preventDefault(); drop.classList.remove('dragover');
       var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-      if (f) beginUpload(f);
+      if (f) onFileChosen(f);
     });
     fileInp.addEventListener('change', function() {
-      if (fileInp.files && fileInp.files[0]) beginUpload(fileInp.files[0]);
+      if (fileInp.files && fileInp.files[0]) onFileChosen(fileInp.files[0]);
     });
+
+    var _inlineBtn = document.getElementById('lpAuthInlineBtn');
+    if (_inlineBtn) _inlineBtn.addEventListener('click', startSignIn);
+
+    // Back from the redirect fallback: the file could not survive the navigation,
+    // so ask for it again instead of pretending it is still there.
+    try {
+      if (sessionStorage.getItem('lle_login_redirect')) {
+        sessionStorage.removeItem('lle_login_redirect');
+        isSignedIn().then(function(ok) {
+          if (ok && drop) {
+            _isAuthenticated = true;
+            setProgress(0, 'Vous êtes connecté — déposez votre vidéo pour lancer le montage.', false);
+          }
+        });
+      }
+    } catch (e) {}
 
     // Style pack selection
     document.querySelectorAll('.lp-pack').forEach(function(btn) {
@@ -1556,6 +1581,111 @@
       if (e.target === overlay) overlay.classList.remove('open');
     });
 
+    // ── Sign-in before upload ───────────────────────────────────────────
+    var _pendingFile = null;
+    var _authPoll = null;
+
+    function isSignedIn() {
+      return fetch('/api/auth/me', { credentials: 'same-origin' })
+        .then(function(r) { return r.ok; })
+        .catch(function() { return false; });
+    }
+
+    // Drop → sign in → upload. The file never leaves the page until there is a
+    // session to attach it to, so nothing is uploaded anonymously.
+    function onFileChosen(file) {
+      _pendingFile = file;
+      isSignedIn().then(function(ok) {
+        _isAuthenticated = ok;
+        if (ok) { beginUpload(file); return; }
+        askSignIn(file);
+      });
+    }
+
+    function askSignIn(file) {
+      drop.style.display = 'none';
+      uploading.style.display = '';
+      packsEl.style.display = 'none';
+      formatEl.style.display = 'none';
+      submitEl.style.display = 'none';
+      var nm = document.getElementById('lpFileName');
+      var sz = document.getElementById('lpFileSize');
+      if (nm) nm.textContent = file.name;
+      if (sz) sz.textContent = (file.size / (1024 * 1024)).toFixed(0) + ' Mo';
+      setProgress(0, 'Connectez-vous pour lancer le montage — votre vidéo est prête.', false);
+      var box = document.getElementById('lpAuthInline');
+      if (box) box.style.display = '';
+    }
+
+    function startSignIn() {
+      var w = 480, h = 640;
+      var x = (window.screen.width - w) / 2, y = (window.screen.height - h) / 2;
+      var pop = null;
+      try {
+        pop = window.open('/api/auth/google/login', 'lle_login',
+                          'width=' + w + ',height=' + h + ',left=' + x + ',top=' + y);
+      } catch (e) { pop = null; }
+
+      // In-app browsers (Instagram, TikTok) refuse popups. Say what will happen
+      // rather than losing the file silently.
+      if (!pop || pop.closed || typeof pop.closed === 'undefined') {
+        setProgress(0, 'Ouverture de la connexion… vous devrez redéposer votre vidéo ensuite.', false);
+        try { sessionStorage.setItem('lle_login_redirect', '1'); } catch (e) {}
+        window.location.href = '/api/auth/google/login';
+        return;
+      }
+
+      setProgress(0, 'Connexion en cours dans la fenêtre ouverte…', false);
+
+      // The popup closing gives the landing its focus back. That event is not
+      // throttled the way a background timer is, so it is the fast path: the
+      // upload starts the instant the visitor returns instead of up to 1.5s later.
+      var onReturn = function() {
+        if (!_pendingFile) return;
+        isSignedIn().then(function(ok) {
+          if (!ok) return;
+          clearInterval(_authPoll);
+          window.removeEventListener('focus', onReturn);
+          document.removeEventListener('visibilitychange', onReturn);
+          _isAuthenticated = true;
+          try { pop.close(); } catch (e) {}
+          var b2 = document.getElementById('lpAuthInline');
+          if (b2) b2.style.display = 'none';
+          var f = _pendingFile; _pendingFile = null;
+          beginUpload(f);
+        });
+      };
+      window.addEventListener('focus', onReturn);
+      document.addEventListener('visibilitychange', onReturn);
+
+      var waited = 0;
+      clearInterval(_authPoll);
+      _authPoll = setInterval(function() {
+        waited += 1500;
+        isSignedIn().then(function(ok) {
+          if (ok) {
+            clearInterval(_authPoll);
+            _isAuthenticated = true;
+            try { pop.close(); } catch (e) {}
+            window.removeEventListener('focus', onReturn);
+            document.removeEventListener('visibilitychange', onReturn);
+            var box = document.getElementById('lpAuthInline');
+            if (box) box.style.display = 'none';
+            var f2 = _pendingFile; _pendingFile = null;
+            if (f2) beginUpload(f2);
+            return;
+          }
+          if (pop.closed) {
+            clearInterval(_authPoll);
+            setProgress(0, 'Connexion annulée. Réessayez quand vous voulez.', false);
+          } else if (waited > 180000) {
+            clearInterval(_authPoll);
+            setProgress(0, 'La connexion a expiré. Réessayez.', false);
+          }
+        });
+      }, 1500);
+    }
+
     // ── Upload logic ────────────────────────────────────────────────────
     function beginUpload(file) {
       drop.style.display = 'none';
@@ -1579,7 +1709,10 @@
         setProgress(100, '✓ Vidéo prête — cliquez pour lancer le montage', true);
       }).catch(function(err) {
         console.error('[LandingUpload]', err);
-        setProgress(0, 'Erreur d\'upload. Rechargez et réessayez.', false);
+        var lost = /\b401\b/.test(String(err && err.message));
+        setProgress(0, lost
+          ? 'Votre session a expiré. Reconnectez-vous puis redéposez votre vidéo.'
+          : 'Erreur d\'upload. Rechargez et réessayez.', false);
         drop.style.display = '';
         uploading.style.display = 'none';
         submitEl.style.display = 'none';

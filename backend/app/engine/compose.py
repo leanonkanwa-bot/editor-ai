@@ -637,9 +637,11 @@ _LEAN_CRAFT = {
     "bg": "#E8D9C5",
     "text": "#3D2B1F",
     "text_secondary": "rgba(61,43,31,0.55)",
-    # Darker terracotta: the old #D97757 measured 2.25:1 on this cream (and 3.1:1
-    # under the white bullet numbers). This reads 4.6:1 and 6.4:1.
-    "accent": "#9C4526",
+    # Terracotta, twice corrected. The original #D97757 measured 2.25:1 on this
+    # cream; #9C4526 fixed the contrast but leaned brown — KAN: "ça fait terre".
+    # #9E2F27 keeps that density and moves the hue toward brick: 5.25:1 on the
+    # cream, 7.27:1 under the white bullet numbers.
+    "accent": "#9E2F27",
     "font": '"Montserrat", "Helvetica Neue", Arial, sans-serif',
     "font_detail": '"Inter", ui-sans-serif, system-ui, sans-serif',
     "font_weight": "700",
@@ -647,7 +649,7 @@ _LEAN_CRAFT = {
     "number_size": "90px",
     "kicker_size": "20px",
     "detail_size": "22px",
-    "border": "1.5px solid rgba(156,69,38,0.22)",
+    "border": "1.5px solid rgba(158,47,39,0.22)",
     "radius": "12px 8px 10px 14px",
     # Shadow is drawn with drop-shadow in the panel CSS so it follows the torn
     # edge; a box-shadow would outline the rectangle the mask just cut away.
@@ -658,9 +660,9 @@ _LEAN_CRAFT = {
     "title_glow_intense": "",
     "has_grain": True,
     "grain_type": "paper",
-    "shimmer_color": "rgba(156,69,38,0.10)",
-    "accent_line_glow": "0 0 6px rgba(156,69,38,0.22)",
-    "accent_line_glow_bright": "0 0 10px rgba(156,69,38,0.32)",
+    "shimmer_color": "rgba(158,47,39,0.10)",
+    "accent_line_glow": "0 0 6px rgba(158,47,39,0.22)",
+    "accent_line_glow_bright": "0 0 10px rgba(158,47,39,0.32)",
     "backdrop_dim": "brightness(0.3) sepia(0.2)",
     "backdrop_restore": "brightness(1) sepia(0)",
     # Climax primitives: deep warm dark with terracotta sol vif from bottom (Direction C — warm)

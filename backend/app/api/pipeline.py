@@ -68,6 +68,40 @@ def _is_unreadable_plan_json(err: BaseException) -> bool:
     return isinstance(err, _json.JSONDecodeError) or str(err).startswith("Agent did not return JSON")
 
 
+# What the model provider can refuse, and what each means for the person waiting.
+# Matched on the message text rather than the exception class: the SDK moves its
+# classes around between versions, the wording of these three does not.
+_PLAN_FAILURES = (
+    ("credit_exhausted", ("credit balance is too low", "insufficient credit",
+                          "billing", "payment required"),
+     "Notre service d'analyse est momentanément indisponible (incident de notre"
+     " côté, pas un problème avec votre vidéo). Réessayez dans quelques minutes"
+     " avec le bouton Relancer."),
+    ("auth", ("authentication_error", "invalid x-api-key", "invalid api key",
+              "unauthorized", "permission_error"),
+     "Notre service d'analyse est momentanément indisponible (incident de notre"
+     " côté). Nous sommes prévenus — réessayez dans quelques minutes."),
+    ("rate_limit", ("rate_limit", "rate limit", "too many requests", "429",
+                    "overloaded"),
+     "Beaucoup de vidéos sont analysées en ce moment. Réessayez dans quelques"
+     " minutes avec le bouton Relancer — votre vidéo est conservée."),
+)
+
+
+def _classify_plan_failure(exc: Exception) -> tuple[str, str]:
+    """(marker, client message) for an exception raised while planning.
+
+    The marker is what to grep for in the logs; the message is what the client
+    reads. An unrecognised failure keeps the generic wording rather than
+    inventing a cause.
+    """
+    blob = f"{type(exc).__name__} {exc}".lower()
+    for marker, needles, message in _PLAN_FAILURES:
+        if any(n in blob for n in needles):
+            return marker, message
+    return "other", "Phase 1 (analysis) failed."
+
+
 def _plan_with_retry(job_id: str, transcript: dict, instructions: str, **plan_kwargs):
     """plan_edit, retried once if the model's answer is not readable as JSON.
 
@@ -1928,11 +1962,20 @@ def run_job(
             message=str(e),
         )
     except Exception as e:
+        # Printed, not only recorded: without this a phase-1 failure is invisible
+        # in the logs and the only trace is inside /data/jobs.json, which nobody
+        # can read while the job is failing.
+        _marker, _client_message = _classify_plan_failure(e)
+        print(
+            f"[PHASE1-FAIL] job={job_id} kind={_marker} {type(e).__name__}: {e}",
+            flush=True,
+        )
+        traceback.print_exc()
         store.update(
             job_id,
             status="error",
             error=f"{type(e).__name__}: {e}\n{traceback.format_exc()}",
-            message="Phase 1 (analysis) failed.",
+            message=_client_message,
             is_retry=True,
         )
 
