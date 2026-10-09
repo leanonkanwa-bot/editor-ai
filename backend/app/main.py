@@ -310,6 +310,7 @@ def _auth_required() -> bool:
 # gate above -- this answers "which profile is this", not "is this visitor
 # allowed in the beta") ────────────────────────────────────────────────────
 # Session helpers live in app.core.session so routers can check ownership too.
+from app.core.llm_guard import require_llm_caller  # noqa: E402
 from app.core.session import (  # noqa: E402
     SESSION_COOKIE, _sign_session, _verify_session, require_api_owner, require_owner,
 )
@@ -350,12 +351,14 @@ def health() -> dict[str, str]:
 
 
 @app.get("/api/debug-last-filter")
-def debug_last_filter() -> Response:
+def debug_last_filter(request: Request) -> Response:
     """Return the exact filter_complex string from the last render attempt.
 
     render.py writes /tmp/debug_filter.txt before every filter_complex call
     so a crash leaves the offending string on disk for inspection.
     """
+    if not _admin_authed(request):
+        return JSONResponse({"detail": "admin only"}, status_code=401)
     p = Path("/tmp/debug_filter.txt")
     if not p.exists():
         return Response(content="(no /tmp/debug_filter.txt found)", media_type="text/plain")
@@ -368,7 +371,9 @@ def healthz() -> dict[str, str]:
 
 
 @app.get("/api/ffmpeg-info")
-async def ffmpeg_info() -> dict:
+async def ffmpeg_info(request: Request):
+    if not _admin_authed(request):
+        return JSONResponse({"detail": "admin only"}, status_code=401)
     import subprocess as _sp
     from app.engine.transcribe import FFMPEG_PATH as _FFP
     r1 = _sp.run([_FFP, "-version"], capture_output=True, text=True)
@@ -390,7 +395,7 @@ async def ffmpeg_info() -> dict:
 
 
 @app.get("/api/test-ffmpeg")
-async def test_ffmpeg() -> dict:
+async def test_ffmpeg(request: Request):
     """Diagnostic: test four enable= syntax variants to find which one works.
 
     tA  backslash-comma, no quotes:  enable=gte(t\\,0.2)*lte(t\\,0.8)
@@ -404,6 +409,8 @@ async def test_ffmpeg() -> dict:
     Returns returncode and stderr tail for every variant so we can see
     exactly which syntax FFmpeg 7.1.4 on Railway accepts.
     """
+    if not _admin_authed(request):
+        return JSONResponse({"detail": "admin only"}, status_code=401)
     import subprocess as _sp
     import os as _os
     from app.engine.transcribe import FFMPEG_PATH
@@ -622,10 +629,24 @@ def _admin_login_html(title: str) -> str:
 
 
 def _admin_authed(request: Request) -> bool:
-    if not _auth_required():
-        return True
-    token = request.cookies.get(AUTH_COOKIE)
-    return bool(token) and secrets.compare_digest(token, settings.access_password)
+    """Is this caller an admin? Denies when no password is configured.
+
+    This used to return True when access_password was unset, which made the
+    admin dashboard, the reports page and the per-user detail page public on
+    any deployment missing the variable. A missing secret is not consent: the
+    safe reading of "no password configured" is "nobody is an admin", not
+    "everybody is". Production does set ACCESS_PASSWORD (verified: /admin
+    answers 401), so this closes a latent hole rather than an open one — but a
+    typo in the variable name would have opened it silently.
+
+    The consequence is deliberate: unset the variable and admin locks everyone
+    out, loudly, instead of letting everyone in, quietly.
+    """
+    password = settings.access_password or ""
+    if not password:
+        return False
+    token = request.cookies.get(AUTH_COOKIE) or ""
+    return bool(token) and secrets.compare_digest(token, password)
 
 
 def _fmt_date(ts: float | None) -> str:
@@ -1822,8 +1843,9 @@ def thumbnail(job_id: str, request: Request):
 # ── Feature 4: Hook Generator ─────────────────────────────────────────────────
 
 @app.post("/api/generate-hooks")
-async def generate_hooks(payload: dict = Body(...)) -> dict:
+async def generate_hooks(request: Request, payload: dict = Body(...)) -> dict:
     """Ask Claude to generate 5 scored hook options for a topic."""
+    require_llm_caller(request)
     topic = (payload.get("topic") or "").strip()
     if not topic:
         raise HTTPException(400, "topic required")
@@ -1915,8 +1937,9 @@ def get_referral_stats(profile_id: str) -> dict:
 # ── Feature 9: AI Video Coach ─────────────────────────────────────────────────
 
 @app.post("/api/coach-chat")
-async def coach_chat(payload: dict = Body(...)) -> dict:
+async def coach_chat(request: Request, payload: dict = Body(...)) -> dict:
     """Claude analyses the user's video history and answers coaching questions."""
+    require_llm_caller(request)
     question = (payload.get("question") or "").strip()
     if not question:
         raise HTTPException(400, "question required")
@@ -1968,8 +1991,9 @@ async def coach_chat(payload: dict = Body(...)) -> dict:
 # ── Feature 11: Competitor Analysis ──────────────────────────────────────────
 
 @app.post("/api/analyze-competitor")
-async def analyze_competitor(payload: dict = Body(...)) -> dict:
+async def analyze_competitor(request: Request, payload: dict = Body(...)) -> dict:
     """Ask Claude to analyse a competitor video URL for content structure."""
+    require_llm_caller(request)
     url = (payload.get("url") or "").strip()
     if not url:
         raise HTTPException(400, "url required")
@@ -2232,8 +2256,9 @@ _digest_t.start()
 
 # ── Feature 17/18 — Description Generator ────────────────────────────────────
 @app.post("/api/generate-descriptions")
-async def generate_descriptions(payload: dict = Body(...)) -> dict:
+async def generate_descriptions(request: Request, payload: dict = Body(...)) -> dict:
     """Generate platform-specific descriptions via Claude."""
+    require_llm_caller(request)
     from app.core.config import settings
     import anthropic
 
@@ -2463,7 +2488,9 @@ def v1_get_job(job_id: str, request: Request) -> dict:
 
 
 @app.get("/api/test-broll")
-async def test_broll():
+async def test_broll(request: Request):
+    if not _admin_authed(request):
+        return JSONResponse({"detail": "admin only"}, status_code=401)
     import requests, os
     key = os.environ.get("PEXELS_API_KEY", "")
     if not key:
@@ -2528,52 +2555,11 @@ def admin_active(request: Request) -> Response:
     })
 
 
-@app.get("/api/caption-audit")
-async def caption_audit():
-    """Return the last job's caption coverage audit data."""
-    audit_path = Path("/tmp/caption_audit.json")
-    if not audit_path.exists():
-        return {"error": "No audit data yet — run a job with RENDER_ENGINE=hyperframes first"}
-    import json as _json
-    data = _json.loads(audit_path.read_text())
-
-    # Run the same coverage comparison the storyboard does
-    src = data.get("source_words", [])
-    remapped = data.get("remapped_words", [])
-
-    # Find words in source but not in remapped (lost in pretrim)
-    src_texts = [w["text"].strip() for w in src if w["text"].strip()]
-    rem_texts = [w["text"].strip() for w in remapped if w["text"].strip()]
-
-    lost_in_pretrim = []
-    j = 0
-    for i, word in enumerate(src_texts):
-        if j < len(rem_texts) and rem_texts[j] == word:
-            j += 1
-        else:
-            ctx = " ".join(src_texts[max(0,i-3):i]) + f" >>>{word}<<< " + " ".join(src_texts[i+1:i+4])
-            lost_in_pretrim.append({"word": word, "index": i, "context": ctx,
-                                     "start": src[i].get("start"), "end": src[i].get("end")})
-
-    # Find zero-duration words in remapped
-    zero_dur = [{"text": w["text"], "start": w["start"], "end": w["end"]}
-                for w in remapped if w["end"] <= w["start"] and w["text"].strip()]
-
-    return {
-        "source_word_count": len(src_texts),
-        "remapped_word_count": len(rem_texts),
-        "lost_in_pretrim": lost_in_pretrim,
-        "lost_count": len(lost_in_pretrim),
-        "zero_duration_words": zero_dur,
-        "zero_dur_count": len(zero_dur),
-        "source_words": src,
-        "remapped_words": remapped,
-    }
-
-
 @app.get("/api/test-hyperframes")
-async def test_hyperframes():
+async def test_hyperframes(request: Request):
     """Render a 3s GSAP animation via the official HyperFrames CLI and return frames."""
+    if not _admin_authed(request):
+        return JSONResponse({"detail": "admin only"}, status_code=401)
     import subprocess as _sp
     import time as _time
     import base64 as _b64
@@ -2720,8 +2706,10 @@ async def test_hyperframes():
 
 
 @app.get("/api/test-hyperframes/view", include_in_schema=False)
-async def test_hyperframes_view():
+async def test_hyperframes_view(request: Request):
     """Run the HyperFrames test and show frames in an HTML page."""
+    if not _admin_authed(request):
+        return JSONResponse({"detail": "admin only"}, status_code=401)
     result = await test_hyperframes()
     frames = result.get("frames", [])
     verdict = result.get("verdict", "UNKNOWN")

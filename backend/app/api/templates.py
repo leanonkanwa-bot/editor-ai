@@ -17,6 +17,7 @@ from fastapi import Request, APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.core.session import require_owner
+from app.core.llm_guard import require_llm_caller
 from app.core.config import settings
 from app.engine.template_engine import (
     TemplateAnalyzer,
@@ -33,11 +34,14 @@ analyzer = TemplateAnalyzer()
 
 @router.post("/api/templates/analyze")
 async def analyze_template(
+    request: Request,
     name: str = Form(...),
     video: UploadFile = File(None),
     video_url: str = Form(""),
 ) -> JSONResponse:
     """Analyse a reference video and save its editing style as a template."""
+    # Transcribes and asks Claude: the heaviest of the five, so it counts double.
+    require_llm_caller(request, cost=2)
     work_dir = settings.work_dir / "_template_analysis"
     work_dir.mkdir(parents=True, exist_ok=True)
 
