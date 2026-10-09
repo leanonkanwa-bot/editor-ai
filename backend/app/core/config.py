@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     # If set, the API and frontend require this token via cookie or header.
     # Leave empty to allow anonymous access (only do this for local dev).
     access_password: str = ""
+    # Read-only deploy check. Lets the push guard ask "are you busy?" without
+    # handing the admin password to a script or an environment: this token
+    # answers one boolean on one route and opens nothing else.
+    active_check_token: str = ""
 
     # How long to keep uploaded source videos on disk (hours).
     upload_retention_hours: int = 24

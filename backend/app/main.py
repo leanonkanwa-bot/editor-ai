@@ -2526,7 +2526,19 @@ def admin_active(request: Request) -> Response:
     holds nothing and would read as idle. The job store's ACTIVE_STATUSES is
     the same set restart recovery already trusts.
     """
-    if not _admin_authed(request):
+    # Two ways in, with deliberately different answers.
+    #
+    # The deploy guard needs one boolean and nothing else, and handing it the
+    # admin password would mean putting that password in a script's environment
+    # just to ask "are you busy?". ACTIVE_CHECK_TOKEN buys exactly that question
+    # and nothing more: a caller holding it gets `busy` and the counts, never
+    # the job ids or their messages, and the token is refused by every other
+    # route on the server.
+    _tok = settings.active_check_token or ""
+    _sent = request.headers.get("x-active-check", "")
+    by_token = bool(_tok) and bool(_sent) and secrets.compare_digest(_sent, _tok)
+    by_admin = _admin_authed(request)
+    if not (by_admin or by_token):
         return JSONResponse({"detail": "admin only"}, status_code=401)
 
     jobs = [{"id": j.id, "status": j.status,
@@ -2536,14 +2548,27 @@ def admin_active(request: Request) -> Response:
         from app.api.upload import active_upload_sessions
         uploads = active_upload_sessions()
     except Exception as exc:          # never let the guard fail open
-        return JSONResponse({"error": f"upload probe failed: {exc}",
-                             "busy": True, "active_jobs": jobs}, status_code=500)
+        _body = {"error": f"upload probe failed: {exc}", "busy": True}
+        if by_admin:
+            _body["active_jobs"] = jobs
+        return JSONResponse(_body, status_code=500)
 
     held = None
     try:
         held = _MAX_CONCURRENT_RENDERS - _RENDER_SEM._value
     except Exception:
         pass
+
+    if not by_admin:
+        # token-only caller: the answer, never the contents
+        return JSONResponse({
+            "busy": bool(jobs or uploads),
+            "active_job_count": len(jobs),
+            "active_upload_count": len(uploads),
+            "render_slots_held": held,
+            "render_slots_total": _MAX_CONCURRENT_RENDERS,
+            "draining": _pipeline_shutdown.is_set(),
+        })
 
     return JSONResponse({
         "busy": bool(jobs or uploads),
