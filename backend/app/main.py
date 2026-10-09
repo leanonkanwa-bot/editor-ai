@@ -38,7 +38,9 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 
 from app.api.jobs import store
-from app.api.pipeline import run_job, run_render_phase, _shutdown_event as _pipeline_shutdown, _RENDER_SEM
+from app.api.pipeline import (run_job, run_render_phase,
+                              _shutdown_event as _pipeline_shutdown,
+                              _RENDER_SEM, _MAX_CONCURRENT_RENDERS)
 from app.api.upload import assembled_path, router as upload_router, upload_owner
 from app.core.config import settings
 from app.core.plans import DEFAULT_PLAN, effective_plan_info
@@ -2481,6 +2483,49 @@ async def test_broll():
         }
     except Exception as e:
         return {"error": str(e), "key_set": bool(key)}
+
+
+@app.get("/api/admin/active", include_in_schema=False)
+def admin_active(request: Request) -> Response:
+    """What the server is doing right now. Read-only; the deploy guard's source.
+
+    Exists because "no matching log line for 150 seconds" was taken for "idle"
+    and a deploy went out on top of a live job: the stage running at the time,
+    a ten-minute 4K upscale, logs nothing at all while it works. Silence in a
+    log is not absence of work, so the guard asks the process instead.
+
+    Counts both phases. The render semaphore is reported, but it is NOT the
+    signal: it is held for phase 2 only, so a job being transcribed or planned
+    holds nothing and would read as idle. The job store's ACTIVE_STATUSES is
+    the same set restart recovery already trusts.
+    """
+    if not _admin_authed(request):
+        return JSONResponse({"detail": "admin only"}, status_code=401)
+
+    jobs = [{"id": j.id, "status": j.status,
+             "message": (getattr(j, "message", "") or "")[:80]}
+            for j in store.active()]
+    try:
+        from app.api.upload import active_upload_sessions
+        uploads = active_upload_sessions()
+    except Exception as exc:          # never let the guard fail open
+        return JSONResponse({"error": f"upload probe failed: {exc}",
+                             "busy": True, "active_jobs": jobs}, status_code=500)
+
+    held = None
+    try:
+        held = _MAX_CONCURRENT_RENDERS - _RENDER_SEM._value
+    except Exception:
+        pass
+
+    return JSONResponse({
+        "busy": bool(jobs or uploads),
+        "active_jobs": jobs,
+        "active_uploads": uploads,
+        "render_slots_held": held,
+        "render_slots_total": _MAX_CONCURRENT_RENDERS,
+        "draining": _pipeline_shutdown.is_set(),
+    })
 
 
 @app.get("/api/caption-audit")

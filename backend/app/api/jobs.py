@@ -40,6 +40,9 @@ TERMINAL_STATUSES = {"done", "error"}
 _STABLE_STATUSES = {"ready_for_review"}
 # Statuses where a worker thread was actively running.
 _ACTIVE_STATUSES = {"queued", "transcribing", "planning", "rendering"}
+# Same set under a public name: the deploy guard needs it too, and the two
+# must never drift apart.
+ACTIVE_STATUSES = _ACTIVE_STATUSES
 INTERRUPT_MESSAGE = "Serveur redémarré - veuillez re-uploader votre vidéo"
 
 
@@ -174,6 +177,19 @@ class JobStore:
                 setattr(job, k, v)
             self._save_locked()
             return job
+
+    def active(self) -> list["Job"]:
+        """Jobs with a worker thread running, newest first.
+
+        The deploy guard's source of truth. Deliberately the store rather than
+        the render semaphore: the semaphore is held only for phase 2, so a job
+        being transcribed or planned holds nothing and would read as idle.
+        """
+        with self._lock:
+            jobs = [j for j in self._jobs.values()
+                    if j.status in _ACTIVE_STATUSES and not getattr(j, "trashed", False)]
+        jobs.sort(key=lambda j: getattr(j, "created_at", "") or "", reverse=True)
+        return jobs
 
     def get(self, job_id: str) -> Job | None:
         with self._lock:

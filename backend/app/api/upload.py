@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import re
 import shutil
+import time
 import uuid
 from pathlib import Path
 
@@ -99,6 +100,37 @@ def _complete_chunks(d: Path) -> dict[int, int]:
         m = _CHUNK_NAME.match(p.name)
         if m:
             out[int(m.group(1))] = p.stat().st_size
+    return out
+
+
+def active_upload_sessions(max_idle_s: float = 900.0) -> list[dict]:
+    """Upload sessions that received a chunk recently.
+
+    A session's directory mtime moves every time a chunk lands, so recent mtime
+    means bytes are still arriving. Deliberately generous: a phone on a weak
+    connection can stall for minutes between chunks and the upload is still
+    live. Erring towards "busy" is the safe direction for a deploy guard.
+    """
+    out = []
+    now = time.time()
+    try:
+        dirs = list(settings.uploads_dir.glob("_chunks_*"))
+    except OSError:
+        return out
+    for d in dirs:
+        try:
+            if not d.is_dir():
+                continue
+            idle = now - d.stat().st_mtime
+            if idle <= max_idle_s:
+                out.append({
+                    "upload_id": d.name.removeprefix("_chunks_"),
+                    "idle_seconds": round(idle, 1),
+                    "chunks": sum(1 for _ in d.glob("chunk_*")),
+                })
+        except OSError:
+            continue
+    out.sort(key=lambda x: x["idle_seconds"])
     return out
 
 
