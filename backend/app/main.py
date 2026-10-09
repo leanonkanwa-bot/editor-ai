@@ -2832,14 +2832,37 @@ def upsell_page(request: Request, job: str = "") -> Response:
     return Response(content=html, media_type="text/html; charset=utf-8")
 
 
+def _page(path: Path, request: Request, media_type: str | None = None) -> Response:
+    """Serve a file that a browser always revalidates.
+
+    FileResponse sends an ETag but never looks at If-None-Match, so the pages
+    answered 200 even to a browser holding the current version. The validator is
+    computed exactly as Starlette computes it (md5 of "mtime-size"), so the two
+    agree whichever path builds the response.
+    """
+    st = path.stat()
+    _base = f"{st.st_mtime}-{st.st_size}".encode()
+    try:
+        etag = f'"{hashlib.md5(_base, usedforsecurity=False).hexdigest()}"'
+    except TypeError:  # older hashlib without the keyword
+        etag = f'"{hashlib.md5(_base).hexdigest()}"'
+    headers = {"Cache-Control": "no-cache", "ETag": etag}
+    _inm = request.headers.get("if-none-match", "")
+    if etag in [t.strip() for t in _inm.split(",") if t.strip()]:
+        return Response(status_code=304, headers=headers)
+    if media_type:
+        return FileResponse(str(path), media_type=media_type, headers=headers)
+    return FileResponse(str(path), headers=headers)
+
+
 if editor_dir.exists():
     @app.get("/", include_in_schema=False)
-    def index():
-        return FileResponse(str(editor_dir / "landing.html"))
+    def index(request: Request):
+        return _page(editor_dir / "landing.html", request)
 
     @app.get("/app", include_in_schema=False)
-    def app_page():
-        return FileResponse(str(editor_dir / "index.html"))
+    def app_page(request: Request):
+        return _page(editor_dir / "index.html", request)
 
     # Style-pack preview clips are re-rendered and re-committed occasionally
     # (e.g. content simplification). Without an explicit Cache-Control, browsers
@@ -2848,16 +2871,33 @@ if editor_dir.exists():
     _PREVIEWS_DIR = (editor_dir / "previews").resolve()
 
     @app.get("/previews/{filename}", include_in_schema=False)
-    def preview_clip(filename: str):
+    def preview_clip(filename: str, request: Request):
         if not filename.endswith(".mp4"):
             raise HTTPException(404)
         path = (_PREVIEWS_DIR / filename).resolve()
         if path.parent != _PREVIEWS_DIR or not path.is_file():
             raise HTTPException(404)
-        return FileResponse(
-            str(path),
-            media_type="video/mp4",
-            headers={"Cache-Control": "no-cache, must-revalidate"},
-        )
+        # Revalidate, but answer 304 when the clip has not changed: this route
+        # asked browsers to check back and then re-sent the whole video every
+        # time, three of them on each view of the landing.
+        return _page(path, request, media_type="video/mp4")
+
+    @app.middleware("http")
+    async def _revalidate_frontend_assets(request: Request, call_next):
+        """Markup, script and style always revalidate; media keeps its own rules.
+
+        StaticFiles sends no Cache-Control, so app.js inherited the same
+        heuristic freshness as the pages: a visitor could receive a new index.html
+        and keep an old script. Anything that already states a policy is left
+        alone, so /previews keeps the directive it sets for itself.
+        """
+        response = await call_next(request)
+        if "cache-control" in response.headers:
+            return response
+        ctype = response.headers.get("content-type", "")
+        if ctype.startswith(("text/html", "text/css", "text/javascript",
+                             "application/javascript", "application/json")):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
 
     app.mount("/", StaticFiles(directory=str(editor_dir)), name="frontend")
