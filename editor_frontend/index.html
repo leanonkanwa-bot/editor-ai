@@ -54,7 +54,13 @@
       }
 
       /* ── SIDEBAR ───────────────────────────────────────────── */
-      .app-shell { display: flex; min-height: 100vh; }
+      /* overflow-x: clip, not hidden: it creates no scroll container, so it
+         cannot turn into a scrollbar of its own and does not affect the
+         fixed sidebar. It exists because main::before bleeds 40px past main
+         on each side; at 1024px main's right edge IS the viewport edge, and
+         that bleed became 40px of horizontal page scroll. What is clipped
+         lies outside the viewport already. */
+      .app-shell { display: flex; min-height: 100vh; overflow-x: clip; }
       .sidebar {
         position: fixed; top: 0; left: 0; bottom: 0;
         width: 220px; background: var(--sidebar-bg);
@@ -119,6 +125,12 @@
         .sidebar .nav-tab { font-size: 0; padding: .55rem .5rem; text-align: center; }
         .sidebar-bottom { padding: .5rem; }
         main { margin-left: 60px; padding: 1.5rem 1.25rem 5rem; }
+        /* Sidebar tabs are drawn 35x18 in the collapsed rail: .sidebar-nav's
+           .75rem padding leaves 35px of the 60px rail, so the padding comes
+           down and the tab itself reaches the 44px floor. */
+        .sidebar-nav { padding: 0 .25rem; }
+        .sidebar .nav-tab { min-height: 44px; display: flex; align-items: center;
+                            justify-content: center; }
       }
 
       /* ── CARDS ───────────────────────────────────────────────── */
@@ -741,6 +753,16 @@
       /* i18n toggle */
       .lle-lang-toggle { display: flex; align-items: center; gap: 2px; margin-top: .55rem; }
       .lle-lang-btn { background: none; border: none; color: rgba(245,245,246,.25); cursor: pointer; padding: 2px 5px; font-size: 10px; font-weight: 700; font-family: var(--font); letter-spacing: .05em; line-height: 1; }
+      /* Touch target without layout change — see the landing for why. */
+      @media (hover: none), (max-width: 768px) {
+        .lle-lang-btn { position: relative; }
+        .lle-lang-btn::after {
+          content: ""; position: absolute; top: 50%; left: 50%;
+          transform: translate(-50%, -50%);
+          /* See the landing: adjacent controls, so width is shared. */
+          width: calc(100% + 10px); height: 44px;
+        }
+      }
       .lle-lang-btn.lle-lang-active { color: rgba(245,245,246,.75); }
       .lle-lang-btn:hover { color: rgba(245,245,246,.6); }
       .lle-lang-sep { color: rgba(245,245,246,.12); font-size: 10px; pointer-events: none; user-select: none; }

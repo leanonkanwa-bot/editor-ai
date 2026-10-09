@@ -347,7 +347,10 @@
     .ob-input {
       width: 100%; padding: .72rem .9rem; border-radius: 10px;
       background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.1);
-      color: var(--text); font-family: var(--font); font-size: .9rem;
+      color: var(--text); font-family: var(--font);
+      /* 16px exactly: anything smaller makes iPhone Safari zoom the page
+         on focus. Not a style choice. */
+      font-size: 1rem;
       transition: border-color .2s, box-shadow .2s; outline: none;
     }
     .ob-input:focus { border-color: var(--salmon); box-shadow: 0 0 0 3px rgba(255,119,81,.12); }
@@ -401,7 +404,10 @@
     .testi-nav-btn:hover { background: rgba(255,119,81,.15); color: var(--text); border-color: var(--salmon-border); }
 
     /* ── PRICING ─────────────────────────────────────────────────────── */
-    .pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+    /* Four plans. minmax(0, 1fr) rather than 1fr: the automatic minimum of
+       a 1fr track is auto, so cards whose content is wider than their share
+       push the row past the viewport instead of shrinking. */
+    .pricing-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.25rem; }
     .pricing-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 2rem 1.75rem; display: flex; flex-direction: column; gap: 1rem; transition: border-color .25s, box-shadow .25s; }
     .pricing-card:hover { border-color: var(--salmon-border); box-shadow: 0 0 30px rgba(255,119,81,.08); }
     .pricing-card.featured { border-color: var(--salmon-border); background: rgba(255,119,81,.05); box-shadow: 0 0 40px rgba(255,119,81,.12); }
@@ -443,14 +449,26 @@
       .step-text p { max-width: 100%; }
       .steps-list { gap: 3.5rem; }
       .testi-grid { grid-template-columns: 1fr; }
-      .pricing-grid { grid-template-columns: 1fr; }
+      .pricing-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .stats-grid { grid-template-columns: 1fr 1fr; }
       .hero-ctas { flex-direction: column; align-items: stretch; }
       .hero-ctas .btn { text-align: center; justify-content: center; }
       .nav-right .nav-link { display: none; }
       .ob-card { padding: 1.5rem; }
     }
+
+    /* The nav keeps the logo, the language toggle and the salmon CTA on a
+       390px screen; at full size they need 425px. Tightened rather than
+       dropped, so nothing becomes unreachable. */
+    @media (max-width: 560px) {
+      .nav-inner { padding: 0 1rem; gap: .5rem; }
+      .nav-right { gap: .5rem; }
+      .logo { gap: .4rem; }
+      .logo-text { font-size: .9rem; }
+      .nav-right .btn { padding: .5rem .7rem; font-size: .78rem; }
+    }
     @media (max-width: 480px) {
+      .pricing-grid { grid-template-columns: minmax(0, 1fr); }
       .stats-grid { grid-template-columns: 1fr 1fr; }
       .section { padding: 4.5rem 1.25rem; }
       .footer-inner { flex-direction: column; align-items: flex-start; gap: .75rem; }
@@ -461,6 +479,21 @@
     .lle-lang-btn.lle-lang-active { color: rgba(245,245,246,.75); }
     .lle-lang-btn:hover { color: rgba(245,245,246,.6); }
     .lle-lang-sep { color: rgba(245,245,246,.12); font-size: 11px; pointer-events: none; user-select: none; }
+    /* 44px of touch target on a control drawn 24x17, without changing the
+       layout: growing these to 44px wide pushes the nav off a 390px screen. */
+    @media (hover: none), (max-width: 768px) {
+      .lle-lang-btn { position: relative; }
+      .lle-lang-btn::after {
+        content: ""; position: absolute; top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        /* Full 44px height; width covers the button plus the gap on each
+           side. Not 44px wide: FR and EN are 2px apart, so two 44px
+           targets would overlap and each would steal the other's edge. */
+        width: calc(100% + 10px); height: 44px;
+      }
+      .footer-links a { display: flex; align-items: center; min-height: 44px; }
+      .footer-links { gap: 1.75rem 1.25rem; }
+    }
   </style>
   <script src="i18n.js"></script>
   <script>initLang();</script>
@@ -680,7 +713,7 @@
       <p class="section-sub" style="margin-bottom:1.5rem" data-i18n="pricing_sub">Commence gratuitement. Évolue quand tu en as besoin.</p>
       <p class="pricing-anchor-text" data-i18n="pricing_anchor">Un monteur freelance facture entre 50 € et 150 € de l'heure. LeanRetention coûte moins qu'une seule session — et traite ta vidéo en 8 minutes.</p>
       <!-- PRICING SOURCE OF TRUTH: Essai 0€/1 vid, Starter 29€/15 vid, Pro 79€/50 vid, Agency 199€/150 vid -->
-      <div class="pricing-grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="pricing-grid">
 
         <!-- Essai gratuit -->
         <div class="pricing-card fade">
