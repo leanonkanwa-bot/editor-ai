@@ -2847,8 +2847,17 @@ def _page(path: Path, request: Request, media_type: str | None = None) -> Respon
     except TypeError:  # older hashlib without the keyword
         etag = f'"{hashlib.md5(_base).hexdigest()}"'
     headers = {"Cache-Control": "no-cache", "ETag": etag}
+    # If-None-Match uses the WEAK comparison function (RFC 9110 13.1.2): the
+    # opaque tags are compared whether or not either side is marked weak. That
+    # is not pedantry here — Railway's edge compresses HTML and hands the
+    # browser back `W/"<tag>"`, which the browser then echoes. Comparing
+    # strongly meant no real browser ever received a 304 on these pages, only
+    # clients whose Accept-Encoding left the response uncompressed.
     _inm = request.headers.get("if-none-match", "")
-    if etag in [t.strip() for t in _inm.split(",") if t.strip()]:
+    _opaque = etag[2:] if etag.startswith("W/") else etag
+    _sent = [t.strip()[2:] if t.strip().startswith("W/") else t.strip()
+             for t in _inm.split(",") if t.strip()]
+    if _opaque in _sent:
         return Response(status_code=304, headers=headers)
     if media_type:
         return FileResponse(str(path), media_type=media_type, headers=headers)
