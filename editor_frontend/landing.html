@@ -532,9 +532,9 @@
         <div class="lp-drop" id="lpDrop">
           <input type="file" id="lpFile" accept="video/*" />
           <svg class="lp-drop-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          <div class="lp-drop-title">Dépose ta vidéo ici</div>
-          <div class="lp-drop-hint">MP4, MOV, MKV · Jusqu'à 30 Go · Sans compte requis</div>
-          <button class="lp-drop-browse" type="button">Parcourir les fichiers</button>
+          <div class="lp-drop-title" data-i18n="drop_title">Dépose ta vidéo ici</div>
+          <div class="lp-drop-hint" data-i18n="drop_hint">MP4, MOV, MKV · Jusqu'à 30 Go · Connexion Google en un clic</div>
+          <button class="lp-drop-browse" type="button" data-i18n="drop_browse">Parcourir les fichiers</button>
         </div>
         <div class="lp-uploading" id="lpUploading" style="display:none">
           <div class="lp-file-row">
@@ -549,7 +549,7 @@
               Continuer avec Google
             </button>
             <p style="margin:.5rem 0 0;font-size:.78rem;opacity:.7">
-              Votre vidéo reste sur cet écran : l'envoi démarre tout seul une fois connecté.
+              <span data-i18n="upload_stays">Votre vidéo reste sur cet écran : l'envoi démarre tout seul une fois connecté.</span>
             </p>
           </div>
         </div>
@@ -740,7 +740,7 @@
             <div class="pricing-desc" style="margin-top:.5rem" data-i18n="plan_starter_desc">Pour le coach solo qui démarre sa présence vidéo.</div>
           </div>
           <ul class="pricing-features">
-            <li><span class="pricing-check">✓</span> <strong>15 vidéos / mois</strong></li>
+            <li><span class="pricing-check">✓</span> <strong data-i18n="plan_starter_videos">15 vidéos / mois</strong></li>
             <li><span class="pricing-check">✓</span> <span data-i18n="plan_f_6styles">6 styles visuels</span></li>
             <li><span class="pricing-check">✓</span> <span data-i18n="plan_f_captions_hook">Captions + Hook Rewriter</span></li>
             <li><span class="pricing-check">✓</span> Export 4K</li>
@@ -759,7 +759,7 @@
             <video class="pricing-preview-vid" src="/demo/after" autoplay muted loop playsinline></video>
           </div>
           <ul class="pricing-features">
-            <li><span class="pricing-check">✓</span> <strong>50 vidéos / mois</strong></li>
+            <li><span class="pricing-check">✓</span> <strong data-i18n="plan_pro_videos">50 vidéos / mois</strong></li>
             <li><span class="pricing-check">✓</span> <span data-i18n="plan_f_graphics">Graphics IA</span></li>
             <li><span class="pricing-check">✓</span> <span data-i18n="plan_f_captions_hook">Captions + Hook Rewriter</span></li>
             <li><span class="pricing-check">✓</span> Export 4K</li>
@@ -777,7 +777,7 @@
             <div class="pricing-desc" style="margin-top:.5rem" data-i18n="plan_agency_desc">Pour les agences gérant plusieurs créateurs.</div>
           </div>
           <ul class="pricing-features">
-            <li><span class="pricing-check">✓</span> <strong>150 vidéos / mois</strong></li>
+            <li><span class="pricing-check">✓</span> <strong data-i18n="plan_agency_videos">150 vidéos / mois</strong></li>
             <li><span class="pricing-check">✓</span> <span data-i18n="plan_f_graphics">Graphics IA</span></li>
             <li><span class="pricing-check">✓</span> <span data-i18n="plan_f_captions_hook">Captions + Hook Rewriter</span></li>
             <li><span class="pricing-check">✓</span> Export 4K</li>
@@ -885,8 +885,8 @@
 
       <!-- ── STEP 1 — Identity ── -->
       <div class="ob-step active" id="ob-step-1">
-        <h2>Créons ton profil</h2>
-        <p>Pour personnaliser ton expérience d'édition et garder tes résultats.</p>
+        <h2 data-i18n="ob_profile_title">Créons ton profil</h2>
+        <p data-i18n="ob_profile_sub">Pour personnaliser ton expérience d'édition et garder tes résultats.</p>
         <div class="ob-field">
           <label>Email <span style="color:var(--salmon)">*</span></label>
           <input type="email" class="ob-input" id="ob-email" placeholder="ton@email.com" />
@@ -896,14 +896,14 @@
           <input type="text" class="ob-input" id="ob-name" placeholder="Marie Dupont" />
         </div>
         <div class="ob-field">
-          <label>Nom de ta marque</label>
+          <label data-i18n="ob_brand_name">Nom de ta marque</label>
           <input type="text" class="ob-input" id="ob-brand" placeholder="Mon Studio" />
         </div>
       </div>
 
       <!-- ── STEP 2 — Content ── -->
       <div class="ob-step" id="ob-step-2">
-        <h2>Ton contenu</h2>
+        <h2 data-i18n="ob_content_title">Ton contenu</h2>
         <p>Ce que tu crées et pour qui tu le crées.</p>
         <div class="ob-field">
           <label>Qu'est-ce que tu fais&nbsp;?</label>
@@ -915,19 +915,19 @@
           </div>
         </div>
         <div class="ob-field">
-          <label>Qui est ton audience&nbsp;?</label>
+          <label data-i18n="ob_audience">Qui est ton audience&nbsp;?</label>
           <input type="text" class="ob-input" id="ob-audience" placeholder="Ex: coaches qui veulent scaler leur business" />
         </div>
         <div class="ob-field">
-          <label>Quelle est ton offre principale&nbsp;?</label>
+          <label data-i18n="ob_offer">Quelle est ton offre principale&nbsp;?</label>
           <input type="text" class="ob-input" id="ob-offer" placeholder="Ex: programme de coaching de 12 semaines" />
         </div>
       </div>
 
       <!-- ── STEP 3 — Style ── -->
       <div class="ob-step" id="ob-step-3">
-        <h2>Ton style</h2>
-        <p>Comment tu veux que tes vidéos sonnent et se ressentent.</p>
+        <h2 data-i18n="ob_style_title">Ton style</h2>
+        <p data-i18n="ob_style_sub">Comment tu veux que tes vidéos sonnent et se ressentent.</p>
         <div class="ob-field">
           <label>Plateforme(s) : sélection multiple</label>
           <div class="ob-btns" id="ob-platform-btns">
@@ -939,7 +939,7 @@
           </div>
         </div>
         <div class="ob-field">
-          <label>Format vidéo</label>
+          <label data-i18n="ob_format">Format vidéo</label>
           <div class="ob-btns" id="ob-format-btns">
             <button type="button" class="ob-btn" data-val="short">Court (&lt;60s)</button>
             <button type="button" class="ob-btn" data-val="long">Long (5min+)</button>
@@ -963,7 +963,7 @@
       <!-- ── STEP 4 — Confirmation ── -->
       <div class="ob-step" id="ob-step-4">
         <h2>Tout est prêt</h2>
-        <p>Voici ton profil de création. Tu peux le modifier à tout moment.</p>
+        <p data-i18n="ob_recap">Voici ton profil de création. Tu peux le modifier à tout moment.</p>
         <div class="ob-summary" id="ob-summary"></div>
         <button type="button" class="ob-finish-btn" id="ob-finish">Commencer l'édition →</button>
       </div>
@@ -1499,7 +1499,7 @@
     <div class="lp-auth-modal">
       <button class="lp-auth-close" id="lpAuthClose" aria-label="Fermer">×</button>
       <div class="lp-auth-badge">🎬</div>
-      <h3>Ta vidéo est reçue</h3>
+      <h3 data-i18n="upload_received">Ta vidéo est reçue</h3>
       <p>Connecte-toi pour lancer le montage IA.<br>Résultats en 3 à 5 minutes.</p>
       <a href="/api/auth/google/login" class="btn-google" id="lpGoogleBtn" style="display:inline-flex">
         <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
@@ -1510,7 +1510,7 @@
         </svg>
         <span>Continuer avec Google</span>
       </a>
-      <div class="lp-auth-trust">Sans carte bancaire · Première vidéo offerte</div>
+      <div class="lp-auth-trust" data-i18n="auth_trust">Sans carte bancaire · Première vidéo offerte</div>
     </div>
   </div>
 

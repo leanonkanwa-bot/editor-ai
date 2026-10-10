@@ -8,6 +8,27 @@
   // ── Translation dictionaries ─────────────────────────────────────────────────
   var TRANSLATIONS = {
     fr: {
+      // ── Tunnel d'inscription — ajoutes le 2026-10-10 ─────────────────────
+      // Ces 19 textes n'avaient aucune cle : reglee en anglais, la page
+      // faisait faire toute l'inscription en francais.
+      drop_title: "Dépose ta vidéo ici",
+      drop_browse: "Parcourir les fichiers",
+      upload_stays: "Votre vidéo reste sur cet écran : l'envoi démarre tout seul une fois connecté.",
+      plan_starter_videos: "15 vidéos / mois",
+      plan_pro_videos: "50 vidéos / mois",
+      plan_agency_videos: "150 vidéos / mois",
+      ob_profile_title: "Créons ton profil",
+      ob_profile_sub: "Pour personnaliser ton expérience d'édition et garder tes résultats.",
+      ob_brand_name: "Nom de ta marque",
+      ob_content_title: "Ton contenu",
+      ob_audience: "Qui est ton audience ?",
+      ob_offer: "Quelle est ton offre principale ?",
+      ob_style_title: "Ton style",
+      ob_style_sub: "Comment tu veux que tes vidéos sonnent et se ressentent.",
+      ob_format: "Format vidéo",
+      ob_recap: "Voici ton profil de création. Tu peux le modifier à tout moment.",
+      upload_received: "Ta vidéo est reçue",
+      auth_trust: "Sans carte bancaire · Première vidéo offerte",
       // ── NAV (landing) ────────────────────────────────────────────────────────
       nav_login: "Se connecter",
       nav_cta: "Commencer gratuitement",
@@ -131,7 +152,7 @@
       ob_step5: "Compléter votre profil ICP",
 
       // ── INDEX — DROP ZONE ─────────────────────────────────────────────────────
-      drop_hint: "MP4, MOV, MKV · Jusqu'à 30 Go",
+      drop_hint: "MP4, MOV, MKV · Jusqu'à 30 Go · Connexion Google en un clic",
 
       // ── INDEX — FORMAT PILLS ──────────────────────────────────────────────────
       fmt_short: "Court · Reels",
@@ -213,6 +234,27 @@
     },
 
     en: {
+      // ── Tunnel d'inscription — ajoutes le 2026-10-10 ─────────────────────
+      // Ces 19 textes n'avaient aucune cle : reglee en anglais, la page
+      // faisait faire toute l'inscription en francais.
+      drop_title: "Drop your video here",
+      drop_browse: "Browse files",
+      upload_stays: "Your video stays on this screen — the upload starts on its own once you sign in.",
+      plan_starter_videos: "15 videos / month",
+      plan_pro_videos: "50 videos / month",
+      plan_agency_videos: "150 videos / month",
+      ob_profile_title: "Let's set up your profile",
+      ob_profile_sub: "So your edits match your brand and your results are kept.",
+      ob_brand_name: "Your brand name",
+      ob_content_title: "Your content",
+      ob_audience: "Who is your audience?",
+      ob_offer: "What is your main offer?",
+      ob_style_title: "Your style",
+      ob_style_sub: "How you want your videos to sound and feel.",
+      ob_format: "Video format",
+      ob_recap: "Here is your creator profile. You can change it at any time.",
+      upload_received: "We have your video",
+      auth_trust: "No card needed · First video free",
       // ── NAV (landing) ────────────────────────────────────────────────────────
       nav_login: "Sign in",
       nav_cta: "Start for free",
@@ -336,7 +378,7 @@
       ob_step5: "Complete your ICP profile",
 
       // ── INDEX — DROP ZONE ─────────────────────────────────────────────────────
-      drop_hint: "MP4, MOV, MKV · Up to 30 GB",
+      drop_hint: "MP4, MOV, MKV · Up to 30 GB · One-click Google sign-in",
 
       // ── INDEX — FORMAT PILLS ──────────────────────────────────────────────────
       fmt_short: "Short · Reels",
