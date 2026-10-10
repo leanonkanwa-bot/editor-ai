@@ -14,7 +14,7 @@ from __future__ import annotations
 from fastapi import Request, APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from app.core.session import require_owner
+from app.core.session import caller_profile, require_owner
 from app.api.jobs import store
 from app.engine.analytics_engine import (
     AnalyticsEngine,
@@ -27,9 +27,28 @@ router = APIRouter()
 engine = AnalyticsEngine()
 
 
+def _mine(request: Request, entries: list) -> list:
+    """The caller's own analytics entries.
+
+    overview() and list_videos() called load_all_analytics() and returned the
+    lot: every user saw every other user's video performance. Analytics have no
+    owner field of their own, so ownership is taken from the job each entry
+    describes — the same source require_owner uses.
+    """
+    caller = caller_profile(request)
+    if not caller:
+        raise HTTPException(401, "Not authenticated")
+    out = []
+    for e in entries:
+        job = store.get(e.get("job_id", "") or "")
+        if job is not None and job.profile_id and job.profile_id == caller:
+            out.append(e)
+    return out
+
+
 @router.get("/api/analytics/overview")
-def overview() -> JSONResponse:
-    all_data  = engine.load_all_analytics()
+def overview(request: Request) -> JSONResponse:
+    all_data  = _mine(request, engine.load_all_analytics())
     insights  = load_insights()
 
     scored = []
@@ -62,8 +81,8 @@ def overview() -> JSONResponse:
 
 
 @router.get("/api/analytics/videos")
-def list_videos() -> JSONResponse:
-    all_data = engine.load_all_analytics()
+def list_videos(request: Request) -> JSONResponse:
+    all_data = _mine(request, engine.load_all_analytics())
     result   = []
     for entry in all_data:
         platforms = entry.get("platforms", {})
@@ -94,7 +113,11 @@ def get_video_analytics(job_id: str, request: Request) -> JSONResponse:
 
 
 @router.get("/api/analytics/insights")
-def get_insights() -> JSONResponse:
+def get_insights(request: Request) -> JSONResponse:
+    # Aggregate rather than per-user, but derived from everyone's data, so it
+    # is for signed-in callers rather than the open internet.
+    if not caller_profile(request):
+        raise HTTPException(401, "Not authenticated")
     insights = load_insights()
     if not insights:
         return JSONResponse({
@@ -107,8 +130,16 @@ def get_insights() -> JSONResponse:
 
 
 @router.post("/api/analytics/collect")
-async def collect_analytics() -> JSONResponse:
-    """Manually trigger metric collection for all published videos."""
+async def collect_analytics(request: Request) -> JSONResponse:
+    """Manually trigger metric collection for all published videos.
+
+    Admin only: it spends every stored platform token, for every user, against
+    YouTube's and TikTok's rate limits — and anyone who knew the URL could fire
+    it in a loop.
+    """
+    from app.main import _admin_authed
+    if not _admin_authed(request):
+        raise HTTPException(401, "admin only")
     tokens  = _load_tokens()
     history = _load_history()
     collected = 0
@@ -148,9 +179,14 @@ async def collect_analytics() -> JSONResponse:
 
 @router.get("/api/analytics/compare")
 def compare_videos(
+    request: Request,
     job_id_a: str = Query(...),
     job_id_b: str = Query(...),
 ) -> JSONResponse:
+    # Both, not either: comparing one's own video against a stranger's would
+    # have read out the stranger's numbers just as effectively.
+    require_owner(request, job_id_a)
+    require_owner(request, job_id_b)
     a = engine.load_analytics(job_id_a)
     b = engine.load_analytics(job_id_b)
     if not a:

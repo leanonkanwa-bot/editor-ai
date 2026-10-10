@@ -313,6 +313,7 @@ def _auth_required() -> bool:
 from app.core.llm_guard import require_llm_caller  # noqa: E402
 from app.core.session import (  # noqa: E402
     SESSION_COOKIE, _sign_session, _verify_session, require_api_owner, require_owner,
+    require_self,
 )
 OAUTH_STATE_COOKIE = "lle_oauth_state"
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -1946,8 +1947,9 @@ def track_referral(ref_id: str, request: Request) -> dict:
 
 
 @app.get("/api/referral/{profile_id}/stats")
-def get_referral_stats(profile_id: str) -> dict:
-    """Return referral count for a profile."""
+def get_referral_stats(profile_id: str, request: Request) -> dict:
+    """Return referral count for the caller's own profile."""
+    require_self(request, profile_id)
     data = _load_referrals()
     entry = data.get(profile_id, {"count": 0})
     return {"profile_id": profile_id, "count": entry.get("count", 0)}
@@ -2390,14 +2392,19 @@ def _save_teams(data: dict) -> None:
 
 
 @app.get("/api/team/{profile_id}")
-def get_team(profile_id: str) -> dict:
+def get_team(profile_id: str, request: Request) -> dict:
+    # Returned any profile's team — the members' email addresses included.
+    require_self(request, profile_id)
     teams = _load_teams()
     return {"members": teams.get(profile_id, {}).get("members", []),
             "comments": teams.get(profile_id, {}).get("comments", [])}
 
 
 @app.post("/api/team/{profile_id}")
-def update_team(profile_id: str, payload: dict = Body(...)) -> dict:
+def update_team(profile_id: str, request: Request, payload: dict = Body(...)) -> dict:
+    # Wrote into any profile's team: anyone could add or remove a member on an
+    # account that was not theirs.
+    require_self(request, profile_id)
     teams = _load_teams()
     if profile_id not in teams:
         teams[profile_id] = {"members": [], "comments": []}

@@ -47,6 +47,19 @@ def caller_profile(request: Request) -> str | None:
     return _verify_session(request.cookies.get(SESSION_COOKIE))
 
 
+def require_self(request: Request, profile_id: str) -> str:
+    """The caller, if they are that profile. 404 otherwise.
+
+    For the routes keyed by a profile id in the path. 404 rather than 403 for
+    the same reason as require_owner: a 403 would confirm which profile ids
+    exist to anyone who guesses one.
+    """
+    caller = caller_profile(request)
+    if not caller or caller != profile_id:
+        raise HTTPException(404, "Profile not found")
+    return caller
+
+
 def require_owner(request: Request, job_id: str):
     """The job, if the signed-in caller owns it.
 
