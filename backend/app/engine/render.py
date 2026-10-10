@@ -3170,7 +3170,16 @@ def _render_hyperframes(
     _SAFETY_WINDOW_S  = 28.0
     _SAFETY_MIN_WORDS = 5
     _SAFETY_SIG_KINDS = frozenset({"drift", "punch_in", "pulse", "pull_out"})
-    _SAFETY_STYLES    = ["key_phrase", "pull_quote", "concept_definition"]
+    # Three styles that render DIFFERENTLY, checked by comparing the HTML each
+    # one produces from a bare title — not by reading the style list, which is
+    # how the previous three got here. `pull_quote` and `concept_definition`
+    # have no dispatch branch in compose.py: both fall through to the generic
+    # title card, so a rotation that "cycles three styles" drew the same card
+    # three times. `question` and `key_takeaway` have a branch but also fall
+    # through on a title alone, so they are no better. These three are the
+    # distinct renderings that need nothing but a title, which is all the
+    # safety net has to give.
+    _SAFETY_STYLES    = ["key_phrase", "callout", "contrarian_take"]
     _sn_style_hist: list[tuple[float, str]] = []  # rolling 90s: (window_end, style)
 
     _sn_graphic_cards  = [c for c in storyboard.get("cards", []) if c.get("type") != "caption"]
