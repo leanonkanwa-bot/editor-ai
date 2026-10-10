@@ -4546,10 +4546,13 @@ def generate_storyboard(
             flush=True,
         )
 
-    # The final card list, after every pass, for the job's diagnostic file.
+    # The planner's own times, kept for comparison. This is NOT the final list:
+    # GAP-FILL still adds cards below, and word anchoring still moves them. The
+    # file used to be written here and called final, which is why its gf-xx
+    # cards were missing and its startSec values were the ones nobody saw.
     try:
         from app.engine import card_diag as _cd
-        _cd.record_cards(graphic_cards, remapped_words)
+        _cd.record_cards_before_anchor(graphic_cards)
     except Exception:
         pass
 
@@ -4869,6 +4872,15 @@ def generate_storyboard(
     if format_hint == "long":
         caption_cards = _exclude_captions_against_cards(caption_cards, graphic_cards)
 
+    # NOW the list is final: after GAP-FILL, after RHYTHM-SPLIT, after word
+    # anchoring, after caption exclusion. Recorded here, the diagnostic holds
+    # the times the renderer uses and the gap-fill cards it draws.
+    try:
+        from app.engine import card_diag as _cd
+        _cd.record_cards(graphic_cards, remapped_words)
+    except Exception:
+        pass
+
     storyboard = {
         "composition": {
             "fps": 24,
@@ -4889,5 +4901,13 @@ def generate_storyboard(
         # added to compose()'s signature: the dict already crosses that boundary.
         "language": language,
     }
+
+    # Keep the whole thing, not the curated extract: the planner is a model
+    # call, so a parameter not written down now cannot be recovered later.
+    try:
+        from app.engine import card_diag as _cd
+        _cd.record_storyboard(storyboard)
+    except Exception:
+        pass
 
     return storyboard

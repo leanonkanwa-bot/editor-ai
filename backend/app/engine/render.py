@@ -3145,6 +3145,13 @@ def _render_hyperframes(
     _zl_total = timing_map.output_duration
     _zl_cov_pct = round(100.0 * _zl_covered / _zl_total, 1) if _zl_total > 0 else 0.0
     _zl_summary = " ".join(f"{k}:{v}" for k, v in sorted(_zl_counts.items()))
+    # Keep the plan, with measured speed per entry, in the job's diagnostic:
+    # asking "was anything moving here" needed the 4-minute log window until now.
+    try:
+        from app.engine import card_diag as _cd_zoom
+        _cd_zoom.record_zoom(remapped_zoom)
+    except Exception:
+        pass
     print(
         f"[ZOOM-LOG] summary: {len(remapped_zoom)} entries — {_zl_summary}"
         f" | coverage: {_zl_cov_pct}%",

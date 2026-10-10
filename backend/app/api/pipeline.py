@@ -985,6 +985,15 @@ def run_job(
     """Phase 1: transcription, analysis, planning → status: ready_for_review."""
     try:
         _t0 = time.perf_counter()
+        # Open the job's diagnostic here, not at the render: phase 1 costs
+        # ~340 s (two 120 s detectors among them) and none of it reached the
+        # file, which then showed 620 s belonging to no stage at all. Phase 2
+        # resumes this same entry.
+        try:
+            from app.engine import card_diag as _card_diag_p1
+            _card_diag_p1.start(job_id, phase=1)
+        except Exception:
+            pass
         # ── Step 1: Transcribe + Vision (concurrent) ──────────────────────
         store.update(job_id, status="transcribing", progress=10,
                      message="Transcribing audio + analysing subject position…")
@@ -2073,7 +2082,7 @@ def run_render_phase(job_id: str, src: Path) -> None:
     # storyboard writes into it without the job id ever being passed down.
     try:
         from app.engine import card_diag as _card_diag
-        _card_diag.start(job_id)
+        _card_diag.start(job_id, phase=2)   # resumes phase 1's entry if present
     except Exception:
         _card_diag = None
     # Serialize heavy renders: Chrome worker pools (8+ processes × 700 MB each)
