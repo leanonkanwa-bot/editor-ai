@@ -46,7 +46,32 @@ publisher = Publisher()
 
 
 def _base_url(request: Request) -> str:
-    return str(request.base_url).rstrip("/")
+    """The public base URL, preferring the configured one over the request.
+
+    Railway terminates TLS at its proxy and forwards over plain HTTP. uvicorn
+    is started without --forwarded-allow-ips, and its default only trusts
+    127.0.0.1, while the proxy reaches the container from 100.64.0.x — so
+    X-Forwarded-Proto is discarded and request.url.scheme reads "http". The
+    access logs show it directly: every client appears as 100.64.0.x, the
+    proxy's own address rather than any real visitor.
+
+    Taking the base URL from the request therefore produced
+    http://leanretention.com/... as the OAuth redirect_uri, which no provider
+    would match against its registered https one. The Google sign-in flow
+    already sidesteps this the same way (main.py: configured value first,
+    request only as a fallback); this brings the publish flow in line.
+    """
+    configured = (settings.app_base_url or "").strip().rstrip("/")
+    return configured if configured else str(request.base_url).rstrip("/")
+
+
+def _is_https(request: Request) -> bool:
+    """Is the browser's connection HTTPS? Not request.url.scheme — see above."""
+    configured = (settings.app_base_url or "").strip()
+    if configured:
+        return configured.lower().startswith("https://")
+    proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip()
+    return (proto or request.url.scheme) == "https"
 
 
 @router.get("/api/publish/connections")
@@ -79,7 +104,7 @@ def connect_platform(platform: str, request: Request) -> JSONResponse:
     resp.set_cookie(
         _STATE_COOKIE, f"{platform}:{nonce}",
         httponly=True, samesite="lax", max_age=600, path="/",
-        secure=request.url.scheme == "https",
+        secure=_is_https(request),
     )
     return resp
 
