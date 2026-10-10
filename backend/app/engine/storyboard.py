@@ -1385,8 +1385,20 @@ def _generate_graphic_cards_chunked(
     Falls back to a single pass below _SB_CHUNK_THRESHOLD_S.
     """
     if trimmed_duration < _SB_CHUNK_THRESHOLD_S:
+        # The marking-primitive budget lives only in this context block, and
+        # this branch used to call the planner without it — so every video
+        # under 20 minutes was planned with no budget stated at all. Job
+        # 37f76379 (8:53) came back with 5 primitives where the formula allows
+        # 1, spaced 68-111 s apart where it asks for 240 s. There are no prior
+        # cards on a single pass, so the block carries the budget and nothing
+        # else. Still advisory: nothing enforces it in code yet.
+        kwargs.pop("prior_context", None)      # never pass it twice
         return _generate_graphic_cards(
-            trimmed_duration, script_structure, keep_segments, **kwargs
+            trimmed_duration, script_structure, keep_segments,
+            prior_context=_sb_build_chunk_context(
+                [], kwargs.get("language", "en"), trimmed_duration
+            ),
+            **kwargs,
         )
 
     _n = max(2, round(trimmed_duration / _SB_CHUNK_TARGET_S))
