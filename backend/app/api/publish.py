@@ -15,6 +15,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import secrets
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
@@ -31,6 +33,8 @@ from app.engine.publisher import (
     handle_callback,
     revoke_connection,
 )
+
+_STATE_COOKIE = "lle_publish_state"
 
 router = APIRouter()
 
@@ -63,23 +67,47 @@ def connect_platform(platform: str, request: Request) -> JSONResponse:
     if not _admin_authed(request):
         raise HTTPException(401, "admin only")
     redirect_uri = f"{_base_url(request)}/api/publish/callback/{platform}"
+    nonce = secrets.token_urlsafe(32)
     try:
-        auth_url = get_auth_url(platform, redirect_uri)
+        auth_url = get_auth_url(platform, redirect_uri, state=f"{platform}:{nonce}")
     except ValueError as e:
         raise HTTPException(400, str(e))
-    return JSONResponse({"auth_url": auth_url, "platform": platform})
+    resp = JSONResponse({"auth_url": auth_url, "platform": platform})
+    # HttpOnly so script cannot read it, Lax so it still rides the provider's
+    # top-level redirect back, and short-lived because an authorization flow
+    # that takes ten minutes is not one worth completing.
+    resp.set_cookie(
+        _STATE_COOKIE, f"{platform}:{nonce}",
+        httponly=True, samesite="lax", max_age=600, path="/",
+        secure=request.url.scheme == "https",
+    )
+    return resp
 
 
 @router.get("/api/publish/callback/{platform}")
-async def oauth_callback(platform: str, code: str = "", request: Request = None) -> RedirectResponse:
+async def oauth_callback(platform: str, code: str = "", state: str = "",
+                         request: Request = None) -> RedirectResponse:
+    # Checked BEFORE the code is used: a failed state must never reach the
+    # platform's token endpoint, or the attacker still gets their exchange.
+    expected = (request.cookies.get(_STATE_COOKIE) or "") if request else ""
+    ok_state = bool(expected) and bool(state) and secrets.compare_digest(state, expected)
+    if not ok_state:
+        bad = RedirectResponse(f"/?oauth_error={platform}:bad_state")
+        bad.delete_cookie(_STATE_COOKIE, path="/")
+        return bad
     if not code:
-        return RedirectResponse("/?oauth_error=no_code")
+        no_code = RedirectResponse("/?oauth_error=no_code")
+        no_code.delete_cookie(_STATE_COOKIE, path="/")
+        return no_code
     redirect_uri = f"{_base_url(request)}/api/publish/callback/{platform}"
     try:
         handle_callback(platform, code, redirect_uri)
-        return RedirectResponse(f"/?oauth_success={platform}")
+        done = RedirectResponse(f"/?oauth_success={platform}")
     except Exception as e:
-        return RedirectResponse(f"/?oauth_error={platform}:{str(e)[:100]}")
+        done = RedirectResponse(f"/?oauth_error={platform}:{str(e)[:100]}")
+    # Single use, whichever way it went: a replayed callback must not pass.
+    done.delete_cookie(_STATE_COOKIE, path="/")
+    return done
 
 
 @router.delete("/api/publish/connections/{platform}")

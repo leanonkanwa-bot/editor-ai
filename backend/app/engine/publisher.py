@@ -146,7 +146,7 @@ def get_connections() -> list[dict[str, Any]]:
     ]
 
 
-def get_auth_url(platform: str, redirect_uri: str) -> str:
+def get_auth_url(platform: str, redirect_uri: str, state: str | None = None) -> str:
     """Build OAuth2 authorization URL for the given platform."""
     cfg = OAUTH_CONFIG.get(platform, {})
     if not cfg.get("client_id"):
@@ -159,7 +159,11 @@ def get_auth_url(platform: str, redirect_uri: str) -> str:
         "redirect_uri":  redirect_uri,
         "response_type": "code",
         "scope":         cfg["scope"],
-        "state":         platform,
+        # The platform name was used here, which is a constant the caller
+        # already knows — it round-trips perfectly and proves nothing. A
+        # single-use nonce, held in a cookie, is what makes the round trip
+        # evidence that this browser started the flow.
+        "state":         state or platform,
     }
     if platform == "youtube":
         params["access_type"] = "offline"
