@@ -17,3 +17,7 @@ backend/.env
 storage/
 backend/replicate/
 # trigger
+
+# Local-only deploy secrets. ACTIVE_CHECK_TOKEN lets the push guard ask
+# production whether it is busy; it must never reach the repository.
+.secrets/

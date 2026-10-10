@@ -2069,6 +2069,13 @@ def run_render_phase(job_id: str, src: Path) -> None:
     if not job:
         return
     work_dir = settings.work_dir / job_id  # defined before try so finally can always access it
+    # Collect the card diagnostic for this render. Keyed by thread, so the
+    # storyboard writes into it without the job id ever being passed down.
+    try:
+        from app.engine import card_diag as _card_diag
+        _card_diag.start(job_id)
+    except Exception:
+        _card_diag = None
     # Serialize heavy renders: Chrome worker pools (8+ processes × 700 MB each)
     # exhaust the cgroup limit when two renders overlap.  The semaphore queues
     # the second render until the first is complete — no job is dropped.
@@ -2325,6 +2332,13 @@ def run_render_phase(job_id: str, src: Path) -> None:
         )
     finally:
         _RENDER_SEM.release()
+        # Write <job>_cards.json beside the output. dump() swallows its own
+        # errors; the extra guard here covers the import itself failing.
+        try:
+            if _card_diag is not None:
+                _card_diag.dump(settings.outputs_dir)
+        except Exception as _diag_exc:
+            print(f"[CARD-DIAG] WARNING: diagnostic skipped: {_diag_exc}", flush=True)
         try:
             shutil.rmtree(work_dir, ignore_errors=False)
         except Exception as _cleanup_exc:

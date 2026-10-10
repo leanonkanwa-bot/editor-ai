@@ -970,6 +970,23 @@ def _anchor_cards_on_words(
                 flush=True,
             )
     graphic_cards.sort(key=lambda _c: float(_c.get("startSec", 0)))
+    # Same numbers the line below prints, kept for the job's diagnostic file.
+    # n_undo is the one that is otherwise impossible to recover: a move the
+    # anchoring pass wanted and anti-collision took back.
+    try:
+        from app.engine import card_diag as _cd
+        _cd.record_anchor_moves(
+            [{"id": _p["card"].get("id"),
+              "from": round(_p["s0"], 3), "to": round(_p["s"], 3),
+              "shift": round(_p["s"] - _p["s0"], 3),
+              "coverage_before": round(_coverage(_p["toks"], _p["s0"], _p["e0"]), 4),
+              "coverage_after": round(_coverage(_p["toks"], _p["s"], _p["e"]), 4),
+              "moved": bool(_p.get("moved"))}
+             for _p in _plan],
+            {"moved": n_moved, "trimmed": n_trim, "undone_by_collision": n_undo},
+        )
+    except Exception:
+        pass
     print(
         f"[CARD-WORDS] {n_moved} card(s) moved onto their words, {n_trim} shortened to make room,"
         f" {n_undo} move(s) undone to avoid an overlap",
@@ -4459,6 +4476,13 @@ def generate_storyboard(
             f" read={_ct_read}(need≈{_ct_need:.1f}s got={_ct_dur:.1f}s)",
             flush=True,
         )
+
+    # The final card list, after every pass, for the job's diagnostic file.
+    try:
+        from app.engine import card_diag as _cd
+        _cd.record_cards(graphic_cards, remapped_words)
+    except Exception:
+        pass
 
     # Generative B-roll auto-injection is disabled.
     # The engine (broll_generative.py + broll_primitive.py) drove card selection via internal

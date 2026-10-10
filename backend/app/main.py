@@ -1791,6 +1791,25 @@ def get_narrative_timeline(job_id: str, request: Request):
     )
 
 
+@app.get("/api/jobs/{job_id}/cards")
+def get_job_cards(job_id: str, request: Request):
+    """The card diagnostic for a finished job: what was actually on screen.
+
+    Owner-only, like the narrative and the edit report, and the file is purged
+    with the job. Written by app/engine/card_diag.py at the end of the render.
+    """
+    require_owner(request, job_id)
+    path = settings.outputs_dir / f"{job_id}_cards.json"
+    if not path.exists():
+        raise HTTPException(
+            404,
+            "No card diagnostic for this job — it predates the diagnostic, "
+            "or the render did not reach the storyboard.",
+        )
+    return Response(content=path.read_text(encoding="utf-8"),
+                    media_type="application/json; charset=utf-8")
+
+
 @app.get("/api/upload/preview/{upload_id}")
 def upload_preview(upload_id: str, request: Request):
     """Extract a representative frame from the caller's own uploaded video."""

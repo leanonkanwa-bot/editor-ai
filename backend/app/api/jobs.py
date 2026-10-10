@@ -228,7 +228,8 @@ class JobStore:
             out = settings.outputs_dir / f"{job.id}.mp4"
             thumb = settings.outputs_dir / f"{job.id}_thumb.jpg"
             landscape = settings.outputs_dir / f"{job.id}_landscape.mp4"
-            for path in (out, thumb, landscape):
+            cards = settings.outputs_dir / f"{job.id}_cards.json"
+            for path in (out, thumb, landscape, cards):
                 try:
                     path.unlink(missing_ok=True)
                 except OSError:
