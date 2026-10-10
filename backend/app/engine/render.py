@@ -2624,15 +2624,21 @@ def inject_safety_cards(
     remapped_words: list,
     output_duration: float,
     remapped_zoom: list,
+    *,
+    format_hint: str = "long",
 ) -> int:
-    """Fill every window with no card and no significant zoom. Returns the count.
+    """Fill every window the viewer would see as empty. Returns the count.
 
-    Moved out of _render_hyperframes unchanged. It was 100 lines in the middle
-    of a thousand-line function, so the only way to check it was to
-    re-implement it in a test — and a re-implementation agrees with itself,
-    not with the code that ships. Behaviour is identical; only the address
-    changed. Mutates storyboard["cards"] in place, as before.
+    Lifted out of _render_hyperframes so it can be run offline against a
+    real job's storyboard. It was 258 lines in the middle of a thousand-line
+    function, which meant the only way to check it was to re-implement it in
+    a test — and a re-implementation agrees with itself, not with the code
+    that ships. Mutates storyboard["cards"] in place, as before.
     """
+    # This module imports os and re per function, never at module level.
+    import os
+    import re
+
     # ── SAFETY NET — deterministic coverage guarantee ─────────────────────────
     # Runs AFTER all LLM systems (storyboard, GAP-FILL) and AFTER all zoom
     # injection (breath, drift, punch_in).  For each 20s window: if there is no
@@ -2642,9 +2648,41 @@ def inject_safety_cards(
     #
     # This is a DETERMINISTIC, zero-LLM guarantee.  It fires unconditionally for
     # any uncovered window regardless of content quality or upstream LLM decisions.
-    _SAFETY_WINDOW_S  = 28.0
+    #
+    # Measured on job 37f76379 (8:53), where it reported "0 injections — all 20s
+    # windows already covered" over nine stretches of 12-21s with nothing on
+    # screen. Three separate reasons, each sufficient on its own, and replaying
+    # the loop offline showed that fixing any ONE of them recovers nothing:
+    #
+    #   1. the window was 28s while every log line said 20s, and the longest
+    #      real hole was 21.5s — no hole could reach the window's size;
+    #   2. the scan stepped window by window, so a hole straddling a grid line
+    #      had a card at each end and was skipped;
+    #   3. "significant zoom" was decided by kind name. Measured on that render,
+    #      a pull_out moves at 0.0021 scale/s and a drift at 0.0055, while the
+    #      breath the list dismisses as invisible moves at 0.0706 — the ranking
+    #      was inverted, and a single 50s pull_out marked the whole timeline
+    #      covered.
+    #
+    # Window and step are now env-tunable, and SAFETY_NET_FILL=false disables
+    # the pass entirely, because a deterministic pass that injects cards into a
+    # finished render needs to be switchable off without a deploy.
+    _SAFETY_ENABLED   = os.environ.get("SAFETY_NET_FILL", "true").strip().lower() \
+        not in ("0", "false", "no", "off")
+    _SAFETY_WINDOW_S  = float(os.environ.get("SAFETY_NET_WINDOW_S", 12.0))
+    # 0.25s, not 1s: a free span of 12.45s admits a 12s window over 0.45s of
+    # slide, and a 1s step walks straight past it. Measured — a 1s step left
+    # two of the nine real holes unfilled.
+    _SAFETY_STEP_S    = float(os.environ.get("SAFETY_NET_STEP_S", 0.25))
+    _SAFETY_MAX_DUR_S = float(os.environ.get("SAFETY_NET_MAX_DUR_S", 6.0))
     _SAFETY_MIN_WORDS = 5
-    _SAFETY_SIG_KINDS = frozenset({"drift", "punch_in", "pulse", "pull_out"})
+    # Speed, not vocabulary. The threshold sits between the fastest structural
+    # move measured (drift, 0.0055/s) and the slowest perceptible one (pulse,
+    # 0.0393/s); the nine real dead zones were 2x to 64x below it.
+    _SAFETY_MIN_SPEED = float(os.environ.get("SAFETY_NET_MIN_ZOOM_SPEED", 0.02))
+    # A fallback card must not repeat what is already on screen next to it.
+    _SAFETY_DUP_RATIO = 0.60
+    _SAFETY_DUP_NEAR_S = 20.0
     # Three styles that render DIFFERENTLY, checked by comparing the HTML each
     # one produces from a bare title — not by reading the style list, which is
     # how the previous three got here. `pull_quote` and `concept_definition`
@@ -2657,36 +2695,121 @@ def inject_safety_cards(
     _SAFETY_STYLES    = ["key_phrase", "callout", "contrarian_take"]
     _sn_style_hist: list[tuple[float, str]] = []  # rolling 90s: (window_end, style)
 
+    # "Covers this window" and "occupies this slot" are two different
+    # questions, and one list cannot answer both. A prim_anecdote_frame
+    # occupies its three seconds — nothing may be drawn on top of it — but it
+    # covers nothing, because it shows no text. Using a single list meant
+    # either counting an empty card as coverage (what shipped) or allowing a
+    # fallback card to be stacked on one (what excluding it naively would do).
+    try:
+        from app.engine.compose import card_shows_text as _sn_shows
+    except Exception:
+        def _sn_shows(_c):
+            return True
     _sn_graphic_cards  = [c for c in storyboard.get("cards", []) if c.get("type") != "caption"]
     _sn_zoom_sorted    = sorted(remapped_zoom, key=lambda z: float(z.get("start", 0)))
-    _sn_card_ivs       = sorted(
-        [(float(c.get("startSec", 0)), float(c.get("endSec", 0))) for c in _sn_graphic_cards],
-        key=lambda iv: iv[0],
-    )
+
+    def _ivs(cards):
+        return sorted([(float(c.get("startSec", 0)), float(c.get("endSec", 0)))
+                       for c in cards], key=lambda iv: iv[0])
+
+    # coverage: anything that puts text on screen, captions included. A
+    # long-form caption is text the viewer reads; a pass asking "is the screen
+    # empty here" that ignores them adds a card where words already are.
+    _sn_captions       = [c for c in storyboard.get("cards", [])
+                          if c.get("type") == "caption"]
+    _sn_card_ivs       = _ivs([c for c in _sn_graphic_cards if _sn_shows(c)]
+                              + _sn_captions)
+    # placement: every card, so nothing is ever stacked
+    _sn_occupe_ivs     = _ivs(_sn_graphic_cards)
     _sn_injected   = 0
     _sn_fb_id      = 0
 
     def _sn_has_card(ws: float, we: float) -> bool:
+        """Is something READABLE on screen in this window?"""
         for cs, ce in _sn_card_ivs:
             if cs < we and ce > ws:
                 return True
         return False
 
+    def _sn_slot_libre(cs: float, ce: float) -> bool:
+        """Is this slot free of ANY card, readable or not?"""
+        return not any(s < ce and e > cs for s, e in _sn_occupe_ivs)
+
     def _sn_has_sig_zoom(ws: float, we: float) -> bool:
+        """Is anything PERCEPTIBLY moving? Measured, not named."""
         for ze in _sn_zoom_sorted:
-            if ze.get("kind") not in _SAFETY_SIG_KINDS:
-                continue
             zs = float(ze.get("start", 0))
             ze_e = float(ze.get("end", zs))
-            if zs < we and ze_e > ws:
-                return True
+            if not (zs < we and ze_e > ws):
+                continue
+            try:
+                amp = abs(float(ze.get("to", 1.0)) - float(ze.get("from", 1.0)))
+                if amp / max(ze_e - zs, 1e-3) >= _SAFETY_MIN_SPEED:
+                    return True
+            except (TypeError, ValueError):
+                continue
         return False
 
+    def _sn_mots_cles(texte: str) -> set:
+        return {w for w in re.findall(r"[a-zà-ÿ0-9']{4,}", str(texte or "").lower())}
+
+    # Every text already on screen nearby, cards and captions alike. A fallback
+    # that repeats the card next to it is worse than the gap it fills.
+    _sn_voisins = []
+    for _c in storyboard.get("cards", []):
+        _h = _c.get("contentHints", {}) or {}
+        _txt = " ".join(str(_h.get(_f, "")) for _f in ("title", "detail", "text", "kicker"))
+        if _txt.strip():
+            _sn_voisins.append((float(_c.get("startSec", 0)),
+                                float(_c.get("endSec", 0)), _sn_mots_cles(_txt)))
+
+    def _sn_doublon(cs: float, ce: float, texte: str) -> str | None:
+        mots = _sn_mots_cles(texte)
+        if not mots:
+            return None
+        for vs, ve, vmots in _sn_voisins:
+            if not vmots:
+                continue
+            if vs > ce + _SAFETY_DUP_NEAR_S or ve < cs - _SAFETY_DUP_NEAR_S:
+                continue
+            if len(mots & vmots) / len(mots) >= _SAFETY_DUP_RATIO:
+                return f"{len(mots & vmots)}/{len(mots)} mots deja a l'ecran a {vs:.1f}s"
+        return None
+
+    def _sn_decoupe(mots) -> list:
+        """Keep a contiguous run of real speech, a question or a sentence first.
+
+        Never a paraphrase: the words are the ones spoken, in order, unbroken.
+        A run that lands on a '?' or a full stop reads as a statement; one cut
+        mid-clause reads as a transcription error.
+        """
+        for _i, _w in enumerate(mots):
+            if "?" in str(_w.text):                       # a question, whole
+                return mots[:_i + 1]
+        for _i in range(len(mots) - 1, 0, -1):
+            if str(mots[_i].text).rstrip().endswith((".", "!", "…")):
+                return mots[:_i + 1]
+        return mots
+
+    # Short format is untouched. A 27-55s vertical clip already runs at ~13
+    # cards/min, has no dead zones to fill, and a 12s window there would mean
+    # a fallback card every other beat.
+    _sn_court = (format_hint == "short"
+                 or storyboard.get("composition", {}).get("layout") == "portrait")
+    if not _SAFETY_ENABLED:
+        print("[SAFETY-NET] disabled (SAFETY_NET_FILL=false)", flush=True)
+    elif _sn_court:
+        print(f"[SAFETY-NET] skipped — short format ({format_hint!r})", flush=True)
+
     _sn_t = 0.0
-    while _sn_t < output_duration:
+    while _SAFETY_ENABLED and not _sn_court and _sn_t < output_duration:
         _sn_ws = _sn_t
         _sn_we = min(_sn_t + _SAFETY_WINDOW_S, output_duration)
-        _sn_t  = _sn_we
+        # Slide, do not step. Window-by-window, a hole straddling a grid line
+        # has a card at each end and is never seen — which is how nine of them
+        # survived on job 37f76379.
+        _sn_t += _SAFETY_STEP_S
 
         if _sn_has_card(_sn_ws, _sn_we) or _sn_has_sig_zoom(_sn_ws, _sn_we):
             continue
@@ -2695,14 +2818,48 @@ def inject_safety_cards(
         if len(_sn_words) < _SAFETY_MIN_WORDS:
             continue  # silence/non-speech window — skip
 
-        _sn_text = " ".join(w.text for w in _sn_words[:12]).strip()
-        if not _sn_text:
+        _sn_words = _sn_decoupe(_sn_words)
+        if len(_sn_words) < _SAFETY_MIN_WORDS:
             continue
 
         _sn_cs = round(_sn_words[0].start, 3)
         _sn_ce = round(min(_sn_words[-1].end + 0.3, _sn_we - 0.1), 3)
         if _sn_ce - _sn_cs < 2.5:
             _sn_ce = round(_sn_cs + 2.5, 3)
+        # At a 12s window the old formula produced 12s cards — longer than
+        # anything this engine has ever drawn (the longest real one is 6.5s).
+        _sn_ce = round(min(_sn_ce, _sn_cs + _SAFETY_MAX_DUR_S,
+                           output_duration), 3)
+        if _sn_ce - _sn_cs < 2.0:
+            continue
+
+        # The text is built AFTER the cap, from the words the card is actually
+        # on screen for. Built before, a 12s run of speech ended up on a 6s
+        # card: its last words were spoken after it had gone, which is the very
+        # desync this pass exists to avoid — and it made the de-duplication
+        # below compare against text no viewer ever reads.
+        _sn_words = [w for w in _sn_words if w.start < _sn_ce] or _sn_words[:1]
+        _sn_text = " ".join(w.text for w in _sn_words).strip()
+        if not _sn_text or len(_sn_words) < _SAFETY_MIN_WORDS:
+            continue
+
+        _sn_dup = _sn_doublon(_sn_cs, _sn_ce, _sn_text)
+        if _sn_dup:
+            print(
+                f"[SAFETY-NET] t={_sn_ws:.1f}→{_sn_we:.1f}s — skipped, {_sn_dup}",
+                flush=True,
+            )
+            continue
+
+        # The window has no READABLE card, but a text-less one may still be
+        # sitting in it; stacking on top of it would be a visual collision.
+        if not _sn_slot_libre(_sn_cs, _sn_ce):
+            print(
+                f"[SAFETY-NET] t={_sn_ws:.1f}→{_sn_we:.1f}s — uncovered but the"
+                f" slot is taken by a text-less card, skipped",
+                flush=True,
+            )
+            continue
 
         # 90s style rotation — no repeat within window
         _sn_style_hist[:] = [(e, s) for e, s in _sn_style_hist if e > _sn_ws - 90]
@@ -2729,22 +2886,31 @@ def inject_safety_cards(
             },
         }
         storyboard["cards"].append(_sn_card)
-        _sn_card_ivs.append((_sn_cs, _sn_ce))   # update live so adjacent windows see it
+        # update both live: the new card both covers and occupies
+        _sn_card_ivs.append((_sn_cs, _sn_ce))
+        _sn_occupe_ivs.append((_sn_cs, _sn_ce))
+        _sn_voisins.append((_sn_cs, _sn_ce, _sn_mots_cles(_sn_text)))
         _sn_injected += 1
         print(
-            f"[SAFETY-NET] t={_sn_ws:.1f}→{_sn_we:.1f}s — no card, no sig zoom"
-            f" → key_phrase: '{_sn_text[:55]}'",
+            f"[SAFETY-NET] t={_sn_ws:.1f}→{_sn_we:.1f}s — no card, no perceptible"
+            f" zoom → {_sn_style}: '{_sn_text[:55]}'",
             flush=True,
         )
 
     if _sn_injected:
         storyboard["cards"].sort(key=lambda c: float(c.get("startSec", 0)))
         print(
-            f"[SAFETY-NET] {_sn_injected} fallback card(s) injected — full 20s coverage guaranteed",
+            f"[SAFETY-NET] {_sn_injected} fallback card(s) injected — "
+            f"no {_SAFETY_WINDOW_S:.0f}s window left uncovered",
             flush=True,
         )
     else:
-        print("[SAFETY-NET] 0 injections — all 20s windows already covered", flush=True)
+        # The old wording claimed 20s while the constant said 28, and said
+        # "covered" on a timeline with nine visible holes. It now names the
+        # window it actually used.
+        if _SAFETY_ENABLED and not _sn_court:
+            print(f"[SAFETY-NET] 0 injections — no uncovered "
+                  f"{_SAFETY_WINDOW_S:.0f}s window found", flush=True)
     return _sn_injected
 
 
@@ -3290,7 +3456,7 @@ def _render_hyperframes(
     # ── SAFETY NET — deterministic coverage guarantee ─────────────────────────
     inject_safety_cards(
         storyboard, timing_map.remapped_words, timing_map.output_duration,
-        remapped_zoom,
+        remapped_zoom, format_hint=plan.format,
     )
 
     # ── NARRATIVE TIMELINE — QA tool ──────────────────────────────────────────
