@@ -2103,6 +2103,24 @@ def _split_title_accent(title: str, accent_word: str, card_id: str) -> str:
     )
 
 
+# Styles that draw no text at all — atmosphere, not a message.
+# prim_anecdote_frame emits three divs (af-tint, af-vignette, af-grain) and
+# nothing else, at all three of its sites: the CSS, the HTML and the GSAP
+# timeline. Verified on the delivered file at 173.0 / 174.0 / 175.2s — three
+# seconds of dimmed video carrying no words.
+#
+# It is still a legitimate choice: dimming and graining the shot under a
+# personal aside is a real effect. What it must not do is count as COVERAGE.
+# [DEAD-ZONE] and the safety net both ask "is there a card here"; answering
+# yes for a card with nothing on it hides the hole instead of filling it.
+_STYLES_SANS_TEXTE = frozenset({"prim_anecdote_frame"})
+
+
+def card_shows_text(card: dict) -> bool:
+    """Whether this card puts anything readable on screen."""
+    return (card.get("contentHints", {}) or {}).get("style", "") not in _STYLES_SANS_TEXTE
+
+
 def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool = False, layout: str = "portrait",
                              language: str | None = None) -> str:
     """Build inner HTML for a graphic overlay card using the given style pack."""

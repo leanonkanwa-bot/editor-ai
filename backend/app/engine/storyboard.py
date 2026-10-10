@@ -4622,7 +4622,16 @@ def generate_storyboard(
     print(f"[STORYBOARD] {len(graphic_cards)} graphic + {len(caption_cards)} caption cards", flush=True)
 
     # Dead-zone audit: log gaps > 12s for monitoring (no fallback injection)
-    _sorted_gc = sorted(graphic_cards, key=lambda c: float(c.get("startSec", 0)))
+    # A card that draws no text is not coverage. prim_anecdote_frame dims the
+    # shot and writes nothing, so counting it answered "there is a card here"
+    # over a stretch the viewer sees as empty.
+    try:
+        from app.engine.compose import card_shows_text as _shows
+    except Exception:          # never let an import failure break the audit
+        def _shows(_c):
+            return True
+    _sorted_gc = sorted((c for c in graphic_cards if _shows(c)),
+                        key=lambda c: float(c.get("startSec", 0)))
     _dz_gaps: list[float] = []
     _prev_end = 0.0
 
