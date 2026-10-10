@@ -15,7 +15,7 @@ import json
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.engine.brand_engine import BRAND_DIR, load_brand, save_brand
@@ -24,19 +24,34 @@ import subprocess
 
 router = APIRouter()
 
+
+def _admin_authed(request):
+    from app.main import _admin_authed as _a   # late: main imports this module
+    return _a(request)
+
 _ALLOWED_IMAGE_EXT  = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 _ALLOWED_VIDEO_EXT  = {".mp4", ".mov", ".webm"}
 _MAX_INTRO_DURATION = 10.0  # seconds
 
 
 @router.get("/api/brand")
-def get_brand() -> JSONResponse:
+def get_brand(request: Request) -> JSONResponse:
+    # Global resource, not per-user: one shared kit / one shared set of
+    # platform tokens for the whole install. So the guard is admin, not
+    # ownership — there is no owner to compare against.
+    if not _admin_authed(request):
+        raise HTTPException(401, "admin only")
     return JSONResponse(load_brand())
 
 
 @router.post("/api/brand")
-async def create_brand(request_body: dict) -> JSONResponse:
+async def create_brand(request: Request, request_body: dict) -> JSONResponse:
     """Replace the entire brand kit."""
+    # Global resource, not per-user: one shared kit / one shared set of
+    # platform tokens for the whole install. So the guard is admin, not
+    # ownership — there is no owner to compare against.
+    if not _admin_authed(request):
+        raise HTTPException(401, "admin only")
     import uuid
     brand = load_brand()
     brand.update(request_body)
@@ -46,8 +61,13 @@ async def create_brand(request_body: dict) -> JSONResponse:
 
 
 @router.put("/api/brand")
-async def update_brand(request_body: dict) -> JSONResponse:
+async def update_brand(request: Request, request_body: dict) -> JSONResponse:
     """Partial update — merge into existing brand kit."""
+    # Global resource, not per-user: one shared kit / one shared set of
+    # platform tokens for the whole install. So the guard is admin, not
+    # ownership — there is no owner to compare against.
+    if not _admin_authed(request):
+        raise HTTPException(401, "admin only")
     brand = load_brand()
     _deep_merge(brand, request_body)
     save_brand(brand)
@@ -55,7 +75,12 @@ async def update_brand(request_body: dict) -> JSONResponse:
 
 
 @router.post("/api/brand/logo")
-async def upload_logo(logo: UploadFile = File(...)) -> JSONResponse:
+async def upload_logo(request: Request, logo: UploadFile = File(...)) -> JSONResponse:
+    # Global resource, not per-user: one shared kit / one shared set of
+    # platform tokens for the whole install. So the guard is admin, not
+    # ownership — there is no owner to compare against.
+    if not _admin_authed(request):
+        raise HTTPException(401, "admin only")
     suffix = Path(logo.filename or "logo.png").suffix.lower()
     if suffix not in _ALLOWED_IMAGE_EXT:
         raise HTTPException(400, f"Logo must be one of: {', '.join(_ALLOWED_IMAGE_EXT)}")
@@ -87,7 +112,11 @@ async def upload_logo(logo: UploadFile = File(...)) -> JSONResponse:
 
 
 @router.post("/api/brand/intro")
-async def upload_intro(intro: UploadFile = File(...)) -> JSONResponse:
+async def upload_intro(request: Request, intro: UploadFile = File(...)) -> JSONResponse:
+    # Global resource, not per-user: one shared kit for the whole install,
+    # so the guard is admin — there is no owner to compare against.
+    if not _admin_authed(request):
+        raise HTTPException(401, "admin only")
     suffix = Path(intro.filename or "intro.mp4").suffix.lower()
     if suffix not in _ALLOWED_VIDEO_EXT:
         raise HTTPException(400, f"Intro must be one of: {', '.join(_ALLOWED_VIDEO_EXT)}")
@@ -111,7 +140,11 @@ async def upload_intro(intro: UploadFile = File(...)) -> JSONResponse:
 
 
 @router.post("/api/brand/outro")
-async def upload_outro(outro: UploadFile = File(...)) -> JSONResponse:
+async def upload_outro(request: Request, outro: UploadFile = File(...)) -> JSONResponse:
+    # Global resource, not per-user: one shared kit for the whole install,
+    # so the guard is admin — there is no owner to compare against.
+    if not _admin_authed(request):
+        raise HTTPException(401, "admin only")
     suffix = Path(outro.filename or "outro.mp4").suffix.lower()
     if suffix not in _ALLOWED_VIDEO_EXT:
         raise HTTPException(400, f"Outro must be one of: {', '.join(_ALLOWED_VIDEO_EXT)}")

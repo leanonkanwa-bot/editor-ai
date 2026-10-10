@@ -33,6 +33,11 @@ from app.engine.publisher import (
 )
 
 router = APIRouter()
+
+
+def _admin_authed(request):
+    from app.main import _admin_authed as _a   # late: main imports this module
+    return _a(request)
 publisher = Publisher()
 
 
@@ -41,12 +46,22 @@ def _base_url(request: Request) -> str:
 
 
 @router.get("/api/publish/connections")
-def connections() -> JSONResponse:
+def connections(request: Request) -> JSONResponse:
+    # Global resource, not per-user: one shared kit / one shared set of
+    # platform tokens for the whole install. So the guard is admin, not
+    # ownership — there is no owner to compare against.
+    if not _admin_authed(request):
+        raise HTTPException(401, "admin only")
     return JSONResponse(get_connections())
 
 
 @router.post("/api/publish/connect/{platform}")
 def connect_platform(platform: str, request: Request) -> JSONResponse:
+    # Global resource, not per-user: one shared kit / one shared set of
+    # platform tokens for the whole install. So the guard is admin, not
+    # ownership — there is no owner to compare against.
+    if not _admin_authed(request):
+        raise HTTPException(401, "admin only")
     redirect_uri = f"{_base_url(request)}/api/publish/callback/{platform}"
     try:
         auth_url = get_auth_url(platform, redirect_uri)
@@ -68,7 +83,12 @@ async def oauth_callback(platform: str, code: str = "", request: Request = None)
 
 
 @router.delete("/api/publish/connections/{platform}")
-def disconnect_platform(platform: str) -> JSONResponse:
+def disconnect_platform(platform: str, request: Request) -> JSONResponse:
+    # Global resource, not per-user: one shared kit / one shared set of
+    # platform tokens for the whole install. So the guard is admin, not
+    # ownership — there is no owner to compare against.
+    if not _admin_authed(request):
+        raise HTTPException(401, "admin only")
     revoke_connection(platform)
     return JSONResponse({"disconnected": True, "platform": platform})
 
@@ -161,7 +181,12 @@ async def get_metadata(job_id: str, request: Request) -> JSONResponse:
 
 
 @router.get("/api/publish/history")
-def publish_history() -> JSONResponse:
+def publish_history(request: Request) -> JSONResponse:
+    # Global resource, not per-user: one shared kit / one shared set of
+    # platform tokens for the whole install. So the guard is admin, not
+    # ownership — there is no owner to compare against.
+    if not _admin_authed(request):
+        raise HTTPException(401, "admin only")
     return JSONResponse(_load_history())
 
 
