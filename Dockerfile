@@ -1,4 +1,12 @@
-FROM python:3.12-slim
+# Pulled from the AWS ECR Public mirror of the official image rather than
+# from Docker Hub directly. Hub rate-limits ANONYMOUS pulls by source IP,
+# and Railway's builders share theirs: on 2026-10-09 a deploy died before a
+# single line of our code was built —
+#   python:3.12-slim: 429 Too Many Requests
+# — which is unfixable from our side, strikes at random, and costs a manual
+# redeploy each time. The mirror carries the same official images with no
+# anonymous pull limit. Tag verified present before the switch.
+FROM public.ecr.aws/docker/library/python:3.12-slim
 RUN apt-get update && apt-get install -y ffmpeg fonts-open-sans curl unzip chromium nodejs npm \
     xvfb xauth x11-utils \
     libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 \
