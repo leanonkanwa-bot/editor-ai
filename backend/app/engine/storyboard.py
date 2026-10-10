@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import unicodedata
 from typing import Any
@@ -837,7 +838,12 @@ def _anchor_caption_moments(
 # 7-minute video, cards quoting the speech had only 60-67 % of their words spoken
 # while on screen, 5-9 per render sat 2-11 s off. Replayed on those renders, this
 # pass raised it to 80-87 %, left no card worse and created no overlap.
-_CARD_ANCHOR_WINDOW_S = 12.0
+# How far a card may be moved to land on its own words. Overridable without a
+# deploy so the value can be tried against a real long render rather than
+# guessed: a window too wide drags a card seconds away from where the planner
+# put it, one too narrow leaves it unanchored. Values unchanged from what has
+# been shipping — this only makes them reachable.
+_CARD_ANCHOR_WINDOW_S = float(os.environ.get("CARD_ANCHOR_WINDOW_S", 12.0))
 _CARD_ANCHOR_MIN_SCORE = 0.6
 _CARD_ANCHOR_LEAD_S = 0.2        # same lead as the trigger ANCHOR pass
 _CARD_ANCHOR_MIN_KEEP_S = 2.0    # a card shortened to make room keeps at least this
@@ -873,7 +879,7 @@ def _card_content_tokens(text: str) -> list[str]:
 # cards sit minutes apart; in a 30-60s short it would let a card cross a third of
 # the video and arrive out of narrative order, so short format searches closer to
 # where the planner put it. Measured: with 12s a card moved 8.0s on a 55s fixture.
-_CARD_ANCHOR_WINDOW_SHORT_S = 5.0
+_CARD_ANCHOR_WINDOW_SHORT_S = float(os.environ.get("CARD_ANCHOR_WINDOW_SHORT_S", 5.0))
 
 
 def _anchor_cards_on_words(
@@ -1249,10 +1255,40 @@ _SB_PRIMITIVE_MIN_GAP_S = 240.0    # never two closer than ~4 min
 _SB_PRIMITIVE_MAX = 6              # a marking moment stops marking if it is routine
 
 
+# Priority when the total has to be shared out: the climax and the confession
+# are the beats a viewer remembers; split_stage is useful but not a landmark.
+_SB_PRIMITIVE_PRIORITY = (
+    "prim_cinematic_reveal",   # shares one pool with prim_ascension_reveal
+    "prim_confession_frame",
+    "prim_shatter_truth",
+    "prim_split_stage",
+)
+
+
+def _sb_primitive_total(duration_s: float) -> int:
+    """How many marking primitives this video gets, ALL categories together."""
+    return max(1, min(_SB_PRIMITIVE_MAX,
+                      round(float(duration_s or 0) / _SB_PRIMITIVE_EVERY_S)))
+
+
 def _sb_budget_for(duration_s: float) -> dict[str, int]:
-    """Per-video primitive budgets, scaled by how long the video actually is."""
-    n = max(1, min(_SB_PRIMITIVE_MAX, round(float(duration_s or 0) / _SB_PRIMITIVE_EVERY_S)))
-    out = {k: v * n for k, v in _SB_BUDGET_STYLES.items()}
+    """Per-style budgets whose SUM is the total above.
+
+    The first version of this scaled each category independently, which turned
+    "one marking primitive every eight minutes" into twenty of them on a
+    thirty-minute video — the opposite of the point. The total is the budget;
+    the split is a priority order for spending it.
+    """
+    total = _sb_primitive_total(duration_s)
+    out = {k: 0 for k in _SB_BUDGET_STYLES}
+    i = 0
+    while total > 0:
+        style = _SB_PRIMITIVE_PRIORITY[i % len(_SB_PRIMITIVE_PRIORITY)]
+        out[style] += 1
+        total -= 1
+        i += 1
+    # the two reveals share one pool, so they carry the same number
+    out["prim_ascension_reveal"] = out["prim_cinematic_reveal"]
     return out
 
 
@@ -1303,38 +1339,33 @@ def _sb_build_chunk_context(prior_cards: list[dict], language: str = "en",
             + ", ".join(f"{_k}x{_v}" for _k, _v in _top)
         )
 
-    _spent: list[str] = []
     _budgets = _sb_budget_for(trimmed_duration)
-    # The two reveals share one pool: they are the same beat wearing different
-    # clothes, and spending both back to back reads as a repeat.
-    _climax_budget = _budgets.get("prim_cinematic_reveal", 1)
-    _climax_used = sum(
-        1 for _c in prior_cards
-        if (_c.get("contentHints", {}) or {}).get("style", "")
-        in ("prim_cinematic_reveal", "prim_ascension_reveal")
+    _total = _sb_primitive_total(trimmed_duration)
+    # Counted across ALL marking primitives: the total is what is scarce, not
+    # any one category. The two reveals count once between them.
+    _used_total = sum(
+        1 for _c in (prior_cards or [])
+        if (_c.get("contentHints", {}) or {}).get("style", "") in _SB_BUDGET_STYLES
     )
-    if _climax_used >= _climax_budget:
-        _spent.append("the climax slot (prim_cinematic_reveal / prim_ascension_reveal)")
-    for _style, _budget in _budgets.items():
-        if _style in ("prim_cinematic_reveal", "prim_ascension_reveal"):
-            continue
-        if _styles.get(_style, 0) >= _budget:
-            _spent.append(_style)
-    if _spent:
-        lines.append(
-            "  BUDGETS ALREADY SPENT — used up for this video. "
-            "Do NOT emit any of: " + ", ".join(_spent) + "."
-        )
-    _remaining = {k: v - _styles.get(k, 0) for k, v in _budgets.items()
-                  if v - _styles.get(k, 0) > 0}
-    if _remaining and not prior_cards:
+    _left = max(0, _total - _used_total)
+    if not prior_cards:
         lines += ["", "MARKING PRIMITIVES FOR THIS VIDEO:"]
-    if _remaining:
+    lines.append(
+        f"  Budget: {_total} marking primitive(s) IN TOTAL for the whole video, "
+        f"{_used_total} already placed, {_left} left. This is a total across all of "
+        + ", ".join(_SB_BUDGET_STYLES) + " — not a quota per style."
+    )
+    if _left:
+        _order = [k for k in _SB_PRIMITIVE_PRIORITY if _budgets.get(k, 0) > 0]
         lines.append(
-            "  Marking primitives still available: "
-            + ", ".join(f"{k} x{v}" for k, v in _remaining.items())
+            "  Spend them in this order of preference: " + ", ".join(_order)
             + f". Keep at least {int(_SB_PRIMITIVE_MIN_GAP_S // 60)} minutes between two "
               "marking primitives — clustered, they stop marking anything."
+        )
+    else:
+        lines.append(
+            "  BUDGET EXHAUSTED — emit no further marking primitive: "
+            + ", ".join(_SB_BUDGET_STYLES) + "."
         )
 
     if not lines:
