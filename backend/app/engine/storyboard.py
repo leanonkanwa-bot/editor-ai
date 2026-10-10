@@ -1240,6 +1240,22 @@ _SB_CONTEXT_LOOKAROUND_S = 60.0   # read-only bleed so a window sees its neighbo
 # / climax / shatter slot. The post-merge eviction guards still run as a backstop,
 # but they keep the LATEST card by timestamp rather than the best one, so it is
 # far better not to generate the duplicate in the first place.
+# One marking primitive roughly every 8 minutes, with a floor of 1 and a
+# sane ceiling. The budget used to be a flat per-video constant, so a 30-minute
+# video got the same five marking moments as a 20-second clip — one every six
+# minutes at best, which is what made long videos feel flat.
+_SB_PRIMITIVE_EVERY_S = 480.0      # ~8 min between marking moments
+_SB_PRIMITIVE_MIN_GAP_S = 240.0    # never two closer than ~4 min
+_SB_PRIMITIVE_MAX = 6              # a marking moment stops marking if it is routine
+
+
+def _sb_budget_for(duration_s: float) -> dict[str, int]:
+    """Per-video primitive budgets, scaled by how long the video actually is."""
+    n = max(1, min(_SB_PRIMITIVE_MAX, round(float(duration_s or 0) / _SB_PRIMITIVE_EVERY_S)))
+    out = {k: v * n for k, v in _SB_BUDGET_STYLES.items()}
+    return out
+
+
 _SB_BUDGET_STYLES: dict[str, int] = {
     "prim_cinematic_reveal": 1,   # shares its slot with prim_ascension_reveal
     "prim_ascension_reveal": 1,
@@ -1249,16 +1265,20 @@ _SB_BUDGET_STYLES: dict[str, int] = {
 }
 
 
-def _sb_build_chunk_context(prior_cards: list[dict], language: str = "en") -> str:
+def _sb_build_chunk_context(prior_cards: list[dict], language: str = "en",
+                            trimmed_duration: float = 0.0) -> str:
     """Cross-chunk state for window N+1: used phrases, style mix, spent budgets.
 
     Built from the first line onward rather than added later — the planner's
     chunking shipped without it and had to be retrofitted (4730660) after
     duplicate cards showed up across boundaries.
     """
-    if not prior_cards:
-        return ""
-    lines: list[str] = ["", "ALREADY PLACED IN EARLIER WINDOWS OF THIS VIDEO:"]
+    # Emitted for the FIRST window too. This used to return early on an empty
+    # list, so window one — the one that decides how the marking primitives get
+    # spent — was the only one never told how many it was allowed to spend.
+    lines: list[str] = []
+    if prior_cards:
+        lines += ["", "ALREADY PLACED IN EARLIER WINDOWS OF THIS VIDEO:"]
 
     _titles: list[str] = []
     for _c in prior_cards:
@@ -1272,7 +1292,7 @@ def _sb_build_chunk_context(prior_cards: list[dict], language: str = "en") -> st
             lines.append(f'    - "{_t[:90]}"')
 
     _styles: dict[str, int] = {}
-    for _c in prior_cards:
+    for _c in (prior_cards or []):
         _s = (_c.get("contentHints", {}) or {}).get("style", "")
         if _s:
             _styles[_s] = _styles.get(_s, 0) + 1
@@ -1284,24 +1304,41 @@ def _sb_build_chunk_context(prior_cards: list[dict], language: str = "en") -> st
         )
 
     _spent: list[str] = []
+    _budgets = _sb_budget_for(trimmed_duration)
+    # The two reveals share one pool: they are the same beat wearing different
+    # clothes, and spending both back to back reads as a repeat.
+    _climax_budget = _budgets.get("prim_cinematic_reveal", 1)
     _climax_used = sum(
         1 for _c in prior_cards
         if (_c.get("contentHints", {}) or {}).get("style", "")
         in ("prim_cinematic_reveal", "prim_ascension_reveal")
     )
-    if _climax_used:
+    if _climax_used >= _climax_budget:
         _spent.append("the climax slot (prim_cinematic_reveal / prim_ascension_reveal)")
-    for _style, _budget in _SB_BUDGET_STYLES.items():
+    for _style, _budget in _budgets.items():
         if _style in ("prim_cinematic_reveal", "prim_ascension_reveal"):
             continue
         if _styles.get(_style, 0) >= _budget:
             _spent.append(_style)
     if _spent:
         lines.append(
-            "  BUDGETS ALREADY SPENT — these are once-per-video and are used up. "
+            "  BUDGETS ALREADY SPENT — used up for this video. "
             "Do NOT emit any of: " + ", ".join(_spent) + "."
         )
+    _remaining = {k: v - _styles.get(k, 0) for k, v in _budgets.items()
+                  if v - _styles.get(k, 0) > 0}
+    if _remaining and not prior_cards:
+        lines += ["", "MARKING PRIMITIVES FOR THIS VIDEO:"]
+    if _remaining:
+        lines.append(
+            "  Marking primitives still available: "
+            + ", ".join(f"{k} x{v}" for k, v in _remaining.items())
+            + f". Keep at least {int(_SB_PRIMITIVE_MIN_GAP_S // 60)} minutes between two "
+              "marking primitives — clustered, they stop marking anything."
+        )
 
+    if not lines:
+        return ""
     lines.append("")
     return "\n".join(lines)
 
@@ -1376,7 +1413,8 @@ def _generate_graphic_cards_chunked(
             _in_span(script_structure, _ctx_lo, _ctx_hi),
             _in_span(keep_segments, _ctx_lo, _ctx_hi),
             window=(_ws, _we),
-            prior_context=_sb_build_chunk_context(all_cards, kwargs.get("language", "en")),
+            prior_context=_sb_build_chunk_context(
+                all_cards, kwargs.get("language", "en"), trimmed_duration),
             **kwargs,
         )
         if _i == 0:
