@@ -2619,6 +2619,135 @@ def _emit_narrative_timeline(
     return out_path
 
 
+def inject_safety_cards(
+    storyboard: dict,
+    remapped_words: list,
+    output_duration: float,
+    remapped_zoom: list,
+) -> int:
+    """Fill every window with no card and no significant zoom. Returns the count.
+
+    Moved out of _render_hyperframes unchanged. It was 100 lines in the middle
+    of a thousand-line function, so the only way to check it was to
+    re-implement it in a test — and a re-implementation agrees with itself,
+    not with the code that ships. Behaviour is identical; only the address
+    changed. Mutates storyboard["cards"] in place, as before.
+    """
+    # ── SAFETY NET — deterministic coverage guarantee ─────────────────────────
+    # Runs AFTER all LLM systems (storyboard, GAP-FILL) and AFTER all zoom
+    # injection (breath, drift, punch_in).  For each 20s window: if there is no
+    # graphic card AND no significant zoom (drift/punch_in/pulse/pull_out — breath
+    # and hold are perceptually near-invisible) AND ≥ 5 speech words → inject a
+    # minimal key_phrase card with the actual spoken text.
+    #
+    # This is a DETERMINISTIC, zero-LLM guarantee.  It fires unconditionally for
+    # any uncovered window regardless of content quality or upstream LLM decisions.
+    _SAFETY_WINDOW_S  = 28.0
+    _SAFETY_MIN_WORDS = 5
+    _SAFETY_SIG_KINDS = frozenset({"drift", "punch_in", "pulse", "pull_out"})
+    # Three styles that render DIFFERENTLY, checked by comparing the HTML each
+    # one produces from a bare title — not by reading the style list, which is
+    # how the previous three got here. `pull_quote` and `concept_definition`
+    # have no dispatch branch in compose.py: both fall through to the generic
+    # title card, so a rotation that "cycles three styles" drew the same card
+    # three times. `question` and `key_takeaway` have a branch but also fall
+    # through on a title alone, so they are no better. These three are the
+    # distinct renderings that need nothing but a title, which is all the
+    # safety net has to give.
+    _SAFETY_STYLES    = ["key_phrase", "callout", "contrarian_take"]
+    _sn_style_hist: list[tuple[float, str]] = []  # rolling 90s: (window_end, style)
+
+    _sn_graphic_cards  = [c for c in storyboard.get("cards", []) if c.get("type") != "caption"]
+    _sn_zoom_sorted    = sorted(remapped_zoom, key=lambda z: float(z.get("start", 0)))
+    _sn_card_ivs       = sorted(
+        [(float(c.get("startSec", 0)), float(c.get("endSec", 0))) for c in _sn_graphic_cards],
+        key=lambda iv: iv[0],
+    )
+    _sn_injected   = 0
+    _sn_fb_id      = 0
+
+    def _sn_has_card(ws: float, we: float) -> bool:
+        for cs, ce in _sn_card_ivs:
+            if cs < we and ce > ws:
+                return True
+        return False
+
+    def _sn_has_sig_zoom(ws: float, we: float) -> bool:
+        for ze in _sn_zoom_sorted:
+            if ze.get("kind") not in _SAFETY_SIG_KINDS:
+                continue
+            zs = float(ze.get("start", 0))
+            ze_e = float(ze.get("end", zs))
+            if zs < we and ze_e > ws:
+                return True
+        return False
+
+    _sn_t = 0.0
+    while _sn_t < output_duration:
+        _sn_ws = _sn_t
+        _sn_we = min(_sn_t + _SAFETY_WINDOW_S, output_duration)
+        _sn_t  = _sn_we
+
+        if _sn_has_card(_sn_ws, _sn_we) or _sn_has_sig_zoom(_sn_ws, _sn_we):
+            continue
+
+        _sn_words = [w for w in remapped_words if _sn_ws <= w.start < _sn_we]
+        if len(_sn_words) < _SAFETY_MIN_WORDS:
+            continue  # silence/non-speech window — skip
+
+        _sn_text = " ".join(w.text for w in _sn_words[:12]).strip()
+        if not _sn_text:
+            continue
+
+        _sn_cs = round(_sn_words[0].start, 3)
+        _sn_ce = round(min(_sn_words[-1].end + 0.3, _sn_we - 0.1), 3)
+        if _sn_ce - _sn_cs < 2.5:
+            _sn_ce = round(_sn_cs + 2.5, 3)
+
+        # 90s style rotation — no repeat within window
+        _sn_style_hist[:] = [(e, s) for e, s in _sn_style_hist if e > _sn_ws - 90]
+        _sn_used = {s for _, s in _sn_style_hist}
+        _sn_style = next(
+            (s for s in _SAFETY_STYLES if s not in _sn_used),
+            _SAFETY_STYLES[_sn_fb_id % len(_SAFETY_STYLES)],
+        )
+        _sn_style_hist.append((_sn_we, _sn_style))
+
+        _sn_fb_id += 1
+        _sn_card = {
+            "id":         f"safety-{_sn_fb_id:02d}",
+            "type":       "graphic",
+            "beat":       "story",
+            "startSec":   _sn_cs,
+            "endSec":     _sn_ce,
+            "accentIndex": 0,
+            "zone":       "video-overlay",
+            "_safety_fallback": True,
+            "contentHints": {
+                "style": _sn_style,
+                "title": _sn_text,
+            },
+        }
+        storyboard["cards"].append(_sn_card)
+        _sn_card_ivs.append((_sn_cs, _sn_ce))   # update live so adjacent windows see it
+        _sn_injected += 1
+        print(
+            f"[SAFETY-NET] t={_sn_ws:.1f}→{_sn_we:.1f}s — no card, no sig zoom"
+            f" → key_phrase: '{_sn_text[:55]}'",
+            flush=True,
+        )
+
+    if _sn_injected:
+        storyboard["cards"].sort(key=lambda c: float(c.get("startSec", 0)))
+        print(
+            f"[SAFETY-NET] {_sn_injected} fallback card(s) injected — full 20s coverage guaranteed",
+            flush=True,
+        )
+    else:
+        print("[SAFETY-NET] 0 injections — all 20s windows already covered", flush=True)
+    return _sn_injected
+
+
 def _render_hyperframes(
     src: Path,
     transcript: dict[str, Any],
@@ -3159,117 +3288,10 @@ def _render_hyperframes(
     )
 
     # ── SAFETY NET — deterministic coverage guarantee ─────────────────────────
-    # Runs AFTER all LLM systems (storyboard, GAP-FILL) and AFTER all zoom
-    # injection (breath, drift, punch_in).  For each 20s window: if there is no
-    # graphic card AND no significant zoom (drift/punch_in/pulse/pull_out — breath
-    # and hold are perceptually near-invisible) AND ≥ 5 speech words → inject a
-    # minimal key_phrase card with the actual spoken text.
-    #
-    # This is a DETERMINISTIC, zero-LLM guarantee.  It fires unconditionally for
-    # any uncovered window regardless of content quality or upstream LLM decisions.
-    _SAFETY_WINDOW_S  = 28.0
-    _SAFETY_MIN_WORDS = 5
-    _SAFETY_SIG_KINDS = frozenset({"drift", "punch_in", "pulse", "pull_out"})
-    # Three styles that render DIFFERENTLY, checked by comparing the HTML each
-    # one produces from a bare title — not by reading the style list, which is
-    # how the previous three got here. `pull_quote` and `concept_definition`
-    # have no dispatch branch in compose.py: both fall through to the generic
-    # title card, so a rotation that "cycles three styles" drew the same card
-    # three times. `question` and `key_takeaway` have a branch but also fall
-    # through on a title alone, so they are no better. These three are the
-    # distinct renderings that need nothing but a title, which is all the
-    # safety net has to give.
-    _SAFETY_STYLES    = ["key_phrase", "callout", "contrarian_take"]
-    _sn_style_hist: list[tuple[float, str]] = []  # rolling 90s: (window_end, style)
-
-    _sn_graphic_cards  = [c for c in storyboard.get("cards", []) if c.get("type") != "caption"]
-    _sn_zoom_sorted    = sorted(remapped_zoom, key=lambda z: float(z.get("start", 0)))
-    _sn_card_ivs       = sorted(
-        [(float(c.get("startSec", 0)), float(c.get("endSec", 0))) for c in _sn_graphic_cards],
-        key=lambda iv: iv[0],
+    inject_safety_cards(
+        storyboard, timing_map.remapped_words, timing_map.output_duration,
+        remapped_zoom,
     )
-    _sn_injected   = 0
-    _sn_fb_id      = 0
-
-    def _sn_has_card(ws: float, we: float) -> bool:
-        for cs, ce in _sn_card_ivs:
-            if cs < we and ce > ws:
-                return True
-        return False
-
-    def _sn_has_sig_zoom(ws: float, we: float) -> bool:
-        for ze in _sn_zoom_sorted:
-            if ze.get("kind") not in _SAFETY_SIG_KINDS:
-                continue
-            zs = float(ze.get("start", 0))
-            ze_e = float(ze.get("end", zs))
-            if zs < we and ze_e > ws:
-                return True
-        return False
-
-    _sn_t = 0.0
-    while _sn_t < timing_map.output_duration:
-        _sn_ws = _sn_t
-        _sn_we = min(_sn_t + _SAFETY_WINDOW_S, timing_map.output_duration)
-        _sn_t  = _sn_we
-
-        if _sn_has_card(_sn_ws, _sn_we) or _sn_has_sig_zoom(_sn_ws, _sn_we):
-            continue
-
-        _sn_words = [w for w in timing_map.remapped_words if _sn_ws <= w.start < _sn_we]
-        if len(_sn_words) < _SAFETY_MIN_WORDS:
-            continue  # silence/non-speech window — skip
-
-        _sn_text = " ".join(w.text for w in _sn_words[:12]).strip()
-        if not _sn_text:
-            continue
-
-        _sn_cs = round(_sn_words[0].start, 3)
-        _sn_ce = round(min(_sn_words[-1].end + 0.3, _sn_we - 0.1), 3)
-        if _sn_ce - _sn_cs < 2.5:
-            _sn_ce = round(_sn_cs + 2.5, 3)
-
-        # 90s style rotation — no repeat within window
-        _sn_style_hist[:] = [(e, s) for e, s in _sn_style_hist if e > _sn_ws - 90]
-        _sn_used = {s for _, s in _sn_style_hist}
-        _sn_style = next(
-            (s for s in _SAFETY_STYLES if s not in _sn_used),
-            _SAFETY_STYLES[_sn_fb_id % len(_SAFETY_STYLES)],
-        )
-        _sn_style_hist.append((_sn_we, _sn_style))
-
-        _sn_fb_id += 1
-        _sn_card = {
-            "id":         f"safety-{_sn_fb_id:02d}",
-            "type":       "graphic",
-            "beat":       "story",
-            "startSec":   _sn_cs,
-            "endSec":     _sn_ce,
-            "accentIndex": 0,
-            "zone":       "video-overlay",
-            "_safety_fallback": True,
-            "contentHints": {
-                "style": _sn_style,
-                "title": _sn_text,
-            },
-        }
-        storyboard["cards"].append(_sn_card)
-        _sn_card_ivs.append((_sn_cs, _sn_ce))   # update live so adjacent windows see it
-        _sn_injected += 1
-        print(
-            f"[SAFETY-NET] t={_sn_ws:.1f}→{_sn_we:.1f}s — no card, no sig zoom"
-            f" → key_phrase: '{_sn_text[:55]}'",
-            flush=True,
-        )
-
-    if _sn_injected:
-        storyboard["cards"].sort(key=lambda c: float(c.get("startSec", 0)))
-        print(
-            f"[SAFETY-NET] {_sn_injected} fallback card(s) injected — full 20s coverage guaranteed",
-            flush=True,
-        )
-    else:
-        print("[SAFETY-NET] 0 injections — all 20s windows already covered", flush=True)
 
     # ── NARRATIVE TIMELINE — QA tool ──────────────────────────────────────────
     # Merged chronological log: speech context + card content + zoom moves.
