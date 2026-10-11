@@ -2953,6 +2953,35 @@ if editor_dir.exists():
     def index(request: Request):
         return _page(editor_dir / "landing.html", request)
 
+    # The application shell is for signed-in users only, and the check has to
+    # live on the SERVER. Until now the only gate was in app.js: it asked
+    # /api/auth/me, and on failure did `window.location.href = "/"`. Anyone
+    # who put a JSON object in localStorage under "coach_profile" skipped the
+    # redirect, because the script only redirects when that key is missing.
+    #
+    # Gating the /app route alone would not have been enough. editor_frontend
+    # is mounted whole at "/", so /index.html served the same 113 KB page with
+    # no route of its own to guard — measured against production before this
+    # change. The set below is the complete list of files in that directory
+    # that belong to the application rather than to the public site:
+    #
+    #   index.html, app.js  -> the application        (protected here)
+    #   landing.html, i18n.js, previews/, public/ -> the public site and the
+    #                          landing's own strings  (must stay reachable)
+    #
+    # It is a list of three rather than a rule, because a rule over a mounted
+    # directory is a rule over whatever anyone drops into it later.
+    _PAGES_PRIVEES = frozenset({"/app", "/index.html", "/app.js"})
+
+    @app.middleware("http")
+    async def _require_session_for_app(request: Request, call_next):
+        if request.url.path in _PAGES_PRIVEES:
+            if not _verify_session(request.cookies.get(SESSION_COOKIE)):
+                # 302 to the landing, where the Google button is. Not 401:
+                # this is a page in a browser, not an API call.
+                return RedirectResponse("/", status_code=302)
+        return await call_next(request)
+
     @app.get("/app", include_in_schema=False)
     def app_page(request: Request):
         return _page(editor_dir / "index.html", request)
