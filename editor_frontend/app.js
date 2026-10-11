@@ -23,10 +23,63 @@ document.getElementById("themeToggle")?.addEventListener("click", () => {
 // ── Auth helpers ─────────────────────────────────────────────────────────────
 function getToken() { return sessionStorage.getItem("lle_token") || ""; }
 function authHeaders() { const t = getToken(); return t ? { "x-access-token": t } : {}; }
+// A session lasts 30 days, so it expires while the tab is open, not between
+// visits. Every caller here tests `res.ok` and quietly skips, so the page
+// turned into a dead shell: the library stopped refreshing, saving did
+// nothing, and nothing on screen said why. One banner, shown once, says it.
+function showSessionExpiredBanner() {
+  if (document.getElementById("sessionExpiredBanner")) return;
+  const banner = document.createElement("div");
+  banner.id = "sessionExpiredBanner";
+  banner.setAttribute("role", "alert");
+  banner.style.cssText = [
+    "position:fixed;top:0;left:0;right:0;z-index:10000",
+    "background:#2a0d0d;border-bottom:1px solid rgba(248,113,113,.3)",
+    "color:rgba(254,202,202,.95);font-size:.8rem;padding:.55rem 1rem",
+    "display:flex;align-items:center;justify-content:center;gap:.9rem",
+    "font-family:inherit",
+  ].join(";");
+  const texte = document.createElement("span");
+  texte.textContent = (localStorage.getItem("lle_lang") === "en")
+    ? "Your session has expired. Sign in again to keep working — nothing is lost."
+    : "Ta session a expiré. Reconnecte-toi pour continuer — rien n'est perdu.";
+  const lien = document.createElement("a");
+  lien.href = "/api/auth/google/login";
+  lien.textContent = (localStorage.getItem("lle_lang") === "en")
+    ? "Sign in" : "Se reconnecter";
+  lien.style.cssText =
+    "color:#fff;background:#dc2626;padding:.25rem .7rem;border-radius:6px;" +
+    "text-decoration:none;font-weight:600;white-space:nowrap";
+  banner.append(texte, lien);
+  document.body.appendChild(banner);
+}
+
+// A 401 is NOT proof the session died: /api/brand answers 401 to every
+// non-admin, by design, on every load. Hanging the banner on any 401 told
+// every ordinary user their session had expired while they were using it.
+// So ask the one route that speaks for the session, and only then.
+let _verifSession = null;
+function confirmerSessionPerdue() {
+  if (_verifSession) return _verifSession;           // one check, not one per 401
+  _verifSession = fetch("/api/auth/me", { credentials: "same-origin" })
+    .then((r) => { if (r.status === 401) showSessionExpiredBanner(); })
+    .catch(() => {})                                  // offline is not expiry
+    .then(() => { _verifSession = null; });
+  return _verifSession;
+}
+
 function apiFetch(url, opts = {}) {
   opts.credentials = opts.credentials || "same-origin";
   opts.headers = { ...authHeaders(), ...(opts.headers || {}) };
-  return fetch(url, opts);
+  return fetch(url, opts).then((res) => {
+    if (res.status === 401) {
+      // /api/auth/me speaks for the session, so its own 401 is the proof —
+      // asking it again would just loop. Any other 401 has to be confirmed.
+      if (String(url).startsWith("/api/auth/me")) showSessionExpiredBanner();
+      else confirmerSessionPerdue();
+    }
+    return res;
+  });
 }
 
 // ── Section switching ─────────────────────────────────────────────────────────
