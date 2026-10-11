@@ -7,6 +7,7 @@ import hashlib
 import hmac
 import json
 import os
+import posixpath as _posixpath
 import re
 import secrets
 import shutil
@@ -2969,18 +2970,65 @@ if editor_dir.exists():
     #   landing.html, i18n.js, previews/, public/ -> the public site and the
     #                          landing's own strings  (must stay reachable)
     #
-    # It is a list of three rather than a rule, because a rule over a mounted
+    # It is a named list rather than a rule, because a rule over a mounted
     # directory is a rule over whatever anyone drops into it later.
-    _PAGES_PRIVEES = frozenset({"/app", "/index.html", "/app.js"})
+    # Guard the FILE, not the URL string. Matching request.url.path against a
+    # set of literals was defeated within hours by three spellings that reach
+    # the same bytes, all measured against production:
+    #
+    #   /index.html/           -> 200, the whole 113 KB application
+    #   /./app.js              -> 200, the application's script
+    #   /static/../index.html  -> 200, the application again
+    #
+    # StaticFiles normalises "." , ".." and the trailing slash when it resolves
+    # a path to a file; a literal comparison upstream of that normalisation is
+    # comparing a different string from the one that decides what is served.
+    # So the path is normalised the same way first, and what is protected is
+    # the file it lands on.
+    #
+    # editor_frontend holds exactly four files plus previews/ and public/.
+    # index.html and app.js are the application; i18n.js and landing.html
+    # belong to the public site (the landing loads i18n.js), and the two
+    # directories are landing media.
+    _FICHIERS_PRIVES = frozenset({"index.html", "app.js"})
+
+    # The comparison must not depend on the filesystem underneath. Measured on
+    # the guard above, against a local instance on Windows:
+    #
+    #   /INDEX.HTML   -> 200, 114710 bytes, the whole application
+    #   /app.js%20    -> 200, 180808 bytes, its script
+    #
+    # Windows resolves filenames case-insensitively and drops trailing spaces
+    # and dots, so both reached the real file while the set was compared
+    # case-sensitively and byte-for-byte. On Linux they 404, which is exactly
+    # why they must be closed here rather than left to the host: the guard
+    # would be correct in production and wrong on a developer's machine, and
+    # only the weaker of the two is a security property.
+    def _fichier_vise(chemin: str) -> str:
+        """The file under editor_dir this URL resolves to, as StaticFiles sees it.
+
+        Returned folded the way the most permissive filesystem would match it,
+        so a spelling that is equivalent for ANY host is equivalent here.
+        """
+        p = _posixpath.normpath("/" + chemin.lstrip("/"))
+        p = p.rstrip("/") or "/"
+        if p == "/app":              # the named route serves index.html
+            return "index.html"
+        return p.lstrip("/").rstrip(" .").casefold()
 
     @app.middleware("http")
     async def _require_session_for_app(request: Request, call_next):
-        if request.url.path in _PAGES_PRIVEES:
-            if not _verify_session(request.cookies.get(SESSION_COOKIE)):
-                # 302 to the landing, where the Google button is. Not 401:
-                # this is a page in a browser, not an API call.
-                return RedirectResponse("/", status_code=302)
-        return await call_next(request)
+        prive = _fichier_vise(request.url.path) in _FICHIERS_PRIVES
+        if prive and not _verify_session(request.cookies.get(SESSION_COOKIE)):
+            # 302 to the landing, where the Google button is. Not 401:
+            # this is a page in a browser, not an API call.
+            return RedirectResponse("/", status_code=302)
+        response = await call_next(request)
+        if prive:
+            # A signed-in user's application must not sit in a shared cache,
+            # nor in the back/forward cache after they sign out.
+            response.headers["Cache-Control"] = "private, no-store"
+        return response
 
     @app.get("/app", include_in_schema=False)
     def app_page(request: Request):
