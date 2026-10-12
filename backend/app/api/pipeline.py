@@ -572,16 +572,23 @@ Si rien à couper : {{"cuts": [], "kept": []}}"""
     _latency = _time.perf_counter() - _t0
     _in_tok = response.usage.input_tokens
     _out_tok = response.usage.output_tokens
-    # Haiku 4.5: $0.80/1M input, $4.00/1M output  |  Sonnet 4.5: $3/$15
-    if "haiku" in _model:
-        _cost = (_in_tok * 0.80 + _out_tok * 4.00) / 1_000_000
-    else:
-        _cost = (_in_tok * 3.00 + _out_tok * 15.00) / 1_000_000
+    # The table that used to live here priced by looking for "haiku" in the
+    # model name and otherwise charged "Sonnet 4.5" rates ($3/$15). The
+    # configured model is claude-opus-4-7 ($5/$25), so every cost= line it
+    # printed under-reported by a factor of 1.67. The rate now comes from
+    # app/core/pricing.py, keyed by the exact model id, and an unlisted model
+    # prints "tarif inconnu" instead of a number that is merely plausible.
+    from app.core.pricing import resume as _prix_resume
     print(
         f"[LLM-EDIT] model={_model} latency={_latency:.1f}s "
-        f"tokens={_in_tok}in+{_out_tok}out cost=${_cost:.4f}",
+        f"{_prix_resume(_model, _in_tok, _out_tok)}",
         flush=True,
     )
+    try:
+        from app.engine import card_diag as _cd_u
+        _cd_u.record_usage("llm_edit", _model, response.usage)
+    except Exception:
+        pass
 
     raw = response.content[0].text.strip()
     m = _re.search(r'\{.*\}', raw, _re.DOTALL)

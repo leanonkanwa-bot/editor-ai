@@ -551,12 +551,22 @@ def _call_haiku(candidates: list[dict], pack: dict, language: str) -> list[dict]
     latency = time.perf_counter() - t0
     in_tok  = resp.usage.input_tokens
     out_tok = resp.usage.output_tokens
-    cost    = (in_tok * 0.80 + out_tok * 4.00) / 1_000_000
+    # Was a second hardcoded table — $0.80/$4.00, which is not even the Haiku
+    # 4.5 rate ($1.00/$5.00). This engine is dormant (its only mention in
+    # storyboard.py is the comment explaining why auto-injection is off), but a
+    # dormant lying number is still a lying number, and leaving one stale table
+    # behind defeats the point of having a single constant.
+    from app.core.pricing import resume as _prix_resume
     print(
         f"[BROLL-GENERATIVE] model={model} latency={latency:.1f}s"
-        f" tokens={in_tok}in+{out_tok}out cost=${cost:.5f}",
+        f" {_prix_resume(model, in_tok, out_tok)}",
         flush=True,
     )
+    try:
+        from app.engine import card_diag as _cd_u
+        _cd_u.record_usage("broll_generative", model, resp.usage)
+    except Exception:
+        pass
 
     raw = resp.content[0].text.strip()
     # Extract JSON array

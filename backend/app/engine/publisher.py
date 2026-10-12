@@ -474,6 +474,18 @@ def generate_metadata(
             max_tokens=512,
             messages=[{"role": "user", "content": prompt}],
         )
+        # Outside the render pipeline, so record_usage finds no job to attach
+        # to and returns — the log line is the measurement here. Counted all
+        # the same: "what does a video cost" includes publishing it.
+        try:
+            from app.core.pricing import resume as _prix_resume
+            from app.engine import card_diag as _cd_u
+            print(f"[PUBLISH-META] model={settings.effective_model} "
+                  f"{_prix_resume(settings.effective_model, resp.usage.input_tokens, resp.usage.output_tokens)}",
+                  flush=True)
+            _cd_u.record_usage("publish_meta", settings.effective_model, resp.usage)
+        except Exception:
+            pass
         text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
         start, end = text.find("{"), text.rfind("}")
         data = json.loads(text[start:end+1]) if start != -1 else {}

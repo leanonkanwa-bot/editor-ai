@@ -1386,6 +1386,20 @@ def _call_generation_api(
             system=system,
             messages=messages,
         )
+        # This call read no usage at all, so its spend was invisible — and it
+        # runs on a DIFFERENT model from the rest of the pipeline
+        # (claude-sonnet-4-6, hardcoded above), which is exactly why a single
+        # rate constant keyed by model id is the only way the job total adds up.
+        # Recorded before the truncation check: a truncated reply was paid for.
+        try:
+            from app.core.pricing import resume as _prix_resume
+            from app.engine import card_diag as _cd_u
+            print(f"[MG-GEN] model=claude-sonnet-4-6 "
+                  f"{_prix_resume('claude-sonnet-4-6', resp.usage.input_tokens, resp.usage.output_tokens)}",
+                  flush=True)
+            _cd_u.record_usage("motion_graphic", "claude-sonnet-4-6", resp.usage)
+        except Exception:
+            pass
         text = resp.content[0].text.strip()
         if resp.stop_reason == "max_tokens":
             print("[MG-GEN] Response truncated (hit max_tokens)")

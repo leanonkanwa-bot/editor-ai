@@ -3253,6 +3253,18 @@ Design graphic overlay cards for {_scope_word} — target {target_cards} cards f
             messages=[{"role": "user", "content": user_msg}],
         ) as _stream:
             response = _stream.get_final_message()
+        # What this call really cost. The planner read nothing before, so the
+        # largest spend of a job — it runs once per chunk, with a max_tokens up
+        # to 128k — was the one nobody could measure.
+        try:
+            from app.core.pricing import resume as _prix_resume
+            from app.engine import card_diag as _cd_u
+            print(f"[STORYBOARD] model={settings.effective_model} "
+                  f"{_prix_resume(settings.effective_model, response.usage.input_tokens, response.usage.output_tokens)}",
+                  flush=True)
+            _cd_u.record_usage("storyboard", settings.effective_model, response.usage)
+        except Exception:
+            pass
         if response.stop_reason == "max_tokens":
             print(
                 f"[STORYBOARD] WARN: LLM hit max_tokens={_max_tok} "
@@ -3715,6 +3727,19 @@ Return ONE JSON object — a card or {{}}, nothing else:
             system=system_prompt,
             messages=[{"role": "user", "content": user_msg}],
         )
+        # Recorded before the parse, and before the abstain check below: a call
+        # that abstains still cost its input tokens, and leaving it out would
+        # make the cheap-looking runs the ones with the most wasted calls.
+        try:
+            from app.core.pricing import resume as _prix_resume
+            from app.engine import card_diag as _cd_u
+            print(f"[GAP-FILL] gap {gap_start:.1f}–{gap_end:.1f}s "
+                  f"model={settings.effective_model} "
+                  f"{_prix_resume(settings.effective_model, response.usage.input_tokens, response.usage.output_tokens)}",
+                  flush=True)
+            _cd_u.record_usage("gap_fill", settings.effective_model, response.usage)
+        except Exception:
+            pass
         raw = response.content[0].text.strip()
         if raw.startswith("```"):
             raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
