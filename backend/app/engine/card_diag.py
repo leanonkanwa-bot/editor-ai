@@ -249,6 +249,44 @@ def record_storyboard(storyboard: dict) -> None:
         pass
 
 
+def record_usage(etape: str, modele: str, usage: Any) -> None:
+    """One model call's real token usage, accumulated for the job.
+
+    The spend of a job could not be measured at all: only LLM-EDIT read
+    response.usage, and it priced it from its own stale table. The planner and
+    GAP-FILL read nothing, so "what did this video cost" had no answer — which
+    made every estimate of a change's cost a guess.
+
+    Appends rather than replaces: the planner runs once per chunk, GAP-FILL
+    once per gap, and the per-call rows are what make a cap or a threshold
+    arguable afterwards. Never raises — a diagnostic must not cost a render.
+    """
+    try:
+        d = getattr(_local, "d", None)
+        if d is None:
+            return
+        tin = int(getattr(usage, "input_tokens", 0) or 0)
+        tout = int(getattr(usage, "output_tokens", 0) or 0)
+        # Cache fields are absent on older SDK responses; 0 is not a claim.
+        cin = int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
+        cread = int(getattr(usage, "cache_read_input_tokens", 0) or 0)
+        from app.core.pricing import cout_usd
+        d.setdefault("llm_usage", []).append({
+            "stage": etape,
+            "model": modele,
+            "input_tokens": tin,
+            "output_tokens": tout,
+            "cache_creation_input_tokens": cin,
+            "cache_read_input_tokens": cread,
+            # null, not 0, when the rate is unlisted — a missing price must not
+            # look like a free call.
+            "cost_usd": (lambda c: round(c, 6) if c is not None else None)(
+                cout_usd(modele, tin, tout)),
+        })
+    except Exception:
+        pass
+
+
 def record_storyboard_final(storyboard: dict) -> None:
     """The storyboard as RENDERED, after the safety net has had its say.
 
@@ -359,6 +397,34 @@ def dump(outputs_dir: Path) -> Path | None:
                 "sum_of_leaves": round(feuilles, 1),
                 "unaccounted": (round(tot - feuilles, 1) if tot is not None else None),
             }
+        # The job's real model spend, summed from the per-call rows. A call
+        # whose model is unpriced is counted in the tokens and named in
+        # `unpriced_calls`, never folded into the dollar total as zero.
+        _usage = d.get("llm_usage", [])
+        _tot_in = sum(u.get("input_tokens", 0) for u in _usage)
+        _tot_out = sum(u.get("output_tokens", 0) for u in _usage)
+        _chiffres = [u["cost_usd"] for u in _usage if u.get("cost_usd") is not None]
+        _sans_prix = sorted({u.get("model") for u in _usage
+                             if u.get("cost_usd") is None})
+        _usage_total = {
+            "calls": len(_usage),
+            "input_tokens": _tot_in,
+            "output_tokens": _tot_out,
+            "cost_usd": round(sum(_chiffres), 6) if _chiffres else None,
+            "priced_calls": len(_chiffres),
+            "unpriced_calls": _sans_prix,
+            "by_stage": {},
+        }
+        for u in _usage:
+            st = _usage_total["by_stage"].setdefault(
+                u.get("stage", "?"),
+                {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0})
+            st["calls"] += 1
+            st["input_tokens"] += u.get("input_tokens", 0)
+            st["output_tokens"] += u.get("output_tokens", 0)
+            if u.get("cost_usd") is not None:
+                st["cost_usd"] = round(st["cost_usd"] + u["cost_usd"], 6)
+
         _etiquettes: dict[str, int] = {}
         for c in cards:
             k = c.get("anchoring") or "?"
@@ -371,6 +437,8 @@ def dump(outputs_dir: Path) -> Path | None:
             "anchoring_counts": _etiquettes,
             "anchor_summary": d.get("anchor_summary", {}),
             "time_accounting": _par_phase,
+            "llm_usage": _usage,
+            "llm_usage_total": _usage_total,
             "stages": stages,
             "zoom": d.get("zoom", []),
             "storyboard": d.get("storyboard"),
@@ -383,10 +451,25 @@ def dump(outputs_dir: Path) -> Path | None:
         tmp = path.with_suffix(".json.part")
         tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
         tmp.replace(path)                         # atomic: never a half file
+        _c = _usage_total["cost_usd"]
         print(f"[CARD-DIAG] wrote {path.name} "
               f"({payload['card_count']} cards, {len(payload['stages'])} stages, "
               f"{len(payload['zoom'])} zoom entries) "
               f"anchoring={payload['anchoring_counts']}", flush=True)
+        # "tarif inconnu" on a job with no calls at all said the wrong thing:
+        # the cost is not unknown, there was none. The three cases are named
+        # apart, because a cost line that misreads its own silence is how the
+        # stale table survived for months.
+        if not _usage_total["calls"]:
+            _montant = "aucun appel"
+        elif _c is None:
+            _montant = "tarif inconnu"
+        else:
+            _montant = "$%.4f" % _c
+        print(f"[LLM-COST] job total: {_usage_total['calls']} call(s), "
+              f"{_tot_in}in+{_tot_out}out tokens, {_montant}"
+              + (f" — modeles sans tarif: {_sans_prix}" if _sans_prix else ""),
+              flush=True)
         return path
     except Exception as exc:
         # A diagnostic must never cost a render.
