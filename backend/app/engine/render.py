@@ -2724,6 +2724,11 @@ def inject_safety_cards(
     _sn_occupe_ivs     = _ivs(_sn_graphic_cards)
     _sn_injected   = 0
     _sn_fb_id      = 0
+    # Windows that are genuinely empty but hold no readable sentence. They are
+    # not dropped: the fallback pass below gives them a word or a move. Kept
+    # as a list rather than handled inline so the count is reportable — a
+    # window silently skipped is a dead zone nobody can see in a log.
+    _sn_sans_phrase: list[tuple[float, float, list]] = []
 
     def _sn_has_card(ws: float, we: float) -> bool:
         """Is something READABLE on screen in this window?"""
@@ -2754,6 +2759,91 @@ def inject_safety_cards(
     def _sn_mots_cles(texte: str) -> set:
         return {w for w in re.findall(r"[a-zà-ÿ0-9']{4,}", str(texte or "").lower())}
 
+    # ── the distinctive word, so the card can draw its accent ────────────────
+    # compose.py draws lean_craft's ink line — and every pack's accent swipe —
+    # only on the span _split_title_accent() builds, and it builds that span
+    # only when contentHints.accent_word is non-empty AND found in the title.
+    # The safety net gave style and title alone, so its cards fell to the
+    # fallback branch: a plain 120px bar instead of a stroke under a word.
+    # One field closes that, and none of the three safety styles is in
+    # compose's _NO_ACCENT_SPAN_TYPES, so nothing else is in the way.
+    #
+    # "Distinctive" is measured against THIS transcript, not a dictionary: the
+    # rarest word of the card's own text is the one that carries it. Function
+    # words are the most frequent by construction, so the frequency does most
+    # of the work; the stop list is there for a short video where a function
+    # word happens to be rare, and for deictics ("ici", "chose") that are
+    # content-shaped but say nothing on a card.
+    _SN_MOTS_VIDES = frozenset({
+        # fonction, FR
+        "alors", "aussi", "autre", "autres", "avec", "avoir", "bien", "cela",
+        "cette", "ceux", "chez", "comme", "dans", "donc", "elle", "elles",
+        "encore", "etre", "être", "fait", "faire", "faut", "leur", "leurs",
+        "mais", "meme", "même", "moins", "notre", "nous", "parce", "pour",
+        "pourquoi", "quand", "quelque", "quelqu'un", "sans", "sont", "sous",
+        "tous", "tout", "toute", "toutes", "très", "tres", "vais", "veut",
+        "veux", "voir", "vont", "votre", "vous", "était", "etait", "plus",
+        "peut", "dire", "dit", "deja", "déjà", "toujours", "jamais", "juste",
+        # trouvés par le test, pas devinés : une liste écrite à la main a des
+        # trous, et c'est l'assertion « aucun mot d'accent quand aucun mot ne
+        # vaut » qui les montre. "puis" avait été choisi sur un texte qui
+        # n'était que des mots de fonction.
+        "puis", "ensuite", "enfin", "avant", "apres", "après", "depuis",
+        # Adverbes de degré et pronoms seulement. Pas "bonne" ni "cherche" :
+        # ce sont des mots de contenu — "bonne" est le mot central d'une des
+        # vidéos — et c'est la fréquence, pas une liste, qui doit les
+        # déclasser quand ils sont partout.
+        "pendant", "surtout", "vraiment", "beaucoup", "peut-etre",
+        "peut-être", "quoi", "trop",
+        # déictiques et mots fourre-tout : forme de contenu, aucun sens affiché
+        "ici", "chose", "choses", "truc", "trucs", "machin", "ça", "cas",
+        # fonction, EN (une vidéo anglaise passe par le même chemin)
+        "about", "after", "also", "because", "been", "before", "being",
+        "could", "does", "every", "from", "have", "here", "into", "just",
+        "like", "more", "much", "only", "other", "same", "should", "some",
+        "such", "than", "that", "their", "them", "then", "there", "these",
+        "they", "thing", "things", "this", "those", "very", "what", "when",
+        "which", "will", "with", "would", "your",
+    })
+
+    def _sn_cle(mot: str) -> str:
+        """The form the frequency count is kept under: case-folded, bare."""
+        return str(mot or "").strip(".,!?…:;«»\"'()[]").casefold()
+
+    # Counted over the whole transcript once, not per card.
+    _sn_freq: dict[str, int] = {}
+    for _w in remapped_words:
+        _k = _sn_cle(getattr(_w, "text", ""))
+        if _k:
+            _sn_freq[_k] = _sn_freq.get(_k, 0) + 1
+
+    def _sn_mot_distinctif(texte: str) -> str:
+        """The rarest real word of this text, returned AS SPELLED in it.
+
+        The surface form matters: _split_title_accent() locates the span with
+        title.lower().find(accent_word.lower()), so a normalised word that is
+        not a substring of the title produces no span and no accent — the
+        failure would be silent and look exactly like having no word at all.
+        """
+        candidats = []
+        for brut in re.findall(r"[0-9A-Za-zÀ-ÿ'’\-]+", str(texte or "")):
+            # French elision: "l'éternel" must offer "éternel", not the
+            # article glued to it — and "éternel" is still a substring of the
+            # title, so the span is found.
+            for part in re.split(r"['’]", brut):
+                if len(part) < 4:
+                    continue
+                cle = _sn_cle(part)
+                if not cle or cle in _SN_MOTS_VIDES:
+                    continue
+                # rarest first; on a tie the longer word, which reads as the
+                # more specific one.
+                candidats.append((_sn_freq.get(cle, 1), -len(part), part))
+        if not candidats:
+            return ""
+        candidats.sort()
+        return candidats[0][2]
+
     # Every text already on screen nearby, cards and captions alike. A fallback
     # that repeats the card next to it is worse than the gap it fills.
     _sn_voisins = []
@@ -2777,20 +2867,118 @@ def inject_safety_cards(
                 return f"{len(mots & vmots)}/{len(mots)} mots deja a l'ecran a {vs:.1f}s"
         return None
 
-    def _sn_decoupe(mots) -> list:
-        """Keep a contiguous run of real speech, a question or a sentence first.
+    # ── choosing WHAT to write, not just where ───────────────────────────────
+    # The old _sn_decoupe kept everything up to the last full stop in the
+    # window, which on a 12 s window is a wall of speech: measured on job
+    # 37f76379 the 23 cards it would write had a MEDIAN of 24 words and a
+    # maximum of 32, and only 3 of 23 fell in a readable 4-12. The card at
+    # 5:55 of the long render was 24 words ending on a comma.
+    #
+    # So the window is searched for the best SHORT proposal instead of being
+    # emptied into a card. Still never a paraphrase: a candidate is a
+    # contiguous run of the words as spoken, in order, unbroken — only its
+    # boundaries are chosen, and both of them fall on punctuation.
+    _SN_FORTE = (".", "!", "?", "…")
+    _SN_MIN_MOTS_CARTE = 4
+    _SN_MAX_MOTS_CARTE = 12
+    # Punctuation alone does not tell a clause from a continuation: a comma
+    # often splits one. Seven of twenty-one cards opened just after a comma
+    # and still read as fragments, every one of them on a preposition or a
+    # conjunction — "au point d'avoir…", "que tu as envie…". So a run may not
+    # OPEN on one of these, whatever the punctuation before it says.
+    _SN_PAS_EN_TETE = frozenset({
+        "et", "mais", "ou", "donc", "or", "ni", "car", "que", "qu", "qui",
+        "quoi", "dont", "parce", "puisque", "comme", "alors", "ainsi", "puis",
+        "ensuite", "de", "du", "des", "d", "a", "à", "au", "aux", "en", "dans",
+        "sur", "sous", "pour", "par", "avec", "sans", "chez", "vers", "entre",
+        "pendant", "afin", "sinon", "tandis", "lorsque", "quand",
+        "and", "but", "so", "because", "that", "which", "who", "then", "of",
+        "to", "in", "on", "for", "with", "at", "by", "from", "while",
+    })
 
-        Never a paraphrase: the words are the ones spoken, in order, unbroken.
-        A run that lands on a '?' or a full stop reads as a statement; one cut
-        mid-clause reads as a transcription error.
+    def _sn_ouvre_mal(mot) -> bool:
+        t = re.sub(r"[^0-9A-Za-zÀ-ÿ]", "", str(getattr(mot, "text", ""))).casefold()
+        return (not t) or t in _SN_PAS_EN_TETE
+
+    def _sn_fin(mot) -> str:
+        """'' , ',' or '.' — what kind of boundary this word's end is."""
+        t = str(getattr(mot, "text", "")).rstrip("\"'»)]")
+        if t.endswith(_SN_FORTE):
+            return "."
+        if t.endswith((",", ";", ":")):
+            return ","
+        return ""
+
+    def _sn_propositions(mots, duree_max: float, mot_avant=None):
+        """Every readable, contiguous, punctuation-bounded run of this window.
+
+        A run may start at the window's first word or just after a boundary,
+        and must end on one. It must also FIT: a run longer than the card's
+        own duration cap would be truncated later, which is the bug that put
+        12 s of speech on a 6 s card.
         """
-        for _i, _w in enumerate(mots):
-            if "?" in str(_w.text):                       # a question, whole
-                return mots[:_i + 1]
-        for _i in range(len(mots) - 1, 0, -1):
-            if str(mots[_i].text).rstrip().endswith((".", "!", "…")):
-                return mots[:_i + 1]
-        return mots
+        # A run must START on a boundary too, not only end on one. Allowing a
+        # mid-clause start and merely ranking it last changed nothing: for the
+        # 7 of 22 windows that had no whole run, the fragment was the only
+        # candidate and won by default. "au point d'avoir en alliance avec eux
+        # car je suis l'éternel," is a fragment however well it is scored, so
+        # those windows go to the fallback instead of being written badly.
+        # Both boundaries may be a comma or a full stop. Requiring a full stop
+        # at the START was measured and is WORSE: on 37f76379 it removed good
+        # candidates whose end was a full stop and forced runs ending on a
+        # comma instead — 50 % of cards whole against 62 %, complete sentences
+        # 80 % against 90 %. The mid-clause start is handled lexically below
+        # instead, where the actual defect is.
+        debuts = [i + 1 for i, w in enumerate(mots[:-1]) if _sn_fin(w)]
+        if mot_avant is not None and _sn_fin(mot_avant):
+            debuts.insert(0, 0)       # the window opens on a clause
+        out = []
+        for d in debuts:
+            if d >= len(mots) or _sn_ouvre_mal(mots[d]):
+                continue
+            for f in range(d + _SN_MIN_MOTS_CARTE - 1,
+                           min(d + _SN_MAX_MOTS_CARTE, len(mots))):
+                k = _sn_fin(mots[f])
+                if not k:
+                    continue
+                if mots[f].end - mots[d].start > duree_max:
+                    break                       # and every longer run too
+                out.append((d, f + 1, k))
+        return out
+
+    def _sn_meilleure(mots, duree_max: float, mot_avant=None):
+        """The run to write, or None when the window has nothing readable.
+
+        Ranked, in order: ends on a full stop rather than a comma; starts on a
+        clause boundary rather than mid-sentence; carries a distinctive word;
+        then the longest, because a 10-word statement says more than a 4-word
+        one. Returns None rather than falling back to the whole window — the
+        caller decides what to do with a window that has no good sentence in
+        it, and writing a bad one is what this replaces.
+        """
+        cands = _sn_propositions(mots, duree_max, mot_avant)
+        if not cands:
+            return None
+        def score(c):
+            d, f, k = c
+            txt = " ".join(w.text for w in mots[d:f])
+            fin_forte = 1 if k == "." else 0
+            # A clean start means a clause ended just before. For d > 0 that
+            # word is in the window; for d == 0 it is the word BEFORE the
+            # window, which is why mot_avant is passed in — without it the
+            # window's first word was judged mid-sentence even when it opened
+            # a sentence, and a genuinely whole run lost to a truncated one.
+            precedent = mots[d - 1] if d > 0 else mot_avant
+            debut_propre = 1 if (precedent is not None and _sn_fin(precedent)) else 0
+            # Both boundaries together first: ranking the strong full stop
+            # above the clean start left 7 of 22 cards opening mid-sentence,
+            # because a run ending on "." always beat a run that was whole.
+            return (fin_forte + debut_propre,
+                    fin_forte,
+                    1 if _sn_mot_distinctif(txt) else 0,
+                    f - d)
+        d, f, _k = max(cands, key=score)
+        return mots[d:f]
 
     # Short format is untouched. A 27-55s vertical clip already runs at ~13
     # cards/min, has no dead zones to fill, and a 12s window there would mean
@@ -2817,30 +3005,46 @@ def inject_safety_cards(
         _sn_words = [w for w in remapped_words if _sn_ws <= w.start < _sn_we]
         if len(_sn_words) < _SAFETY_MIN_WORDS:
             continue  # silence/non-speech window — skip
+        # The word spoken just before this window, so a run that begins at the
+        # window's edge can still be recognised as opening a sentence.
+        _sn_avant = None
+        for _w in remapped_words:
+            if _w.start >= _sn_ws:
+                break
+            _sn_avant = _w
 
-        _sn_words = _sn_decoupe(_sn_words)
-        if len(_sn_words) < _SAFETY_MIN_WORDS:
+        # The best SHORT proposal in this window, chosen on punctuation, or
+        # nothing. The duration cap is passed in so a run that would later be
+        # truncated is never offered: the text and the card's life now agree
+        # by construction, instead of being reconciled after the fact.
+        _sn_choix = _sn_meilleure(_sn_words, _SAFETY_MAX_DUR_S, _sn_avant)
+        if _sn_choix is None:
+            # No readable sentence here. Writing a bad one is what this
+            # replaces, so the window is handed to the fallback pass below.
+            # Merged, not appended: the scan slides by 0.25 s and an uncovered
+            # hole is re-seen at every step, which reported 34 "windows" for a
+            # handful of real holes.
+            if _sn_sans_phrase and _sn_ws <= _sn_sans_phrase[-1][1]:
+                _p = _sn_sans_phrase[-1]
+                _sn_sans_phrase[-1] = (_p[0], max(_p[1], _sn_we),
+                                       _p[2] if len(_p[2]) >= len(_sn_words)
+                                       else _sn_words)
+            else:
+                _sn_sans_phrase.append((_sn_ws, _sn_we, _sn_words))
             continue
+        _sn_words = _sn_choix
 
         _sn_cs = round(_sn_words[0].start, 3)
         _sn_ce = round(min(_sn_words[-1].end + 0.3, _sn_we - 0.1), 3)
         if _sn_ce - _sn_cs < 2.5:
             _sn_ce = round(_sn_cs + 2.5, 3)
-        # At a 12s window the old formula produced 12s cards — longer than
-        # anything this engine has ever drawn (the longest real one is 6.5s).
         _sn_ce = round(min(_sn_ce, _sn_cs + _SAFETY_MAX_DUR_S,
                            output_duration), 3)
         if _sn_ce - _sn_cs < 2.0:
             continue
 
-        # The text is built AFTER the cap, from the words the card is actually
-        # on screen for. Built before, a 12s run of speech ended up on a 6s
-        # card: its last words were spoken after it had gone, which is the very
-        # desync this pass exists to avoid — and it made the de-duplication
-        # below compare against text no viewer ever reads.
-        _sn_words = [w for w in _sn_words if w.start < _sn_ce] or _sn_words[:1]
         _sn_text = " ".join(w.text for w in _sn_words).strip()
-        if not _sn_text or len(_sn_words) < _SAFETY_MIN_WORDS:
+        if not _sn_text:
             continue
 
         _sn_dup = _sn_doublon(_sn_cs, _sn_ce, _sn_text)
@@ -2885,6 +3089,12 @@ def inject_safety_cards(
                 "title": _sn_text,
             },
         }
+        # Only when there is one: an empty accent_word is what compose.py
+        # already handles, and writing the key with "" would say nothing while
+        # looking like it said something.
+        _sn_accent = _sn_mot_distinctif(_sn_text)
+        if _sn_accent:
+            _sn_card["contentHints"]["accent_word"] = _sn_accent
         storyboard["cards"].append(_sn_card)
         # update both live: the new card both covers and occupies
         _sn_card_ivs.append((_sn_cs, _sn_ce))
@@ -2893,7 +3103,102 @@ def inject_safety_cards(
         _sn_injected += 1
         print(
             f"[SAFETY-NET] t={_sn_ws:.1f}→{_sn_we:.1f}s — no card, no perceptible"
-            f" zoom → {_sn_style}: '{_sn_text[:55]}'",
+            f" zoom → {_sn_style}: '{_sn_text[:55]}'"
+            f" accent={_sn_accent or '(aucun)'}",
+            flush=True,
+        )
+
+    # ── FALLBACK for a window with no readable sentence ──────────────────────
+    # Two steps, in order. Neither writes a sentence, because the whole point
+    # is that this window has none worth writing.
+    #
+    #   (a) the distinctive word alone, in `definition` — the ONE style that
+    #       was measured to be both distinct from the generic title card and
+    #       distinct from the net's own three, while needing nothing but a
+    #       title (269 bytes of markup, class def-term). Compared as HTML, not
+    #       chosen from the style list: silent_beat_pause is distinct too but
+    #       draws a symbol, not the word; question/stat/quote fall through to
+    #       the generic card and would be indistinguishable from what the net
+    #       already makes. Capped, because a word on its own is a strong
+    #       gesture and three of them in a minute is a tic.
+    #
+    #   (b) otherwise a short, fast camera move. Note the two nets disagree on
+    #       "perceptible": ZOOM-SAFETY-NET above accepts 0.040 of total travel
+    #       over up to 6s (0.0067/s), which is THREE TIMES below this pass's
+    #       own 0.02/s bar — measured from breath 0.0706/s, pulse 0.0393/s,
+    #       drift 0.0055/s. So the move injected here is short and quick
+    #       rather than long and slow, or it would not clear the very test
+    #       that found the hole.
+    _SN_MOT_MIN_ECART_S = float(os.environ.get("SAFETY_NET_MOT_MIN_ECART_S", 45.0))
+    _SN_MOT_MAX = int(os.environ.get("SAFETY_NET_MOT_MAX", 6))
+    _SN_ZOOM_DUREE_S = 2.5
+    _SN_ZOOM_AMP = 0.075                      # 0.030/s — above the 0.02/s bar
+    _sn_mots_poses: list[float] = []
+    _sn_zoom_poses = 0
+
+    for _ws, _we, _mw in _sn_sans_phrase:
+        _mot = _sn_mot_distinctif(" ".join(w.text for w in _mw))
+        _assez_loin = all(abs(_ws - t) >= _SN_MOT_MIN_ECART_S for t in _sn_mots_poses)
+        _sous_plafond = len(_sn_mots_poses) < _SN_MOT_MAX
+        # Named where the refusal happens, not inferred afterwards: inferring
+        # it printed "trop pres du precedent" for a hole 198 s from the last
+        # word card, whose real problem was that the slot was too short.
+        _refus = ("aucun mot utilisable" if not _mot else
+                  "plafond de mots atteint" if not _sous_plafond else
+                  "trop pres du mot precedent" if not _assez_loin else "")
+        if not _refus:
+            _sn_cs = round(max(_ws, _mw[0].start), 3)
+            _sn_ce = round(min(_sn_cs + 3.0, _we - 0.1, output_duration), 3)
+            if _sn_ce - _sn_cs < 2.0:
+                _refus = "creneau trop court pour une carte"
+            elif not _sn_slot_libre(_sn_cs, _sn_ce):
+                _refus = "creneau deja occupe"
+            else:
+                _sn_fb_id += 1
+                storyboard["cards"].append({
+                    "id": f"safety-{_sn_fb_id:02d}",
+                    "type": "graphic", "beat": "story",
+                    "startSec": _sn_cs, "endSec": _sn_ce,
+                    "accentIndex": 0, "zone": "video-overlay",
+                    "_safety_fallback": True, "_safety_mode": "mot",
+                    "contentHints": {"style": "definition", "title": _mot,
+                                     "accent_word": _mot},
+                })
+                _sn_card_ivs.append((_sn_cs, _sn_ce))
+                _sn_occupe_ivs.append((_sn_cs, _sn_ce))
+                _sn_mots_poses.append(_ws)
+                _sn_injected += 1
+                print(f"[SAFETY-NET] t={_ws:.1f}→{_we:.1f}s — aucune phrase"
+                      f" lisible → mot mis en avant : « {_mot} »", flush=True)
+                continue
+        # (b) no word, or the cap/spacing refuses one: move the camera.
+        _zs = round(max(_ws, _mw[0].start), 3)
+        _ze = round(min(_zs + _SN_ZOOM_DUREE_S, _we, output_duration), 3)
+        if _ze - _zs < 1.0:
+            print(f"[SAFETY-NET] t={_ws:.1f}→{_we:.1f}s — ni phrase, ni mot,"
+                  f" ni place pour un mouvement — laissee vide", flush=True)
+            continue
+        _base = 1.10
+        for _ze_prev in _sn_zoom_sorted:
+            if float(_ze_prev.get("end", 0)) <= _zs:
+                _base = float(_ze_prev.get("to", _base))
+        _vers = _base + _SN_ZOOM_AMP if _base <= 1.12 else _base - _SN_ZOOM_AMP
+        remapped_zoom.append({"start": _zs, "end": _ze,
+                              "from": round(_base, 3), "to": round(_vers, 3),
+                              "kind": "safety_pulse"})
+        remapped_zoom.sort(key=lambda z: float(z.get("start", 0)))
+        _sn_zoom_sorted = sorted(remapped_zoom,
+                                 key=lambda z: float(z.get("start", 0)))
+        _sn_zoom_poses += 1
+        print(f"[SAFETY-NET] t={_ws:.1f}→{_we:.1f}s — aucune phrase lisible,"
+              f" {_refus} → mouvement {_base:.3f}→{_vers:.3f} sur"
+              f" {_ze - _zs:.1f}s ({abs(_vers - _base) / max(_ze - _zs, 1e-3):.4f}/s)",
+              flush=True)
+
+    if _sn_sans_phrase:
+        print(
+            f"[SAFETY-NET] {len(_sn_sans_phrase)} fenetre(s) sans phrase lisible :"
+            f" {len(_sn_mots_poses)} mot(s) mis en avant, {_sn_zoom_poses} mouvement(s)",
             flush=True,
         )
 
@@ -3458,6 +3763,7 @@ def _render_hyperframes(
         storyboard, timing_map.remapped_words, timing_map.output_duration,
         remapped_zoom, format_hint=plan.format,
     )
+
 
     # ── NARRATIVE TIMELINE — QA tool ──────────────────────────────────────────
     # Merged chronological log: speech context + card content + zoom moves.
