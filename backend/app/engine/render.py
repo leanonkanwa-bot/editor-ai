@@ -3764,6 +3764,21 @@ def _render_hyperframes(
         remapped_zoom, format_hint=plan.format,
     )
 
+    # Re-record AFTER the net: the diagnostic has to describe what was drawn.
+    # record_cards() calls itself "the final card list, after every pass" and
+    # it was not — it runs in storyboard.py, before this pass — and record_zoom
+    # above ran one statement before the net, which also appends entries when
+    # its fallback moves the camera.
+    try:
+        from app.engine import card_diag as _cd_fin
+        _cd_fin.record_cards(
+            [_c for _c in storyboard.get("cards", []) if _c.get("type") != "caption"],
+            timing_map.remapped_words,
+        )
+        _cd_fin.record_storyboard_final(storyboard)
+        _cd_fin.record_zoom(remapped_zoom)
+    except Exception:
+        pass
 
     # ── NARRATIVE TIMELINE — QA tool ──────────────────────────────────────────
     # Merged chronological log: speech context + card content + zoom moves.

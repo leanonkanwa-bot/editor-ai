@@ -249,6 +249,27 @@ def record_storyboard(storyboard: dict) -> None:
         pass
 
 
+def record_storyboard_final(storyboard: dict) -> None:
+    """The storyboard as RENDERED, after the safety net has had its say.
+
+    record_storyboard() above freezes the planner's version on purpose, and
+    that copy is worth keeping. But it is taken in storyboard.py, while the
+    safety net runs later in render.py — so neither it nor `cards` held a
+    single safety- card. Measured on job b17a54cc (post-497ede5): cards[] 41
+    entries, storyboard.cards 43, zero safety-. A reader could not tell "the
+    net injected nothing" from "nothing recorded the net", which is the one
+    question the file exists to answer.
+    """
+    try:
+        d = getattr(_local, "d", None)
+        if d is None:
+            return
+        d["storyboard_rendered"] = json.loads(
+            json.dumps(storyboard, ensure_ascii=False, default=str))
+    except Exception:
+        pass
+
+
 def record_cards(cards: list[dict], words: Any) -> None:
     """The final card list, after every pass. Called where [CARD-TIMING] prints."""
     try:
@@ -353,6 +374,7 @@ def dump(outputs_dir: Path) -> Path | None:
             "stages": stages,
             "zoom": d.get("zoom", []),
             "storyboard": d.get("storyboard"),
+            "storyboard_rendered": d.get("storyboard_rendered"),
             "anchor_moves": d.get("anchor_moves", []),
             "cards_before_anchor": d.get("cards_before_anchor", []),
             "cards": cards,
