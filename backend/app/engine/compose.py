@@ -5063,9 +5063,17 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'      <div class="carousel-slide" id="{card_id}-slide-{i}">{_esc(str(slide))}</div>')
         parts.append(f'    </div>')
     elif content_style == "definition":
+        # Same omission as contrarian_take above: the term was escaped here
+        # instead of going through _split_title_accent(), so no accent span
+        # existed while `definition` is absent from _NO_ACCENT_SPAN_TYPES —
+        # GSAP aimed at a missing element and the accent-line fallback was
+        # skipped with it. The safety net's word-emphasis fallback writes a
+        # single word into this style, and that word is exactly what should
+        # carry lean_craft's ink line.
         term = hints.get("term", title)
         defn = hints.get("definition", detail)
-        parts.append(f'    <div class="def-term" id="{card_id}-term">{_esc(term)}</div>')
+        parts.append(f'    <div class="def-term" id="{card_id}-term">'
+                     f'{_split_title_accent(term, accent_word_hint, card_id)}</div>')
         if defn:
             parts.append(f'    <div class="def-text" id="{card_id}-def">{_esc(defn)}</div>')
     elif content_style == "checklist":
@@ -5670,7 +5678,16 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
             parts.append(f'      <div class="am-ctx" id="{card_id}-am-ctx">{_am_ctx}</div>')
         parts.append(f'    </div>')
     elif content_style == "contrarian_take":
-        _ct_text = _esc(hints.get("take_text", hints.get("title", "")))
+        # This branch escaped its own text instead of going through
+        # _split_title_accent(), so it never produced the #{card_id}-accent
+        # span — while contrarian_take is absent from _NO_ACCENT_SPAN_TYPES,
+        # so the GSAP side below happily aimed _accent_treatment at that
+        # missing element AND skipped the accent-line fallback. Harmless only
+        # as long as no card of this style carried an accent_word; the safety
+        # net now does. _split_title_accent escapes the text itself and falls
+        # back to plain escaped text when the word is absent.
+        _ct_raw = hints.get("take_text", hints.get("title", ""))
+        _ct_text = _split_title_accent(_ct_raw, accent_word_hint, card_id)
         parts.append(f'    <div class="ct-wrap">')
         parts.append(f'      <div class="ct-text" id="{card_id}-ct-text">{_ct_text}</div>')
         parts.append(f'      <div class="ct-rule" id="{card_id}-ct-rule"></div>')
@@ -9953,7 +9970,17 @@ def _build_timeline_js(
             })
             _aw = card.get("contentHints", {}).get("accent_word", "")
             _ch_ref = card.get("contentHints", {})
-            _display_ref = _ch_ref.get("number") or _ch_ref.get("title", "")
+            # The condition has to name the text that was actually RENDERED,
+            # not the title: contrarian_take draws contentHints.take_text when
+            # it has one, so a word present in the title but absent from
+            # take_text would pass here and leave GSAP tweening an element
+            # _split_title_accent() never built.
+            if content_style == "contrarian_take":
+                _display_ref = _ch_ref.get("take_text") or _ch_ref.get("title", "")
+            elif content_style == "definition":
+                _display_ref = _ch_ref.get("term") or _ch_ref.get("title", "")
+            else:
+                _display_ref = _ch_ref.get("number") or _ch_ref.get("title", "")
             _accent_in_dom = (
                 bool(_aw)
                 and _aw.lower() in _display_ref.lower()
