@@ -194,6 +194,30 @@ _DATA_ANCHOR_FIELDS: dict[str, str] = {
                                                      # a numeral never matches speech
     "prim_split_stage":         "steps",             # mode=steps; mode=diagram
                                                      # leaves this empty and falls through
+    # R1b — the 12 styles these two renders used whose prose was in a field no
+    # map listed. Measured: 14 used styles read an unlisted text field; two of
+    # the 14 are left out on purpose. `attributed_quote` would offer
+    # `attribution`, a person's name, which anchors badly — a numeral never
+    # matches speech and neither does a byline. `emoji_reaction` offers
+    # `emoji_label`, a one-word tag. Both stay in champs_texte.py, which the
+    # diagnostic and the control read, and out of here, which the anchoring
+    # reads: what is drawn and what is said are two questions.
+    #
+    # The field chosen is the one spoken FIRST, since the anchor moves a card
+    # onto the word that opens its content: myth before fact, before before
+    # after, left before right.
+    "myth_vs_fact":             "myth_text",         # the myth is stated, then corrected
+    "warning_soft":             "warning_text",
+    "contrarian_take":          "take_text",
+    "audience_question":        "question_text",
+    "hand_written_note":        "note_text",
+    "action_step_cta":          "cta_text",
+    "comparison":               "left_label",
+    "before_after_image":       "before_label",
+    "prim_split_compare":       "left_label",
+    "list":                     "items",
+    "recap_summary":            "recap_items",
+    "timeline":                 "steps",
 }
 
 # Styles that legitimately occupy video-overlay / fullscreen in landscape (full-canvas heroes).
@@ -4946,7 +4970,8 @@ def generate_storyboard(
             # The text this card actually draws: title, else the field its
             # style stores its prose in (_DATA_ANCHOR_FIELDS, consulted only
             # when title is empty — same rule the anchoring uses).
-            _txt = str(_h.get("title") or "").strip()
+            from app.engine.champs_texte import texte_affiche as _acc_txt
+            _txt = _acc_txt(_h)
             if not _txt:
                 _fld = _DATA_ANCHOR_FIELDS.get(_h.get("style", ""), "")
                 _v = _h.get(_fld) if _fld else ""

@@ -100,8 +100,15 @@ def condense(texte: str) -> str | None:
 
 
 def _texte_dessine(hints: dict, champs_style: dict | None = None) -> str:
-    """The text this card will actually draw."""
-    t = str(hints.get("title") or "").strip()
+    """The text this card will actually draw.
+
+    Delegates to champs_texte.py so the control, the diagnostic and the accent
+    word read the same fields. champs_style (the anchoring map) is still
+    accepted and tried as a last resort, so a style listed there but not here
+    is not lost.
+    """
+    from app.engine.champs_texte import texte_affiche
+    t = texte_affiche(hints)
     if t:
         return t
     fld = (champs_style or {}).get(hints.get("style", ""), "")

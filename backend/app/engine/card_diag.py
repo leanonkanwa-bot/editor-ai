@@ -324,14 +324,17 @@ def record_cards(cards: list[dict], words: Any) -> None:
         out = []
         for c in cards:
             hints = c.get("contentHints", {}) or {}
-            text = ""
-            for fld in ("title", "confession_text", "qa_question", "text", "kicker"):
-                v = hints.get(fld, "")
-                if isinstance(v, list):
-                    v = " ".join(str(x) for x in v)
-                if v:
-                    text = str(v).strip()
-                    break
+            # Five hardcoded fields saw nothing for card-26 (myth_text) and
+            # card-34 (warning_text) on job b17a54cc: the file showed them as
+            # textless cards when they say two sentences and one. The map in
+            # champs_texte.py knows what each style draws; joined, because a
+            # myth_vs_fact says two things and reporting only the first
+            # under-counts its text.
+            try:
+                from app.engine.champs_texte import texte_affiche
+                text = texte_affiche(hints, joindre=True)
+            except Exception:
+                text = str(hints.get("title") or "").strip()
             s = float(c.get("startSec", 0))
             e = float(c.get("endSec", s))
             near = [w for w in words if s - 0.3 <= w.start <= s + 0.5]
