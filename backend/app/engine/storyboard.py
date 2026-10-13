@@ -1290,9 +1290,22 @@ _SB_PRIMITIVE_PRIORITY = (
 
 
 def _sb_primitive_total(duration_s: float) -> int:
-    """How many marking primitives this video gets, ALL categories together."""
+    """How many marking primitives this video gets, ALL categories together.
+
+    La cadence de 480 s se contredisait avec l'ecart minimal de 240 s que la
+    meme phrase de prompt annonce : elle donnait UNE primitive pour 534 s la
+    ou l'ecart en autorise trois, et la ou les gardes d'eviction du code en
+    gardent jusqu'a cinq (1 PCR+PAR, 1 PCF, 1 shatter, 2 split_stage).
+    Mesure : 37f76379 (8 min 53) en a pose cinq, espacees de 68 a 111 s,
+    avant que ce budget ne soit transmis aux videos de moins de 20 minutes ;
+    b17a54cc, le meme discours avec le budget, n'en garde qu'une.
+
+    Le budget est donc celui que l'ecart minimal permet deja, plafonne par
+    _SB_PRIMITIVE_MAX. Aucune constante nouvelle : la cadence disparait au
+    profit de l'ecart, qui etait deja la.
+    """
     return max(1, min(_SB_PRIMITIVE_MAX,
-                      round(float(duration_s or 0) / _SB_PRIMITIVE_EVERY_S)))
+                      int(float(duration_s or 0) // _SB_PRIMITIVE_MIN_GAP_S) + 1))
 
 
 def _sb_budget_for(duration_s: float) -> dict[str, int]:
@@ -5012,6 +5025,44 @@ def generate_storyboard(
               f"(sur {len(graphic_cards)} cartes)", flush=True)
     except Exception as _acc_exc:
         print(f"[ACCENT] non pose ({_acc_exc}) — le rendu continue", flush=True)
+
+    # R2 — une carte de bouchage ne prend pas tout le cadre.
+    #
+    # Mesure sur b17a54cc : 14 cartes sur 41 occupent le plein cadre, et la
+    # coupure est nette — les six candidates au declassement sont exactement
+    # les six cartes nees de GAP-FILL, 36,6 s de plein cadre au total. Une
+    # carte ecrite pour boucher un trou n'a pas merite toute l'image ; les
+    # huit autres viennent du planner, dont les trois primitives, et gardent
+    # le cadre.
+    try:
+        from app.engine.champs_texte import texte_affiche as _r2_txt
+        # Les zones de 280 px ne suffisent pas : mesure dans le navigateur,
+        # trois des six cartes y debordaient — gf-01 a 288 px dans une zone
+        # de 280, gf-04 et gf-02 a 15 et 17 mots. Les variantes hautes de
+        # 500 px les prennent, et les six tiennent alors.
+        _R2_COURT = ("landscape-tl", "landscape-tr")
+        _R2_LONG = ("landscape-tl-tall", "landscape-tr-tall")
+        _r2_n = 0
+        for _gc in graphic_cards:
+            if not str(_gc.get("id", "")).startswith("gf-"):
+                continue
+            if _gc.get("zone") != "fullscreen":
+                continue
+            _r2_mots = len(_r2_txt(_gc.get("contentHints") or {},
+                                   joindre=True).split())
+            # Rotation gauche/droite : deux cartes declassees de suite ne
+            # tombent jamais du meme cote.
+            _gc["zone"] = (_R2_LONG if _r2_mots > 12 else _R2_COURT)[_r2_n % 2]
+            print(f"[BUDGET] {_gc.get('id')} "
+                  f"({(_gc.get('contentHints') or {}).get('style','?')}, "
+                  f"{_r2_mots} mots) plein cadre -> {_gc['zone']} "
+                  f"(carte de bouchage)", flush=True)
+            _r2_n += 1
+        _r2_reste = sum(1 for c in graphic_cards if c.get("zone") == "fullscreen")
+        print(f"[BUDGET] {_r2_n} carte(s) de bouchage declassee(s), "
+              f"{_r2_reste} carte(s) gardent le plein cadre", flush=True)
+    except Exception as _r2_exc:
+        print(f"[BUDGET] non applique ({_r2_exc}) — le rendu continue", flush=True)
 
     # R9 — les annonces de reference que personne n'habille.
     #
