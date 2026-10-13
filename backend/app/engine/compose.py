@@ -43,6 +43,10 @@ _ZONE_BOUNDS_LANDSCAPE = {
     "landscape-cf":      {"left": 0,    "top": 380, "width": 1920, "height": 300},  # center-full (dimming)
     # Tall multi-item data cards in landscape — 2-position top cycle, extra height.
     "landscape-tl-tall": {"left": 40,   "top": 40,  "width": 660, "height": 500},
+    # Bande du verset : 800 px, soit 41,7 % de la largeur, contre 34,4 %
+    # pour landscape-cr qui rendait la carte trop etroite. Se termine a 730,
+    # au-dessus de la zone de sous-titres qui commence a 756.
+    "landscape-verse":   {"left": 1040, "top": 330, "width": 832, "height": 400},
     "landscape-tr-tall": {"left": 1220, "top": 40,  "width": 660, "height": 500},
 }
 
@@ -86,7 +90,12 @@ _ZONE_BOUNDS_PORTRAIT = {
     # donc un bandeau pose a 1030 se termine a 1326 et laisse 18 px avant la
     # zone de sous-titres a 1344. portrait-center-full ne convenait pas : c'est
     # une zone « centre », elle assombrit le fond et couvre le visage.
-    "portrait-verse-band":   {"left": 40,  "top": 1030, "width": 1000, "height": 300},
+    # Bandeau du verset. Largeur 1000 sur 1080 : 92,6 %, marges de 40 px de
+    # chaque cote. Hauteur 540 : mesure dans le navigateur, la carte fait
+    # 520 px a 104 px de reference sur deux lignes et 74 px de verset sur
+    # deux lignes. Le bas tombe a 1330, soit 14 px au-dessus des sous-titres
+    # qui commencent a 1344.
+    "portrait-verse-band":   {"left": 40,  "top": 800, "width": 1000, "height": 540},
     # Legacy bottom zones (kept for backward compat, not used in the rotation sequence).
     "portrait-bottom-left":  {"left": 30,  "top": 1070, "width": 500, "height": 250},
     "portrait-bottom-right": {"left": 540, "top": 1070, "width": 500, "height": 250},
@@ -178,7 +187,7 @@ _DATA_PANEL_TYPES = {"stat", "list", "comparison", "checklist", "score", "trend"
     "milestone_recap", "content_calendar", "client_result_number",
     "mistake_lesson", "tool_comparison", "weekly_review", "audience_question"}
 _CENTER_ZONES = {"fullscreen", "video-overlay"}
-_SIDE_PANEL_ZONES = {"side-panel", "side-panel-left", "side-panel-right", "side-panel-top", "upper-data", "upper-right", "upper-left-data", "upper-left-data-sm", "upper-right-data-tall", "portrait-verse-band", "portrait-bottom-left", "portrait-bottom-right", "portrait-center-left", "portrait-center-right", "landscape-tl", "landscape-tr", "landscape-cl", "landscape-cr", "landscape-cf", "landscape-tl-tall", "landscape-tr-tall"}
+_SIDE_PANEL_ZONES = {"side-panel", "side-panel-left", "side-panel-right", "side-panel-top", "upper-data", "upper-right", "upper-left-data", "upper-left-data-sm", "upper-right-data-tall", "landscape-verse", "portrait-verse-band", "portrait-bottom-left", "portrait-bottom-right", "portrait-center-left", "portrait-center-right", "landscape-tl", "landscape-tr", "landscape-cl", "landscape-cr", "landscape-cf", "landscape-tl-tall", "landscape-tr-tall"}
 # Zones where the backdrop-dim overlay fires — card overlaps the speaker face.
 # Portrait centre zones added as safety net: backdrop-dim fires IN ADDITION to
 # per-card portrait scrims, ensuring consistent dimming regardless of face detection.
@@ -2720,8 +2729,26 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
     # Every colour comes from the pack; the locus takes the accent so the
     # numbers carry the emphasis the ink line would otherwise duplicate.
     if content_style == "verse_reference":
-        _vrs_ref_size = "44px" if compact else "60px"
-        _vrs_txt_size = "22px" if compact else "28px"
+        # La taille est calee sur le SOUS-TITRE du meme format, pas sur le
+        # mode compact. Mesure dans captions.py : la police du sous-titre
+        # vaut 42 px * (hauteur/1080), soit 42 px en paysage et 74 px en
+        # portrait. Le verset en faisait 22 — 0,52x le sous-titre en paysage
+        # et 0,30x en portrait, illisible sur un telephone ou 1080 px de
+        # large s'affichent sur 390 pt.
+        #
+        # Le verset vaut donc le sous-titre, et la reference 1,4x le verset
+        # pour rester le heros de la carte.
+        _vrs_txt_size = "74px" if layout == "portrait" else "42px"
+        _vrs_ref_size = "104px" if layout == "portrait" else "59px"
+        # Le panneau remplit sa zone au lieu de se retracter sur son texte :
+        # mesure, il ne faisait que 35 % de la largeur en paysage la ou la
+        # consigne est 40 %, et en portrait il perdait 140 px de largeur
+        # utile, ce qui poussait le verset sur une ligne de plus.
+        parts.append(f'.card[data-card-id="{card_id}"] .card-panel {{')
+        # max-width valait 92 %, ce qui ramenait le panneau a 677 px en
+        # paysage, soit 35,3 % de la largeur au lieu des 40 % demandes.
+        parts.append('  width: 100%; max-width: 100%; box-sizing: border-box;')
+        parts.append('}')
         parts.append(f'.card[data-card-id="{card_id}"] .vrs-book {{')
         parts.append(f'  font-family: {p["font"]}; font-size: {_vrs_ref_size};')
         parts.append(f'  font-weight: {p["font_weight"]}; color: {p["text"]};')

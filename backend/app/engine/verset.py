@@ -274,7 +274,15 @@ def reference(a: dict) -> tuple[str, str]:
 
 
 # ── de l'annonce a la carte ──────────────────────────────────────────────────
-MAX_MOTS_VERSET = 10        # valide par KAN sur la maquette
+MAX_MOTS_VERSET = 8         # a la taille du sous-titre, 10 mots
+                            # passaient a trois lignes
+# Le vrai plafond est en CARACTERES, pas en mots : c'est la largeur qui
+# decide du nombre de lignes. Mesure dans le navigateur, sur la composition
+# reelle, guillemets compris : en portrait 49 caracteres tiennent sur deux
+# lignes et 53 passent a trois et debordent sous les sous-titres ; en
+# paysage 61 tiennent encore sur deux lignes.
+MAX_CAR_PORTRAIT = 50
+MAX_CAR_PAYSAGE = 62
 DUREE_S = 4.0               # au-dessus du plancher de lisibilite de 3,0 s
 PLANCHER_S = 3.0            # ENDSEC-CLAMP : en dessous, la carte ne se lit pas
 FENETRE_MOTS = 26           # ou chercher la citation apres l'annonce
@@ -283,12 +291,47 @@ REPETITION_MIN_S = 120.0    # la meme reference peut revenir, pas coup sur coup
 VOISINAGE_S = 2.0           # une carte du planner dans cette fenetre = doublon
 
 STYLE = "verse_reference"
-ZONE_PAYSAGE = "landscape-cr"      # tiers droit, mi-hauteur — la maquette
+ZONE_PAYSAGE = "landscape-verse"   # tiers droit, 41,7 % de la largeur
 ZONE_PORTRAIT = "portrait-verse-band"    # bandeau bas pleine largeur, la
                                          # position validee sur la maquette
 
 # Mots qui introduisent la citation et n'en font pas partie.
 _AMORCE = frozenset({"dit", "disait", "ecrit", "declare", "says", "said"})
+
+
+def tient(texte: str, portrait: bool) -> bool:
+    """Ce texte tient-il en deux lignes dans la carte de ce format ?"""
+    return len(str(texte or "")) <= (MAX_CAR_PORTRAIT if portrait
+                                     else MAX_CAR_PAYSAGE)
+
+
+def ajuste(texte: str, portrait: bool) -> str:
+    """Le texte ramene au budget en retirant des mots par la fin, ou "".
+
+    Jamais tronque au milieu d'un mot et jamais dessine trop long : si
+    quatre mots ne tiennent toujours pas, la carte renonce a sa citation et
+    n'affiche que la reference. Un debordement doit etre signale, pas
+    dessine.
+    """
+    entier = " ".join(str(texte or "").split())
+    m = entier.split()
+
+    def rendu(mots_: list[str]) -> str:
+        # Le point de suspension suit la coupe : il annonce que la phrase
+        # continue, et il n'a plus de sens si la coupe a disparu.
+        bout = " ".join(mots_)
+        if bout and bout != entier:
+            bout = bout.rstrip(",;:…") + "…"
+        return bout
+
+    # Le budget se mesure sur la forme FINALE, point de suspension compris :
+    # le mesurer avant l'ajout rendait un texte de 51 caracteres pour un
+    # plafond de 50, et c'est bien le texte final qui est dessine.
+    while m and not tient(rendu(m), portrait):
+        if len(m) <= 4:
+            return ""
+        m.pop()
+    return rendu(m)
 
 
 def citation(mots, a: dict) -> str:
@@ -439,7 +482,10 @@ def cartes_verset(mots, cartes_existantes, duree: float,
             journal.append(note)
             continue
 
-        txt = citation(liste, a)
+        brut = citation(liste, a)
+        txt = ajuste(brut, portrait)
+        if brut and not txt:
+            note["citation_refusee"] = brut
         carte = {
             "id": f"vrs-{n + 1:02d}",
             "type": "graphic",
@@ -451,9 +497,12 @@ def cartes_verset(mots, cartes_existantes, duree: float,
         }
         out.append(carte)
         derniere[cle] = debut
-        note["decision"] = (f"posee {carte['id']} {debut:.1f}-{fin:.1f}s"
-                            + (f" + citation {len(txt.split())} mots"
-                               if txt else " (reference seule)"))
+        note["decision"] = (
+            f"posee {carte['id']} {debut:.1f}-{fin:.1f}s"
+            + (f" + citation {len(txt.split())} mots, {len(txt)} car"
+               if txt else
+               (f" (reference seule : citation de {len(brut)} car ne tient "
+                f"pas en deux lignes)" if brut else " (reference seule)")))
         note["citation"] = txt
         journal.append(note)
     return out, journal
