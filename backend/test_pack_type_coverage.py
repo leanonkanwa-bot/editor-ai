@@ -31,6 +31,8 @@ PACKS = {
 # Fields listed here are what the LLM would typically supply.
 _HINTS: dict[str, dict] = {
     "callout":              {"title": "Test callout"},
+    "verse_reference":      {"verse_book": "Lévitique", "verse_locus": "26:44",
+                             "verse_text": "Je ne les rejetterai pas"},
     "key_phrase":           {"title": "Test key phrase"},
     "quote":                {"title": "\"Une citation remarquable\"", "detail": "— Auteur"},
     "attributed_quote":     {"title": "\"Citation attribuée\"", "detail": "— Auteur, 2024"},

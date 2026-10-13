@@ -69,16 +69,22 @@ def _fin(mot) -> str:
     return ""
 
 
-def condense(texte: str) -> str | None:
-    """The best contiguous 4-12 word run of this text, bounded by punctuation.
+def condense(texte: str, max_mots: int = MAX_MOTS,
+             forcer: bool = False) -> str | None:
+    """The best contiguous 4-max_mots word run of this text, bounded by punctuation.
 
     Never a paraphrase: the words are the ones already in the card, in order,
     unbroken. Only the boundaries are chosen. Same ranking as the safety net's
     shortening — both boundaries first, then a full stop over a comma, then a
     distinctive word, then the longest.
+
+    max_mots lets another caller ask for a shorter run without a second copy
+    of this ranking: the verse card wants 10 words where a card tolerates 12.
+    forcer asks for the run even when the text already fits, which is what
+    picking a quotation out of running speech needs.
     """
     mots = str(texte or "").split()
-    if len(mots) <= MAX_MOTS:
+    if len(mots) <= max_mots and not forcer:
         return None
     debuts = [i + 1 for i, w in enumerate(mots[:-1]) if _fin(w)]
     debuts.insert(0, 0)
@@ -86,7 +92,7 @@ def condense(texte: str) -> str | None:
     for d in debuts:
         if d >= len(mots) or ouvre_mal(mots[d]):
             continue
-        for f in range(d + MIN_MOTS - 1, min(d + MAX_MOTS, len(mots))):
+        for f in range(d + MIN_MOTS - 1, min(d + max_mots, len(mots))):
             k = _fin(mots[f])
             if not k:
                 continue

@@ -56,6 +56,7 @@ CHAMPS_AFFICHES: dict[str, tuple[str, ...]] = {
     "star_rating_review":       ("review_text",),
     "story_chapter_transition": ("transition_label",),
     "testimonial":              ("testimonial_text",),
+    "verse_reference":          ("verse_book", "verse_locus", "verse_text"),
     "timeline":                 ("steps",),
     "warning_soft":             ("warning_text",),
 }

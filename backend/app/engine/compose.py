@@ -81,6 +81,12 @@ _ZONE_BOUNDS_PORTRAIT = {
     # 360px fitted the old 20-25px type; at 32px the content of a three-item list
     # grows past it and clips. Ends at 1100 of 1920, still clear of the frame.
     "portrait-center-full":  {"left": 40,  "top": 640, "width": 1000, "height": 460},
+    # Bandeau bas pleine largeur, valide par KAN sur la maquette du verset.
+    # Mesure : la carte verset fait 296 px de haut au corps de texte portrait,
+    # donc un bandeau pose a 1030 se termine a 1326 et laisse 18 px avant la
+    # zone de sous-titres a 1344. portrait-center-full ne convenait pas : c'est
+    # une zone « centre », elle assombrit le fond et couvre le visage.
+    "portrait-verse-band":   {"left": 40,  "top": 1030, "width": 1000, "height": 300},
     # Legacy bottom zones (kept for backward compat, not used in the rotation sequence).
     "portrait-bottom-left":  {"left": 30,  "top": 1070, "width": 500, "height": 250},
     "portrait-bottom-right": {"left": 540, "top": 1070, "width": 500, "height": 250},
@@ -172,12 +178,22 @@ _DATA_PANEL_TYPES = {"stat", "list", "comparison", "checklist", "score", "trend"
     "milestone_recap", "content_calendar", "client_result_number",
     "mistake_lesson", "tool_comparison", "weekly_review", "audience_question"}
 _CENTER_ZONES = {"fullscreen", "video-overlay"}
-_SIDE_PANEL_ZONES = {"side-panel", "side-panel-left", "side-panel-right", "side-panel-top", "upper-data", "upper-right", "upper-left-data", "upper-left-data-sm", "upper-right-data-tall", "portrait-bottom-left", "portrait-bottom-right", "portrait-center-left", "portrait-center-right", "landscape-tl", "landscape-tr", "landscape-cl", "landscape-cr", "landscape-cf", "landscape-tl-tall", "landscape-tr-tall"}
+_SIDE_PANEL_ZONES = {"side-panel", "side-panel-left", "side-panel-right", "side-panel-top", "upper-data", "upper-right", "upper-left-data", "upper-left-data-sm", "upper-right-data-tall", "portrait-verse-band", "portrait-bottom-left", "portrait-bottom-right", "portrait-center-left", "portrait-center-right", "landscape-tl", "landscape-tr", "landscape-cl", "landscape-cr", "landscape-cf", "landscape-tl-tall", "landscape-tr-tall"}
 # Zones where the backdrop-dim overlay fires — card overlaps the speaker face.
 # Portrait centre zones added as safety net: backdrop-dim fires IN ADDITION to
 # per-card portrait scrims, ensuring consistent dimming regardless of face detection.
 # Upper landscape zones (landscape-tl/tr) intentionally excluded — they sit above the
 # speaker and dimming would cover unrelated content.
+# Les zones portrait qu'une carte garde. Toute autre est ramenee au centre.
+# La liste etait ecrite en dur a deux endroits — le placement et le voile de
+# fond — et les deux copies ont diverge des qu'une zone a ete ajoutee : la
+# carte se posait bien dans son bandeau mais le voile la croyait au centre et
+# assombrissait toute l'image. Une seule definition, lue par les deux.
+_PORTRAIT_KEEP_ZONES = (
+    "portrait-center-full", "portrait-center-left", "portrait-center-right",
+    "portrait-verse-band",
+)
+
 _DIMMING_ZONES = frozenset({
     "fullscreen", "video-overlay",
     "landscape-cf",
@@ -371,9 +387,11 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
             "prim_ascension_reveal", "prim_shatter_truth", "prim_split_stage",
             "prim_confession_frame",
         )
-        if not _is_portrait_full_cover and zone not in (
-            "portrait-center-full", "portrait-center-left", "portrait-center-right"
-        ):
+        # Le bandeau bas du verset passe : c'est la position validee pour ce
+        # style, et cette redirection la ramenait au centre, par dessus le
+        # visage. C'est aussi ce qui rend les zones « portrait-bottom-* »
+        # inutilisables aujourd'hui.
+        if not _is_portrait_full_cover and zone not in _PORTRAIT_KEEP_ZONES:
             zone = "portrait-center-full"
 
     bounds = _zone_bounds(zone, layout)
@@ -2696,6 +2714,36 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  margin-top: 12px; text-align: center; max-width: 90%;')
         parts.append(f'  line-height: 1.5; overflow-wrap: break-word; word-break: break-word;')
         parts.append('}')
+    # Verse reference: the book on one line, the chapter:verse under it, the
+    # ink line, then the quotation. The reference is the hero — a listener who
+    # hears "Levitique 26 verset 44" wants to SEE 26:44, not read a paragraph.
+    # Every colour comes from the pack; the locus takes the accent so the
+    # numbers carry the emphasis the ink line would otherwise duplicate.
+    if content_style == "verse_reference":
+        _vrs_ref_size = "44px" if compact else "60px"
+        _vrs_txt_size = "22px" if compact else "28px"
+        parts.append(f'.card[data-card-id="{card_id}"] .vrs-book {{')
+        parts.append(f'  font-family: {p["font"]}; font-size: {_vrs_ref_size};')
+        parts.append(f'  font-weight: {p["font_weight"]}; color: {p["text"]};')
+        parts.append('  line-height: 1.02; letter-spacing: -0.015em;')
+        parts.append('  overflow-wrap: break-word; word-break: break-word;')
+        if p["title_glow"]:
+            parts.append(f'  text-shadow: {p["title_glow"]};')
+        parts.append('  opacity: 0;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .vrs-locus {{')
+        parts.append(f'  font-family: {p["font"]}; font-size: {_vrs_ref_size};')
+        parts.append(f'  font-weight: {p["font_weight"]}; color: {p["accent"]};')
+        parts.append('  line-height: 1.02; letter-spacing: -0.015em;')
+        parts.append('  font-variant-numeric: tabular-nums; opacity: 0;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .vrs-text {{')
+        parts.append(f'  font-family: {p.get("font_detail", p["font"])};')
+        parts.append(f'  font-size: {_vrs_txt_size}; font-weight: 400;')
+        parts.append(f'  color: {p["text"]}; line-height: 1.38;')
+        parts.append('  overflow-wrap: break-word; word-break: break-word;')
+        parts.append('  opacity: 0;')
+        parts.append('}')
     # Checklist: items with checkmarks
     if content_style == "checklist":
         parts.append(f'.card[data-card-id="{card_id}"] .chk-items {{')
@@ -4965,6 +5013,34 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('</div>')
         parts.append('</div>')
         return "\n".join(parts)
+    # Verse reference: own panel so the ink line sits BETWEEN the reference
+    # and the quotation, where the mock puts it, instead of being appended at
+    # the bottom by the generic builder. Same element and same id, so the
+    # generic GSAP tween still draws it.
+    if content_style == "verse_reference":
+        _vrs_book = str(hints.get("verse_book") or "").strip()
+        _vrs_locus = str(hints.get("verse_locus") or "").strip()
+        _vrs_text = str(hints.get("verse_text") or "").strip()
+        parts.append('<div class="root">')
+        parts.append('  <div class="card-panel">')
+        if kicker:
+            parts.append(f'    <div class="kicker" id="{card_id}-kicker">{_esc(kicker)}</div>')
+        parts.append(f'    <div class="vrs-book" id="{card_id}-vrs-book">{_esc(_vrs_book)}</div>')
+        parts.append(f'    <div class="vrs-locus" id="{card_id}-vrs-locus">{_esc(_vrs_locus)}</div>')
+        parts.append(f'    <div class="accent-line" id="{card_id}-line"></div>')
+        if _vrs_text:
+            parts.append(f'    <div class="vrs-text" id="{card_id}-vrs-text">'
+                         f'« {_esc(_vrs_text)} »</div>')
+        parts.append(f'    <div class="shimmer-mask" id="{card_id}-shimmer"></div>')
+        if p.get("id") == "lean_glass":
+            parts.append(f'    <div class="edge-light" id="{card_id}-edge"></div>')
+        if p.get("id") == "lean_cinema":
+            parts.append(f'    <div class="cine-bar cine-bar-top" id="{card_id}-bar-top"></div>')
+            parts.append(f'    <div class="cine-bar cine-bar-bottom" id="{card_id}-bar-bot"></div>')
+        parts.append('  </div>')
+        parts.append('</div>')
+        parts.append('</div>')
+        return "\n".join(parts)
     if content_style == "news_ticker":
         ticker_text = _esc(title or kicker or "BREAKING")
         label_text  = _esc(kicker or "LIVE")
@@ -6703,9 +6779,7 @@ def _build_timeline_js(
             if layout == "portrait" and card.get("type") != "caption":
                 _pfc_style = card.get("contentHints", {}).get("style", "")
                 _is_pfc = _pfc_style in ("prim_split_compare", "prim_journey_map", "prim_cinematic_reveal", "prim_ascension_reveal", "prim_shatter_truth", "prim_split_stage", "prim_confession_frame")
-                if not _is_pfc and card_zone not in (
-                    "portrait-center-full", "portrait-center-left", "portrait-center-right"
-                ):
+                if not _is_pfc and card_zone not in _PORTRAIT_KEEP_ZONES:
                     _effective_zone = "portrait-center-full"
                 else:
                     _effective_zone = card_zone
@@ -7217,6 +7291,29 @@ def _build_timeline_js(
                     f'  tl.fromTo(\'{def_sel}\', '
                     f'{{ opacity: 0 }}, {{ opacity: 1, duration: 0.300, ease: _eIn }}, '
                     f'{t_in + 0.20:.4f});')
+            elif content_style == "verse_reference":
+                # Le livre, puis le reperage, puis la citation : l'ordre dans
+                # lequel l'annonce est prononcee. La ligne d'encre entre les
+                # deux est tracee par le tween generique de .accent-line.
+                _vb = f'.card[data-card-id="{card_id}"] #{card_id}-vrs-book'
+                _vl = f'.card[data-card-id="{card_id}"] #{card_id}-vrs-locus'
+                lines.append(
+                    f'  tl.fromTo(\'{_vb}\', '
+                    f'{{ opacity: 0, y: 10 }}, '
+                    f'{{ opacity: 1, y: 0, duration: 0.320, ease: _eIn }}, '
+                    f'{t_in:.4f});')
+                lines.append(
+                    f'  tl.fromTo(\'{_vl}\', '
+                    f'{{ opacity: 0, y: 10 }}, '
+                    f'{{ opacity: 1, y: 0, duration: 0.320, ease: _eIn }}, '
+                    f'{t_in + 0.14:.4f});')
+                if str(card.get("contentHints", {}).get("verse_text") or "").strip():
+                    _vt = f'.card[data-card-id="{card_id}"] #{card_id}-vrs-text'
+                    lines.append(
+                        f'  tl.fromTo(\'{_vt}\', '
+                        f'{{ opacity: 0 }}, '
+                        f'{{ opacity: 1, duration: 0.300, ease: _eIn }}, '
+                        f'{t_in + 0.46:.4f});')
             elif content_style == "checklist":
                 items = card.get("contentHints", {}).get("items", [])
                 n_items = min(len(items), 6)
@@ -9967,6 +10064,10 @@ def _build_timeline_js(
                 "prim_cinematic_reveal", "prim_ascension_reveal", "number_hero", "prim_stat_counter",
                 "prim_split_compare", "prim_journey_map", "prim_anecdote_frame",
                 "prim_numbered_rule", "prim_shatter_truth", "prim_split_stage", "prim_confession_frame",
+                # Le reperage chiffre est deja dessine dans la couleur
+                # d'accent : un second mot souligne ferait deux accents sur
+                # une carte qui n'a que deux lignes.
+                "verse_reference",
             })
             _aw = card.get("contentHints", {}).get("accent_word", "")
             _ch_ref = card.get("contentHints", {})

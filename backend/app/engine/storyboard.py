@@ -5009,6 +5009,33 @@ def generate_storyboard(
     except Exception as _acc_exc:
         print(f"[ACCENT] non pose ({_acc_exc}) — le rendu continue", flush=True)
 
+    # R9 — les annonces de reference que personne n'habille.
+    #
+    # Mesure sur b17a54cc : le locuteur annonce huit fois une reference et
+    # cinq de ces huit annonces ne portent aucune carte. La ou le planner en
+    # pose une, il ecrit deja la bonne chose, donc la sienne est gardee et
+    # celle-ci ne sort que sur les trous.
+    #
+    # Pose APRES l'ancrage : la carte est deja sur le mot qui l'annonce, et
+    # un ancrage par correspondance de mot ne pourrait que la deplacer. C'est
+    # aussi pourquoi `verse_reference` est absent de _DATA_ANCHOR_FIELDS.
+    try:
+        from app.engine.verset import cartes_verset as _vrs_cartes
+        _vrs_new, _vrs_journal = _vrs_cartes(
+            remapped_words, graphic_cards, trimmed_duration,
+            portrait=(layout == "portrait"),
+        )
+        for _n in _vrs_journal:
+            print(f"[VERSET] {_n['debut']:.1f}s {_n['ref']} — {_n['decision']}",
+                  flush=True)
+        if _vrs_new:
+            graphic_cards.extend(_vrs_new)
+            graphic_cards.sort(key=lambda c: float(c.get("startSec", 0)))
+        print(f"[VERSET] {len(_vrs_journal)} annonce(s), "
+              f"{len(_vrs_new)} carte(s) posee(s)", flush=True)
+    except Exception as _vrs_exc:
+        print(f"[VERSET] non pose ({_vrs_exc}) — le rendu continue", flush=True)
+
     # NOW the list is final: after GAP-FILL, after RHYTHM-SPLIT, after word
     # anchoring, after caption exclusion. Recorded here, the diagnostic holds
     # the times the renderer uses and the gap-fill cards it draws.
