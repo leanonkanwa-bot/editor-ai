@@ -4188,6 +4188,10 @@ def generate_storyboard(
     language: str = "en",
     style_pack: str = "lean_glass",
     subject_side: str | None = None,
+    # Haut du visage en % de la hauteur, quand la vision a repondu. La carte
+    # verset s'en sert pour ne jamais se dessiner sur le visage en portrait ;
+    # sans cette valeur elle ne se pose pas du tout.
+    face_top_pct: float | None = None,
     energy_profile: list | None = None,
     prosodic_keep_segments: list | None = None,
 ) -> dict:
@@ -5024,6 +5028,7 @@ def generate_storyboard(
         _vrs_new, _vrs_journal = _vrs_cartes(
             remapped_words, graphic_cards, trimmed_duration,
             portrait=(layout == "portrait"),
+            face_top_pct=face_top_pct, hauteur=height,
         )
         for _n in _vrs_journal:
             print(f"[VERSET] {_n['debut']:.1f}s {_n['ref']} — {_n['decision']}",

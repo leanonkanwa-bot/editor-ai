@@ -3396,6 +3396,8 @@ def _render_hyperframes(
         language=transcript.get("language", "en"),
         style_pack=style_pack,
         subject_side=_subject_side,
+        face_top_pct=((subject_position or {}).get("face_top_pct")
+                      if subject_position else None),
         energy_profile=energy_profile,
         prosodic_keep_segments=_prosodic_segs,
     )

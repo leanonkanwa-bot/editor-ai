@@ -90,12 +90,12 @@ _ZONE_BOUNDS_PORTRAIT = {
     # donc un bandeau pose a 1030 se termine a 1326 et laisse 18 px avant la
     # zone de sous-titres a 1344. portrait-center-full ne convenait pas : c'est
     # une zone « centre », elle assombrit le fond et couvre le visage.
-    # Bandeau du verset. Largeur 1000 sur 1080 : 92,6 %, marges de 40 px de
-    # chaque cote. Hauteur 540 : mesure dans le navigateur, la carte fait
-    # 520 px a 104 px de reference sur deux lignes et 74 px de verset sur
-    # deux lignes. Le bas tombe a 1330, soit 14 px au-dessus des sous-titres
-    # qui commencent a 1344.
-    "portrait-verse-band":   {"left": 40,  "top": 800, "width": 1000, "height": 540},
+    # Bande haute du verset. KAN : ne pas recouvrir le visage. Le haut part
+    # de 250 px, la zone des boutons TikTok/Reels, et s'arrete a 670 : la
+    # peau commence au plus haut a 668 px sur les neuf cadrages mesures du
+    # clip de reference. La carte doit donc y tenir en 420 px, ce qui lui
+    # laisse une seule ligne de verset.
+    "portrait-verse-top":    {"left": 40,  "top": 250, "width": 1000, "height": 420},
     # Legacy bottom zones (kept for backward compat, not used in the rotation sequence).
     "portrait-bottom-left":  {"left": 30,  "top": 1070, "width": 500, "height": 250},
     "portrait-bottom-right": {"left": 540, "top": 1070, "width": 500, "height": 250},
@@ -187,7 +187,7 @@ _DATA_PANEL_TYPES = {"stat", "list", "comparison", "checklist", "score", "trend"
     "milestone_recap", "content_calendar", "client_result_number",
     "mistake_lesson", "tool_comparison", "weekly_review", "audience_question"}
 _CENTER_ZONES = {"fullscreen", "video-overlay"}
-_SIDE_PANEL_ZONES = {"side-panel", "side-panel-left", "side-panel-right", "side-panel-top", "upper-data", "upper-right", "upper-left-data", "upper-left-data-sm", "upper-right-data-tall", "landscape-verse", "portrait-verse-band", "portrait-bottom-left", "portrait-bottom-right", "portrait-center-left", "portrait-center-right", "landscape-tl", "landscape-tr", "landscape-cl", "landscape-cr", "landscape-cf", "landscape-tl-tall", "landscape-tr-tall"}
+_SIDE_PANEL_ZONES = {"side-panel", "side-panel-left", "side-panel-right", "side-panel-top", "upper-data", "upper-right", "upper-left-data", "upper-left-data-sm", "upper-right-data-tall", "landscape-verse", "portrait-verse-top", "portrait-bottom-left", "portrait-bottom-right", "portrait-center-left", "portrait-center-right", "landscape-tl", "landscape-tr", "landscape-cl", "landscape-cr", "landscape-cf", "landscape-tl-tall", "landscape-tr-tall"}
 # Zones where the backdrop-dim overlay fires — card overlaps the speaker face.
 # Portrait centre zones added as safety net: backdrop-dim fires IN ADDITION to
 # per-card portrait scrims, ensuring consistent dimming regardless of face detection.
@@ -200,7 +200,7 @@ _SIDE_PANEL_ZONES = {"side-panel", "side-panel-left", "side-panel-right", "side-
 # assombrissait toute l'image. Une seule definition, lue par les deux.
 _PORTRAIT_KEEP_ZONES = (
     "portrait-center-full", "portrait-center-left", "portrait-center-right",
-    "portrait-verse-band",
+    "portrait-verse-top",
 )
 
 _DIMMING_ZONES = frozenset({

@@ -110,6 +110,33 @@ _CONFUSIONS: dict[str, str] = {
 }
 
 
+# Un nom de livre trop long casse la carte dans les packs a police large.
+# Mesure sur la composition reelle, portrait, bande haute : lean_ledger est
+# en IBM Plex Mono et met « 1 Thessaloniciens » sur TROIS lignes, carte de
+# 513 px occupant 203-717 — elle franchit la marge haute de 250 px et touche
+# la peau a 668. lean_vibe (Poppins) et lean_craft (Montserrat) le mettent
+# sur deux lignes, 254-666 et 256-664, encore dans les clous. Les trois
+# autres packs tiennent sur une ligne.
+#
+# C'est le MOT le plus long qui decide du retour a la ligne, pas la chaine
+# entiere : « 1 Corinthiens » fait treize caracteres mais se coupe a
+# l'espace. Au-dela de onze lettres d'un seul tenant, le nom est abrege —
+# avec les abreviations d'usage, jamais une troncature inventee.
+MAX_MOT_LIVRE = 11
+_ABREGE: dict[str, str] = {
+    "thessaloniciens": "Thess.",
+    "lamentations": "Lam.",
+}
+
+
+def abrege_livre(livre: str) -> str:
+    """Le nom du livre, abrege seulement si un de ses mots est trop long."""
+    mots_ = str(livre or "").split()
+    if not mots_ or max((len(m) for m in mots_), default=0) <= MAX_MOT_LIVRE:
+        return str(livre or "")
+    return " ".join(_ABREGE.get(_sans_accent(_nu(m)), m) for m in mots_)
+
+
 def _texte(mot) -> str:
     if isinstance(mot, dict):
         return str(mot.get("text") or "")
@@ -292,8 +319,18 @@ VOISINAGE_S = 2.0           # une carte du planner dans cette fenetre = doublon
 
 STYLE = "verse_reference"
 ZONE_PAYSAGE = "landscape-verse"   # tiers droit, 41,7 % de la largeur
-ZONE_PORTRAIT = "portrait-verse-band"    # bandeau bas pleine largeur, la
-                                         # position validee sur la maquette
+ZONE_PORTRAIT = "portrait-verse-top"     # bande haute, hors du visage
+
+# Mesure dans le navigateur, bande haute 250-670, composition reelle :
+#   reference seule      -> carte 301 px, occupe 309-611
+#   + verset 1 ligne     -> carte 417 px, occupe 251-669
+#   + verset 2 lignes    -> carte 519 px, occupe 200-720
+# La peau commence a 668 px au plus haut sur les neuf cadrages du clip de
+# reference. Seule la reference seule laisse une marge — 57 px. Le verset
+# n'est donc pas dessine en portrait : il ne tient pas au-dessus du visage
+# a la taille du sous-titre, et le dessiner plus petit a deja ete refuse.
+PORTRAIT_BAS_CARTE = 611     # bas de la carte reference seule, mesure
+MARGE_PEAU = 20              # hypothese : de quoi ne pas fröler le front
 
 # Mots qui introduisent la citation et n'en font pas partie.
 _AMORCE = frozenset({"dit", "disait", "ecrit", "declare", "says", "said"})
@@ -405,7 +442,9 @@ def citation(mots, a: dict) -> str:
 
 
 def cartes_verset(mots, cartes_existantes, duree: float,
-                  portrait: bool = False) -> tuple[list[dict], list[dict]]:
+                  portrait: bool = False,
+                  face_top_pct: float | None = None,
+                  hauteur: int = 1920) -> tuple[list[dict], list[dict]]:
     """(cartes a ajouter, journal de ce qui a ete decide pour chaque annonce).
 
     Rien n'est modifie : la fonction rend de nouvelles cartes et un journal.
@@ -423,6 +462,19 @@ def cartes_verset(mots, cartes_existantes, duree: float,
     """
     liste = list(mots or [])
     deja = [c for c in (cartes_existantes or []) if c.get("type") != "caption"]
+    # Le visage remonte-t-il dans la bande haute ? Quand la vision a repondu,
+    # on le sait ; sinon on ne pose rien plutot que de risquer de dessiner
+    # sur le visage, ce que KAN a tranche.
+    bloque = ""
+    if portrait:
+        if face_top_pct is None:
+            bloque = ("position du visage inconnue — rien n'est pose en "
+                      "portrait plutot que de risquer le visage")
+        else:
+            _ft = float(face_top_pct) / 100.0 * float(hauteur or 1920)
+            if _ft < PORTRAIT_BAS_CARTE + MARGE_PEAU:
+                bloque = (f"le visage commence a {_ft:.0f} px, la carte "
+                          f"finirait a {PORTRAIT_BAS_CARTE} px")
     out: list[dict] = []
     journal: list[dict] = []
     vus: set[str] = set()
@@ -482,8 +534,12 @@ def cartes_verset(mots, cartes_existantes, duree: float,
             journal.append(note)
             continue
 
+        if bloque:
+            note["decision"] = f"ignoree : {bloque}"
+            journal.append(note)
+            continue
         brut = citation(liste, a)
-        txt = ajuste(brut, portrait)
+        txt = "" if portrait else ajuste(brut, portrait)
         if brut and not txt:
             note["citation_refusee"] = brut
         carte = {
@@ -492,7 +548,7 @@ def cartes_verset(mots, cartes_existantes, duree: float,
             "startSec": round(debut, 3),
             "endSec": round(fin, 3),
             "zone": ZONE_PORTRAIT if portrait else ZONE_PAYSAGE,
-            "contentHints": {"style": STYLE, "verse_book": l1,
+            "contentHints": {"style": STYLE, "verse_book": abrege_livre(l1),
                              "verse_locus": l2, "verse_text": txt},
         }
         out.append(carte)
@@ -501,8 +557,10 @@ def cartes_verset(mots, cartes_existantes, duree: float,
             f"posee {carte['id']} {debut:.1f}-{fin:.1f}s"
             + (f" + citation {len(txt.split())} mots, {len(txt)} car"
                if txt else
-               (f" (reference seule : citation de {len(brut)} car ne tient "
-                f"pas en deux lignes)" if brut else " (reference seule)")))
+               (" (reference seule : en portrait le verset ne tient pas "
+                "au-dessus du visage)" if (brut and portrait) else
+                (f" (reference seule : citation de {len(brut)} car ne tient "
+                 f"pas en deux lignes)" if brut else " (reference seule)"))))
         note["citation"] = txt
         journal.append(note)
     return out, journal
