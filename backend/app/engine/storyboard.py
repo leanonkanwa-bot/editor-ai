@@ -4918,6 +4918,72 @@ def generate_storyboard(
     if format_hint == "long":
         caption_cards = _exclude_captions_against_cards(caption_cards, graphic_cards)
 
+    # ── R3 — the word each card draws its accent on ──────────────────────────
+    # lean_craft's ink line, and every pack's accent swipe, only exist on the
+    # span _split_title_accent() builds, and it builds one only when
+    # contentHints.accent_word is non-empty AND found in the rendered text.
+    # The safety net supplies that word; the planner and GAP-FILL never did.
+    # Measured on job b17a54cc: 7 of 41 cards carried one, while 32 more had a
+    # usable word sitting in their own title.
+    #
+    # Set here and not earlier: the list is final, so a card added by GAP-FILL
+    # or split by RHYTHM-SPLIT gets the same treatment as a planner card, and
+    # a word is never computed for a card that is later dropped.
+    #
+    # Never overwrites a word the model chose. The field is written only when
+    # the word is a verbatim substring of the text the card will draw —
+    # otherwise the span is not built, GSAP aims at a missing element, and the
+    # accent-line fallback is suppressed with it: strictly worse than no word.
+    try:
+        from app.engine.accent import mot_distinctif as _acc_mot
+        from app.engine.accent import table_frequences as _acc_freq
+        _acc_table = _acc_freq(remapped_words)
+        _acc_pose = _acc_deja = _acc_sans = _acc_repris = 0
+        for _gc in graphic_cards:
+            _h = _gc.get("contentHints")
+            if not isinstance(_h, dict):
+                continue
+            # The text this card actually draws: title, else the field its
+            # style stores its prose in (_DATA_ANCHOR_FIELDS, consulted only
+            # when title is empty — same rule the anchoring uses).
+            _txt = str(_h.get("title") or "").strip()
+            if not _txt:
+                _fld = _DATA_ANCHOR_FIELDS.get(_h.get("style", ""), "")
+                _v = _h.get(_fld) if _fld else ""
+                if isinstance(_v, list):
+                    _v = " ".join(str(x) for x in _v)
+                _txt = str(_v or "").strip()
+            _fourni = str(_h.get("accent_word") or "").strip()
+            if _fourni:
+                # A word the model chose is kept — but only if it is really
+                # there. Measured on b17a54cc: 1 of its 7 was not. card-25
+                # carried accent_word="relever" while its title read "Dieu va
+                # utiliser ça", so _split_title_accent() built no span, GSAP
+                # aimed at a missing element, and `if not _accent_in_dom` took
+                # the accent-line fallback away too: the card lost its stroke
+                # and gained nothing. An unusable word is worse than none, so
+                # it is dropped and recomputed.
+                if _fourni.lower() in _txt.lower():
+                    _acc_deja += 1
+                    continue
+                _h.pop("accent_word", None)
+                _acc_repris += 1
+            if not _txt:
+                _acc_sans += 1
+                continue
+            _m = _acc_mot(_txt, _acc_table)
+            if _m and _m.lower() in _txt.lower():
+                _h["accent_word"] = _m
+                _acc_pose += 1
+            else:
+                _acc_sans += 1
+        print(f"[ACCENT] {_acc_pose} mot(s) pose(s), {_acc_deja} garde(s) du "
+              f"modele, {_acc_repris} reprise(s) (mot absent du texte), "
+              f"{_acc_sans} sans mot utilisable "
+              f"(sur {len(graphic_cards)} cartes)", flush=True)
+    except Exception as _acc_exc:
+        print(f"[ACCENT] non pose ({_acc_exc}) — le rendu continue", flush=True)
+
     # NOW the list is final: after GAP-FILL, after RHYTHM-SPLIT, after word
     # anchoring, after caption exclusion. Recorded here, the diagnostic holds
     # the times the renderer uses and the gap-fill cards it draws.

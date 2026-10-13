@@ -2774,75 +2774,21 @@ def inject_safety_cards(
     # of the work; the stop list is there for a short video where a function
     # word happens to be rare, and for deictics ("ici", "chose") that are
     # content-shaped but say nothing on a card.
-    _SN_MOTS_VIDES = frozenset({
-        # fonction, FR
-        "alors", "aussi", "autre", "autres", "avec", "avoir", "bien", "cela",
-        "cette", "ceux", "chez", "comme", "dans", "donc", "elle", "elles",
-        "encore", "etre", "être", "fait", "faire", "faut", "leur", "leurs",
-        "mais", "meme", "même", "moins", "notre", "nous", "parce", "pour",
-        "pourquoi", "quand", "quelque", "quelqu'un", "sans", "sont", "sous",
-        "tous", "tout", "toute", "toutes", "très", "tres", "vais", "veut",
-        "veux", "voir", "vont", "votre", "vous", "était", "etait", "plus",
-        "peut", "dire", "dit", "deja", "déjà", "toujours", "jamais", "juste",
-        # trouvés par le test, pas devinés : une liste écrite à la main a des
-        # trous, et c'est l'assertion « aucun mot d'accent quand aucun mot ne
-        # vaut » qui les montre. "puis" avait été choisi sur un texte qui
-        # n'était que des mots de fonction.
-        "puis", "ensuite", "enfin", "avant", "apres", "après", "depuis",
-        # Adverbes de degré et pronoms seulement. Pas "bonne" ni "cherche" :
-        # ce sont des mots de contenu — "bonne" est le mot central d'une des
-        # vidéos — et c'est la fréquence, pas une liste, qui doit les
-        # déclasser quand ils sont partout.
-        "pendant", "surtout", "vraiment", "beaucoup", "peut-etre",
-        "peut-être", "quoi", "trop",
-        # déictiques et mots fourre-tout : forme de contenu, aucun sens affiché
-        "ici", "chose", "choses", "truc", "trucs", "machin", "ça", "cas",
-        # fonction, EN (une vidéo anglaise passe par le même chemin)
-        "about", "after", "also", "because", "been", "before", "being",
-        "could", "does", "every", "from", "have", "here", "into", "just",
-        "like", "more", "much", "only", "other", "same", "should", "some",
-        "such", "than", "that", "their", "them", "then", "there", "these",
-        "they", "thing", "things", "this", "those", "very", "what", "when",
-        "which", "will", "with", "would", "your",
-    })
+    # Le sélecteur vit dans app/engine/accent.py : le filet, le planner et
+    # tout audit doivent poser la MÊME question. Il était une closure ici, ce
+    # qui obligeait un audit hors ligne à le ré-implémenter — et une
+    # ré-implémentation est d'accord avec elle-même, pas avec le code qui tourne.
+    from app.engine.accent import (
+        mot_distinctif as _accent_mot,
+        ouvre_mal as _accent_ouvre_mal,
+        table_frequences as _accent_freq,
+    )
 
-    def _sn_cle(mot: str) -> str:
-        """The form the frequency count is kept under: case-folded, bare."""
-        return str(mot or "").strip(".,!?…:;«»\"'()[]").casefold()
-
-    # Counted over the whole transcript once, not per card.
-    _sn_freq: dict[str, int] = {}
-    for _w in remapped_words:
-        _k = _sn_cle(getattr(_w, "text", ""))
-        if _k:
-            _sn_freq[_k] = _sn_freq.get(_k, 0) + 1
+    # Comptée une fois sur tout le transcript, pas par carte.
+    _sn_freq = _accent_freq(remapped_words)
 
     def _sn_mot_distinctif(texte: str) -> str:
-        """The rarest real word of this text, returned AS SPELLED in it.
-
-        The surface form matters: _split_title_accent() locates the span with
-        title.lower().find(accent_word.lower()), so a normalised word that is
-        not a substring of the title produces no span and no accent — the
-        failure would be silent and look exactly like having no word at all.
-        """
-        candidats = []
-        for brut in re.findall(r"[0-9A-Za-zÀ-ÿ'’\-]+", str(texte or "")):
-            # French elision: "l'éternel" must offer "éternel", not the
-            # article glued to it — and "éternel" is still a substring of the
-            # title, so the span is found.
-            for part in re.split(r"['’]", brut):
-                if len(part) < 4:
-                    continue
-                cle = _sn_cle(part)
-                if not cle or cle in _SN_MOTS_VIDES:
-                    continue
-                # rarest first; on a tie the longer word, which reads as the
-                # more specific one.
-                candidats.append((_sn_freq.get(cle, 1), -len(part), part))
-        if not candidats:
-            return ""
-        candidats.sort()
-        return candidats[0][2]
+        return _accent_mot(texte, _sn_freq)
 
     # Every text already on screen nearby, cards and captions alike. A fallback
     # that repeats the card next to it is worse than the gap it fills.
@@ -2886,19 +2832,10 @@ def inject_safety_cards(
     # and still read as fragments, every one of them on a preposition or a
     # conjunction — "au point d'avoir…", "que tu as envie…". So a run may not
     # OPEN on one of these, whatever the punctuation before it says.
-    _SN_PAS_EN_TETE = frozenset({
-        "et", "mais", "ou", "donc", "or", "ni", "car", "que", "qu", "qui",
-        "quoi", "dont", "parce", "puisque", "comme", "alors", "ainsi", "puis",
-        "ensuite", "de", "du", "des", "d", "a", "à", "au", "aux", "en", "dans",
-        "sur", "sous", "pour", "par", "avec", "sans", "chez", "vers", "entre",
-        "pendant", "afin", "sinon", "tandis", "lorsque", "quand",
-        "and", "but", "so", "because", "that", "which", "who", "then", "of",
-        "to", "in", "on", "for", "with", "at", "by", "from", "while",
-    })
-
+    # Même raison : la liste des mots qui ne peuvent pas ouvrir une
+    # proposition est dans app/engine/accent.py.
     def _sn_ouvre_mal(mot) -> bool:
-        t = re.sub(r"[^0-9A-Za-zÀ-ÿ]", "", str(getattr(mot, "text", ""))).casefold()
-        return (not t) or t in _SN_PAS_EN_TETE
+        return _accent_ouvre_mal(mot)
 
     def _sn_fin(mot) -> str:
         """'' , ',' or '.' — what kind of boundary this word's end is."""
