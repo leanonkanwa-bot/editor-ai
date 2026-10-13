@@ -20,6 +20,8 @@ returns for an unlisted id is what makes that drift visible instead of silent.
 """
 from __future__ import annotations
 
+import re as _re
+
 # $/1M tokens, (input, output). Exact model ids only — no prefix matching.
 PRIX_PAR_MTOK: dict[str, tuple[float, float]] = {
     "claude-fable-5-1":  (10.00, 50.00),
@@ -37,9 +39,30 @@ PRIX_PAR_MTOK: dict[str, tuple[float, float]] = {
 }
 
 
+#     A dated snapshot — "claude-haiku-4-5-20251001" — is the same model at
+# the same price as its base id, and LLM_EDITORIAL_MODEL defaults to exactly
+# that one (pipeline.py), so without this the cut detector would have printed
+# "tarif inconnu" on every run. Found by the harmlessness test, not by reading.
+#
+# This is a normalisation of Anthropic's own id convention, not the
+# substring-guessing the old table did: only a trailing hyphen followed by
+# exactly eight digits is removed, and the result must then match a listed id
+# exactly. "mon-claude-opus-4-7-perso" still does not match, and neither does
+# "claude-opus-4-7-2026" — which is the test that keeps the two apart.
+_DATE_FINALE = _re.compile(r"-\d{8}$")
+
+
 def prix(modele: str) -> tuple[float, float] | None:
-    """(input, output) $/1M for this exact model id, or None if unlisted."""
-    return PRIX_PAR_MTOK.get(str(modele or "").strip())
+    """(input, output) $/1M for this model id, or None if unlisted.
+
+    Exact match first; then the same id with a trailing -YYYYMMDD snapshot
+    date removed. Nothing else.
+    """
+    m = str(modele or "").strip()
+    p = PRIX_PAR_MTOK.get(m)
+    if p is not None:
+        return p
+    return PRIX_PAR_MTOK.get(_DATE_FINALE.sub("", m))
 
 
 def cout_usd(modele: str, tokens_in: int, tokens_out: int) -> float | None:

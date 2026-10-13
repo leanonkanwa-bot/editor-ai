@@ -149,6 +149,11 @@ def start(job_id: str, phase: int = 2) -> None:
                     "anchor_summary": {},
                     "zoom": [],
                     "stages": [],
+                    # record_usage() would create this lazily; declared here so
+                    # a reader of start() sees everything a job accumulates.
+                    # Keyed by job_id like the rest, so one job's spend can
+                    # never be attributed to another on a reused thread.
+                    "llm_usage": [],
                     "_buf": "",
                 }
                 _by_job[job_id] = d
