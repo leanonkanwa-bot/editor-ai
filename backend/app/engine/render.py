@@ -3701,6 +3701,21 @@ def _render_hyperframes(
         remapped_zoom, format_hint=plan.format,
     )
 
+    # ── R1 — control the plan before spending 45 minutes on it ───────────────
+    # Runs after the net so it sees the final list, and before the render so a
+    # named defect costs 13 s instead of a second pass. Repairs only what is
+    # unambiguous (a text over 12 words); everything else is reported with a
+    # named repair, because demoting or deleting a card shows on screen.
+    try:
+        from app.engine.controle_plan import controle_du_plan, journalise
+        from app.engine.storyboard import _DATA_ANCHOR_FIELDS as _cp_champs
+        journalise(controle_du_plan(
+            storyboard, timing_map.remapped_words, remapped_zoom,
+            timing_map.output_duration, champs_style=_cp_champs,
+        ))
+    except Exception as _cp_exc:
+        print(f"[CONTROLE] non effectue ({_cp_exc}) — le rendu continue", flush=True)
+
     # Re-record AFTER the net: the diagnostic has to describe what was drawn.
     # record_cards() calls itself "the final card list, after every pass" and
     # it was not — it runs in storyboard.py, before this pass — and record_zoom
