@@ -94,6 +94,22 @@ for _c, _v in [
     _enregistre(_c, *_v)
 
 
+# Confusions de transcription connues : ce que le moteur de reconnaissance
+# ecrit, et le livre que le locuteur a reellement dit. Cette table n'est
+# JAMAIS consultee en dehors d'une annonce complete — un declencheur
+# « verset », un chapitre ET un verset. « un roman de 8 cents pages » ne
+# declenche rien et ne passe donc jamais ici.
+#
+# Une seule entree est mesuree : « Le roman 8 verset 28 » dans b17a54cc, ou
+# le locuteur dit Romains 8:28. Les autres seraient des suppositions, et une
+# supposition fausse ecrit un faux verset a l'ecran. La table est faite pour
+# grandir a mesure que des cas sont OBSERVES, pas imagines.
+_CONFUSIONS: dict[str, str] = {
+    "roman": "Romains",      # mesure : b17a54cc, 485,6 s
+    "romans": "Romains",     # meme confusion au pluriel
+}
+
+
 def _texte(mot) -> str:
     if isinstance(mot, dict):
         return str(mot.get("text") or "")
@@ -212,6 +228,15 @@ def annonces(mots) -> list[dict]:
         # la phrase d'avant, jamais un nom de livre.
         livre, reconnu = (normalise_livre(_cherche_livre(liste, i0))
                           if chap_ecrit else ("", False))
+        # La correction des confusions de transcription ne s'applique qu'ici :
+        # annonce complete, chapitre ET verset presents, declencheur
+        # « verset ». Hors de ces trois conditions le mot garde son sens
+        # ordinaire.
+        if (not reconnu and chap is not None and vers is not None
+                and any(k == "vers" for _i, k, _n in g)):
+            _c = _CONFUSIONS.get(_sans_accent(_nu(livre)))
+            if _c:
+                livre, reconnu = _c, True
         out.append({
             "i_debut": i0,
             "i_fin": g[-1][0] + 1,
