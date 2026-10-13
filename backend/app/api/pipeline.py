@@ -570,25 +570,30 @@ Si rien à couper : {{"cuts": [], "kept": []}}"""
         return []
 
     _latency = _time.perf_counter() - _t0
-    _in_tok = response.usage.input_tokens
-    _out_tok = response.usage.output_tokens
     # The table that used to live here priced by looking for "haiku" in the
     # model name and otherwise charged "Sonnet 4.5" rates ($3/$15). The
     # configured model is claude-opus-4-7 ($5/$25), so every cost= line it
     # printed under-reported by a factor of 1.67. The rate now comes from
     # app/core/pricing.py, keyed by the exact model id, and an unlisted model
     # prints "tarif inconnu" instead of a number that is merely plausible.
-    from app.core.pricing import resume as _prix_resume
-    print(
-        f"[LLM-EDIT] model={_model} latency={_latency:.1f}s "
-        f"{_prix_resume(_model, _in_tok, _out_tok)}",
-        flush=True,
-    )
+    #
+    # The WHOLE block is guarded, reads included. It was not: response.usage
+    # was dereferenced outside any try, so a response without a usage object
+    # would have made the cut detection fail — accounting breaking the edit it
+    # is only there to describe. The other four sites were already guarded;
+    # this one was found by walking the AST rather than by reading.
     try:
+        from app.core.pricing import resume as _prix_resume
+        print(
+            f"[LLM-EDIT] model={_model} latency={_latency:.1f}s "
+            f"{_prix_resume(_model, response.usage.input_tokens, response.usage.output_tokens)}",
+            flush=True,
+        )
         from app.engine import card_diag as _cd_u
         _cd_u.record_usage("llm_edit", _model, response.usage)
-    except Exception:
-        pass
+    except Exception as _exc_cout:
+        print(f"[LLM-EDIT] cout non journalise ({_exc_cout}) — la coupe continue",
+              flush=True)
 
     raw = response.content[0].text.strip()
     m = _re.search(r'\{.*\}', raw, _re.DOTALL)
