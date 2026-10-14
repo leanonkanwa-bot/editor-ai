@@ -124,6 +124,14 @@ def _texte_dessine(hints: dict, champs_style: dict | None = None) -> str:
     return str(v or "").strip()
 
 
+def _bornes(carte) -> tuple[float, float] | None:
+    try:
+        s_, e_ = float(carte.get("startSec", 0)), float(carte.get("endSec", 0))
+    except (TypeError, ValueError):
+        return None
+    return (s_, e_) if e_ > s_ else None
+
+
 def _intervalles(cartes) -> list[tuple[float, float]]:
     out = []
     for c in cartes:
@@ -178,7 +186,7 @@ def controle_du_plan(storyboard: dict, mots, zoom, duree: float,
         "cartes": 0, "zones_mortes": [], "sans_texte": [], "texte_invisible": [],
         "trop_longues": [], "condensees": [], "verbatim": [], "sans_accent": [],
         "plein_cadre": 0, "primitives": [], "ecarts_primitives": [],
-        "hors_champ": [],
+        "hors_champ": [], "chevauchements": [], "trop_courtes": [],
     }
     try:
         cartes = [c for c in (storyboard.get("cards") or [])
@@ -265,6 +273,46 @@ def controle_du_plan(storyboard: dict, mots, zoom, duree: float,
         rapport["ecarts_primitives"] = [
             round(float(b.get("startSec", 0)) - float(a.get("startSec", 0)), 1)
             for a, b in zip(prims, prims[1:])]
+        # ── Deux faits geometriques, sans jugement et sans faux positif ──
+        #
+        # Mesure sur b17a54cc : card-34 et card-35 sont toutes deux dans
+        # landscape-tl, se recouvrent 0,58 s, et pendant ce temps « Ton desir
+        # ne doit pas devenir ta maison » et « Reviens vers Dieu » se
+        # superposent dans le meme coin. Aucune regle ne le voyait.
+        #
+        # Et card-35 ne dure que 1,72 s la ou ENDSEC-CLAMP promet 3,0 s.
+        # hors_champ ne couvrait que ce que la FIN DE LA VIDEO cause : une
+        # carte courte a l'interieur de la video n'etait signalee par rien.
+        _ordre = sorted(
+            (c for c in cartes if _bornes(c) is not None),
+            key=lambda c: _bornes(c)[0])
+        for _i, _a in enumerate(_ordre):
+            _as, _ae = _bornes(_a)
+            for _b in _ordre[_i + 1:]:
+                _bs, _be = _bornes(_b)
+                if _bs >= _ae - 0.01:
+                    break                      # tries : plus rien ne touche
+                _za, _zb = _a.get("zone"), _b.get("zone")
+                # Sans zone connue, deux None se vaudraient et chaque
+                # chevauchement temporel deviendrait un faux defaut.
+                if not _za or not _zb or _za != _zb:
+                    continue                   # zones differentes ou inconnues
+                rapport["chevauchements"].append(
+                    (str(_a.get("id", "?")), str(_b.get("id", "?")),
+                     str(_a.get("zone", "?")), round(min(_ae, _be) - _bs, 2)))
+        for _c in cartes:
+            _b2 = _bornes(_c)
+            if _b2 is None:
+                continue
+            _cs, _ce = _b2
+            if duree > 0 and _ce > duree:
+                continue                       # deja dit par hors_champ
+            _pl = 3.5 if style_de(_c) in _MULTI_ITEM else 3.0
+            if _ce - _cs < _pl - 0.01:
+                rapport["trop_courtes"].append(
+                    (str(_c.get("id", "?")), style_de(_c),
+                     round(_ce - _cs, 2), _pl))
+
         rapport["zones_mortes"] = _zones_mortes(cartes, zoom, duree)
     except Exception as exc:                        # noqa: BLE001
         rapport["erreur"] = f"{type(exc).__name__}: {exc}"
@@ -304,6 +352,15 @@ def journalise(rapport: dict) -> None:
             print(f"[CONTROLE] DEFAUT {cid} : {s_}-{e_}s depasse la video "
                   f"({quoi}) — reparation : recaler ou supprimer (a decider)",
                   flush=True)
+        for a, b, zone, ov in rapport.get("chevauchements", []):
+            print(f"[CONTROLE] DEFAUT {a} et {b} se superposent {ov}s dans la "
+                  f"meme zone {zone} — reparation : raccourcir la premiere, "
+                  f"retarder la seconde, ou changer sa zone (a decider)",
+                  flush=True)
+        for cid, style, vu, pl in rapport.get("trop_courtes", []):
+            print(f"[CONTROLE] DEFAUT {cid} ({style}) : {vu}s a l'ecran pour "
+                  f"un plancher de {pl}s — reparation : etendre ou retirer "
+                  f"(a decider)", flush=True)
         for a, b in rapport.get("zones_mortes", []):
             print(f"[CONTROLE] DEFAUT zone morte {a:.1f}-{b:.1f}s "
                   f"({b-a:.1f}s) — le filet aurait du la couvrir", flush=True)
