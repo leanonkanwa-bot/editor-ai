@@ -2793,6 +2793,45 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append(f'  margin-top: 12px; text-align: center; max-width: 90%;')
         parts.append(f'  line-height: 1.5; overflow-wrap: break-word; word-break: break-word;')
         parts.append('}')
+    # Quote: une citation se LIT, elle ne frappe pas.
+    #
+    # Jusqu'ici `quote` tombait dans le cas general — le commentaire du
+    # builder le disait lui-meme : « key_phrase, quote and any unknown
+    # style ». Mesure : 15 cartes `quote` et 26 `key_phrase` sur 112, soit
+    # 37 % des cartes pour UN seul rendu. Le planner distinguait deux
+    # intentions, le moteur n'en dessinait qu'une.
+    #
+    # La taille ne se deduit pas d'un ratio : elle est calee sur le
+    # sous-titre du meme format, que captions.py calcule a 42 px * (hauteur
+    # / 1080) — 42 px en paysage, 74 px en portrait. La carte verset avait
+    # ete refusee pour avoir ete sizee a l'oeil ; pas deux fois.
+    if content_style == "quote":
+        _q_txt = "74px" if layout == "portrait" else "42px"
+        _q_mark = "132px" if layout == "portrait" else "76px"
+        _q_attr = "40px" if layout == "portrait" else "23px"
+        # Le guillemet est un ELEMENT, pas un caractere tape dans le texte :
+        # il ne compte pas dans les mots, ne part pas dans le diagnostic et
+        # n'est pas lu par l'ancrage ni par le mot d'accent.
+        parts.append(f'.card[data-card-id="{card_id}"] .qt-mark {{')
+        parts.append(f'  font-family: {p["font"]}; font-size: {_q_mark};')
+        parts.append(f'  font-weight: {p["font_weight"]}; color: {p["accent"]};')
+        parts.append('  line-height: .72; opacity: .9; display: block;')
+        parts.append('  margin-bottom: -.06em;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .qt-text {{')
+        parts.append(f'  font-family: {p.get("font_detail", p["font"])};')
+        parts.append(f'  font-size: {_q_txt}; font-weight: 400;')
+        parts.append('  font-style: italic; line-height: 1.34;')
+        parts.append(f'  color: {p["text"]}; max-width: 34ch;')
+        parts.append('  overflow-wrap: break-word; word-break: break-word;')
+        parts.append('  opacity: 0;')
+        parts.append('}')
+        parts.append(f'.card[data-card-id="{card_id}"] .qt-attr {{')
+        parts.append(f'  font-family: {p["font"]}; font-size: {_q_attr};')
+        parts.append(f'  font-weight: {p["font_weight"]}; color: {p["text_secondary"]};')
+        parts.append('  letter-spacing: .06em; text-transform: uppercase;')
+        parts.append('  opacity: 0;')
+        parts.append('}')
     # Verse reference: the book on one line, the chapter:verse under it, the
     # ink line, then the quotation. The reference is the hero — a listener who
     # hears "Levitique 26 verset 44" wants to SEE 26:44, not read a paragraph.
@@ -5110,6 +5149,37 @@ def _build_graphic_card_html(card: dict, pack: dict | None = None, compact: bool
         parts.append('</div>')
         parts.append('</div>')
         return "\n".join(parts)
+    # Quote : panneau propre, pour que le filet tombe ENTRE la citation et
+    # l'attribution. Le guillemet et l'attribution sont des elements a part.
+    if content_style == "quote":
+        _q_corps = str(display_text or title or "").strip().strip('"\u201c\u201d')
+        _q_attr_txt = str(hints.get("attribution") or detail or "").strip()
+        _q_attr_txt = _q_attr_txt.lstrip("\u2014- ").strip()
+        parts.append('<div class="root">')
+        parts.append('  <div class="card-panel">')
+        if kicker:
+            parts.append(f'    <div class="kicker" id="{card_id}-kicker">{_esc(kicker)}</div>')
+        parts.append(f'    <div class="qt-mark" id="{card_id}-qt-mark">&#8220;</div>')
+        # id generique : la branche `quote` de la timeline anime deja
+        # #{card_id}-title, avec ses variantes cinema et ledger. Lui donner
+        # un id a part laissait le texte a opacity:0 — le tween visait un
+        # element disparu et la carte sortait VIDE a l'ecran.
+        parts.append(f'    <div class="qt-text" id="{card_id}-title">'
+                     f'{_split_title_accent(_q_corps, accent_word_hint, card_id)}</div>')
+        parts.append(f'    <div class="accent-line" id="{card_id}-line"></div>')
+        if _q_attr_txt:
+            parts.append(f'    <div class="qt-attr" id="{card_id}-qt-attr">'
+                         f'{_esc(_q_attr_txt)}</div>')
+        parts.append(f'    <div class="shimmer-mask" id="{card_id}-shimmer"></div>')
+        if p.get("id") == "lean_glass":
+            parts.append(f'    <div class="edge-light" id="{card_id}-edge"></div>')
+        if p.get("id") == "lean_cinema":
+            parts.append(f'    <div class="cine-bar cine-bar-top" id="{card_id}-bar-top"></div>')
+            parts.append(f'    <div class="cine-bar cine-bar-bottom" id="{card_id}-bar-bot"></div>')
+        parts.append('  </div>')
+        parts.append('</div>')
+        parts.append('</div>')
+        return chr(10).join(parts)
     # Verse reference: own panel so the ink line sits BETWEEN the reference
     # and the quotation, where the mock puts it, instead of being appended at
     # the bottom by the generic builder. Same element and same id, so the
@@ -7065,6 +7135,25 @@ def _build_timeline_js(
                         f'{{ opacity: 0, y: 40 }}, '
                         f'{{ opacity: 1, y: 0, duration: 0.500, ease: _eIn }}, '
                         f'{t_in:.4f});'
+                    )
+                # Le guillemet pose le ton avant la citation,
+                # l'attribution ferme. Deux elements propres au style.
+                _qm = f'.card[data-card-id="{card_id}"] #{card_id}-qt-mark'
+                lines.append(
+                    f'  tl.fromTo(\'{_qm}\', '
+                    f'{{ opacity: 0, scale: .82 }}, '
+                    f'{{ opacity: .9, scale: 1, duration: 0.300, ease: _eIn }}, '
+                    f'{max(0.0, t_in - 0.12):.4f});'
+                )
+                if str((card.get("contentHints") or {}).get("attribution")
+                       or (card.get("contentHints") or {}).get("detail")
+                       or "").strip():
+                    _qa = f'.card[data-card-id="{card_id}"] #{card_id}-qt-attr'
+                    lines.append(
+                        f'  tl.fromTo(\'{_qa}\', '
+                        f'{{ opacity: 0 }}, '
+                        f'{{ opacity: 1, duration: 0.280, ease: _eIn }}, '
+                        f'{t_in + 0.52:.4f});'
                     )
             elif content_style == "comparison":
                 left_sel = f'.card[data-card-id="{card_id}"] #{card_id}-left'
@@ -10173,7 +10262,10 @@ def _build_timeline_js(
             # it has one, so a word present in the title but absent from
             # take_text would pass here and leave GSAP tweening an element
             # _split_title_accent() never built.
-            if content_style == "contrarian_take":
+            if content_style == "quote":
+                _display_ref = (_ch_ref.get("title", "")
+                                or _ch_ref.get("text", ""))
+            elif content_style == "contrarian_take":
                 _display_ref = _ch_ref.get("take_text") or _ch_ref.get("title", "")
             elif content_style == "definition":
                 _display_ref = _ch_ref.get("term") or _ch_ref.get("title", "")
