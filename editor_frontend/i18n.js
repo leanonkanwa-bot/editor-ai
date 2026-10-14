@@ -37,16 +37,11 @@
       hero_title1: "Monteur vidéo. Stratège rétention. Motion designer.",
       hero_glow: "Le tout en un : LeanRetention.",
       hero_sub: "Glisse ta vidéo brute. Reçois en moins de 10 minutes une version montée, capée, visualisée — prête à poster.",
-      demo_context: "La même vidéo. Avant LeanRetention. Après.",
-      demo_before_caption: "Vidéo brute · hésitations · silences non coupés",
-      demo_after_caption: "Captions · graphics synchronisés",
       hero_cta1: "Éditer ma première vidéo →",
       hero_cta2: "Voir comment ça marche",
       trust_free: "Première vidéo gratuite",
       trust_no_card: "Sans carte bancaire",
       trust_time: "Résultats en 3 minutes",
-      demo_before: "Avant",
-      demo_after: "Après",
 
       // ── EMAIL CAPTURE ─────────────────────────────────────────────────────────
       email_title: "Obtiens ta première vidéo éditée gratuitement",
@@ -268,11 +263,6 @@
       trust_free: "First video free",
       trust_no_card: "No credit card required",
       trust_time: "Results in 3 minutes",
-      demo_before: "Before",
-      demo_after: "After",
-      demo_context: "The same video. Before LeanRetention. After.",
-      demo_before_caption: "Raw footage · hesitations · uncut silences",
-      demo_after_caption: "Captions · synced graphics",
 
       // ── EMAIL CAPTURE ─────────────────────────────────────────────────────────
       email_title: "Get your first video edited for free",
