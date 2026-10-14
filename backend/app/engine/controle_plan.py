@@ -373,3 +373,126 @@ def journalise(rapport: dict) -> None:
               f"(budget non applique — R2 non valide)", flush=True)
     except Exception:
         pass
+
+
+# ── Les reparations ──────────────────────────────────────────────────────────
+#
+# R1 est un controle : il nomme. Mais deux de ses defauts se reparent sans
+# juger de rien, parce que la reparation ne change aucun texte et ne retire
+# aucune carte — elle rend a la carte la duree que le moteur lui promet deja,
+# ou la deplace dans un coin libre.
+#
+# Le format court est exclu. Sur un clip de 24 s, une carte de 2,5 s n'est pas
+# un defaut mais une consequence du format : mesure sur l'export, 24 des 28
+# cartes sous le plancher sont sur des clips de moins de 30 s. Le seuil de
+# 120 s est une hypothese, pas une mesure.
+DUREE_MINI_REPARATION = 120.0
+
+# Zones de repli, par hauteur. Mesure dans le navigateur : au-dela de douze
+# mots une carte depasse une zone de 300 px et demande une variante haute.
+_ZONES_REPLI_COURT = ("landscape-tl", "landscape-tr",
+                      "landscape-cl", "landscape-cr")
+_ZONES_REPLI_LONG = ("landscape-tl-tall", "landscape-tr-tall")
+_ZONES_REPLI_PORTRAIT = ("upper-left-data-sm", "upper-data",
+                         "portrait-bottom-left", "portrait-bottom-right")
+MAX_MOTS_ZONE_COURTE = 12
+
+
+def _libre(zone: str, debut: float, fin: float, cartes, sauf_id: str) -> bool:
+    """Cette zone est-elle libre sur TOUT l'intervalle, pas juste au debut ?"""
+    for c in cartes:
+        if str(c.get("id", "")) == sauf_id or c.get("zone") != zone:
+            continue
+        b = _bornes(c)
+        if b and b[0] < fin - 0.01 and b[1] > debut + 0.01:
+            return False
+    return True
+
+
+def repare_le_plan(storyboard: dict, duree: float, rapport: dict,
+                   portrait: bool = False) -> list[dict]:
+    """Applique les reparations sures et rend la liste de ce qui a change.
+
+    Ne retire jamais une carte, ne change jamais un texte, ne deplace jamais
+    une carte dans le temps : une carte qui bouge dans le temps quitte le mot
+    qu'elle commente, ce que le rejeu de R6 a montre.
+    """
+    faits: list[dict] = []
+    try:
+        if float(duree or 0) < DUREE_MINI_REPARATION:
+            return faits
+        cartes = [c for c in (storyboard.get("cards") or [])
+                  if c.get("type") != "caption"]
+        par_id = {str(c.get("id", "")): c for c in cartes}
+        dernier = max(cartes, key=lambda c: float(c.get("startSec", 0)),
+                      default=None)
+
+        # Le chevauchement n'est PAS repare, et la mesure dit pourquoi.
+        # compose ecrete deja la premiere carte juste avant le debut de la
+        # seconde — « WARNING: graphic overlap — card-34.endSec clamped
+        # 532.360 -> 531.779 » — donc rien ne se superpose a l'ecran. Et cet
+        # ecretage est GLOBAL, pas par zone : deplacer la seconde carte
+        # ailleurs ne rend pas une seconde a la premiere. Mesure, card-34
+        # joue 2,418 s avec ou sans le deplacement.
+        #
+        # Le defaut reste reel, mais ce n'est pas une superposition : c'est
+        # une carte silencieusement raccourcie sous son plancher. Il est
+        # nomme par le controle, pas repare ici.
+        for a, b, zone, ov in rapport.get("chevauchements", []):
+            ca = par_id.get(a)
+            bb = _bornes(ca) if ca else None
+            if bb is None:
+                continue
+            cb = par_id.get(b)
+            bs = _bornes(cb)[0] if cb and _bornes(cb) else bb[1]
+            print(f"[CONTROLE] {a} sera ecretee a {bs - bb[0]:.2f}s par "
+                  f"{b} ({ov}s de recouvrement au plan) — le deplacer ne "
+                  f"rend rien, l'ecretage de compose est global", flush=True)
+
+        # Les cartes trop courtes.
+        for cid, style, vu, pl in rapport.get("trop_courtes", []):
+            c = par_id.get(cid)
+            bb = _bornes(c) if c else None
+            if bb is None:
+                continue
+            s_, e_ = bb
+            voulu = s_ + pl
+            # Le butoir est celui de compose : il ecrete contre la carte
+            # suivante QUELLE QUE SOIT sa zone. Le calculer par zone
+            # surestimait le gain — card-04 annoncait 3,00 s et n'en jouait
+            # que 2,64, bornee par une carte d'une autre zone.
+            butoir = min(
+                [x[0] for x in (_bornes(o) for o in cartes
+                                if str(o.get("id", "")) != cid)
+                 if x and x[0] > s_],
+                default=float("inf"))
+            fin = min(voulu, butoir - 0.01, float(duree))
+            if fin <= e_ + 0.01:
+                print(f"[CONTROLE] {cid} fait {vu}s et ne peut pas s'etendre "
+                      f"(carte suivante ou fin de video) — laisse tel quel",
+                      flush=True)
+                continue
+            cause = ("la fin de la video" if voulu > duree >= fin
+                     else "la carte suivante" if voulu > butoir - 0.01
+                     else f"le plancher de {pl}s")
+            faits.append({"carte": cid, "cause": f"{vu}s a l'ecran",
+                          "action": "etendue", "limite": cause,
+                          "avant": {"endSec": round(e_, 3),
+                                    "duree": round(e_ - s_, 2)},
+                          "apres": {"endSec": round(fin, 3),
+                                    "duree": round(fin - s_, 2)}})
+            print(f"[CONTROLE] REPARE {cid} ({style}) : {vu}s -> "
+                  f"{fin - s_:.2f}s (borne par {cause})"
+                  + ("  — derniere carte, jamais retiree"
+                     if dernier is not None and c is dernier else ""),
+                  flush=True)
+            c["endSec"] = round(fin, 3)
+    except Exception as exc:                        # noqa: BLE001
+        print(f"[CONTROLE] reparations non appliquees ({exc}) — "
+              f"le rendu continue", flush=True)
+    try:
+        from app.engine import card_diag as _cd
+        _cd.record_reparations(faits)
+    except Exception:
+        pass
+    return faits

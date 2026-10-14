@@ -3708,12 +3708,25 @@ def _render_hyperframes(
     # unambiguous (a text over 12 words); everything else is reported with a
     # named repair, because demoting or deleting a card shows on screen.
     try:
-        from app.engine.controle_plan import controle_du_plan, journalise
+        from app.engine.controle_plan import (
+            controle_du_plan, journalise, repare_le_plan,
+        )
         from app.engine.storyboard import _DATA_ANCHOR_FIELDS as _cp_champs
-        journalise(controle_du_plan(
+        _cp_rapport = controle_du_plan(
             storyboard, timing_map.remapped_words, remapped_zoom,
             timing_map.output_duration, champs_style=_cp_champs,
-        ))
+        )
+        journalise(_cp_rapport)
+        # Les reparations sures : rendre a une carte la duree que le moteur
+        # lui promet deja, et sortir une carte superposee d'un coin occupe.
+        # Aucun texte change, aucune carte retiree, aucun deplacement dans
+        # le temps — une carte qui bouge dans le temps quitte le mot qu'elle
+        # commente.
+        repare_le_plan(
+            storyboard, timing_map.output_duration, _cp_rapport,
+            portrait=((storyboard.get("composition") or {}).get("layout")
+                      == "portrait"),
+        )
     except Exception as _cp_exc:
         print(f"[CONTROLE] non effectue ({_cp_exc}) — le rendu continue", flush=True)
 

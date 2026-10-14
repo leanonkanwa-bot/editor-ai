@@ -177,6 +177,21 @@ def record_anchor_moves(moves: list[dict], summary: dict | None = None) -> None:
         pass
 
 
+def record_reparations(reparations: list[dict]) -> None:
+    """Ce que le controle du plan a change, et pourquoi.
+
+    Une reparation se voit a l'ecran : elle doit se relire apres coup, avec
+    l'etat d'avant a cote de l'etat d'apres.
+    """
+    try:
+        d = getattr(_local, "d", None)
+        if d is None:
+            return
+        d["reparations"] = reparations
+    except Exception:
+        pass
+
+
 def record_cards_before_anchor(cards: list[dict]) -> None:
     """The planner's own times, kept so the two can be compared.
 
