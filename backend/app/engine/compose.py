@@ -13,6 +13,7 @@ Follows the graphic-overlays SKILL.md composition template exactly:
 """
 from __future__ import annotations
 
+import json
 import shutil
 from pathlib import Path
 from typing import Any
@@ -225,6 +226,34 @@ _DATA_PANEL_TYPES = {"stat", "list", "comparison", "checklist", "score", "trend"
     "milestone_recap", "content_calendar", "client_result_number",
     "mistake_lesson", "tool_comparison", "weekly_review", "audience_question"}
 _CENTER_ZONES = {"fullscreen", "video-overlay"}
+# Zone courte -> sa variante haute. Une carte qui deborde sa zone y passe,
+# si la variante est libre sur tout son intervalle. Mesure dans le navigateur
+# sur b17a54cc : trois cartes debordent, toutes en hauteur et toutes dans une
+# zone de 300 px — card-24 a 343 px, card-26 a 459 px, card-31 a 321 px — et
+# les trois tiennent dans 500 px.
+def controle_debordement_actif() -> bool:
+    """CARD_OVERFLOW_CHECK coupe la mesure ET la reparation du debordement.
+
+    Lu a chaque appel, pas une fois a l'import : une variable changee sur
+    Railway doit prendre effet au redemarrage du service, sans renvoyer de
+    code. Coupe, la page composee est identique a ce qu'elle etait avant
+    l'ajout de la regle — l'attribut data-zone disparait avec le script.
+    """
+    import os
+    return str(os.environ.get("CARD_OVERFLOW_CHECK", "1")).strip().lower() \
+        not in ("0", "false", "no", "off", "")
+
+
+_VARIANTE_HAUTE = {
+    "landscape-tl": "landscape-tl-tall",
+    "landscape-tr": "landscape-tr-tall",
+    "landscape-cl": "landscape-tl-tall",
+    "landscape-cr": "landscape-tr-tall",
+    "upper-data": "upper-right-data-tall",
+    "upper-right": "upper-right-data-tall",
+    "upper-left-data-sm": "upper-left-data",
+}
+
 _SIDE_PANEL_ZONES = {"side-panel", "side-panel-left", "side-panel-right", "side-panel-top", "upper-data", "upper-right", "upper-left-data", "upper-left-data-sm", "upper-right-data-tall", "landscape-verse", "portrait-verse-top", "portrait-bottom-left", "portrait-bottom-right", "portrait-center-left", "portrait-center-right", "landscape-tl", "landscape-tr", "landscape-cl", "landscape-cr", "landscape-cf", "landscape-tl-tall", "landscape-tr-tall"}
 # Zones where the backdrop-dim overlay fires — card overlaps the speaker face.
 # Portrait centre zones added as safety net: backdrop-dim fires IN ADDITION to
@@ -545,7 +574,10 @@ def _build_card_host(card: dict, layout: str, track_index: int, pack: dict | Non
 
     card_host = (
         f'<div class="card-host clip" data-card-id="{card_id}" '
-        f'data-start="{start:.3f}" data-duration="{duration:.3f}" '
+        # L'attribut ne sort que si la regle est active : coupee, la page
+        # composee doit etre identique a ce qu'elle etait avant elle.
+        + (f'data-zone="{zone}" ' if controle_debordement_actif() else '')
+        +         f'data-start="{start:.3f}" data-duration="{duration:.3f}" '
         f'data-track-index="{track_index}" '
         f'style="left:{bounds["left"]}px;top:{bounds["top"]}px;'
         f'width:{bounds["width"]}px;height:{bounds["height"]}px;'
@@ -10538,6 +10570,120 @@ def _grain_svg(pack: dict) -> str:
     }.get(grain_type, _GRAIN_SVG)
 
 
+_JS_DEBORDEMENT = chr(10) + r'''<script>
+try {
+(function () {
+  // R1c — la carte qui deborde sa zone.
+  //
+  // Un controle a l'ecriture du plan ne peut pas le savoir : le balayage l'a
+  // montre, la limite depend du style ET de la repartition du texte entre les
+  // champs — 8 mots pour un callout, 10 pour une quote, 14 pour un
+  // cause_effect, dans la meme zone de 300 px. Une regle au nombre de mots se
+  // tromperait dans les deux sens.
+  //
+  // La mesure se fait donc ici, une fois le texte mis en page et avant que la
+  // timeline ne joue. On ne retire ni ne raccourcit jamais : la carte passe
+  // dans la variante haute de sa zone, ou rien ne bouge et le defaut est dit.
+  var HAUTES = __HAUTES__;
+
+  function boite(h) {
+    var d = h.dataset, s = parseFloat(d.start) || 0;
+    return [s, s + (parseFloat(d.duration) || 0)];
+  }
+
+  function libre(nom, a, b, moi) {
+    var hs = document.querySelectorAll('.card-host');
+    for (var i = 0; i < hs.length; i++) {
+      var h = hs[i];
+      if (h === moi || h.dataset.zone !== nom) continue;
+      var o = boite(h);
+      if (o[0] < b - 0.01 && o[1] > a + 0.01) return false;
+    }
+    return true;
+  }
+
+  function timelines() {
+    var t = window.__timelines || {}, out = [];
+    for (var k in t) if (t.hasOwnProperty(k)) out.push(t[k]);
+    return out;
+  }
+
+  // Mesurer au chargement ne suffit pas : certaines cartes ne prennent leur
+  // hauteur definitive qu'une fois la timeline jouee. Mesure, card-26
+  // faisait 459 px a son milieu et passait inapercue a t=0. On avance donc
+  // la timeline sur le milieu de CHAQUE carte, puis on la remet a zero.
+  window.__reparerDebordements = function () {
+   try {
+    var hs = document.querySelectorAll('.card-host'), n = 0, vus = 0;
+    var tls = timelines();
+    for (var i = 0; i < hs.length; i++) {
+      var h = hs[i], p = h.querySelector('.card-panel');
+      if (!p) continue;
+      var bm = boite(h), mid = (bm[0] + bm[1]) / 2;
+      for (var k = 0; k < tls.length; k++) {
+        try { tls[k].seek(mid); } catch (e) {}
+      }
+      var ph = p.scrollHeight, pw = p.scrollWidth;
+      var hh = h.clientHeight, hw = h.clientWidth;
+      if (ph <= hh + 1 && pw <= hw + 1) continue;
+      vus++;
+      var id = h.dataset.cardId, zone = h.dataset.zone, v = HAUTES[zone];
+      var ou = ' (' + pw + 'x' + ph + ' dans ' + hw + 'x' + hh + ')';
+      if (!v) {
+        console.log('[CONTROLE] DEFAUT ' + id + ' deborde ' + zone + ou +
+                    ' - aucune variante haute pour cette zone');
+        continue;
+      }
+      var bb = boite(h);
+      if (!libre(v.nom, bb[0], bb[1], h)) {
+        console.log('[CONTROLE] DEFAUT ' + id + ' deborde ' + zone + ou +
+                    ' - ' + v.nom + ' occupee sur son intervalle, laisse tel quel');
+        continue;
+      }
+      h.style.left = v.left + 'px';
+      h.style.top = v.top + 'px';
+      h.style.width = v.width + 'px';
+      h.style.height = v.height + 'px';
+      h.dataset.zone = v.nom;
+      n++;
+      console.log('[CONTROLE] REPARE ' + id + ' : debordait ' + zone + ou +
+                  ' -> ' + v.nom + ' (' + v.width + 'x' + v.height + ')');
+    }
+    for (var z = 0; z < tls.length; z++) {
+      try { tls[z].seek(0); } catch (e) {}   // la timeline repart de zero
+    }
+    if (vus) console.log('[CONTROLE] ' + vus + ' debordement(s), ' + n + ' repare(s)');
+    return n;
+   } catch (e) {
+    // Une mesure ratee ne doit JAMAIS emporter le rendu ni la timeline :
+    // on remet la timeline a zero si on le peut, on le dit, et on s'arrete.
+    try {
+      var r = timelines();
+      for (var q = 0; q < r.length; q++) { try { r[q].seek(0); } catch (e2) {} }
+    } catch (e3) {}
+    console.log('[CONTROLE] ECHEC mesure (' + (e && e.message ? e.message : e)
+                + ') — le rendu continue');
+    return 0;
+   }
+  };
+
+  function lancer() {
+    try { window.__reparerDebordements(); }
+    catch (e) {
+      console.log('[CONTROLE] ECHEC mesure (' + (e && e.message ? e.message : e)
+                  + ') — le rendu continue');
+    }
+  }
+  if (document.readyState === 'complete') lancer();
+  else window.addEventListener('load', lancer);
+})();
+} catch (e) {
+  console.log('[CONTROLE] ECHEC mesure (' + (e && e.message ? e.message : e)
+              + ') — le rendu continue');
+}
+</script>'''
+
+
 def compose(
     storyboard: dict,
     trimmed_video: Path,
@@ -10939,6 +11085,17 @@ def compose(
             )
     all_cards = _rendered_cards
 
+    # R1c — la carte qui deborde sa zone, mesuree dans la page et non devinee.
+    # Le script est inerte quand rien ne deborde : il ne fait que lire des
+    # boites. Voir le commentaire en tete du script pour le pourquoi.
+    _zb = _ZONE_BOUNDS_PORTRAIT if layout == "portrait" else _ZONE_BOUNDS_LANDSCAPE
+    _hautes = {k: dict(_zb[v], nom=v)
+               for k, v in _VARIANTE_HAUTE.items() if v in _zb and k in _zb}
+    debordement_js = (
+        _JS_DEBORDEMENT.replace("__HAUTES__", json.dumps(_hautes))
+        if controle_debordement_actif() else ""
+    )
+
     # Build master timeline
     timeline_js = _build_timeline_js(all_cards, zoom_entries=zoom_entries, subject_position=subject_position, pack=pack, layout=layout, video_pos_x=_video_pos_x, face_cx=_face_cx, vert_scale=_vert_scale, vert_origin_y=_vert_origin_y_pct)
 
@@ -11022,7 +11179,7 @@ def compose(
 
 {chr(10).join(f"    {host}" for host in card_hosts)}
 
-    <script src="vendor/gsap.min.js"></script>
+    <script src="vendor/gsap.min.js"></script>{debordement_js}
     <script>
 {timeline_js}
     </script>
