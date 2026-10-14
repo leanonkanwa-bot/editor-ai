@@ -3651,6 +3651,32 @@ def _render_hyperframes(
             flush=True,
         )
 
+    # ── R4 — des zooms qui ont un role ───────────────────────────────────
+    # Six sortes de mouvement cohabitaient sans qu'aucune ne dise pourquoi
+    # elle etait la. Trois roles les remplacent, chacun avec une intention,
+    # et chaque entree est calee sur l'attaque d'un mot plutot que sur un
+    # temps rond. ZOOM_ROLES=0 revient au plan precedent sans renvoyer de
+    # code.
+    try:
+        from app.engine import zoom_roles as _zr
+        if _zr.actif():
+            _zr_cartes = (storyboard.get("cards") or []) if storyboard else []
+            _zr_avant = list(remapped_zoom)
+            _zr_plan = _zr.plan_par_roles(
+                timing_map.remapped_words, _zr_cartes,
+                timing_map.output_duration, energie=energy_profile,
+            )
+            if _zr_plan:
+                _zr.journalise(_zr_avant, _zr_plan, _zr_cartes,
+                               timing_map.output_duration)
+                remapped_zoom = _zr_plan
+            else:
+                print("[ZOOM-ROLES] aucun plan produit — ancien plan conserve",
+                      flush=True)
+    except Exception as _zr_exc:
+        print(f"[ZOOM-ROLES] non applique ({_zr_exc}) — le rendu continue",
+              flush=True)
+
     # Seal all temporal gaps with zero-delta holds so the FFmpeg if(between())
     # expression never falls back to default_zoom (1.3) between breath tweens.
     remapped_zoom = _fill_zoom_gaps_with_holds(remapped_zoom, timing_map.output_duration)
