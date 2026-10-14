@@ -21,3 +21,16 @@ backend/replicate/
 # Local-only deploy secrets. ACTIVE_CHECK_TOKEN lets the push guard ask
 # production whether it is busy; it must never reach the repository.
 .secrets/
+
+# ── Images et captures de travail ────────────────────────────────────────
+# Elles montrent le visage d'une personne dont l'accord n'a pas ete obtenu.
+# Regles ciblees, pas un *.png global : les assets du site (previews/,
+# public/) doivent rester suivis.
+/*.png
+/*.jpg
+/*.jpeg
+/*.mov
+!editor_frontend/public/*.png
+!editor_frontend/previews/*
+backend/tools/maquette_verset.html
+backend/tools/pcf_preview.html
