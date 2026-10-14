@@ -173,6 +173,44 @@ def _chrome_glyph(language: str | None, key: str, glyph: str) -> str:
     return f"{glyph} {_esc(label)}" if label else glyph
 
 
+def recadrage_vertical(face_cy: float) -> tuple[float, float]:
+    """(echelle, origine Y en %) du recadrage vertical en portrait.
+
+    Une seule definition, lue par le rendu ET par qui a besoin de savoir ou
+    le visage atterrit dans le cadre de sortie. Recopiee ailleurs, elle
+    divergerait : la carte verset s'est deja posee en croyant le visage a
+    384 px la ou le moteur l'avait descendu a 642.
+    """
+    if abs(face_cy - 50.0) <= 5.0:
+        return 1.0, 50.0
+    if face_cy >= 50.0:
+        return min(2.0, 0.5 / max(0.01, 1.0 - face_cy / 100.0)), 100.0
+    return min(2.0, 0.5 / max(0.01, face_cy / 100.0)), 0.0
+
+
+def projette_y_sortie(y_pct_source: float, face_cy: float,
+                      hauteur: int = 1920) -> float:
+    """Ou un point du cadre SOURCE atterrit dans le cadre portrait, en px.
+
+    La projection verticale est 1:1 avant recadrage : object-fit:cover d'un
+    16:9 vers un 9:16 n'a aucun debordement vertical, tout le deversement
+    est horizontal. Mesure sur le clip de reference : la peau commence a
+    36,0 % dans la source et a 34,8 % dans la composition, soit 23 px
+    d'ecart sur 1920 — du bruit de detection, pas un decalage.
+
+    Reste le recadrage vertical, que le moteur applique pour centrer le
+    locuteur et qui, lui, deplace vraiment le visage.
+    """
+    h = float(hauteur or 1920)
+    y = float(y_pct_source) / 100.0 * h
+    ech, org = recadrage_vertical(face_cy)
+    if org == 0.0:
+        return y * ech
+    if org == 100.0:
+        return h - (h - y) * ech
+    return y
+
+
 def _zone_bounds(zone: str, layout: str) -> dict:
     table = _ZONE_BOUNDS_PORTRAIT if layout == "portrait" else _ZONE_BOUNDS_LANDSCAPE
     return table.get(zone, table["lower-third"])
@@ -10644,13 +10682,9 @@ def compose(
     # Cap at 1.5× to limit visible zoom; uncapped formula: 0.5/(1-face_cy/100).
     _vert_scale = 1.0
     _vert_origin_y_pct = 50.0
-    if layout == "portrait" and abs(_face_cy - 50.0) > 5.0:
-        if _face_cy >= 50.0:
-            _vert_scale = min(2.0, 0.5 / max(0.01, 1.0 - _face_cy / 100.0))
-            _vert_origin_y_pct = 100.0
-        else:
-            _vert_scale = min(2.0, 0.5 / max(0.01, _face_cy / 100.0))
-            _vert_origin_y_pct = 0.0
+    if layout == "portrait":
+        _vert_scale, _vert_origin_y_pct = recadrage_vertical(_face_cy)
+    if layout == "portrait" and _vert_scale > 1.005:
         print(
             f"[COMPOSE] vertical-reframe: face_cy={_face_cy:.1f}%"
             f" scale={_vert_scale:.3f} origin_y={_vert_origin_y_pct:.0f}%",

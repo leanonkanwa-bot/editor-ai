@@ -441,9 +441,33 @@ def citation(mots, a: dict) -> str:
     return " ".join(coupe).rstrip(",;:") + "…"
 
 
+def haut_visage_sortie(subject_position: dict | None,
+                       hauteur: int = 1920) -> float | None:
+    """Ou le haut du visage atterrit dans le cadre portrait, en pixels.
+
+    face_top_pct est un pourcentage du cadre SOURCE : la vision analyse une
+    image de la video d'origine. Le prendre pour un pourcentage du cadre de
+    sortie etait faux de deux facons, et seule la seconde comptait. La
+    projection verticale est bien 1:1 — mesure sur le clip de reference,
+    36,0 % dans la source contre 34,8 % dans la composition, 23 px d'ecart
+    sur 1920. Mais le moteur applique ensuite un recadrage vertical pour
+    centrer le locuteur, et CELUI-LA descend le visage : mesure sur les
+    quatorze jobs de l'export, il repousse le haut du visage de 524 a 642 px
+    sur huit d'entre eux. Les ignorer retirait la carte sur 14 jobs sur 14.
+    """
+    sp = subject_position or {}
+    ft = sp.get("face_top_pct")
+    if ft is None:
+        return None
+    from app.engine.compose import projette_y_sortie
+    fb = float(sp.get("face_bottom_pct", 65.0))
+    face_cy = max(20.0, min(80.0, (float(ft) + fb) / 2))
+    return projette_y_sortie(float(ft), face_cy, hauteur)
+
+
 def cartes_verset(mots, cartes_existantes, duree: float,
                   portrait: bool = False,
-                  face_top_pct: float | None = None,
+                  subject_position: dict | None = None,
                   hauteur: int = 1920) -> tuple[list[dict], list[dict]]:
     """(cartes a ajouter, journal de ce qui a ete decide pour chaque annonce).
 
@@ -467,14 +491,13 @@ def cartes_verset(mots, cartes_existantes, duree: float,
     # sur le visage, ce que KAN a tranche.
     bloque = ""
     if portrait:
-        if face_top_pct is None:
+        _ft = haut_visage_sortie(subject_position, hauteur)
+        if _ft is None:
             bloque = ("position du visage inconnue — rien n'est pose en "
                       "portrait plutot que de risquer le visage")
-        else:
-            _ft = float(face_top_pct) / 100.0 * float(hauteur or 1920)
-            if _ft < PORTRAIT_BAS_CARTE + MARGE_PEAU:
-                bloque = (f"le visage commence a {_ft:.0f} px, la carte "
-                          f"finirait a {PORTRAIT_BAS_CARTE} px")
+        elif _ft < PORTRAIT_BAS_CARTE + MARGE_PEAU:
+            bloque = (f"le visage arrive a {_ft:.0f} px dans le cadre de "
+                      f"sortie, la carte finirait a {PORTRAIT_BAS_CARTE} px")
     out: list[dict] = []
     journal: list[dict] = []
     vus: set[str] = set()
