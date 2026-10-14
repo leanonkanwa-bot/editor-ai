@@ -481,7 +481,7 @@
             </p>
           </div>
         </div>
-        <div class="lp-packs" id="lpPacks" style="display:none">
+        <div class="lp-packs" id="lpPacks">
           <div class="lp-packs-label">Style visuel</div>
           <div class="lp-packs-grid">
             <button type="button" class="lp-pack active" data-pack="lean_cinema">
@@ -1552,7 +1552,8 @@
     function askSignIn(file) {
       drop.style.display = 'none';
       uploading.style.display = '';
-      packsEl.style.display = 'none';
+      // Le selecteur de packs reste visible : depuis le retrait du bloc
+      // avant/apres il est la vitrine du hero, plus seulement un reglage.
       formatEl.style.display = 'none';
       submitEl.style.display = 'none';
       var nm = document.getElementById('lpFileName');
@@ -1663,7 +1664,8 @@
         drop.style.display = '';
         uploading.style.display = 'none';
         submitEl.style.display = 'none';
-        packsEl.style.display = 'none';
+        // idem : le masquer ici le faisait disparaitre pour de bon apres
+        // une erreur, alors qu'il etait visible au chargement.
         formatEl.style.display = 'none';
       });
     }
