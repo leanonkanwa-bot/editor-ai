@@ -4407,11 +4407,33 @@ def generate_storyboard(
             # card earlier, so only "too early" was ever corrected.
             _new_start = _matched - _ANCHOR_LEAD_S
             _floor = _prev_end + 0.05
+            # Le plancher n'avait pas de borne haute. Pousse derriere une
+            # carte qui finit pres de la fin, une carte demarrait APRES la
+            # fin de la video, et le plancher de 3,0 s ci-dessous l'y
+            # enfoncait : sur 4e5b4dbf (6,08 s), 6,28 + 0,05 = 6,33 puis
+            # 6,33 + 3,0 = 9,33 — jamais affichee. Invisible en format long,
+            # ou aucune carte ne finit pres de la fin ; cinq jobs courts sur
+            # treize en portaient une.
+            from app.engine.fin_video import MIN_VU_S as _FV_MIN
+            if _floor > trimmed_duration - _FV_MIN:
+                print(
+                    f"[STORYBOARD] {('DATA-ANCHOR' if _used_data_fallback else 'TITLE-ANCHOR')}"
+                    f" card {_gc.get('id','?')} NON deplacee — la caler apres"
+                    f" la carte precedente ({_prev_end:.2f}s) la sortirait de"
+                    f" la video ({trimmed_duration:.2f}s)",
+                    flush=True,
+                )
+                _prev_end = max(_prev_end,
+                                float(_gc.get("endSec", _gc.get("startSec", 0))))
+                continue
             _clamped = _new_start < _floor
             _new_start = max(_new_start, _floor, 0.0)
             _gc["startSec"] = round(_new_start, 3)
             if float(_gc.get("endSec", 0)) < _gc["startSec"] + 1.5:
-                _gc["endSec"] = round(_gc["startSec"] + 3.0, 3)
+                # Borne a la duree : le plancher de 3,0 s pouvait depasser la
+                # fin meme quand le depart, lui, tenait dedans.
+                _gc["endSec"] = round(min(_gc["startSec"] + 3.0,
+                                          trimmed_duration), 3)
             _anchor_tag = "DATA-ANCHOR" if _used_data_fallback else "TITLE-ANCHOR"
             _dir = "BACK" if _delta < 0 else "FWD"
             _anchor_moves.append(_gc["startSec"] - _orig_start)
@@ -5095,6 +5117,18 @@ def generate_storyboard(
               f"{len(_vrs_new)} carte(s) posee(s)", flush=True)
     except Exception as _vrs_exc:
         print(f"[VERSET] non pose ({_vrs_exc}) — le rendu continue", flush=True)
+
+    # ── La fin de video, en dernier ───────────────────────────────────────
+    # La correction a la source ne suffit pas : d'autres passes deplacent des
+    # cartes (RHYTHM-SPLIT, le verset, le filet cote render) et aucune ne
+    # revalide la duree. Ici la liste est finie, donc c'est le seul endroit
+    # ou la garde peut etre vraie pour toutes.
+    try:
+        from app.engine import fin_video as _fv
+        _fv.journalise(_fv.cale_dans_la_duree(graphic_cards, trimmed_duration))
+    except Exception as _fv_exc:                              # noqa: BLE001
+        print(f"[FIN-VIDEO] non applique ({_fv_exc}) — le rendu continue",
+              flush=True)
 
     # NOW the list is final: after GAP-FILL, after RHYTHM-SPLIT, after word
     # anchoring, after caption exclusion. Recorded here, the diagnostic holds
