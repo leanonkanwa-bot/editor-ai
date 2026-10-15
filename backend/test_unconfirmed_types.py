@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from app.engine.compose import (
     _LEAN_GLASS, _LEAN_PAPER, _LEAN_VIBE,
     _LEAN_LEDGER, _LEAN_CRAFT, _LEAN_CINEMA,
-    _build_graphic_card_html, _build_timeline_js,
+    _build_graphic_card_html, _build_timeline_js, _build_card_host,
 )
 
 PACKS = {
@@ -125,8 +125,16 @@ for style, card in CARDS.items():
     print(f"── {style} ──────────────────────────────────────────────────────")
     for pack_name, pack in PACKS.items():
         try:
-            html = _build_graphic_card_html(card, pack=pack)
-            js   = _build_timeline_js([card], pack=pack)
+            # Le HTML doit venir de la MEME porte que le JS.
+            # _build_graphic_card_html ne rend que le FRAGMENT interieur :
+            # le scrim portrait est emis par l'enveloppe _build_card_host.
+            # Comparer le JS de la page a ce fragment faisait manquer
+            # {card_id}-scrim sur 3 types x 6 packs = 18 echecs, alors que
+            # les deux conditions sont identiques dans le code
+            # (layout == "portrait" and type != "caption").
+            _LAYOUT = "portrait"      # le defaut de _build_timeline_js
+            html = _build_card_host(card, _LAYOUT, 1, pack=pack)
+            js   = _build_timeline_js([card], pack=pack, layout=_LAYOUT)
         except Exception as exc:
             check(f"{pack_name} — render", False, f"EXCEPTION: {exc}")
             continue
@@ -167,7 +175,7 @@ try:
     combined_cards = list(CARDS.values())
     combined_js    = _build_timeline_js(combined_cards, pack=_LEAN_GLASS)
     for style_key, card in CARDS.items():
-        combined_html = _build_graphic_card_html(card, pack=_LEAN_GLASS)
+        combined_html = _build_card_host(card, "portrait", 1, pack=_LEAN_GLASS)
         refs = js_targets(combined_js)
         ids  = html_ids(combined_html)
         miss = refs & {r for r in refs if r.startswith(CARD_ID + "-")} - ids

@@ -71,12 +71,23 @@ ws_ct = words([
 
 anchor = _find_trigger_anchor(card_ct, ws_ct)
 check("anchor returns a value", anchor is not None, True)
-check("anchor ≈ 4.00 - 0.20 = 3.80s", anchor, 3.80, approx=True)
+# Derive de la constante, pas recopie : _ANCHOR_LEAD_S est passe de 0,20
+# a 0,32 avec 63f7582 (ancrage des cartes long-format sur leurs mots), et
+# ce test importait la constante tout en codant 3,80 en dur.
+check(f"anchor ≈ 4.00 - {_ANCHOR_LEAD_S} = {4.00 - _ANCHOR_LEAD_S:.2f}s",
+      anchor, round(4.00 - _ANCHOR_LEAD_S, 2), approx=True)
 # Offset reduction: was 4.00 - 1.00 = 3.0s early; now 4.00 - 3.80 = 0.20s (just the lead)
 check("anchored startSec moved forward from sentence-start (1.00s)", anchor != 1.00, True)
 # After anchoring, grounding window covers [3.30, 6.80] → "impopulaire"@4.0 is inside
 card_ct_anchored = dict(card_ct, startSec=anchor)
-overlap_after = _grounding_overlap(card_ct_anchored, ws_ct)
+# AVEC la langue. Sans elle, _grounding_overlap retombe sur l'anglais et ne
+# retire pas les mots-outils francais : « Le SEO est completement mort,
+# c'est impopulaire mais vrai » donnait 8 jetons dont « le », « est »,
+# « mais », soit 3/8 = 0,375, sous le seuil de 0,40. En francais : 5 jetons,
+# 2/5 = 0,400, qui passe. Les deux appelants de production passent la
+# langue (storyboard.py:4560 et :4891) — c'etait le test qui ne la passait
+# pas, et il mesurait donc un francais juge en anglais.
+overlap_after = _grounding_overlap(card_ct_anchored, ws_ct, "fr")
 check("grounding overlap ≥ threshold AFTER anchoring", overlap_after >= _GROUNDING_OVERLAP_THRESHOLD, True)
 
 print()
@@ -148,8 +159,11 @@ for style, field, trigger, ws_pairs in type_cases:
 
 print()
 
-# ── 5. Trigger keyword exactly at window boundary (startSec + 6.0s) ───────────
-print("5. keyword at boundary startSec + 6.0s — should be included")
+# ── 5. Trigger keyword exactly at the window boundary ────────────────────────
+# La borne vient de _ANCHOR_SEARCH_FORWARD_S, qui vaut 10,0 s. Le test
+# codait 6,0 s en dur alors qu'il importe la constante.
+_BORNE = _ANCHOR_SEARCH_FORWARD_S
+print(f"5. keyword at boundary startSec + {_BORNE}s — should be included")
 
 card_edge = {
     "id": "ce", "startSec": 1.00, "endSec": 5.00,
@@ -158,15 +172,17 @@ card_edge = {
         "secret_text": "formule secrète révélation",
     },
 }
-ws_edge = words([("voici", 1.0), ("formule", 7.0)])  # "formule" at 1.0 + 6.0 = 7.0s
+_T_BORD = 1.0 + _BORNE
+ws_edge = words([("voici", 1.0), ("formule", _T_BORD)])
 anchor_edge = _find_trigger_anchor(card_edge, ws_edge)
-check("keyword at +6.0s boundary is found", anchor_edge is not None, True)
-check("anchor ≈ 7.0 - 0.20 = 6.80s", anchor_edge, 6.80, approx=True)
+check(f"keyword at +{_BORNE}s boundary is found", anchor_edge is not None, True)
+check(f"anchor ≈ {_T_BORD} - {_ANCHOR_LEAD_S} = {_T_BORD - _ANCHOR_LEAD_S:.2f}s",
+      anchor_edge, round(_T_BORD - _ANCHOR_LEAD_S, 2), approx=True)
 
 print()
 
-# ── 6. keyword beyond window (startSec + 6.1s) → None ────────────────────────
-print("6. keyword beyond +6.0s window → None (too late to be same sentence)")
+# ── 6. keyword beyond the window → None ──────────────────────────────────────
+print(f"6. keyword beyond +{_BORNE}s window → None (too late to be same sentence)")
 
 card_far = {
     "id": "cf", "startSec": 1.00, "endSec": 5.00,
@@ -175,9 +191,10 @@ card_far = {
         "secret_text": "formule secrète révélation",
     },
 }
-ws_far = words([("voici", 1.0), ("formule", 7.2)])   # beyond 1.0 + 6.0
+ws_far = words([("voici", 1.0), ("formule", 1.0 + _BORNE + 0.2)])
 anchor_far = _find_trigger_anchor(card_far, ws_far)
-check("keyword at +6.1s is NOT found (beyond window)", anchor_far, None)
+check(f"keyword at +{_BORNE + 0.2}s is NOT found (beyond window)",
+      anchor_far, None)
 
 print()
 

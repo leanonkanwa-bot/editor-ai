@@ -19,11 +19,29 @@ WORK_ROOT = Path("/data/work")
 
 def find_job_dir(job_id: str | None) -> Path:
     if job_id:
+        # Un chemin complet est accepte tel quel : sans cela, le seul moyen
+        # de jouer le test etait d'avoir /data/work, donc d'etre dans le
+        # conteneur.
+        _p = Path(job_id)
+        if _p.is_dir():
+            return _p
         d = WORK_ROOT / job_id
         if not d.is_dir():
             sys.exit(f"ERROR: {d} does not exist")
         return d
 
+    # WORK_ROOT n'existe que dans le conteneur. Hors de la, iterdir levait
+    # un FileNotFoundError brut : le test paraissait casse alors qu'il
+    # manquait seulement ses donnees. On le dit, comme
+    # test_zone_timing_audit le fait deja.
+    if not WORK_ROOT.is_dir():
+        sys.exit(
+            f"IMPOSSIBLE A JOUER ICI : {WORK_ROOT} n'existe pas.\n"
+            "Ce test lit un repertoire de travail reel, qui ne vit que dans\n"
+            "le conteneur. Donnez-lui un chemin :\n"
+            "    python test_compose.py /chemin/vers/un/job_dir\n"
+            "Ce n'est pas un echec du code : il n'y a rien a mesurer."
+        )
     candidates = [d for d in WORK_ROOT.iterdir() if d.is_dir()]
     if not candidates:
         sys.exit(f"ERROR: no job dirs found under {WORK_ROOT}")
