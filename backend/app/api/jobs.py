@@ -278,17 +278,34 @@ class JobStore:
         cutoff = time.time() - max_age_hours * 3600
         with self._lock:
             expired = [j for j in self._jobs.values() if j.trashed_at is not None and j.trashed_at < cutoff]
+        # Les SIX familles, pas quatre. _narrative.txt et _report.pdf
+        # etaient oublies, donc chaque job purge laissait deux fichiers
+        # derriere lui, pour toujours. La liste vient de
+        # nettoyage_outputs.SUFFIXES, unique endroit ou elle est tenue :
+        # deux listes separees, c'est ainsi que les deux s'etaient perdus.
+        try:
+            from app.core.nettoyage_outputs import SUFFIXES as _SUF
+        except Exception:                                     # noqa: BLE001
+            _SUF = (".mp4", "_landscape.mp4", "_thumb.jpg", "_cards.json",
+                    "_narrative.txt", "_report.pdf")
+        _n_fichiers = 0
         for job in expired:
-            out = settings.outputs_dir / f"{job.id}.mp4"
-            thumb = settings.outputs_dir / f"{job.id}_thumb.jpg"
-            landscape = settings.outputs_dir / f"{job.id}_landscape.mp4"
-            cards = settings.outputs_dir / f"{job.id}_cards.json"
-            for path in (out, thumb, landscape, cards):
+            for _suf in _SUF:
+                _p = settings.outputs_dir / f"{job.id}{_suf}"
                 try:
-                    path.unlink(missing_ok=True)
-                except OSError:
-                    pass
+                    if _p.exists():
+                        _p.unlink()
+                        _n_fichiers += 1
+                except OSError as _exc:
+                    # Dit, plutot qu'avale : un fichier qu'on n'arrive pas a
+                    # supprimer reste sur le volume et personne ne le savait.
+                    print(f"[TRASH] {_p.name} non supprime ({_exc})",
+                          flush=True)
             self.delete(job.id)
+        if expired:
+            print(f"[TRASH] {len(expired)} job(s) purge(s), "
+                  f"{_n_fichiers} fichier(s) supprime(s) sur "
+                  f"{len(expired) * len(_SUF)} possibles", flush=True)
         return len(expired)
 
     def count_for_profile(self, profile_id: str, period: str) -> int:
