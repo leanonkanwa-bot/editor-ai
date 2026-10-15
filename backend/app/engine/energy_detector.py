@@ -18,6 +18,9 @@ from app.engine.transcribe import FFMPEG_PATH, FFPROBE_PATH
 
 
 _WINDOW_S = 3.0  # seconds per energy window
+# Frequence imposee a l'analyse. `reset` compte des echantillons :
+# sans elle, la fenetre depend de la source et la grille derive.
+_TAUX_ANALYSE = 44100
 
 
 @dataclass
@@ -58,7 +61,16 @@ class EnergyDetector:
                 [
                     FFMPEG_PATH, "-y", "-loglevel", "error",
                     "-i", str(media_path),
-                    "-af", f"astats=metadata=1:reset={int(_WINDOW_S * 44100)},"
+                    # aresample en TETE de chaine : `reset` compte des
+                    # echantillons, donc la fenetre ne vaut _WINDOW_S que si
+                    # la frequence est celle supposee. Le clip de reference
+                    # est a 48 kHz et la fenetre faisait 2,756 s au lieu de
+                    # 3,0 — un ecart de 8 % qui desalignait la grille de
+                    # reset des seaux de 3,0 s utilises comme cles.
+                    # Reechantillonner coute moins qu'un sondage ffprobe et
+                    # rend la fenetre exacte quelle que soit la source.
+                    "-af", f"aresample={_TAUX_ANALYSE},"
+                           f"astats=metadata=1:reset={int(_WINDOW_S * _TAUX_ANALYSE)},"
                            f"ametadata=print:file={stats_path}",
                     "-f", "null", "-",
                 ],
