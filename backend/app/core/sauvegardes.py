@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import shutil
 import time
 from pathlib import Path
 
@@ -47,10 +48,42 @@ NIVEAU = 6
 # A ~183 Ko par job (mesure sur 14 jobs reels), 179 jobs font ~33 Mo, soit
 # ~3,4 Mo comprime. Vingt instantanes tiennent dans 70 Mo.
 GARDE = 20
+# Plafond ABSOLU, mais il n'est pas le seul : voir budget(). Un plafond fixe
+# serait raisonnable sur un gros volume et deraisonnable sur un petit, et je
+# ne peux pas lire la taille du volume Railway sans deployer d'abord quelque
+# chose qui la rapporte. On le rend donc relatif a la place reelle.
 BUDGET_OCTETS = 250 * 1024 * 1024
+# Part maximale de la place TOTALE du volume que les sauvegardes peuvent
+# prendre. Le volume porte surtout des videos sources et des sorties : les
+# sauvegardes doivent rester une ligne de detail, pas un poste.
+PART_DU_VOLUME = 0.02
+# Et on s'arrete net s'il ne reste presque plus rien, quelle que soit la part.
+PLANCHER_LIBRE = 1024 * 1024 * 1024
 REFERENCE = "jobs-reference.json.gz"
 _PREFIXE = "jobs-"
 _SUFFIXE = ".json.gz"
+
+
+def place(chemin: Path | None = None) -> tuple[int, int]:
+    """(libre, total) en octets sur le volume, ou (-1, -1) si illisible."""
+    try:
+        u = shutil.disk_usage(str(chemin or FICHIER.parent))
+        return u.free, u.total
+    except OSError:
+        return -1, -1
+
+
+def budget() -> int:
+    """Le poids maximal des instantanes glissants, adapte au volume.
+
+    Le plus petit des deux : le plafond absolu, et une part de la taille
+    totale du volume. Si la place est illisible, on retombe sur le plafond
+    absolu — ne pas savoir ne doit pas supprimer la borne.
+    """
+    _, total = place()
+    if total <= 0:
+        return BUDGET_OCTETS
+    return min(BUDGET_OCTETS, int(total * PART_DU_VOLUME))
 
 
 def _nombre_de_jobs(octets: bytes) -> int | None:
@@ -87,19 +120,20 @@ def _glissants() -> list[Path]:
 def _rotation() -> int:
     """Supprime les instantanes en trop. Ne touche jamais la reference.
 
-    Deux bornes : le nombre (GARDE) et le poids total (BUDGET_OCTETS). Le
-    plus recent n'est jamais supprime, meme s'il excede le budget a lui
-    seul — sans quoi un fichier devenu enorme ne serait plus sauvegarde
-    du tout.
+    Deux bornes : le nombre (GARDE) et le poids total (budget(), qui suit
+    la taille du volume). Le plus recent n'est jamais supprime, meme s'il
+    excede le budget a lui seul — sans quoi un fichier devenu enorme ne
+    serait plus sauvegarde du tout.
     """
     retires = 0
+    plafond = budget()
     glissants = _glissants()
     while len(glissants) > GARDE:
         glissants.pop(0).unlink(missing_ok=True)
         retires += 1
     while len(glissants) > 1:
         poids = sum(p.stat().st_size for p in glissants if p.exists())
-        if poids <= BUDGET_OCTETS:
+        if poids <= plafond:
             break
         glissants.pop(0).unlink(missing_ok=True)
         retires += 1
@@ -136,6 +170,16 @@ def instantane(raison: str) -> Path | None:
         _t = time.time()
         horo = (time.strftime("%Y%m%d-%H%M%S", time.gmtime(_t))
                 + f".{int(_t * 1000) % 1000:03d}")
+
+        libre, total = place()
+        if 0 <= libre < PLANCHER_LIBRE:
+            # Ecrire une sauvegarde sur un volume presque plein pourrait
+            # faire echouer un rendu en cours. La reference deja ecrite
+            # reste la : on saute ce passage, on ne supprime rien.
+            print(f"[SAUVEGARDE] sautee — il ne reste que "
+                  f"{libre / 1e6:.0f} Mo libres sur {total / 1e9:.1f} Go",
+                  flush=True)
+            return None
         etat = "illisible" if n is None else f"{n}jobs"
         cible = DOSSIER / f"{_PREFIXE}{horo}-{raison}-{etat}{_SUFFIXE}"
         comprime = gzip.compress(brut, NIVEAU)
@@ -153,10 +197,18 @@ def instantane(raison: str) -> Path | None:
             print(f"[SAUVEGARDE] reference portee a {n} jobs", flush=True)
 
         retires = _rotation()
+        # La place est journalisee a chaque passage : c'est la seule facon
+        # de connaitre la taille reelle du volume /data sans y deployer une
+        # route exprès, et de voir le plafond s'y adapter.
+        _occupe = sum(g.stat().st_size for g in _glissants() if g.exists())
         print(
             f"[SAUVEGARDE] {cible.name} — {len(brut) / 1e6:.1f} Mo -> "
             f"{len(comprime) / 1e6:.1f} Mo"
-            + (f", {retires} ancien(s) retire(s)" if retires else ""),
+            + (f", {retires} ancien(s) retire(s)" if retires else "")
+            + f" · {len(_glissants())} copie(s) pour {_occupe / 1e6:.0f} Mo"
+            f" / plafond {budget() / 1e6:.0f} Mo"
+            + (f" · volume {libre / 1e9:.1f} Go libres sur "
+               f"{total / 1e9:.1f} Go" if total > 0 else " · volume inconnu"),
             flush=True,
         )
         return cible
