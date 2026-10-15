@@ -57,8 +57,13 @@ BUDGET_OCTETS = 250 * 1024 * 1024
 # prendre. Le volume porte surtout des videos sources et des sorties : les
 # sauvegardes doivent rester une ligne de detail, pas un poste.
 PART_DU_VOLUME = 0.02
-# Et on s'arrete net s'il ne reste presque plus rien, quelle que soit la part.
-PLANCHER_LIBRE = 1024 * 1024 * 1024
+# Place exigee avant d'ecrire. Proportionnelle a ce qu'on ecrit, pas un
+# chiffre rond : un plancher absolu de 1 Go refusait une ecriture de 3,4 Mo
+# alors qu'il restait 999 Mo libres — c'est-a-dire qu'il eteignait les
+# sauvegardes au moment ou elles comptent le plus. Le facteur 3 laisse la
+# place du fichier temporaire, de sa version finale, et une marge.
+PLANCHER_LIBRE = 100 * 1024 * 1024
+FACTEUR_MARGE = 3
 REFERENCE = "jobs-reference.json.gz"
 _PREFIXE = "jobs-"
 _SUFFIXE = ".json.gz"
@@ -171,18 +176,21 @@ def instantane(raison: str) -> Path | None:
         horo = (time.strftime("%Y%m%d-%H%M%S", time.gmtime(_t))
                 + f".{int(_t * 1000) % 1000:03d}")
 
+        # On comprime AVANT de decider : la place exigee depend de la
+        # taille reelle de ce qu'on s'apprete a ecrire.
+        comprime = gzip.compress(brut, NIVEAU)
         libre, total = place()
-        if 0 <= libre < PLANCHER_LIBRE:
-            # Ecrire une sauvegarde sur un volume presque plein pourrait
-            # faire echouer un rendu en cours. La reference deja ecrite
-            # reste la : on saute ce passage, on ne supprime rien.
-            print(f"[SAUVEGARDE] sautee — il ne reste que "
-                  f"{libre / 1e6:.0f} Mo libres sur {total / 1e9:.1f} Go",
-                  flush=True)
+        exige = max(PLANCHER_LIBRE, len(comprime) * FACTEUR_MARGE)
+        if 0 <= libre < exige:
+            # Un volume vraiment sature : ecrire pourrait faire echouer un
+            # rendu en cours. La reference deja ecrite reste la, et on ne
+            # supprime rien.
+            print(f"[SAUVEGARDE] sautee — {libre / 1e6:.0f} Mo libres, "
+                  f"{exige / 1e6:.0f} Mo exiges pour une copie de "
+                  f"{len(comprime) / 1e6:.1f} Mo", flush=True)
             return None
         etat = "illisible" if n is None else f"{n}jobs"
         cible = DOSSIER / f"{_PREFIXE}{horo}-{raison}-{etat}{_SUFFIXE}"
-        comprime = gzip.compress(brut, NIVEAU)
         tmp = cible.with_suffix(".tmp")
         tmp.write_bytes(comprime)
         tmp.replace(cible)
