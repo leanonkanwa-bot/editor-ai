@@ -46,6 +46,45 @@ ACTIVE_STATUSES = _ACTIVE_STATUSES
 INTERRUPT_MESSAGE = "Serveur redémarré - veuillez re-uploader votre vidéo"
 
 
+def _mets_de_cote(pourquoi: str) -> None:
+    """Ecarte un jobs.json illisible au lieu de le laisser etre ecrase.
+
+    Sans cela, _load sortait en silence sur un fichier illisible : les jobs
+    restaient vides en memoire, et le premier create() reecrivait jobs.json
+    avec le seul job neuf. L'historique partait sans une ligne de journal —
+    c'est le mecanisme par lequel on perd 179 videos.
+
+    On RENOMME plutot que copier : apres le renommage, JOBS_FILE n'existe
+    plus, donc le premier create() ecrit un fichier neuf sans rien effacer.
+    Les octets d'origine survivent sous un nom horodate, a cote du fichier.
+    Ne leve jamais : un echec ici ne doit pas empecher le service de
+    demarrer, mais il est dit.
+    """
+    horo = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+    cible = JOBS_FILE.with_name(f"jobs-illisible-{horo}.json")
+    try:
+        taille = JOBS_FILE.stat().st_size
+    except OSError:
+        taille = -1
+    print(f"[JOBS] ILLISIBLE — {pourquoi}", flush=True)
+    try:
+        i = 2
+        while cible.exists():
+            cible = JOBS_FILE.with_name(f"jobs-illisible-{horo}-{i}.json")
+            i += 1
+        JOBS_FILE.rename(cible)
+        print(f"[JOBS] ILLISIBLE — {taille} octets mis de cote sous "
+              f"{cible.name} ; le fichier n'est PAS ecrase. Restauration : "
+              f"backend/tools/outil_sauvegardes.py liste", flush=True)
+    except OSError as exc:
+        # Le renommage a echoue : le fichier est toujours la, donc le
+        # premier create() l'ecraserait. On le dit fort plutot que de
+        # laisser croire que tout va bien.
+        print(f"[JOBS] ILLISIBLE — ECHEC de la mise de cote ({exc}). Le "
+              f"fichier reste en place et le prochain create() L'ECRASERA. "
+              f"L'instantane de demarrage reste la seule copie.", flush=True)
+
+
 @dataclass
 class Job:
     id: str
@@ -107,9 +146,12 @@ class JobStore:
                   f"({_exc_sauv}) — le chargement continue", flush=True)
         try:
             data = json.loads(JOBS_FILE.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+        except (OSError, json.JSONDecodeError) as _exc_lecture:
+            _mets_de_cote(f"{type(_exc_lecture).__name__}: {_exc_lecture}")
             return
         if not isinstance(data, dict):
+            _mets_de_cote(f"le contenu est un {type(data).__name__}, "
+                          f"pas un dictionnaire de jobs")
             return
         for jid, jd in data.items():
             if not isinstance(jd, dict):
