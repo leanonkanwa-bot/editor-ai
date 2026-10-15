@@ -4735,7 +4735,11 @@ def generate_storyboard(
 
     # ── Gap-fill: targeted second LLM calls for speech deserts ───────────────
     # After the dead-zone audit we know exactly which spans lack card coverage.
-    # For each qualifying gap (≥ 20s, ≥ 25 speech words) we fire a focused call
+    # For each qualifying gap we fire a focused call. The thresholds are
+    # the ones passed below — 12.0s and 15 words, not the 20s/25 words
+    # this comment claimed: _find_fill_gaps defaults to 20/25 but every
+    # caller overrides them, so the comment described the signature
+    # rather than the call.
     # that sees only that passage and may abstain (returns None/{}). Each survivor
     # runs the full quality chain identical to main cards.
     from math import ceil as _math_ceil

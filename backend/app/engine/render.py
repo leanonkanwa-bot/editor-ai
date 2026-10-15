@@ -2729,6 +2729,16 @@ def inject_safety_cards(
     # as a list rather than handled inline so the count is reportable — a
     # window silently skipped is a dead zone nobody can see in a log.
     _sn_sans_phrase: list[tuple[float, float, list]] = []
+    # Fenetres qu'une passe a examinees et laissees sans rien. Gardees
+    # BRUTES, une entree par position du balayage : le filtre de fin doit
+    # juger chaque fenetre separement. Fusionner d'abord et tester ensuite
+    # est faux — un seul mouvement d'une seconde faisait passer une zone
+    # fusionnee de 27 s pour couverte. On fusionne donc apres le filtre,
+    # pour l'affichage seulement.
+    _sn_vides: list[tuple[float, float, str]] = []
+
+    def _sn_note_vide(ws: float, we: float, pourquoi: str) -> None:
+        _sn_vides.append((ws, we, pourquoi))
 
     def _sn_has_card(ws: float, we: float) -> bool:
         """Is something READABLE on screen in this window?"""
@@ -2978,10 +2988,12 @@ def inject_safety_cards(
         _sn_ce = round(min(_sn_ce, _sn_cs + _SAFETY_MAX_DUR_S,
                            output_duration), 3)
         if _sn_ce - _sn_cs < 2.0:
+            _sn_note_vide(_sn_ws, _sn_we, "creneau trop court")
             continue
 
         _sn_text = " ".join(w.text for w in _sn_words).strip()
         if not _sn_text:
+            _sn_note_vide(_sn_ws, _sn_we, "aucun texte")
             continue
 
         _sn_dup = _sn_doublon(_sn_cs, _sn_ce, _sn_text)
@@ -2990,6 +3002,7 @@ def inject_safety_cards(
                 f"[SAFETY-NET] t={_sn_ws:.1f}→{_sn_we:.1f}s — skipped, {_sn_dup}",
                 flush=True,
             )
+            _sn_note_vide(_sn_ws, _sn_we, "doublon")
             continue
 
         # The window has no READABLE card, but a text-less one may still be
@@ -3000,6 +3013,7 @@ def inject_safety_cards(
                 f" slot is taken by a text-less card, skipped",
                 flush=True,
             )
+            _sn_note_vide(_sn_ws, _sn_we, "creneau pris par une carte muette")
             continue
 
         # 90s style rotation — no repeat within window
@@ -3114,6 +3128,7 @@ def inject_safety_cards(
         if _ze - _zs < 1.0:
             print(f"[SAFETY-NET] t={_ws:.1f}→{_we:.1f}s — ni phrase, ni mot,"
                   f" ni place pour un mouvement — laissee vide", flush=True)
+            _sn_note_vide(_ws, _we, "ni phrase, ni mot, ni place")
             continue
         _base = 1.10
         for _ze_prev in _sn_zoom_sorted:
@@ -3139,11 +3154,49 @@ def inject_safety_cards(
             flush=True,
         )
 
+    # Le bilan est MESURE contre l'etat final, pas deduit du nombre
+    # d'injections. L'ancienne ligne annoncait « no 12s window left
+    # uncovered » des qu'une seule carte etait posee, alors que les sorties
+    # ci-dessus peuvent laisser une fenetre vide — l'affirmation ne
+    # decoulait pas du code. C'est la meme faute que la formulation qui
+    # annoncait 20 s quand la constante disait 28.
+    _sn_restantes: list[tuple[float, float, str]] = []
+    for _v_ws, _v_we, _v_why in _sn_vides:
+        if _sn_has_card(_v_ws, _v_we) or _sn_has_sig_zoom(_v_ws, _v_we):
+            continue    # couverte entre-temps par une injection voisine
+        # Fusion APRES le filtre : le balayage glisse de 0,25 s et revoit
+        # le meme trou a chaque pas, ce qui annoncerait 138 « fenetres »
+        # pour huit vrais trous.
+        if _sn_restantes and _v_ws <= _sn_restantes[-1][1]:
+            _p = _sn_restantes[-1]
+            _sn_restantes[-1] = (
+                _p[0], max(_p[1], _v_we),
+                _p[2] if _v_why in _p[2] else f"{_p[2]} / {_v_why}")
+        else:
+            _sn_restantes.append((_v_ws, _v_we, _v_why))
     if _sn_injected:
         storyboard["cards"].sort(key=lambda c: float(c.get("startSec", 0)))
+        if _sn_restantes:
+            _sn_detail = ", ".join(
+                f"{ws:.1f}-{we:.1f}s ({why})" for ws, we, why in _sn_restantes)
+            print(
+                f"[SAFETY-NET] {_sn_injected} fenetre(s) couverte(s), "
+                f"{len(_sn_restantes)} laissee(s) vide(s) : {_sn_detail}",
+                flush=True,
+            )
+        else:
+            print(
+                f"[SAFETY-NET] {_sn_injected} fenetre(s) couverte(s), "
+                f"0 laissee(s) vide(s) — aucune fenetre de "
+                f"{_SAFETY_WINDOW_S:.0f}s ne reste decouverte",
+                flush=True,
+            )
+    elif _sn_restantes:
+        _sn_detail = ", ".join(
+            f"{ws:.1f}-{we:.1f}s ({why})" for ws, we, why in _sn_restantes)
         print(
-            f"[SAFETY-NET] {_sn_injected} fallback card(s) injected — "
-            f"no {_SAFETY_WINDOW_S:.0f}s window left uncovered",
+            f"[SAFETY-NET] 0 fenetre(s) couverte(s), "
+            f"{len(_sn_restantes)} laissee(s) vide(s) : {_sn_detail}",
             flush=True,
         )
     else:
