@@ -1113,8 +1113,31 @@ def run_job(
                  "level": ep.level}
                 for ep in energy_profile
             ]
-        except Exception:
+            # Sans cette ligne, le correctif de rms_db est inverifiable en
+            # production : un profil muet (-60 dB partout) et un profil
+            # mesure ont exactement la meme trace, c'est-a-dire aucune.
+            if energy_dicts:
+                _e_rms = sorted(d["rms_db"] for d in energy_dicts)
+                _e_niv = {}
+                for d in energy_dicts:
+                    _e_niv[d["level"]] = _e_niv.get(d["level"], 0) + 1
+                print(
+                    f"[ENERGY] {len(energy_dicts)} fenetres · rms_db "
+                    f"min {_e_rms[0]:.1f} / med "
+                    f"{_e_rms[len(_e_rms) // 2]:.1f} / max {_e_rms[-1]:.1f} dB"
+                    f" · {len(set(_e_rms))} valeurs distinctes · "
+                    + " ".join(f"{k}={v}" for k, v in sorted(_e_niv.items())),
+                    flush=True,
+                )
+            else:
+                print("[ENERGY] aucune fenetre", flush=True)
+        except Exception as _e_exc:
             energy_dicts = []
+            # L'echec etait avale sans trace : un profil vide se lisait
+            # comme un fichier silencieux.
+            print(f"[ENERGY] echec de l'analyse "
+                  f"({type(_e_exc).__name__}: {_e_exc}) — le rendu continue "
+                  f"sans profil d'energie", flush=True)
         print(f"[TIMING] energy_detection: {time.perf_counter()-_t:.1f}s", flush=True)
 
         # ── Step 4: Multi-speaker detection (Feature 8) ───────────────────
