@@ -280,6 +280,17 @@ def _on_startup() -> None:
     print(f"[BUILD] Running commit: {_commit}")
     _cleanup_old_uploads()
     _purge_trash()
+    # Inventaire de outputs, en lecture seule. Aucune suppression : le
+    # module n'en contient aucune. Journalise ici parce que c'est le seul
+    # moyen de connaitre le contenu du volume sans ouvrir une route ni se
+    # connecter au conteneur — railway ssh echoue sur la verification de
+    # cle d'hote, et la contourner modifierait la machine.
+    try:
+        from app.core import nettoyage_outputs as _no
+        _no.journalise(_no.inventaire(settings.outputs_dir, store._jobs))
+    except Exception as _no_exc:                              # noqa: BLE001
+        print(f"[NETTOYAGE] inventaire impossible ({_no_exc}) — "
+              f"le service continue", flush=True)
     asyncio.create_task(_purge_trash_loop())
     asyncio.create_task(_reengagement_loop())
     asyncio.create_task(_orphan_detector_loop())
