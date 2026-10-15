@@ -216,6 +216,10 @@ def plan_par_roles(mots, cartes, duree: float, energie=None) -> list[dict]:
         return min((debuts[x] for x in cands), key=lambda d: abs(d - t))
 
     poses: list[tuple[float, float, str, str]] = []
+    # Les punchs deja poses, pour que l'espacement soit vrai globalement et
+    # non seulement a l'interieur de la passe des emphases.
+    punchs: list[float] = []
+    declasses: list[tuple[float, float]] = []
 
     def libre(a: float, b: float) -> bool:
         return not any(x < b - 0.001 and y > a + 0.001 for x, y, _, _ in poses)
@@ -223,25 +227,46 @@ def plan_par_roles(mots, cartes, duree: float, energie=None) -> list[dict]:
     def pose(t: float, role: str, source: str,
              borne: tuple[float, float] | None = None) -> bool:
         t = cale_sur_mot(t, borne)
+        # L'espacement se juge APRES le calage : cale_sur_mot deplace le temps
+        # demande, donc un controle fait avant juge un instant qui n'existera
+        # pas.
+        #
+        # ECART_PUNCH n'etait applique que dans la passe des emphases. Le
+        # combleur de trous posait des punchs sans le consulter, et la regle
+        # etait violee partout, y compris sur le job de reference : 24 ecarts
+        # sur 30 sous les 25 s sur b17a54cc, 26 sur 31 sur 37f76379, 2 sur 2
+        # sur da5d26f9, minimum mesure 3,98 s.
+        #
+        # On DECLASSE en `large` plutot que de refuser : refuser rendait
+        # False, le combleur avancait de 1 s, et le trou pouvait rester vide.
+        # `large` a la meme course et comble aussi bien.
+        if role == "punch" and punchs:
+            _ecart = min(abs(t - x) for x in punchs)
+            if _ecart < ECART_PUNCH:
+                declasses.append((t, _ecart))
+                role = "large"
         du = float(ROLES[role]["duree"])
         if t < 0.2 or t + du > duree - 0.05 or not libre(t, t + du):
             return False
         poses.append((t, t + du, role, source))
+        if role == "punch":
+            punchs.append(t)
         return True
 
     # ── 1. les emphases ────────────────────────────────────────────────────
     sig = emphases(liste, energie)
-    dernier_punch = -1e9
     for t, nom in sorted(sig, key=lambda x: (x[1] not in SIGNAUX_FORTS, x[0])):
-        if nom in SIGNAUX_FORTS and not sous_carte(t) \
-                and t - dernier_punch >= ECART_PUNCH:
+        # Plus de compteur local : `pose` tient la liste des punchs et
+        # declasse lui-meme. Deux endroits qui comptaient separement,
+        # c'est ainsi que la regle avait fini par n'etre appliquee qu'a
+        # moitie.
+        if nom in SIGNAUX_FORTS and not sous_carte(t):
             role = "punch"
         elif sous_carte(t):
             role = "pousse"
         else:
             role = "large"
-        if pose(t, role, nom) and role == "punch":
-            dernier_punch = t
+        pose(t, role, nom)
 
     # ── 2. les trous, APRES les emphases ───────────────────────────────────
     # Deux passes : la seconde rattrape ce que la premiere a laisse une fois
@@ -285,6 +310,7 @@ def plan_par_roles(mots, cartes, duree: float, energie=None) -> list[dict]:
     # cotes, une seule laissait six repetitions au lieu des deux que KAN
     # accepte.
     poses.sort()
+    refus_alternance: list[float] = []
     for _tour in range(2):
       for i in range(1, len(poses)):
         a, b, r, src = poses[i]
@@ -300,6 +326,18 @@ def plan_par_roles(mots, cartes, duree: float, energie=None) -> list[dict]:
                 continue
             if cand == "punch" and sous_carte(a):
                 continue
+            # L'alternance ecrit dans `poses` sans passer par `pose`, donc
+            # sans sa garde d'espacement — et elle essaie `punch` EN PREMIER.
+            # C'est par ici que passaient la quasi-totalite des punchs trop
+            # rapproches : poser la garde dans `pose` seule ne declassait
+            # qu'une entree par job et laissait 23 ecarts sur 29 sous le
+            # seuil. Mesure, pas deduction.
+            if cand == "punch" and any(
+                    _r2 == "punch" and abs(_x - a) < ECART_PUNCH
+                    for _k, (_x, _y, _r2, _s2) in enumerate(poses)
+                    if _k != i):
+                refus_alternance.append(a)
+                continue
             du = float(ROLES[cand]["duree"])
             if a + du > duree - 0.05:
                 continue
@@ -309,6 +347,13 @@ def plan_par_roles(mots, cartes, duree: float, energie=None) -> list[dict]:
             poses[i] = (a, a + du, cand, src)
             break
 
+    # Les deux sources de refus, nommees separement : la premiere version
+    # ne comptait que celles de `pose` et affichait « 1 declasse » alors que
+    # l'alternance en refusait des dizaines en silence.
+    if declasses or refus_alternance:
+        print(f"[ZOOM-ROLES] espacement des punchs ({ECART_PUNCH:.0f}s) : "
+              f"{len(declasses)} declasse(s) a la pose, "
+              f"{len(refus_alternance)} refuse(s) a l'alternance", flush=True)
     poses.sort()
     return [{"start": round(a, 3), "end": round(b, 3), "kind": r,
              "amplitude": float(ROLES[r]["course"]),
