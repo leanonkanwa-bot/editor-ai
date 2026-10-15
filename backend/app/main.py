@@ -119,6 +119,41 @@ async def _purge_trash_loop() -> None:
         _purge_trash()
 
 
+_NETTOYAGE_DELAI_S = 15.0    # on laisse le demarrage finir d'abord
+
+
+async def _inventaire_outputs() -> None:
+    """Le rapport de outputs, hors du chemin de demarrage.
+
+    `_on_startup` est une fonction SYNCHRONE : tout ce qu'on y fait retarde
+    « Application startup complete » et donc la premiere reponse de
+    /api/health. Un parcours de dossier n'a rien a faire la.
+
+    Deux bornes, parce qu'une seule ne suffit pas : `wait_for` annule
+    l'ATTENTE mais pas le fil qui travaille, donc `inventaire` porte sa
+    propre limite et rend un rapport marque partiel. Le parcours ne fait
+    que des stat() : meme debordant, il ne peut rien casser.
+    """
+    await asyncio.sleep(_NETTOYAGE_DELAI_S)
+    from app.core import nettoyage_outputs as _no
+    try:
+        _rap = await asyncio.wait_for(
+            asyncio.to_thread(_no.inventaire, settings.outputs_dir,
+                              store._jobs),
+            timeout=_no.LIMITE_S + 5.0,
+        )
+    except asyncio.TimeoutError:
+        print(f"[NETTOYAGE] parcours abandonne — l'attente a depasse "
+              f"{_no.LIMITE_S + 5.0:.0f}s ; aucun rapport, aucune "
+              f"suppression (le service n'est pas affecte)", flush=True)
+        return
+    except Exception as _exc:                                 # noqa: BLE001
+        print(f"[NETTOYAGE] inventaire impossible ({_exc}) — "
+              f"le service continue", flush=True)
+        return
+    _no.journalise(_rap)
+
+
 _SAUVEGARDE_INTERVAL_S = 6 * 3600   # un instantane de jobs.json toutes les 6 h
 
 
@@ -280,21 +315,12 @@ def _on_startup() -> None:
     print(f"[BUILD] Running commit: {_commit}")
     _cleanup_old_uploads()
     _purge_trash()
-    # Inventaire de outputs, en lecture seule. Aucune suppression : le
-    # module n'en contient aucune. Journalise ici parce que c'est le seul
-    # moyen de connaitre le contenu du volume sans ouvrir une route ni se
-    # connecter au conteneur — railway ssh echoue sur la verification de
-    # cle d'hote, et la contourner modifierait la machine.
-    try:
-        from app.core import nettoyage_outputs as _no
-        _no.journalise(_no.inventaire(settings.outputs_dir, store._jobs))
-    except Exception as _no_exc:                              # noqa: BLE001
-        print(f"[NETTOYAGE] inventaire impossible ({_no_exc}) — "
-              f"le service continue", flush=True)
+
     asyncio.create_task(_purge_trash_loop())
     asyncio.create_task(_reengagement_loop())
     asyncio.create_task(_orphan_detector_loop())
     asyncio.create_task(_sauvegarde_loop())
+    asyncio.create_task(_inventaire_outputs())
 
     # Minimal SIGTERM handler — rejette les nouvelles requêtes, exit immédiat.
     # Drain retiré (2026-08-31) pour la phase de tests intensifs : pushs instantanés.

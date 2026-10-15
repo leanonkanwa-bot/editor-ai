@@ -45,6 +45,11 @@ from pathlib import Path
 CONSERVATION_JOURS = 30.0
 # Plancher absolu : rien de plus recent n'est jamais candidat.
 PLANCHER_JOURS = 7.0
+# Limite du parcours. Elle est verifiee DANS la boucle, pas seulement par
+# l'appelant : un asyncio.wait_for annule l'attente, jamais le fil qui
+# travaille. Sans cette borne interne, un dossier enorme continuerait a etre
+# parcouru apres l'abandon de l'attente.
+LIMITE_S = 20.0
 
 SUFFIXES = (".mp4", "_landscape.mp4", "_thumb.jpg", "_cards.json",
             "_narrative.txt", "_report.pdf")
@@ -65,11 +70,16 @@ def _job_id_de(nom: str) -> str | None:
 
 
 def inventaire(dossier: Path, jobs: dict, maintenant: float | None = None,
-               conservation_jours: float = CONSERVATION_JOURS) -> dict:
+               conservation_jours: float = CONSERVATION_JOURS,
+               limite_s: float = LIMITE_S) -> dict:
     """Classe chaque fichier du dossier. Ne supprime rien, ne leve jamais.
 
     `jobs` est le dictionnaire du JobStore : {id: Job}. On lit `status`,
     `completed_at`, `created_at` et `trashed_at`.
+
+    S'arrete au bout de `limite_s` et rend un rapport PARTIEL, marque comme
+    tel. Un rapport partiel ne doit pas servir a decider d'une suppression,
+    ce que `rapport["partiel"]` permet de refuser explicitement.
     """
     t0 = maintenant if maintenant is not None else time.time()
     rapport = {c: {"fichiers": 0, "octets": 0, "jobs": set()}
@@ -78,6 +88,9 @@ def inventaire(dossier: Path, jobs: dict, maintenant: float | None = None,
     rapport["regle"] = {"conservation_jours": conservation_jours,
                         "plancher_jours": PLANCHER_JOURS}
     rapport["erreurs"] = []
+    rapport["partiel"] = False
+    rapport["secondes"] = 0.0
+    _depart = time.perf_counter()
     try:
         from app.api.jobs import ACTIVE_STATUSES
     except Exception:                                         # noqa: BLE001
@@ -88,7 +101,14 @@ def inventaire(dossier: Path, jobs: dict, maintenant: float | None = None,
         rapport["erreurs"].append(f"lecture du dossier impossible : {exc}")
         return rapport
 
-    for p in entrees:
+    rapport["a_parcourir"] = len(entrees)
+    for _i, p in enumerate(entrees):
+        if _i % 500 == 0 and time.perf_counter() - _depart > limite_s:
+            rapport["partiel"] = True
+            rapport["erreurs"].append(
+                f"parcours arrete a {_i}/{len(entrees)} apres "
+                f"{limite_s:.0f}s")
+            break
         try:
             if not p.is_file():
                 continue
@@ -127,6 +147,7 @@ def inventaire(dossier: Path, jobs: dict, maintenant: float | None = None,
         rapport[classe]["octets"] += taille
         if jid:
             rapport[classe]["jobs"].add(jid)
+    rapport["secondes"] = round(time.perf_counter() - _depart, 3)
     return rapport
 
 
@@ -137,9 +158,16 @@ def journalise(rapport: dict) -> None:
         tot = rapport.get("total", {})
         print(f"[NETTOYAGE] inventaire de outputs : "
               f"{tot.get('fichiers', 0)} fichier(s), "
-              f"{tot.get('octets', 0) / 1e9:.2f} Go — regle a l'etude : "
+              f"{tot.get('octets', 0) / 1e9:.2f} Go en "
+              f"{rapport.get('secondes', 0):.2f}s — regle a l'etude : "
               f"conservation {r.get('conservation_jours')} j, plancher "
               f"{r.get('plancher_jours')} j. AUCUNE SUPPRESSION.", flush=True)
+        if rapport.get("partiel"):
+            print(f"[NETTOYAGE] RAPPORT PARTIEL — la limite de "
+                  f"{LIMITE_S:.0f}s a ete atteinte sur "
+                  f"{rapport.get('a_parcourir', 0)} entree(s) ; les chiffres "
+                  f"ci-dessous ne couvrent pas tout le dossier et ne doivent "
+                  f"pas servir a decider d'une suppression", flush=True)
         for c in _CLASSES:
             d = rapport.get(c) or {}
             if not d.get("fichiers"):
