@@ -100,6 +100,11 @@ def _nombre_de_jobs(octets: bytes) -> int | None:
     return len(d) if isinstance(d, dict) else None
 
 
+def _n_txt(n: int | None) -> str:
+    """« 227 jobs », ou « contenu illisible » quand le compte n'est pas su."""
+    return "contenu illisible" if n is None else f"{n} jobs"
+
+
 def _reference_actuelle() -> tuple[Path | None, int]:
     """(chemin, nombre de jobs) de la reference, ou (None, -1)."""
     p = DOSSIER / REFERENCE
@@ -164,9 +169,23 @@ def instantane(raison: str) -> Path | None:
         if glissants:
             try:
                 if gzip.decompress(glissants[-1].read_bytes()) == brut:
+                    # Le saut se DIT. Muet, il etait indistinguable d'un
+                    # echec : au deploiement de 1226f59 la production etait
+                    # au repos, aucune ligne [SAUVEGARDE] n'est sortie, et
+                    # rien dans les logs ne permettait de choisir entre
+                    # « rien a sauvegarder » et « la sauvegarde est cassee ».
+                    print(f"[SAUVEGARDE] sautee : jobs.json identique au "
+                          f"dernier instantane ({_n_txt(n)}, "
+                          f"{len(brut) / 1e6:.1f} Mo) — {glissants[-1].name}",
+                          flush=True)
                     return None
-            except OSError:
-                pass
+            except OSError as _exc_lecture:
+                # Le dernier instantane est illisible : on ne peut pas
+                # comparer, donc on ecrit. Dit, parce que c'est le signe
+                # d'un fichier abime dans le dossier de sauvegardes.
+                print(f"[SAUVEGARDE] dernier instantane illisible "
+                      f"({glissants[-1].name}: {_exc_lecture}) — "
+                      f"comparaison impossible, on ecrit", flush=True)
 
         # Les millisecondes font partie du nom : a la seconde pres, deux
         # instantanes du meme passage portaient le meme nom et le second
