@@ -1411,6 +1411,51 @@ def _sb_build_chunk_context(prior_cards: list[dict], language: str = "en",
     return "\n".join(lines)
 
 
+# Les zones vers lesquelles R2 declasse une carte de bouchage, par layout.
+# Verifiees contre la table de compose.py a l'usage : si une zone est
+# renommee ou retiree, la fonction rend None et R2 ne declasse plus, au lieu
+# de poser la carte sur la zone de repli — qui est `lower-third`, autrement
+# dit la bande des sous-titres.
+class _R2Passe(Exception):
+    """Sortie sans erreur du bloc R2 : il n'y a rien a declasser ici."""
+
+
+_R2_ZONES_PAR_LAYOUT: dict[str, tuple[tuple[str, str], tuple[str, str]]] = {
+    # (paire courte, paire haute) — la haute pour les textes de plus de 12 mots
+    "landscape": (("landscape-tl", "landscape-tr"),
+                  ("landscape-tl-tall", "landscape-tr-tall")),
+    # Portrait n'offre pas de paire courte symetrique ; la paire haute sert
+    # dans les deux cas. Les deux zones sont a top=80 et hautes de 500 px,
+    # donc tres loin de lower-third (top=1344) : une carte declassee ne peut
+    # pas se poser sur le sous-titre.
+    "portrait": (("upper-left-data", "upper-right-data-tall"),
+                 ("upper-left-data", "upper-right-data-tall")),
+}
+
+
+def zones_declassement(layout: str):
+    """Les deux paires de zones pour ce layout, ou None s'il n'y en a pas.
+
+    None veut dire « ne declasse pas ». C'est le cas sur un layout inconnu,
+    et ce serait le cas si une zone disparaissait de compose.py : mieux vaut
+    une carte qui garde le plein cadre qu'une carte posee sur le sous-titre.
+    """
+    paires = _R2_ZONES_PAR_LAYOUT.get(layout)
+    if not paires:
+        return None
+    try:
+        from app.engine.compose import (
+            _ZONE_BOUNDS_LANDSCAPE, _ZONE_BOUNDS_PORTRAIT,
+        )
+    except Exception:                                         # noqa: BLE001
+        return None
+    table = (_ZONE_BOUNDS_PORTRAIT if layout == "portrait"
+             else _ZONE_BOUNDS_LANDSCAPE)
+    if not all(z in table for paire in paires for z in paire):
+        return None
+    return paires
+
+
 def _generate_graphic_cards_chunked(
     trimmed_duration: float,
     script_structure: list[dict],
@@ -5066,8 +5111,20 @@ def generate_storyboard(
         # trois des six cartes y debordaient — gf-01 a 288 px dans une zone
         # de 280, gf-04 et gf-02 a 15 et 17 mots. Les variantes hautes de
         # 500 px les prennent, et les six tiennent alors.
-        _R2_COURT = ("landscape-tl", "landscape-tr")
-        _R2_LONG = ("landscape-tl-tall", "landscape-tr-tall")
+        # Les zones etaient ecrites en dur et paysage : en portrait aucune
+        # des quatre n'existe, et _zone_bounds retombe sur `lower-third`,
+        # c'est-a-dire la bande des sous-titres. Inatteignable aujourd'hui,
+        # puisque layout vaut "portrait" seulement quand format_hint vaut
+        # "short" et qu'une carte gf- n'existe qu'en format long — mais la
+        # garde ne coute rien et survivra au jour ou le layout cessera
+        # d'etre deduit du format.
+        _r2_paires = zones_declassement(layout)
+        if _r2_paires is None:
+            print(f"[BUDGET] aucun declassement en {layout!r} — pas de zone "
+                  f"cible connue pour ce layout ; les cartes de bouchage "
+                  f"gardent leur zone", flush=True)
+            raise _R2Passe()
+        _R2_COURT, _R2_LONG = _r2_paires
         _r2_n = 0
         for _gc in graphic_cards:
             if not str(_gc.get("id", "")).startswith("gf-"):
@@ -5087,6 +5144,8 @@ def generate_storyboard(
         _r2_reste = sum(1 for c in graphic_cards if c.get("zone") == "fullscreen")
         print(f"[BUDGET] {_r2_n} carte(s) de bouchage declassee(s), "
               f"{_r2_reste} carte(s) gardent le plein cadre", flush=True)
+    except _R2Passe:
+        pass        # deja journalise, et ce n'est pas une erreur
     except Exception as _r2_exc:
         print(f"[BUDGET] non applique ({_r2_exc}) — le rendu continue", flush=True)
 
