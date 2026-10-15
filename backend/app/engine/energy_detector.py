@@ -76,7 +76,16 @@ class EnergyDetector:
 
         current_pts: float | None = None
         for line in text.splitlines():
-            pts_m = re.match(r"pts_time:([\d.]+)", line)
+            # re.search, pas re.match : ametadata ecrit « frame:0  pts:0
+            # pts_time:0 » sur UNE ligne, et re.match est ancre au debut.
+            # Mesure sur le clip de reference : 1 420 lignes CONTIENNENT
+            # pts_time:, ZERO ne commence par. current_pts n'etait donc
+            # jamais affecte, aucune valeur RMS n'etait enregistree, et
+            # _classify retombait sur son defaut de -60,0 dB pour chaque
+            # fenetre. Les 164 entrees du profil de b17a54cc valaient
+            # toutes -60,0 : une seule valeur distincte, soit un signal
+            # mort que personne ne lisait comme tel.
+            pts_m = re.search(r"pts_time:([\d.]+)", line)
             if pts_m:
                 current_pts = float(pts_m.group(1))
             rms_m = re.match(r"lavfi\.astats\.Overall\.RMS_level=(-?[\d.]+)", line)
