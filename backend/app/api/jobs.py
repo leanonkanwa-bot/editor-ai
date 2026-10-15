@@ -93,6 +93,18 @@ class JobStore:
     def _load(self) -> None:
         if not JOBS_FILE.exists():
             return
+        # AVANT le triage, et avant meme de parser. La fin de _load appelle
+        # _save_locked() et reecrit jobs.json avec le resultat du triage, et
+        # `store` est instancie a l'import de ce module — donc avant le hook
+        # de demarrage de FastAPI. Un instantane pose ailleurs arriverait
+        # apres la reecriture. Avant de parser, parce qu'un fichier illisible
+        # est precisement celui qu'on veut conserver.
+        try:
+            from app.core.sauvegardes import instantane
+            instantane("demarrage")
+        except Exception as _exc_sauv:                        # noqa: BLE001
+            print(f"[SAUVEGARDE] instantane de demarrage impossible "
+                  f"({_exc_sauv}) — le chargement continue", flush=True)
         try:
             data = json.loads(JOBS_FILE.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):

@@ -119,6 +119,31 @@ async def _purge_trash_loop() -> None:
         _purge_trash()
 
 
+_SAUVEGARDE_INTERVAL_S = 6 * 3600   # un instantane de jobs.json toutes les 6 h
+
+
+async def _sauvegarde_loop() -> None:
+    """Un instantane de jobs.json toutes les 6 h, en plus de celui du
+    demarrage pris dans JobStore._load.
+
+    Le demarrage ne suffit pas : un conteneur qui reste debout des semaines
+    ne sauvegarderait rien entre deux deploiements. L'instantane est saute
+    si le contenu n'a pas change, donc un service au repos n'empile pas des
+    copies identiques.
+
+    En fil separe : comprimer 33 Mo prend ~0,9 s et bloquerait la boucle
+    d'evenements.
+    """
+    from app.core.sauvegardes import instantane
+    while True:
+        await asyncio.sleep(_SAUVEGARDE_INTERVAL_S)
+        try:
+            await asyncio.to_thread(instantane, "periodique")
+        except Exception as _exc:                             # noqa: BLE001
+            print(f"[SAUVEGARDE] passage periodique en echec ({_exc}) — "
+                  f"le service continue", flush=True)
+
+
 _ORPHAN_CHECK_INTERVAL_S = 5 * 60   # check every 5 min
 _ORPHAN_MAX_AGE_S        = 2 * 3600 # 2 h from job creation → definitely stuck
 
@@ -258,6 +283,7 @@ def _on_startup() -> None:
     asyncio.create_task(_purge_trash_loop())
     asyncio.create_task(_reengagement_loop())
     asyncio.create_task(_orphan_detector_loop())
+    asyncio.create_task(_sauvegarde_loop())
 
     # Minimal SIGTERM handler — rejette les nouvelles requêtes, exit immédiat.
     # Drain retiré (2026-08-31) pour la phase de tests intensifs : pushs instantanés.
