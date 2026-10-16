@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import os
 import shutil
 import time
 from pathlib import Path
@@ -174,8 +175,14 @@ def instantane(raison: str) -> Path | None:
                     # au repos, aucune ligne [SAUVEGARDE] n'est sortie, et
                     # rien dans les logs ne permettait de choisir entre
                     # « rien a sauvegarder » et « la sauvegarde est cassee ».
-                    print(f"[SAUVEGARDE] sautee : jobs.json identique au "
-                          f"dernier instantane ({_n_txt(n)}, "
+                    # La RAISON et le PID. Sans eux, quatre lignes
+                    # « sautee » sont apparues dans une meme fenetre de
+                    # logs sans qu'on puisse dire laquelle venait du
+                    # chargement du store, du passage periodique ou d'un
+                    # autre processus — la ligne ne nommait pas sa source.
+                    print(f"[SAUVEGARDE] sautee ({raison}, pid "
+                          f"{os.getpid()}) : jobs.json identique au dernier "
+                          f"instantane ({_n_txt(n)}, "
                           f"{len(brut) / 1e6:.1f} Mo) — {glissants[-1].name}",
                           flush=True)
                     return None
@@ -183,7 +190,8 @@ def instantane(raison: str) -> Path | None:
                 # Le dernier instantane est illisible : on ne peut pas
                 # comparer, donc on ecrit. Dit, parce que c'est le signe
                 # d'un fichier abime dans le dossier de sauvegardes.
-                print(f"[SAUVEGARDE] dernier instantane illisible "
+                print(f"[SAUVEGARDE] ({raison}, pid {os.getpid()}) dernier "
+                      f"instantane illisible "
                       f"({glissants[-1].name}: {_exc_lecture}) — "
                       f"comparaison impossible, on ecrit", flush=True)
 
@@ -204,7 +212,8 @@ def instantane(raison: str) -> Path | None:
             # Un volume vraiment sature : ecrire pourrait faire echouer un
             # rendu en cours. La reference deja ecrite reste la, et on ne
             # supprime rien.
-            print(f"[SAUVEGARDE] sautee — {libre / 1e6:.0f} Mo libres, "
+            print(f"[SAUVEGARDE] sautee ({raison}, pid {os.getpid()}) — "
+              f"{libre / 1e6:.0f} Mo libres, "
                   f"{exige / 1e6:.0f} Mo exiges pour une copie de "
                   f"{len(comprime) / 1e6:.1f} Mo", flush=True)
             return None
@@ -229,7 +238,8 @@ def instantane(raison: str) -> Path | None:
         # route exprès, et de voir le plafond s'y adapter.
         _occupe = sum(g.stat().st_size for g in _glissants() if g.exists())
         print(
-            f"[SAUVEGARDE] {cible.name} — {len(brut) / 1e6:.1f} Mo -> "
+            f"[SAUVEGARDE] (pid {os.getpid()}) {cible.name} — "
+            f"{len(brut) / 1e6:.1f} Mo -> "
             f"{len(comprime) / 1e6:.1f} Mo"
             + (f", {retires} ancien(s) retire(s)" if retires else "")
             + f" · {len(_glissants())} copie(s) pour {_occupe / 1e6:.0f} Mo"

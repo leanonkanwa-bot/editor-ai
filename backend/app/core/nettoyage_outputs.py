@@ -38,6 +38,7 @@ La regle proposee, et le raisonnement derriere chaque borne :
 
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 
@@ -156,7 +157,9 @@ def journalise(rapport: dict) -> None:
     try:
         r = rapport.get("regle", {})
         tot = rapport.get("total", {})
-        print(f"[NETTOYAGE] inventaire de outputs : "
+        # Le PID, pour la meme raison que sur la ligne de sauvegarde :
+        # savoir quel processus parle quand plusieurs lignes se ressemblent.
+        print(f"[NETTOYAGE] (pid {os.getpid()}) inventaire de outputs : "
               f"{tot.get('fichiers', 0)} fichier(s), "
               f"{tot.get('octets', 0) / 1e9:.2f} Go en "
               f"{rapport.get('secondes', 0):.2f}s — regle a l'etude : "
