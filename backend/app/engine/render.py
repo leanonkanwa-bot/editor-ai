@@ -153,7 +153,15 @@ def _run(cmd: list[str]) -> None:
             )
         elif sig == 15:
             hint = " -- SIGTERM. Something asked ffmpeg to stop."
-        raise RuntimeError(
+        # Typee passagere : un signal est une cause EXTERIEURE — le
+        # noyau a tue le processus, presque toujours par manque de
+        # memoire. Le code n'est pas en cause et un second essai
+        # peut reussir. Le type est pose ICI, au site qui SAIT ;
+        # personne n'aura a lire le message pour le deviner.
+        # ErreurPassagere herite de RuntimeError, donc les
+        # `except RuntimeError` existants l'attrapent comme avant.
+        from app.core.erreurs import ErreurPassagere
+        raise ErreurPassagere(
             f"ffmpeg killed by signal {sig}{hint}\n"
             f"  cmd: {shlex.join(cmd)}\n  stderr: {stderr}"
         )
