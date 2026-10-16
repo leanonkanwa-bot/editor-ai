@@ -404,8 +404,13 @@ function loadVideoLibrary() {
         trashNote = `<div class="video-lib-trash-note">Purge dans ${daysLeft}j</div>`;
         actionButtons = v.jobId ? `<button class="action-btn" onclick="restoreVideo('${v.jobId}')">Restaurer</button>` : "";
       } else {
+        // Expiree : le bouton devient un libelle inerte. Le bouton
+        // « Supprimer » reste, pour retirer l'entree de la bibliotheque.
+        const _tele = v.expiredAt
+          ? `<span class="action-btn" style="opacity:.55;cursor:default" title="Les fichiers sont supprimés après la durée de conservation ; le plan de montage est conservé.">${_libelleExpiree(v.expiredAt)}</span>`
+          : `<button class="action-btn" onclick="downloadVideo('${v.jobId}')">Télécharger</button>`;
         actionButtons = v.jobId
-          ? `<a href="/api/download/${v.jobId}" class="action-btn" download>Télécharger</a>
+          ? `${_tele}
              <button class="action-btn" onclick="trashVideo('${v.jobId}')" style="color:#ff5c7a">Supprimer</button>`
           : "";
       }
@@ -475,6 +480,63 @@ document.getElementById("libTabTrash")?.addEventListener("click", () => {
   document.getElementById("libTabActive")?.classList.remove("active");
   loadVideoLibrary();
 });
+
+
+// ── Telechargement : lire le statut, pour que « expiree » soit vrai ───────
+// Un <a download> ne rapporte aucun code : si le serveur repond 410 parce
+// que la video a ete retiree apres la duree de conservation, le navigateur
+// affiche une page d'erreur et la bibliotheque continue de montrer un
+// bouton mort. On recupere donc le statut, et on retient l'expiration.
+function _libelleExpiree(iso) {
+  try {
+    const d = new Date(iso);
+    const jj = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    return `Expirée le ${jj}/${mm}`;
+  } catch { return "Expirée"; }
+}
+
+function _marqueExpiree(jobId, iso) {
+  try {
+    const videos = JSON.parse(localStorage.getItem("edited_videos") || "[]");
+    localStorage.setItem("edited_videos", JSON.stringify(
+      videos.map(v => v.jobId === jobId ? { ...v, expiredAt: iso } : v)));
+  } catch { /* localStorage indisponible : le libelle ne survivra pas au
+               rechargement, mais le message a ete montre. */ }
+}
+
+async function downloadVideo(jobId, fmt) {
+  const url = `/api/download/${jobId}` + (fmt ? `?fmt=${fmt}` : "");
+  let r;
+  try {
+    r = await fetch(url);
+  } catch {
+    alert("Téléchargement impossible : connexion interrompue.");
+    return;
+  }
+  if (r.status === 410) {
+    // La video a existe et ne reviendra pas. On le retient et on le dit.
+    let msg = "Cette vidéo a expiré.";
+    try { const j = await r.json(); if (j && j.detail) msg = j.detail; } catch {}
+    _marqueExpiree(jobId, new Date().toISOString());
+    alert(msg);
+    if (typeof loadVideoLibrary === "function") loadVideoLibrary();
+    if (typeof loadAnalytics === "function") loadAnalytics();
+    return;
+  }
+  if (!r.ok) {
+    alert("La vidéo n'est pas encore prête.");
+    return;
+  }
+  const blob = await r.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${jobId}.mp4`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+}
 
 async function trashVideo(jobId) {
   if (!confirm("Supprimer cette vidéo ? Elle restera dans la corbeille 7 jours avant suppression définitive.")) return;
@@ -556,7 +618,9 @@ async function loadAnalytics() {
           <td>${v.date ? new Date(v.date).toLocaleDateString("fr-FR") : "—"}</td>
           <td>${scoreHtml}</td>
           <td>
-            ${v.jobId ? `<a href="/api/download/${v.jobId}" class="action-btn" download>Télécharger</a>` : ""}
+            ${v.jobId ? (v.expiredAt
+                ? `<span class="action-btn" style="opacity:.55;cursor:default">${_libelleExpiree(v.expiredAt)}</span>`
+                : `<button class="action-btn" onclick="downloadVideo('${v.jobId}')">Télécharger</button>`) : ""}
             <button class="action-btn" onclick="deleteVideo('${v.jobId || i}')" style="color:#e53e3e">Supprimer</button>
           </td>
         </tr>`;

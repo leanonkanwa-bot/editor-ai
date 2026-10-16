@@ -120,6 +120,14 @@ async def _purge_trash_loop() -> None:
 
 
 _NETTOYAGE_DELAI_S = 15.0    # on laisse le demarrage finir d'abord
+# Lue la ou la regle est tenue, pour que le message et la regle ne puissent
+# pas se contredire.
+try:
+    from app.core.nettoyage_outputs import (
+        CONSERVATION_JOURS as _CONSERVATION_JOURS,
+    )
+except Exception:                                             # noqa: BLE001
+    _CONSERVATION_JOURS = 30.0
 
 
 async def _inventaire_outputs() -> None:
@@ -1799,6 +1807,20 @@ def download(
         require_owner(request, job_id)
     out = settings.outputs_dir / f"{job_id}.mp4"
     if not out.exists():
+        # 410 et non 404 quand la video a EXISTE puis a ete retiree par la
+        # conservation. Un 404 dit « cette chose n'a jamais existe » et
+        # laisse croire a une panne ; un 410 dit qu'elle ne reviendra pas.
+        _j = store.get(job_id)
+        _purge = getattr(_j, "outputs_purged_at", None) if _j else None
+        if _purge:
+            from datetime import datetime as _dt, timezone as _tz
+            _quand = _dt.fromtimestamp(float(_purge), _tz.utc).strftime("%d/%m/%Y")
+            raise HTTPException(
+                410,
+                f"Vidéo expirée le {_quand}. Les fichiers sont supprimés "
+                f"après {_CONSERVATION_JOURS:.0f} jours ; le plan de montage "
+                f"est conservé et vous pouvez relancer le rendu.",
+            )
         raise HTTPException(404, "Output not ready")
 
     if fmt == "landscape":
