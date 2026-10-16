@@ -1033,6 +1033,9 @@ def run_job(
                 transcript = f_transcript.result(timeout=_TRANSCRIPTION_TIMEOUT_S)
             except _FutureTimeoutError:
                 _mins = _TRANSCRIPTION_TIMEOUT_S // 60
+                from app.core.alerte import echec_rendu as _alerte
+                _alerte(job_id, "transcription",
+                        f"delai depasse apres {_mins} min")
                 store.update(
                     job_id,
                     status="error",
@@ -1999,6 +2002,8 @@ def run_job(
         )
 
     except AudioMissingError as e:
+        from app.core.alerte import echec_rendu as _alerte
+        _alerte(job_id, "phase1_audio", e)
         store.update(
             job_id,
             status="error",
@@ -2367,6 +2372,11 @@ def run_render_phase(job_id: str, src: Path) -> None:
         except Exception as _email_exc:
             print(f"[email] video_ready hook failed for job {job_id}: {_email_exc}")
     except Exception as e:
+        # Ce chemin n'ecrivait RIEN : l'etat et la trace partaient dans le
+        # champ du job, et les logs n'en gardaient aucune trace. C'est le
+        # chemin par lequel un rendu echoue le plus souvent.
+        from app.core.alerte import echec_rendu as _alerte
+        _alerte(job_id, "render", e)
         store.update(
             job_id,
             status="error",

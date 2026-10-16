@@ -1193,6 +1193,12 @@ async def submit_edit(
             _limit_label = "3 minutes" if format_hint == "short" else "2 heures"
             _dur_min     = int(_src_dur // 60)
             _dur_sec     = int(_src_dur % 60)
+            # Journalise, mais PAS une alerte : c'est un refus d'entree, pas
+            # une panne. Alerter dessus noierait les vraies pannes sous les
+            # fichiers trop longs que des utilisateurs deposent.
+            print(f"[JOB-REFUS] job {str(job.id)[:8]} source "
+                  f"{_dur_min}m{_dur_sec:02d}s > limite {_limit_label}",
+                  flush=True)
             store.update(
                 job.id,
                 status="error",
