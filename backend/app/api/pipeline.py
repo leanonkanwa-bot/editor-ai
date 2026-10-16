@@ -25,6 +25,8 @@ from app.core.config import settings as _render_settings
 _MAX_CONCURRENT_RENDERS = max(1, int(_render_settings.max_concurrent_renders))
 _RENDER_SEM = threading.Semaphore(_MAX_CONCURRENT_RENDERS)
 _TRANSCRIPTION_TIMEOUT_S = 1200  # 20 min — Whisper hang guard; sets status=error + is_retry=True
+# Le meme budget, attendu en DEUX fenetres. Voir _attend_transcription.
+_TRANSCRIPTION_FENETRES = 2
 
 # Set by the SIGTERM handler in main.py.  When set:
 #   - run_render_phase() refuses to start a new render (returns immediately so
@@ -965,6 +967,32 @@ Si rien à couper : {{"cuts": [], "kept": []}}"""
     return drops
 
 
+def _attend_transcription(future, job_id: str):
+    """Attend la transcription en plusieurs fenetres, et le dit.
+
+    Meme budget total qu'une attente unique. On ne RELANCE rien :
+    un future abandonne ne s'annule pas, le fil continue, et le
+    pool n'a que deux ouvriers — une relance attendrait derriere la
+    transcription bloquee et ne demarrerait jamais. Ce qu'on gagne
+    ici, c'est de SAVOIR qu'une premiere fenetre est passee.
+
+    Laisse remonter _FutureTimeoutError a la derniere fenetre, pour
+    que le chemin d'erreur existant la traite comme avant.
+    """
+    _fenetre = _TRANSCRIPTION_TIMEOUT_S / _TRANSCRIPTION_FENETRES
+    for _essai in range(1, _TRANSCRIPTION_FENETRES + 1):
+        try:
+            return future.result(timeout=_fenetre)
+        except _FutureTimeoutError:
+            if _essai >= _TRANSCRIPTION_FENETRES:
+                raise
+            from app.core.alerte import reprise as _reprise
+            _reprise(job_id, 'transcription', _essai,
+                     _TRANSCRIPTION_FENETRES,
+                     f"delai de {_fenetre / 60:.0f} min depasse, on "
+                     f"patiente une fenetre de plus")
+
+
 def run_job(
     job_id: str,
     src: Path,
@@ -1035,7 +1063,7 @@ def run_job(
             f_transcript = _tx_pool.submit(lambda: transcribe(src).to_dict())
             f_subject    = _tx_pool.submit(lambda: _subject_fn(src))
             try:
-                transcript = f_transcript.result(timeout=_TRANSCRIPTION_TIMEOUT_S)
+                transcript = _attend_transcription(f_transcript, job_id)
             except _FutureTimeoutError:
                 _mins = _TRANSCRIPTION_TIMEOUT_S // 60
                 from app.core.alerte import echec_rendu as _alerte

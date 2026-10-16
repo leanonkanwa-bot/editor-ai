@@ -46,6 +46,35 @@ def cause_courte(exc: BaseException | str | None) -> str:
     return plein[:MAX_CAUSE] + ("…" if len(plein) > MAX_CAUSE else "")
 
 
+# Combien de fois chaque cause est arrivee depuis le demarrage. Compte en
+# memoire, remis a zero a chaque redemarrage : il sert a donner un ORDRE DE
+# GRANDEUR dans les logs, pas une comptabilite. KAN decidera des reprises
+# avec ces chiffres.
+_compte: dict[str, int] = {}
+
+
+def _cle(etape: str, exc: BaseException | str | None) -> str:
+    """L'etape et le TYPE, sans le message : deux pannes identiques dont le
+    message differe par un chemin de fichier doivent compter ensemble."""
+    nom = type(exc).__name__ if isinstance(exc, BaseException) else "str"
+    return f"{etape}/{nom}"
+
+
+def reprise(job_id: str, etape: str, essai: int, total: int,
+            cause: BaseException | str | None) -> None:
+    """Une tentative de plus. Dite, jamais alertee.
+
+    Une reprise qui reussit ne doit pas reveiller qui que ce soit ; une
+    reprise qui echoue finira par appeler echec_rendu.
+    """
+    try:
+        print(f"[REPRISE] job {str(job_id)[:8]} etape={etape} "
+              f"tentative {essai}/{total} cause={cause_courte(cause)}",
+              flush=True)
+    except Exception:                                         # noqa: BLE001
+        pass
+
+
 def echec_rendu(job_id: str, etape: str, exc: BaseException | str | None,
                 *, definitif: bool = True) -> None:
     """La ligne d'alerte. Ne leve jamais, ne ralentit rien.
@@ -59,8 +88,11 @@ def echec_rendu(job_id: str, etape: str, exc: BaseException | str | None,
     """
     try:
         etiquette = "[ALERTE] rendu echoue" if definitif else "[ALERTE] echec repris"
+        k = _cle(etape, exc)
+        _compte[k] = _compte.get(k, 0) + 1
         print(f"{etiquette} — job {str(job_id)[:8]} etape={etape} "
-              f"cause={cause_courte(exc)} pid={os.getpid()}", flush=True)
+              f"cause={cause_courte(exc)} pid={os.getpid()} "
+              f"occurrence={_compte[k]} depuis le demarrage", flush=True)
     except Exception:                                         # noqa: BLE001
         # Une alerte qui casse le rendu serait pire que pas d'alerte.
         pass
