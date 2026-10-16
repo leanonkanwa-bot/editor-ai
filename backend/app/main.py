@@ -1114,8 +1114,13 @@ async def submit_edit(
             _profile_path = settings._data_root / "profiles" / f"{profile_id}.json"
             if _profile_path.exists():
                 coach_profile = json.loads(_profile_path.read_text())
-        except Exception:
-            pass
+        except Exception as _prof_exc:
+            # coach_profile sert au PLAN, donc au quota. Illisible, il
+            # retombait en silence sur le plan gratuit : un client payant
+            # perdait ses droits sans que rien ne l'indique.
+            print(f"[PROFIL] {str(profile_id)[:8]} illisible "
+                  f"({_prof_exc}) — le plan retombe au gratuit pour cette "
+                  f"requete", flush=True)
 
     info = effective_plan_info(coach_profile)
     used = store.count_for_profile(profile_id, info["period"])
@@ -1219,8 +1224,13 @@ async def submit_edit(
         pass  # ffprobe failed — let the pipeline handle the bad file
     except HTTPException:
         raise  # re-raise our own rejection
-    except Exception:
-        pass   # fail-open on unexpected probe errors
+    except Exception as _dur_exc:
+        # fail-open conserve, mais plus en silence : un echec INATTENDU
+        # du controle laissait passer une video trop longue parce que
+        # la verification elle-meme avait casse.
+        print(f"[JOB-REFUS] controle de duree impossible "
+              f"({type(_dur_exc).__name__}: {_dur_exc}) — la source n'est "
+              f"pas verifiee", flush=True)
 
     # Persist source path + run params so the job can be retried after a
     # server restart without the user having to re-upload the video.

@@ -1004,8 +1004,13 @@ def run_job(
         try:
             from app.engine import card_diag as _card_diag_p1
             _card_diag_p1.start(job_id, phase=1)
-        except Exception:
-            pass
+        except Exception as _cd1_exc:
+            # Le diagnostic est l'instrument qui mesure tout le reste.
+            # S'il ne demarre pas, <job>_cards.json n'existera jamais,
+            # et l'absence se lisait comme « rien a signaler ».
+            print(f"[DIAG] phase 1 non demarree ({_cd1_exc}) — le job "
+                  f"{str(job_id)[:8]} n'aura pas de diagnostic",
+                  flush=True)
         # ── Step 1: Transcribe + Vision (concurrent) ──────────────────────
         store.update(job_id, status="transcribing", progress=10,
                      message="Transcribing audio + analysing subject position…")
@@ -1171,8 +1176,12 @@ def run_job(
                     cap_style_map = {"one_word": "impact", "phrase": "impact", "full_sentence": "kinetic"}
                     caption_style = cap_style_map.get(style.get("caption_style", ""), caption_style)
                     caption_position = style.get("caption_position", caption_position)
-            except Exception:
-                pass
+            except Exception as _tpl_exc:
+                # Un modele choisi par l'utilisateur qui ne s'applique pas :
+                # la video sort avec d'autres reglages que ceux demandes, et
+                # rien ne le disait.
+                print(f"[TEMPLATE] non applique ({_tpl_exc}) — les reglages "
+                      f"demandes sont ignores", flush=True)
 
         # ── Step 5b: Load brand kit (Feature 2) ───────────────────────────
         brand_kit: dict = {}
